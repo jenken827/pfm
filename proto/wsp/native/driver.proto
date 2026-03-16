@@ -1,0 +1,17 @@
+syntax="proto3";
+
+package native;
+
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+message LocalDriver {
+    // 根路径
+    optional string root_path=1;
+    // 分配的容量
+    optional uint64 capacity=2;
+    // 是否显示隐藏文件
+    optional bool show_hidden=3;
+    // 创建文件夹的权限
+    optional string mkdir_permission=4;
+}

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package native;
+
+import "google/protobuf/any.proto";
+import "native/enum.proto";
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// BaseResp 应用响应
+message BaseResp {
+  optional RespCode code = 1;
+  optional string message = 2;
+  optional google.protobuf.Any data = 3;
+}
+

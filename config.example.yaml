@@ -1,0 +1,33 @@
+# github.com/flipped-aurora/gin-vue-admin/server Global Configuration
+
+# schema
+schema:
+  addr: 127.0.0.1
+  port: 10999
+# redis configuration
+# redis:
+#     addr: 127.0.0.1
+#     port: 6379
+#     password: "123456"
+#     db: 0
+# log
+log:
+  logger: 
+    filename: logs/log.txt
+  level: debug
+db:
+  type: sqlite3
+  addr:
+  port: 
+  name: "data.db"
+  user: ""
+  password: ""
+casdoor:
+  endpoint: "https://example.com"
+  client_id: "client_id"
+  client_secret: "client_secret"
+  certificate: ""
+  organization_name: "org"
+  application_name: "app"
+
+

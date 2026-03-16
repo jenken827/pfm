@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package native;
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// StorageProviderType 存储提供者类型
+enum StorageProviderType {
+  PROVIDER_UNSPECIFIED = 0;
+  LOCAL = 1;
+  TELEGRAM = 2;
+}
+
+// FileType 文件类型
+enum FileType {
+  TYPE_UNSPECIFIED = 0;
+  FOLDER = 1;
+  IMAGE = 2;
+  VIDEO = 3;
+  AUDIO = 4;
+  DOCUMENT = 5;
+  ARCHIVE = 6;
+  FONT = 7;
+  APPLICATION = 8;
+}
+
+// HashType 哈希类型
+enum HashType {
+  HASH_TYPE_UNSPECIFIED = 0;
+  MD5 = 1;
+  SHA1 = 2;
+  SHA256 = 3;
+  SHA512 = 4;
+  BLAKE2B = 5; //64位
+  BLAKE2S = 6; //32位
+  BLAKE3 = 7;
+}
+
+
+// RespCode 应用状态码
+enum RespCode {
+  // 根据 protobuf 规范，枚举值必须从 0 开始，且建议后缀使用_UNSPECIFIED 表示未指定的状态，所以前端在处理时不要用 0 作为成功的状态码。
+  CODE_UNSPECIFIED = 0;
+  SUCCESS = 1;
+  TOKEN_INVALID = 2;
+  PARAMS_ERROR = 3;
+  ITEM_ALREADY_EXISTS = 4;
+  PERMISSION_DENIED = 5;
+  INTERNAL_ERROR = 6;
+  CUSTOM_ERROR = 7;
+  RATE_LIMIT_EXCEEDED = 8;
+}

@@ -1,0 +1,21 @@
+{
+    "@@locale": "zh",
+
+    "home": "主页",
+    "@home": {
+        "description": "主页标签"
+    },
+
+    "files": "文件",
+    "@files": {
+        "description": "底部导航-文件"
+    },
+    "transfer": "传输",
+    "@transfer": {
+        "description": "底部导航-传输"
+    },
+    "settings": "设置",
+    "@settings": {
+        "description": "通用设置"
+    }
+}

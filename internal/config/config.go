@@ -1,0 +1,86 @@
+package config
+
+import (
+	"fmt"
+
+	"os"
+
+	"jenken827.com/jenken827/pfm/flags"
+	"jenken827.com/jenken827/pfm/internal/models"
+	"github.com/spf13/viper"
+)
+
+var cfg *models.Config
+
+// Init 配置初始化
+func Init() {
+	initViper()
+	cfg = defaultConfig()
+	if err := viper.Unmarshal(cfg); err != nil {
+		panic(fmt.Errorf("fatal error config file: %v", err))
+	}
+
+}
+
+// GetConfig 获取配置
+func GetConfig() *models.Config {
+	return cfg
+}
+
+func initViper() {
+	checkConfigFile()
+
+	viper.SetConfigFile(flags.ConfigPath)
+
+	if err := viper.ReadInConfig(); err != nil {
+		panic(fmt.Errorf("read config file: %v, err: %v ", flags.ConfigPath, err))
+	}
+
+}
+
+func checkConfigFile() {
+	fmt.Printf("config path: %s", flags.ConfigPath)
+	stat, err := os.Stat(flags.ConfigPath)
+	if err != nil {
+		panic(fmt.Errorf("parse config file: %v err: %v", flags.ConfigPath, err))
+	}
+	if stat.IsDir() {
+		panic(fmt.Sprintf("config file: %v is a directory", flags.ConfigPath))
+	}
+
+}
+
+func defaultConfig() *models.Config {
+	return &models.Config{
+		// 监听地址与端口
+		Schema: models.Schema{
+			Addr: "127.0.0.1",
+			Port: 10999,
+		},
+		DB: models.DB{
+			Type:     "sqlite3",
+			Addr:     "",
+			Port:     0,
+			User:     "",
+			Password: "",
+			Name:     "ga.db",
+		},
+
+		Log: models.Log{
+			Level:      "warning",
+			Filename:   "logs/log.log",
+			LocalTime:  true,
+			MaxSize:    10,
+			MaxAge:     7,
+			MaxBackups: 10,
+			Compress:   false,
+		},
+
+		Cors: models.Cors{
+			AllowOrigins: []string{"*"},
+			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
+			AllowHeaders: []string{"*"},
+		},
+	}
+
+}

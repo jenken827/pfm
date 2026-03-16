@@ -1,0 +1,6 @@
+.lingma/
+.vscode/
+.idea/
+.codebuddy
+proto/gen/
+data/

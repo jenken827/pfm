@@ -1,0 +1,22 @@
+version: v2
+# 注意：配置为true会先删除目标目录下的所有文件，再进行生成，请确保目标目录为空，避免误删除
+clean: false
+plugins:
+  - local: protoc-gen-go
+    out: gen
+    opt: 
+      - paths=source_relative
+
+  - local: protoc-gen-connect-go
+    out: gen
+    opt:
+      - paths=source_relative  
+      
+  - local: protoc-gen-gorm
+    out: gen
+    opt: 
+      - paths=source_relative
+  
+
+inputs:
+  - directory: wsp/
