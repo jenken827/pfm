@@ -12,10 +12,7 @@ class SettingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('设置'), centerTitle: true),
       body: ListView(
         children: [
           // 主题设置
@@ -51,15 +48,6 @@ class SettingPage extends StatelessWidget {
             title: '存储介质设置',
             subtitle: '管理存储介质',
             onTap: () => const StorageProviderSettingRoute().push(context),
-          ),
-          const Divider(height: 1),
-
-          // 文件服务器设置
-          _SettingsTile(
-            icon: Icons.dns_outlined,
-            title: '文件服务器',
-            subtitle: GetIt.I<LocalStorage>().fileServer ?? '未设置',
-            onTap: () => _showServerDialog(context),
           ),
           const Divider(height: 1),
 
@@ -111,41 +99,6 @@ class SettingPage extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showServerDialog(BuildContext context) {
-    final ls = GetIt.I<LocalStorage>();
-    final controller = TextEditingController(text: ls.fileServer ?? 'http://localhost:8080');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('设置文件服务器'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: '请输入服务器地址',
-            prefixIcon: Icon(Icons.link),
-          ),
-          keyboardType: TextInputType.url,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                await ls.saveFileServer(url);
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
   }

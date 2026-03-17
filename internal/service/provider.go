@@ -103,6 +103,27 @@ func ListStorageProviders(ctx context.Context, req *native.StorageProviderListRe
 	}
 
 	items := make([]*native.StorageProviderItem, 0, len(providers))
+
+	// 批量获取所有组 ID
+	groupIDs := make(map[uint32]bool)
+	for _, p := range providers {
+		if p.GroupId != nil && *p.GroupId > 0 {
+			groupIDs[*p.GroupId] = true
+		}
+	}
+
+	// 一次性获取所有组信息
+	groupNames := make(map[uint32]string)
+	if len(groupIDs) > 0 {
+		for groupID := range groupIDs {
+			group, err := db.GetStorageGroupByID(groupID)
+			if err == nil && group.Name != nil {
+				groupNames[groupID] = *group.Name
+			}
+		}
+	}
+
+	// 构建返回结果
 	for _, p := range providers {
 		pb, err := p.ToPB(ctx)
 		if err != nil {
@@ -114,17 +135,19 @@ func ListStorageProviders(ctx context.Context, req *native.StorageProviderListRe
 			ProviderType:      pb.ProviderType,
 			Name:              pb.Name,
 			Description:       pb.Description,
+			GroupId:           p.GroupId,
 			TotalCapacity:     pb.TotalCapacity,
 			RemainingCapacity: pb.RemainingCapacity,
 			Enabled:           pb.Enabled,
 			Order:             pb.Order,
 			CreatedAt:         pb.CreatedAt,
+			Config:            pb.Config,
 		}
 
+		// 从缓存的 map 中获取组名
 		if p.GroupId != nil && *p.GroupId > 0 {
-			group, groupErr := db.GetStorageGroupByID(*p.GroupId)
-			if groupErr == nil {
-				item.GroupName = group.Name
+			if groupName, ok := groupNames[*p.GroupId]; ok {
+				item.GroupName = &groupName
 			}
 		}
 

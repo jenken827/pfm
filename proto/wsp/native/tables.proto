@@ -162,24 +162,25 @@ message StorageProvider {
   }];
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {index: "idx_sp_dt"}];
   // 类型
-  optional StorageProviderType provider_type = 4;
+  optional StorageProviderType provider_type = 5;
   // 实例名称
-  optional string name = 5;
+  optional string name = 6;
   // 实例描述
-  optional string description = 6;
+  optional string description = 7;
   // 实例配置
-  optional string config = 7;
-  // 所属组id
-  optional uint32 group_id = 8;
+  optional string config = 8;
+  // 所属组 id
+  optional uint32 group_id = 9;
   // 总容量
-  optional uint64 total_capacity = 9;
+  optional uint64 total_capacity = 10;
   // 剩余容量
-  optional uint64 remaining_capacity = 10;
+  optional uint64 remaining_capacity = 11;
   // 是否启用
-  optional bool enabled = 11;
+  optional bool enabled = 12;
   // 优先级
-  optional uint32 order = 12;
+  optional uint32 order = 13;
 }
 
 // 存储组
@@ -192,10 +193,11 @@ message StorageGroup {
   }];
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {index: "idx_sg_dt"}];
   // 组名称
-  optional string name = 4;
+  optional string name = 5;
   // 组描述
-  optional string description = 5;
+  optional string description = 6;
   // 顺序
-  optional uint32 order = 6;
+  optional uint32 order = 7;
 }

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:fixnum/fixnum.dart';
 import 'package:protobuf/protobuf.dart';
+import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import '../proto/native/common.pb.dart';
@@ -102,7 +103,7 @@ class FmRepository {
     }
 
     if (!br.hasData()) {
-      throw Exception('Response data is empty');
+      return message;
     }
 
     final result = message;
@@ -221,7 +222,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除文件失败: ${e.message}');
@@ -243,7 +244,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('重命名文件失败: ${e.message}');
@@ -352,6 +353,7 @@ class FmRepository {
         data,
         StorageGroupListRespData(),
       );
+      _logger.info('获取存储组列表成功 total ${respData.total}');
       return ApiResult(success: true, data: respData);
     } on DioException catch (e) {
       _logger.error('获取存储组列表失败: ${e.message}');
@@ -408,7 +410,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('更新存储组失败: ${e.message}');
@@ -420,9 +422,14 @@ class FmRepository {
   }
 
   /// 删除存储组
-  Future<ApiResult<void>> deleteStorageGroup(int id, {bool force = false}) async {
+  Future<ApiResult<void>> deleteStorageGroup(
+    int id, {
+    bool force = false,
+  }) async {
     try {
-      final req = StorageGroupDeleteReq()..id = id..force = force;
+      final req = StorageGroupDeleteReq()
+        ..id = id
+        ..force = force;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/DeleteStorageGroup',
@@ -430,7 +437,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除存储组失败: ${e.message}');
@@ -465,7 +472,7 @@ class FmRepository {
         '$_baseUrl/native.StorageProviderService/ListStorageProviders',
         data: req.toProto3Json(typeRegistry: _typeRegistry),
       );
-
+      _logger.info('获取存储提供者列表成功 $response');
       final data = response.data as Map<String, dynamic>;
       final respData = _extractData<StorageProviderListRespData>(
         data,
@@ -544,9 +551,9 @@ class FmRepository {
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',
         data: req.toProto3Json(typeRegistry: _typeRegistry),
       );
-
+      _logger.info('更新存储提供者成功,$response');
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('更新存储提供者失败: ${e.message}');
@@ -558,9 +565,14 @@ class FmRepository {
   }
 
   /// 删除存储提供者
-  Future<ApiResult<void>> deleteStorageProvider(int id, {bool force = false}) async {
+  Future<ApiResult<void>> deleteStorageProvider(
+    int id, {
+    bool force = false,
+  }) async {
     try {
-      final req = StorageProviderDeleteReq()..id = id..force = force;
+      final req = StorageProviderDeleteReq()
+        ..id = id
+        ..force = force;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/DeleteStorageProvider',
@@ -568,7 +580,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<BaseResp>(data, BaseResp());
+      _extractData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除存储提供者失败: ${e.message}');

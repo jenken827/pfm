@@ -36,6 +36,12 @@ C --> D[(多源存储)]
 - golang 环境已经搭建并配置好了，可以直接使用 go 命令
 - flutter 开发环境使用了 puro 做版本管理，所以运行时，需要使用 puro flutter 和 puro dart 命令
 - protobuf 编译环境也已配置好，可以直接使用 buf 命令
+  ```
+  // 编译成go语言
+  buf generate
+  // 编译成dart语言
+  buf generate --template=buf.gen.dart.yaml
+  ```
 - 系统安装了git，并带了bash命令，可以执行bash命令切换到 MINGW64 环境
 
 # 目录结构
@@ -184,6 +190,7 @@ bottombar有四个菜单项，分别是 首页、文件、传输、设置。
 - 在出现异常或错误时，必须添加必要的日志记录
 - UI设计简洁美观，现代化，符合Material3设计规范
 - 前端各页面，组件风格要保持一致，且能够响应主题切换
+- 前端form表单统一使用flutter_form_builder和form_builder_validators
 
 
 

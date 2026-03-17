@@ -15,3 +15,7 @@ message LocalDriver {
     // 创建文件夹的权限
     optional string mkdir_permission=4;
 }
+
+message TeleDriver {
+    optional string bot_token=1;
+}
