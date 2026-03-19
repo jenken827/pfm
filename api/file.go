@@ -109,3 +109,48 @@ func (s *FileServer) UploadFile(ctx context.Context, stream *connect.ClientStrea
 
 	return response.SuccessResp(result)
 }
+
+// InitUpload 初始化上传任务
+func (s *FileServer) InitUpload(ctx context.Context, req *connect.Request[native.InitUploadReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.InitUpload(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+	return response.SuccessResp(result)
+}
+
+// UploadChunk 上传分片（非流式）
+func (s *FileServer) UploadChunk(ctx context.Context, req *connect.Request[native.UploadChunkReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.UploadChunkSingle(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+	return response.SuccessResp(result)
+}
+
+// CompleteUpload 完成上传
+func (s *FileServer) CompleteUpload(ctx context.Context, req *connect.Request[native.CompleteUploadReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.CompleteUpload(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+	return response.SuccessResp(result)
+}
+
+// GetUploadProgress 获取上传进度
+func (s *FileServer) GetUploadProgress(ctx context.Context, req *connect.Request[native.UploadProgressReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.GetUploadProgress(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+	return response.SuccessResp(result)
+}
+
+// CancelUpload 取消上传
+func (s *FileServer) CancelUpload(ctx context.Context, req *connect.Request[native.CancelUploadReq]) (*connect.Response[native.BaseResp], error) {
+	err := service.CancelUpload(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+	return response.SuccessResp(nil)
+}

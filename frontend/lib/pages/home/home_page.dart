@@ -25,7 +25,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _loadUser() {
-    final ls = GetIt.I<LocalStorage>();
+    final ls = GetIt.I.get<LocalStorage>();
     setState(() {
       _user = ls.user;
     });

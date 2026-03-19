@@ -10,3 +10,7 @@ bool isDesktop() {
 bool isMobile() {
   return !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 }
+
+bool isWeb() {
+  return kIsWeb;
+}

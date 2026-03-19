@@ -46,7 +46,7 @@ app.*.map.json
 
 # Auto-generated file
 *.g.dart
-*.g.yaml
+
 
 # Editor config files
 .codebuddy

@@ -20,7 +20,7 @@ func GInterceptor() connect.UnaryInterceptorFunc {
 			req connect.AnyRequest,
 		) (r connect.AnyResponse, e error) {
 			uuid := uuid.New().String()
-			llog.GetLogger().Infof("request received, uuid:%s, procedure:%s, param: %s", uuid, req.Spec().Procedure, req.Any())
+			// llog.GetLogger().Infof("request received, uuid:%s, procedure:%s, param: %s", uuid, req.Spec().Procedure, req.Any())
 			defer func() {
 				if p := recover(); p != nil {
 					llog.GetLogger().Errorf("panic occurred: %v", p)

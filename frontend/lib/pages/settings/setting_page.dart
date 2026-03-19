@@ -65,7 +65,7 @@ class SettingPage extends StatelessWidget {
   }
 
   void _showLanguageDialog(BuildContext context) {
-    final ls = GetIt.I<LocalStorage>();
+    final ls = GetIt.I.get<LocalStorage>();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -119,7 +119,7 @@ class SettingPage extends StatelessWidget {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () async {
-              await GetIt.I<LocalStorage>().clearLoginInfo();
+              await GetIt.I.get<LocalStorage>().clearLoginInfo();
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 const LoginRoute().go(context);

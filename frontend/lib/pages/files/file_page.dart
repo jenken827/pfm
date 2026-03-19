@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/blocs/upload_bloc/upload_bloc.dart';
+import 'package:pfm/blocs/upload_bloc/upload_event.dart';
 import 'package:pfm/proto/native/tables.pb.dart';
-import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/utils.dart';
 
 /// 文件列表页面
@@ -17,7 +19,8 @@ class FilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) =>
-          FileBloc(context.read<FmRepository>())..add(FileListEvent(dirId)),
+          FileBloc(context.read<FmRepository>())
+            ..add(FileListEvent(dirId: dirId)),
       child: const _FileView(),
     );
   }
@@ -459,21 +462,84 @@ class _FileView extends StatelessWidget {
               title: const Text('上传文件'),
               onTap: () {
                 Navigator.pop(ctx);
-                // TODO: 上传文件
+                _pickAndUploadFiles(context);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('拍照上传'),
+              leading: const Icon(Icons.folder),
+              title: const Text('上传文件夹'),
               onTap: () {
                 Navigator.pop(ctx);
-                // TODO: 拍照上传
+                _pickAndUploadFolder(context);
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// 选择并上传文件
+  Future<void> _pickAndUploadFiles(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withData: false,
+      );
+
+      if (result != null && result.files.isNotEmpty && context.mounted) {
+        final state = context.read<FileBloc>().state;
+        final parentId = state.currentDirId;
+
+        for (final file in result.files) {
+          if (file.path != null) {
+            GetIt.I.get<UploadBloc>().add(
+              UploadStartEvent(
+                filePath: file.path!,
+                parentId: parentId.isEmpty ? null : parentId,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('选择文件失败: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 选择并上传文件夹
+  Future<void> _pickAndUploadFolder(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.getDirectoryPath();
+
+      if (result != null) {
+        final state = context.read<FileBloc>().state;
+        final parentId = state.currentDirId;
+
+        GetIt.I.get<UploadBloc>().add(
+          UploadStartEvent(
+            filePath: result,
+            parentId: parentId.isEmpty ? null : parentId,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('选择文件夹失败: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   void _showBatchActionMenu(BuildContext context, FileState state) {

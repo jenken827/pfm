@@ -36,18 +36,18 @@ class FileState extends Equatable {
 
   @override
   List<Object?> get props => [
-        status,
-        msg,
-        currentDirId,
-        currentDirName,
-        files,
-        selectedFiles,
-        sort,
-        isGridView,
-        isSelectMode,
-        breadcrumbs,
-        searchKeyword,
-      ];
+    status,
+    msg,
+    currentDirId,
+    currentDirName,
+    files,
+    selectedFiles,
+    sort,
+    isGridView,
+    isSelectMode,
+    breadcrumbs,
+    searchKeyword,
+  ];
 
   FileState copyWith({
     FileStateStatus? status,

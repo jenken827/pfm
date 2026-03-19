@@ -201,3 +201,46 @@ message StorageGroup {
   // 顺序
   optional uint32 order = 7;
 }
+
+// UploadChunkRecord 文件分片上传记录
+// 用于支持断点续传和大文件分片上传
+message UploadChunkRecord {
+  option (gorm.opts).ormable = true;
+  // 主键 ID
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  // 上传任务ID（UUID格式）
+  optional string upload_id = 4 [(gorm.field).tag = {index: "idx_ucr_uid,length:36"}];
+  // 文件哈希（blake3，用于去重）
+  optional string file_hash = 5 [(gorm.field).tag = {index: "idx_ucr_fh"}];
+  // 文件名
+  optional string file_name = 6;
+  // 文件大小（字节）
+  optional uint64 file_size = 7;
+  // 父目录ID
+  optional string parent_id = 8 [(gorm.field).tag = {index: "idx_ucr_pid"}];
+  // MIME类型
+  optional string mime = 9;
+  // 文件类型
+  optional FileType file_type = 10;
+  // 分片总数
+  optional uint32 chunk_total = 11;
+  // 分片大小（字节，默认10MB）
+  optional uint32 chunk_size = 12;
+  // 当前分片序号（从1开始）
+  optional uint32 chunk_index = 13 [(gorm.field).tag = {index: "idx_ucr_ci"}];
+  // 分片哈希（用于校验）
+  optional string chunk_hash = 14;
+  // 分片数据临时存储路径
+  optional string temp_path = 15;
+  // 上传状态：pending-待上传, uploading-上传中, completed-已完成
+  optional string status = 16;
+  // 存储介质ID（文件最终存储位置）
+  optional uint32 provider_id = 17;
+  // 存储组ID
+  optional uint32 group_id = 18;
+}

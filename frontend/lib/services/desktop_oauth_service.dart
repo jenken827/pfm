@@ -16,7 +16,7 @@ class DesktopOAuthService {
 
   late final PkceParams _pkce;
   late final CasdoorConfig _config;
-  final _localStorage = GetIt.I<LocalStorage>();
+  final _localStorage = GetIt.I.get<LocalStorage>();
   HttpServer? _server;
 
   /// 启动本地服务器监听回调

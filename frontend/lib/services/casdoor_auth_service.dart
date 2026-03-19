@@ -107,7 +107,7 @@ class CasdoorLoginHelper {
     final userInfo = JwtDecoder.decode(token.accessToken!);
     final user = User.fromMap(userInfo);
 
-    final ls = GetIt.I<LocalStorage>();
+    final ls = GetIt.I.get<LocalStorage>();
     await ls.saveToken(token);
     await ls.saveUser(user);
 
@@ -116,7 +116,7 @@ class CasdoorLoginHelper {
 
   /// 检查 Casdoor 是否已配置
   static bool isConfigured() {
-    final config = GetIt.I<LocalStorage>().casdoorConfig;
+    final config = GetIt.I.get<LocalStorage>().casdoorConfig;
     return config != null &&
         config.serverUrl.isNotEmpty &&
         config.clientId.isNotEmpty;
@@ -124,7 +124,7 @@ class CasdoorLoginHelper {
 
   /// 获取 Casdoor 配置
   static CasdoorConfig? getConfig() {
-    return GetIt.I<LocalStorage>().casdoorConfig;
+    return GetIt.I.get<LocalStorage>().casdoorConfig;
   }
 
   /// 生成 PKCE 参数

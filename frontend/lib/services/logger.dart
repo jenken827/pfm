@@ -1,6 +1,26 @@
+import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
+Talker getLogger() => GetIt.I.get<Talker>();
+
+void initTalkerLogger() {
+  final talker = TalkerFlutter.init(
+    logger: TalkerLogger(
+      settings: TalkerLoggerSettings(
+        level: kDebugMode ? LogLevel.debug : LogLevel.info,
+      ),
+      formatter: CustomLoggerFormatter(),
+    ),
+    settings: TalkerSettings(
+      colors: <String, AnsiPen>{TalkerKey.debug: AnsiPen()..magenta()},
+    ),
+  );
+  GetIt.I.registerSingleton<Talker>(talker);
+  talker.info('talker init complete');
+}
+
+/// 自定义日志格式化器
 class CustomLoggerFormatter extends LoggerFormatter {
   @override
   String fmt(LogDetails details, TalkerLoggerSettings settings) {
@@ -17,14 +37,14 @@ class CustomLoggerFormatter extends LoggerFormatter {
     final msg = details.message?.toString() ?? '';
     var msgBorderedLines = msg.split('\n').map((e) => '│ $e');
 
-    // if (details.level == LogLevel.debug) {
+    // 添加调用者信息
     final callerInfo = _getCallerInfo(StackTrace.current);
     final linesList = msgBorderedLines.toList();
     if (linesList.isNotEmpty) {
       linesList[0] = '│ $callerInfo ${linesList[0].substring(2)}';
     }
     msgBorderedLines = linesList;
-    // }
+
     if (!settings.enableColors) {
       return '$topline\n${msgBorderedLines.join('\n')}\n$underline';
     }
@@ -51,10 +71,8 @@ class CustomLoggerFormatter extends LoggerFormatter {
         }
       }
     } catch (e) {
-      // ignore errors and fall through to return unknown
+      // ignore errors
     }
     return 'unknown:0';
   }
 }
-
-Talker getLogger() => GetIt.I<Talker>();

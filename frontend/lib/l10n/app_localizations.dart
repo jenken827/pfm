@@ -112,6 +112,18 @@ abstract class AppLocalizations {
   /// **'传输'**
   String get transfer;
 
+  /// 上传标签
+  ///
+  /// In zh, this message translates to:
+  /// **'上传'**
+  String get upload;
+
+  /// 下载标签
+  ///
+  /// In zh, this message translates to:
+  /// **'下载'**
+  String get download;
+
   /// 通用设置
   ///
   /// In zh, this message translates to:

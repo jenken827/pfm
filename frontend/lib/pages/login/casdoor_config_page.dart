@@ -50,7 +50,7 @@ class _CasdoorConfigPageState extends State<CasdoorConfigPage> {
         appName: _appNameController.text.trim(),
       );
 
-      await GetIt.I<LocalStorage>().saveCasdoorConfig(config);
+      await GetIt.I.get<LocalStorage>().saveCasdoorConfig(config);
 
       if (mounted) {
         ScaffoldMessenger.of(

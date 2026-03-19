@@ -11,9 +11,10 @@ class FileServerSubScriptionEvent extends FileEvent {
 
 /// 获取文件列表事件
 class FileListEvent extends FileEvent {
-  const FileListEvent(this.dirId);
+  const FileListEvent({this.dirId = '', this.dirName = ''});
 
   final String dirId;
+  final String dirName;
 }
 
 /// 刷新文件列表事件

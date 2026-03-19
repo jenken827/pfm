@@ -18,5 +18,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transfer => '传输';
 
   @override
+  String get upload => '上传';
+
+  @override
+  String get download => '下载';
+
+  @override
   String get settings => '设置';
 }

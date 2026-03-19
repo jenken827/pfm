@@ -4,3 +4,7 @@ export 'logger.dart';
 export 'casdoor_auth_service.dart';
 export 'casdoor_webview_login.dart';
 export 'desktop_oauth_service.dart';
+export 'background_service.dart';
+export 'sqlite3_storage.dart';
+export 'workmanager_task.dart';
+export 'isolate.dart';

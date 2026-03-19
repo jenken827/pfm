@@ -4,7 +4,6 @@ import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_ce_flutter/adapters.dart';
-import '../hive/hive.dart';
 import '../models/models.dart';
 
 class LocalStorage {
@@ -66,9 +65,6 @@ class LocalStorage {
     final key = await secureStorage.read(key: _localEncryptionKeyKey);
 
     final encryptionKeyUint8List = base64Url.decode(key!);
-
-    await Hive.initFlutter();
-    Hive.registerAdapters();
 
     _box = await Hive.openBox(
       _boxname,

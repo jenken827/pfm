@@ -7,11 +7,12 @@ import 'l10n/l10n.dart';
 import 'router/router.dart';
 
 class App extends StatelessWidget {
-  const App({super.key});
+  const App({super.key, required this.fmRepository});
+  final FmRepository fmRepository;
 
   @override
   Widget build(BuildContext context) {
-    final ls = GetIt.I<LocalStorage>();
+    final ls = GetIt.I.get<LocalStorage>();
 
     return StreamBuilder(
       stream: ls.settingsBox.watch(),
@@ -21,8 +22,8 @@ class App extends StatelessWidget {
           'current theme: ${tl.themeName},current locale: ${tl.locale}',
         );
 
-        return RepositoryProvider(
-          create: (context) => FmRepository(),
+        return RepositoryProvider.value(
+          value: fmRepository,
           child: MaterialApp.router(
             debugShowCheckedModeBanner: false,
             theme: AppTheme(themeName: ls.currentThemeName).light(),

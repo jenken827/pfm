@@ -14,6 +14,14 @@
     "@transfer": {
         "description": "底部导航-传输"
     },
+    "upload": "上传",
+    "@upload": {
+        "description": "上传标签"
+    },
+    "download": "下载",
+    "@download": {
+        "description": "下载标签"
+    },
     "settings": "设置",
     "@settings": {
         "description": "通用设置"

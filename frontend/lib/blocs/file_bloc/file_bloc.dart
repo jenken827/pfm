@@ -53,30 +53,31 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     getLogger().info('get file list dir id: ${event.dirId}');
     final resp = await fmRepository.getFileList(parentId: event.dirId);
 
-    if (resp.success) {
-      final files = resp.data?.files.toList() ?? [];
-      // 应用排序
-      state.sort.sort(files);
-
-      emit(
-        state.copyWith(
-          status: FileStateStatus.success,
-          currentDirId: event.dirId,
-          currentDirName: _getDirName(event.dirId, files),
-          files: files,
-          breadcrumbs: _buildBreadcrumbs(event.dirId),
-          selectedFiles: [],
-          isSelectMode: false,
-        ),
-      );
-    } else {
+    if (!resp.success) {
       emit(
         state.copyWith(
           status: FileStateStatus.failure,
           msg: resp.message ?? '获取文件列表失败',
         ),
       );
+      return;
     }
+    final files = resp.data?.files.toList() ?? [];
+    // 应用排序
+    state.sort.sort(files);
+
+    final breadcrumb = _buildBreadcrumbs(event.dirId, event.dirName);
+    emit(
+      state.copyWith(
+        status: FileStateStatus.success,
+        currentDirId: event.dirId,
+        currentDirName: event.dirName,
+        files: files,
+        breadcrumbs: breadcrumb,
+        selectedFiles: [],
+        isSelectMode: false,
+      ),
+    );
   }
 
   /// 刷新文件列表
@@ -84,7 +85,9 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     FileRefreshEvent event,
     Emitter<FileState> emit,
   ) async {
-    add(FileListEvent(state.currentDirId));
+    add(
+      FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName),
+    );
   }
 
   /// 切换视图模式
@@ -198,7 +201,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
 
   /// 导航到目录
   void _onNavigate(FileNavigateEvent event, Emitter<FileState> emit) {
-    add(FileListEvent(event.dirId));
+    add(FileListEvent(dirId: event.dirId, dirName: event.dirName));
   }
 
   /// 搜索
@@ -207,22 +210,21 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     emit(state.copyWith(searchKeyword: event.keyword));
   }
 
-  String _getDirName(String? dirId, List<File> files) {
-    if (dirId == null || dirId.isEmpty) {
-      return '根目录';
+  //有两种情况：1. 从目录进入  2. 从面包屑跳转
+  List<Breadcrumb> _buildBreadcrumbs(String dirId, String dirName) {
+    if (dirId.isEmpty) {
+      return [Breadcrumb(name: '根目录', id: '')];
     }
-    final dir = files.where((f) => f.id == dirId).firstOrNull;
-    return dir?.name ?? '未知目录';
-  }
+    int i = 0;
+    for (; i < state.breadcrumbs.length; i++) {
+      if (state.breadcrumbs[i].id == dirId) {
+        break;
+      }
+    }
+    if (i == state.breadcrumbs.length) {
+      return [...state.breadcrumbs, Breadcrumb(name: dirName, id: dirId)];
+    }
 
-  List<Breadcrumb> _buildBreadcrumbs(String? dirId) {
-    if (dirId == null || dirId.isEmpty) {
-      return [const Breadcrumb(id: '', name: '根目录')];
-    }
-    // 简化版本，只显示当前目录
-    return [
-      const Breadcrumb(id: '', name: '根目录'),
-      Breadcrumb(id: dirId, name: state.currentDirName),
-    ];
+    return state.breadcrumbs.sublist(0, i + 1);
   }
 }

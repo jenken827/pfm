@@ -15,6 +15,7 @@ import '../proto/native/provider.pb.dart';
 import '../proto/native/tables.pb.dart';
 import '../services/local_storage.dart';
 import '../services/logger.dart';
+import 'util.dart';
 
 /// API 响应结果
 class ApiResult<T> {
@@ -30,22 +31,7 @@ class FmRepository {
   late final Dio _dio;
   Talker get _logger => getLogger();
 
-  // final StreamController<String> _baseUrlStreamController =
-  //     StreamController.broadcast();
-  // Stream get baseUrl => _baseUrlStreamController.stream;
-  String? get _baseUrl => GetIt.I<LocalStorage>().fileServer;
-
-  /// 类型注册表 - 用于解析 Any 类型
-  static final TypeRegistry _typeRegistry = TypeRegistry([
-    FileListRespData(),
-    CreateDirRespData(),
-    UpdateDirRespData(),
-    UploadRespData(),
-    StorageGroupListRespData(),
-    StorageGroupAddRespData(),
-    StorageProviderListRespData(),
-    StorageProviderAddRespData(),
-  ]);
+  String? get _baseUrl => GetIt.I.get<LocalStorage>().fileServer;
 
   FmRepository() {
     _dio = Dio(
@@ -63,7 +49,7 @@ class FmRepository {
       InterceptorsWrapper(
         onRequest: (options, handler) {
           // 添加认证 Token
-          final token = GetIt.I<LocalStorage>().token;
+          final token = GetIt.I.get<LocalStorage>().token;
           if (token?.accessToken != null) {
             options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
           }
@@ -84,31 +70,6 @@ class FmRepository {
         },
       ),
     );
-    // final url = GetIt.I.get<LocalStorage>().fileServer;
-    // if (url != null) {
-    //   _baseUrlStreamController.add(url);
-    // }
-  }
-
-  /// 通用方法：将响应转换为 BaseResp 并提取数据
-  T _extractData<T extends GeneratedMessage>(
-    Map<String, dynamic> jsonData,
-    T message,
-  ) {
-    final br = BaseResp();
-    br.mergeFromProto3Json(jsonData, typeRegistry: _typeRegistry);
-
-    if (br.code != RespCode.SUCCESS) {
-      throw Exception('API Error: ${br.code.value} - ${br.message}');
-    }
-
-    if (!br.hasData()) {
-      return message;
-    }
-
-    final result = message;
-    br.data.unpackInto(result);
-    return result;
   }
 
   // ==================== File Service ====================
@@ -125,7 +86,10 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<FileListRespData>(data, FileListRespData());
+      final respData = extractRespData<FileListRespData>(
+        data,
+        FileListRespData(),
+      );
       return ApiResult(success: true, data: respData);
     } on DioException catch (e) {
       _logger.error('获取文件列表失败: ${e.message}');
@@ -156,11 +120,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateDir',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<CreateDirRespData>(
+      final respData = extractRespData<CreateDirRespData>(
         data,
         CreateDirRespData(),
       );
@@ -193,11 +157,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/UpdateDir',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<UpdateDirRespData>(
+      final respData = extractRespData<UpdateDirRespData>(
         data,
         UpdateDirRespData(),
       );
@@ -216,13 +180,11 @@ class FmRepository {
     try {
       final response = await _dio.post(
         '$_baseUrl/native.FileService/DeleteFile',
-        data: (DeleteFileReq()..ids.addAll(ids)).toProto3Json(
-          typeRegistry: _typeRegistry,
-        ),
+        data: (DeleteFileReq()..ids.addAll(ids)).toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除文件失败: ${e.message}');
@@ -240,11 +202,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/RenameFile',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('重命名文件失败: ${e.message}');
@@ -275,7 +237,7 @@ class FmRepository {
       if (hash != null) metadata.hash = hash;
 
       final formData = FormData.fromMap({
-        'metadata': metadata.toProto3Json(typeRegistry: _typeRegistry),
+        'metadata': metadata.toProto3Json(),
         'file': MultipartFile.fromBytes(fileBytes, filename: name),
       });
 
@@ -286,7 +248,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<UploadRespData>(data, UploadRespData());
+      final respData = extractRespData<UploadRespData>(data, UploadRespData());
       return ApiResult(success: true, data: respData);
     } on DioException catch (e) {
       _logger.error('上传文件失败: ${e.message}');
@@ -345,11 +307,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/ListStorageGroups',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<StorageGroupListRespData>(
+      final respData = extractRespData<StorageGroupListRespData>(
         data,
         StorageGroupListRespData(),
       );
@@ -375,11 +337,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/AddStorageGroup',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<StorageGroupAddRespData>(
+      final respData = extractRespData<StorageGroupAddRespData>(
         data,
         StorageGroupAddRespData(),
       );
@@ -406,11 +368,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/UpdateStorageGroup',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('更新存储组失败: ${e.message}');
@@ -433,11 +395,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/DeleteStorageGroup',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除存储组失败: ${e.message}');
@@ -470,11 +432,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/ListStorageProviders',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
       _logger.info('获取存储提供者列表成功 $response');
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<StorageProviderListRespData>(
+      final respData = extractRespData<StorageProviderListRespData>(
         data,
         StorageProviderListRespData(),
       );
@@ -510,11 +472,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = _extractData<StorageProviderAddRespData>(
+      final respData = extractRespData<StorageProviderAddRespData>(
         data,
         StorageProviderAddRespData(),
       );
@@ -549,11 +511,11 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
       _logger.info('更新存储提供者成功,$response');
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('更新存储提供者失败: ${e.message}');
@@ -576,17 +538,182 @@ class FmRepository {
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/DeleteStorageProvider',
-        data: req.toProto3Json(typeRegistry: _typeRegistry),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      _extractData<Empty>(data, Empty());
+      extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('删除存储提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('删除存储提供者失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  // ==================== Chunk Upload Service ====================
+
+  /// 初始化上传任务
+  /// 返回 upload_id 和已上传分片信息（支持断点续传）
+  Future<ApiResult<InitUploadRespData>> initUpload({
+    required String name,
+    String? parentId,
+    required int size,
+    String? hash,
+    String? mime,
+    FileType? type,
+    int? chunkSize,
+  }) async {
+    try {
+      final req = InitUploadReq()
+        ..name = name
+        ..size = Int64(size);
+      if (parentId != null) req.parentId = parentId;
+      if (hash != null) req.hash = hash;
+      if (mime != null) req.mime = mime;
+      if (type != null) req.type = type;
+      if (chunkSize != null) req.chunkSize = chunkSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/InitUpload',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<InitUploadRespData>(
+        data,
+        InitUploadRespData(),
+      );
+      _logger.info('初始化上传任务成功: ${respData.uploadId}');
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('初始化上传任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('初始化上传任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 上传分片
+  /// [uploadId] 上传任务ID
+  /// [chunkIndex] 分片序号（从1开始）
+  /// [chunkData] 分片数据
+  /// [chunkHash] 分片哈希（可选，用于校验）
+  Future<ApiResult<UploadChunkRespData>> uploadChunk({
+    required String uploadId,
+    required int chunkIndex,
+    required List<int> chunkData,
+    String? chunkHash,
+    void Function(int, int)? onSendProgress,
+  }) async {
+    try {
+      final req = UploadChunkReq()
+        ..uploadId = uploadId
+        ..chunkIndex = chunkIndex
+        ..chunk = chunkData;
+      if (chunkHash != null) req.chunkHash = chunkHash;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/UploadChunk',
+        data: req.toProto3Json(),
+        onSendProgress: onSendProgress,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UploadChunkRespData>(
+        data,
+        UploadChunkRespData(),
+      );
+      _logger.info(
+        '上传分片成功: uploadId=$uploadId, chunkIndex=$chunkIndex, progress=${respData.uploadedCount}/${respData.chunkTotal}',
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('上传分片失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('上传分片失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 完成上传
+  Future<ApiResult<CompleteUploadRespData>> completeUpload({
+    required String uploadId,
+  }) async {
+    try {
+      final req = CompleteUploadReq()..uploadId = uploadId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/CompleteUpload',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<CompleteUploadRespData>(
+        data,
+        CompleteUploadRespData(),
+      );
+      _logger.info('完成上传成功: ${respData.fileId}');
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('完成上传失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('完成上传失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取上传进度
+  Future<ApiResult<UploadProgressRespData>> getUploadProgress({
+    required String uploadId,
+  }) async {
+    try {
+      final req = UploadProgressReq()..uploadId = uploadId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetUploadProgress',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UploadProgressRespData>(
+        data,
+        UploadProgressRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取上传进度失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取上传进度失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 取消上传
+  Future<ApiResult<void>> cancelUpload({required String uploadId}) async {
+    try {
+      final req = CancelUploadReq()..uploadId = uploadId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/CancelUpload',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      _logger.info('取消上传成功: $uploadId');
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('取消上传失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('取消上传失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

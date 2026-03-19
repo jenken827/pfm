@@ -9,14 +9,11 @@ class ThemeSettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ls = GetIt.I<LocalStorage>();
+    final ls = GetIt.I.get<LocalStorage>();
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('主题设置'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('主题设置'), centerTitle: true),
       body: ListView(
         children: [
           // 主题模式
@@ -49,9 +46,7 @@ class ThemeSettingPage extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Text('主题颜色', style: theme.textTheme.titleMedium),
           ),
-          _ThemeColorGrid(
-            currentColor: ls.currentThemeName,
-          ),
+          _ThemeColorGrid(currentColor: ls.currentThemeName),
         ],
       ),
     );
@@ -81,7 +76,7 @@ class _ThemeModeTile extends StatelessWidget {
       groupValue: currentMode,
       onChanged: (value) async {
         if (value != null) {
-          final ls = GetIt.I<LocalStorage>();
+          final ls = GetIt.I.get<LocalStorage>();
           final tl = ls.themeLanguage.copyWith(themeMode: value);
           await ls.saveThemeLanguage(tl);
         }
@@ -98,10 +93,7 @@ class _ThemeColorGrid extends StatelessWidget {
 
   List<_ColorOption> get _colors {
     return FlexScheme.values
-        .map((scheme) => _ColorOption(
-              name: scheme.name,
-              color: scheme,
-            ))
+        .map((scheme) => _ColorOption(name: scheme.name, color: scheme))
         .toList();
   }
 
@@ -117,7 +109,7 @@ class _ThemeColorGrid extends StatelessWidget {
           final isSelected = currentColor == option.name;
           return GestureDetector(
             onTap: () async {
-              final ls = GetIt.I<LocalStorage>();
+              final ls = GetIt.I.get<LocalStorage>();
               final tl = ls.themeLanguage.copyWith(themeName: option.name);
               await ls.saveThemeLanguage(tl);
             },
@@ -128,17 +120,11 @@ class _ThemeColorGrid extends StatelessWidget {
                 color: theme.colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
                 border: isSelected
-                    ? Border.all(
-                        color: theme.colorScheme.primary,
-                        width: 3,
-                      )
+                    ? Border.all(color: theme.colorScheme.primary, width: 3)
                     : null,
               ),
               child: isSelected
-                  ? Icon(
-                      Icons.check,
-                      color: theme.colorScheme.primary,
-                    )
+                  ? Icon(Icons.check, color: theme.colorScheme.primary)
                   : null,
             ),
           );
