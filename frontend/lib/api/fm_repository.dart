@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:fixnum/fixnum.dart';
-import 'package:protobuf/protobuf.dart';
 import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
-import '../proto/native/common.pb.dart';
 import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/group.pb.dart';
@@ -103,21 +101,23 @@ class FmRepository {
   /// 创建目录
   Future<ApiResult<File>> createDir({
     required String name,
-    String? parentId,
+    required String parentId,
+    required bool enableEncryption,
     bool encryptName = false,
     String? encryptionSuffix,
     String? encryptionKey,
     String? encryptionSalt,
   }) async {
     try {
-      final req = CreateDirReq()
-        ..name = name
-        ..encryptName = encryptName;
-      if (parentId != null) req.parentId = parentId;
-      if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
-      if (encryptionKey != null) req.encryptionKey = encryptionKey;
-      if (encryptionSalt != null) req.encryptionSalt = encryptionSalt;
-
+      final req = CreateDirReq(
+        name: name,
+        parentId: parentId,
+        encryptName: encryptName,
+        enableEncryption: enableEncryption,
+        encryptionSuffix: encryptionSuffix,
+        encryptionKey: encryptionKey,
+        encryptionSalt: encryptionSalt,
+      );
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateDir',
         data: req.toProto3Json(),

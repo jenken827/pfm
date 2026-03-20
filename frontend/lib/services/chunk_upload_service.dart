@@ -65,7 +65,7 @@ class UploadTask {
 class ChunkUploadService {
   static const int defaultChunkSize = 10 * 1024 * 1024; // 10MB
   static const int largeFileThreshold = 100 * 1024 * 1024; // 100MB
-  static const int maxConcurrentUploads = 3; // 最大并发上传数
+  static const int maxConcurrentUploads = 5; // 最大并发上传数
 
   final FmRepository _repository;
   final Talker _logger = getLogger();

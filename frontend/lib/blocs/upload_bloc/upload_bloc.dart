@@ -42,7 +42,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
   /// 开始同步
   void _startStorageSync() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+    _syncTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
       await _syncFromStorage();
     });
   }

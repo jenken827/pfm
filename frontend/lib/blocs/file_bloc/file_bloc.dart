@@ -141,7 +141,12 @@ class FileBloc extends Bloc<FileEvent, FileState> {
 
     final resp = await fmRepository.createDir(
       name: event.name,
-      parentId: state.currentDirId.isEmpty ? null : state.currentDirId,
+      parentId: state.currentDirId,
+      enableEncryption: event.enableEncryption,
+      encryptName: event.encryptName,
+      encryptionSuffix: event.encryptionSuffix,
+      encryptionKey: event.encryptionKey,
+      encryptionSalt: event.encryptionSalt,
     );
 
     if (resp.success) {

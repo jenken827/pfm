@@ -63,14 +63,15 @@ message DirConfig {
   optional string path = 5;
   // 文件 ID
   optional string file_id = 6 [(gorm.field).tag = {index: "idx_d_fid"}];
+  optional bool enable_encryption = 7;
   // 加密密钥
-  optional string encryption_key = 7;
+  optional string encryption_key = 8;
   // 加密盐值
-  optional string encryption_salt = 8;
+  optional string encryption_salt = 9;
   // 是否加密文件名
-  optional bool encrypt_name = 9;
+  optional bool encrypt_name = 10;
   // 加密后缀
-  optional string encryption_suffix = 10;
+  optional string encryption_suffix = 11;
 }
 
 // FileHistory 文件历史版本信息

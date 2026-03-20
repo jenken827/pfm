@@ -587,33 +587,86 @@ class _FileView extends StatelessWidget {
   }
 
   void _showCreateDirDialog(BuildContext context) {
-    final controller = TextEditingController();
+    final nameController = TextEditingController();
+    bool enableEncryption = false;
+    bool encryptName = false;
+    final encryptionSuffixController = TextEditingController(text: '.enc');
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('新建文件夹'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: '请输入文件夹名称'),
-          autofocus: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (builderctx, setState) => AlertDialog(
+          title: const Text('新建文件夹'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: '文件夹名称',
+                    hintText: '请输入文件夹名称',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                // 加密选项
+                SwitchListTile(
+                  title: const Text('启用加密'),
+                  subtitle: const Text('对文件夹内容进行加密存储'),
+                  value: enableEncryption,
+                  onChanged: (value) {
+                    setState(() => enableEncryption = value);
+                  },
+                ),
+                if (enableEncryption) ...[
+                  const Divider(),
+                  SwitchListTile(
+                    title: const Text('加密文件夹名称'),
+                    subtitle: const Text('隐藏文件夹的真实名称'),
+                    value: encryptName,
+                    onChanged: (value) {
+                      setState(() => encryptName = value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: encryptionSuffixController,
+                    decoration: const InputDecoration(
+                      labelText: '加密后缀',
+                      hintText: '加密文件的后缀名',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (nameController.text.isNotEmpty) {
+                  context.read<FileBloc>().add(
+                    FileCreateDirEvent(
+                      name: nameController.text,
+                      enableEncryption: enableEncryption,
+                      encryptName: encryptName,
+                      encryptionSuffix: enableEncryption
+                          ? encryptionSuffixController.text
+                          : null,
+                    ),
+                  );
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('创建'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                context.read<FileBloc>().add(
-                  FileCreateDirEvent(controller.text),
-                );
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('创建'),
-          ),
-        ],
       ),
     );
   }

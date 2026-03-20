@@ -55,9 +55,21 @@ class FileSelectAllEvent extends FileEvent {
 
 /// 创建目录事件
 class FileCreateDirEvent extends FileEvent {
-  const FileCreateDirEvent(this.name);
+  const FileCreateDirEvent({
+    required this.name,
+    this.enableEncryption = false,
+    this.encryptName = false,
+    this.encryptionSuffix,
+    this.encryptionKey,
+    this.encryptionSalt,
+  });
 
   final String name;
+  final bool enableEncryption;
+  final bool encryptName;
+  final String? encryptionSuffix;
+  final String? encryptionKey;
+  final String? encryptionSalt;
 }
 
 /// 删除文件事件

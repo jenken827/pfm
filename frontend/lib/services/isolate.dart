@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -165,65 +166,91 @@ void uploadIsolateEntryPoint(UploadIsolateConfig config) async {
       }
     }
 
-    // 3. 上传分片
+    // 3. 并发上传分片（最多5个同时上传）
+    const int maxConcurrentChunks = 5;
     final file = io.File(task.filePath);
     final uploadedChunksSet = Set<int>.from(task.uploadedChunks);
     final totalChunks = task.chunkTotal;
     final chunkSize = task.chunkSize;
 
+    // 获取待上传的分片列表
+    final pendingChunks = <int>[];
     for (int i = 1; i <= totalChunks; i++) {
-      // 检查是否被取消或暂停
-      final currentTask = await storage.getUploadTaskAsync(task.id);
-      if (currentTask?.status == UploadTaskStatusRecord.cancelled ||
-          currentTask?.status == UploadTaskStatusRecord.paused) {
-        return;
+      if (!uploadedChunksSet.contains(i)) {
+        pendingChunks.add(i);
+      }
+    }
+
+    if (pendingChunks.isEmpty) {
+      getLogger().info('All chunks already uploaded');
+    } else {
+      getLogger().info('Starting concurrent chunk upload: ${pendingChunks.length} chunks, max $maxConcurrentChunks concurrent');
+
+      // 已完成计数
+      int completedCount = uploadedChunksSet.length;
+
+      // 发送初始进度
+      sendProgress('uploading', 10 + (completedCount / totalChunks) * 90);
+
+      // 信号量实现
+      int runningCount = 0;
+      final futures = <Future<void>>[];
+      final lock = <Completer<void>>[];
+
+      Future<void> acquire() async {
+        if (runningCount < maxConcurrentChunks) {
+          runningCount++;
+          return;
+        }
+        final completer = Completer<void>();
+        lock.add(completer);
+        await completer.future;
+        runningCount++;
       }
 
-      if (uploadedChunksSet.contains(i)) continue;
+      void release() {
+        if (lock.isNotEmpty) {
+          final completer = lock.removeAt(0);
+          completer.complete();
+        } else {
+          runningCount--;
+        }
+      }
 
-      final offset = (i - 1) * chunkSize;
-      final remainingBytes = task.fileSize - offset;
-      final currentChunkSize = remainingBytes > chunkSize
-          ? chunkSize
-          : remainingBytes;
+      // 启动并发上传
+      for (final chunkIndex in pendingChunks) {
+        // 检查是否被取消或暂停
+        final currentTask = await storage.getUploadTaskAsync(task.id);
+        if (currentTask?.status == UploadTaskStatusRecord.cancelled ||
+            currentTask?.status == UploadTaskStatusRecord.paused) {
+          break;
+        }
 
-      final raf = await file.open();
-      await raf.setPosition(offset);
-      final chunkData = await raf.read(currentChunkSize);
-      await raf.close();
+        await acquire();
 
-      final chunkHash = _computeBlake3Hash(chunkData);
-
-      // 使用 protobuf 请求
-      final uploadChunkReq = UploadChunkReq()
-        ..uploadId = task.uploadId!
-        ..chunkIndex = i
-        ..chunkHash = chunkHash
-        ..chunk = chunkData;
-
-      getLogger().debug(
-        'Uploading chunk $i/$totalChunks: uploadId=${task.uploadId}, '
-        'chunkIndex=${uploadChunkReq.chunkIndex}, chunkSize=${chunkData.length}, '
-        'chunkHash=$chunkHash',
-      );
-
-      try {
-        final uploadResp = await dio.post(
-          '/native.FileService/UploadChunk',
-          data: uploadChunkReq.toProto3Json(),
+        futures.add(
+          _uploadChunk(
+            dio: dio,
+            file: file,
+            task: task,
+            chunkIndex: chunkIndex,
+            chunkSize: chunkSize,
+            storage: storage,
+            uploadedChunksSet: uploadedChunksSet,
+          ).then((_) {
+            completedCount++;
+            sendProgress('uploading', 10 + (completedCount / totalChunks) * 90);
+            getLogger().debug('Chunk $chunkIndex uploaded, progress: $completedCount/$totalChunks');
+          }).catchError((e) {
+            getLogger().error('Chunk $chunkIndex upload failed: $e');
+          }).whenComplete(() {
+            release();
+          }),
         );
-        getLogger().debug('Upload chunk $i response: ${uploadResp.data}');
-      } catch (e) {
-        getLogger().error('Upload chunk $i failed: $e');
-        rethrow;
       }
 
-      uploadedChunksSet.add(i);
-      task.uploadedChunks = uploadedChunksSet.toList();
-      await storage.saveUploadTask(task);
-
-      // 更新进度 (10% - 100%)
-      sendProgress('uploading', 10 + (i / totalChunks) * 90);
+      // 等待所有任务完成
+      await Future.wait(futures);
     }
 
     // 4. 完成上传
@@ -247,6 +274,49 @@ void uploadIsolateEntryPoint(UploadIsolateConfig config) async {
     getLogger().error('Task ${config.taskId} failed: $e');
     sendPort.send({'type': 'failed', 'error': e.toString()});
   }
+}
+
+/// 上传单个分片
+Future<void> _uploadChunk({
+  required Dio dio,
+  required io.File file,
+  required UploadTaskRecord task,
+  required int chunkIndex,
+  required int chunkSize,
+  required Sqlite3Storage storage,
+  required Set<int> uploadedChunksSet,
+}) async {
+  final offset = (chunkIndex - 1) * chunkSize;
+  final remainingBytes = task.fileSize - offset;
+  final currentChunkSize = remainingBytes > chunkSize ? chunkSize : remainingBytes;
+
+  final raf = await file.open();
+  await raf.setPosition(offset);
+  final chunkData = await raf.read(currentChunkSize);
+  await raf.close();
+
+  final chunkHash = _computeBlake3Hash(chunkData);
+
+  // 使用 protobuf 请求
+  final uploadChunkReq = UploadChunkReq()
+    ..uploadId = task.uploadId!
+    ..chunkIndex = chunkIndex
+    ..chunkHash = chunkHash
+    ..chunk = chunkData;
+
+  getLogger().debug(
+    'Uploading chunk $chunkIndex: uploadId=${task.uploadId}, chunkSize=${chunkData.length}',
+  );
+
+  await dio.post(
+    '/native.FileService/UploadChunk',
+    data: uploadChunkReq.toProto3Json(),
+  );
+
+  // 更新已上传分片
+  uploadedChunksSet.add(chunkIndex);
+  task.uploadedChunks = uploadedChunksSet.toList();
+  await storage.saveUploadTask(task);
 }
 
 /// 计算文件 Hash（使用 Blake3）

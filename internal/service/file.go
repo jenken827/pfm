@@ -61,6 +61,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (*native.File, *mo
 	}
 	dp := path.Join(dir, *req.Name)
 	fc := &native.DirConfigORM{
+		EnableEncryption: req.EnableEncryption,
 		EncryptName:      req.EncryptName,
 		EncryptionKey:    req.EncryptionKey,
 		EncryptionSalt:   req.EncryptionSalt,
@@ -123,7 +124,7 @@ func UploadFile(ctx context.Context, metadata *native.UploadMetadata, chunks [][
 		if exists {
 			return &native.UploadRespData{
 				FileId: &fileID,
-				Exists:  func() *bool { v := true; return &v }(),
+				Exists: func() *bool { v := true; return &v }(),
 			}, nil
 		}
 	}
@@ -176,7 +177,7 @@ func UploadFile(ctx context.Context, metadata *native.UploadMetadata, chunks [][
 
 	result := &native.UploadRespData{
 		FileId: func() *string { v := id.String(); return &v }(),
-		Exists:  func() *bool { v := false; return &v }(),
+		Exists: func() *bool { v := false; return &v }(),
 	}
 
 	return result, nil

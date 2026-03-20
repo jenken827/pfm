@@ -21,12 +21,12 @@ message FileListRespData {
 // 创建目录请求
 message CreateDirReq {
   optional string name = 1;
-  optional string enable_encryption = 3;
-  optional string parent_id = 4;
-  optional bool encrypt_name = 5;
-  optional string encryption_suffix = 6;
-  optional string encryption_key = 7;
-  optional string encryption_salt = 8;
+  optional bool enable_encryption = 2;
+  optional string parent_id = 3;
+  optional bool encrypt_name = 4;
+  optional string encryption_suffix = 5;
+  optional string encryption_key = 6;
+  optional string encryption_salt = 7;
 }
 
 // 创建目录响应数据
@@ -40,15 +40,15 @@ message UpdateDirReq {
 
   optional string name = 2;
 
-  optional string enable_encryption = 4;
+  optional bool enable_encryption = 3;
 
-  optional bool encrypt_name = 5;
+  optional bool encrypt_name = 4;
 
-  optional string encryption_suffix = 6;
+  optional string encryption_suffix = 5;
 
-  optional string encryption_key = 7;
+  optional string encryption_key = 6;
 
-  optional string encryption_salt = 8;
+  optional string encryption_salt = 7;
 }
 
 // 更新目录响应数据
