@@ -79,195 +79,195 @@ Future<void> _executeUploadTask(
   Talker logger,
 ) async {
   // 1. 计算 Hash（移动平台后台任务中计算）
-  if (task.fileHash == null || task.fileHash!.isEmpty) {
-    task.status = UploadTaskStatusRecord.initializing;
-    await storage.saveUploadTask(task);
+  // if (task.fileHash == null || task.fileHash!.isEmpty) {
+  //   task.status = UploadTaskStatus.initializing;
+  //   await storage.saveUploadTask(task);
 
-    final file = io.File(task.filePath);
-    if (!await file.exists()) {
-      task.status = UploadTaskStatusRecord.failed;
-      task.errorMessage = '文件不存在';
-      await storage.saveUploadTask(task);
-      return;
-    }
+  //   final file = io.File(task.filePath);
+  //   if (!await file.exists()) {
+  //     task.status = UploadTaskStatus.failed;
+  //     task.errorMessage = '文件不存在';
+  //     await storage.saveUploadTask(task);
+  //     return;
+  //   }
 
-    logger.info('Computing file hash: ${task.fileName}');
-    final fileHash = await _computeFileHash(task.filePath);
-    task.fileHash = fileHash;
-    await storage.saveUploadTask(task);
-  }
+  //   logger.info('Computing file hash: ${task.fileName}');
+  //   final fileHash = await _computeFileHash(task.filePath);
+  //   task.fileHash = fileHash;
+  //   await storage.saveUploadTask(task);
+  // }
 
-  final file = io.File(task.filePath);
-  if (!await file.exists()) {
-    task.status = UploadTaskStatusRecord.failed;
-    task.errorMessage = '文件不存在';
-    await storage.saveUploadTask(task);
-    return;
-  }
+  // final file = io.File(task.filePath);
+  // if (!await file.exists()) {
+  //   task.status = UploadTaskStatus.failed;
+  //   task.errorMessage = '文件不存在';
+  //   await storage.saveUploadTask(task);
+  //   return;
+  // }
 
-  // 更新状态为上传中
-  task.status = UploadTaskStatusRecord.uploading;
-  await storage.saveUploadTask(task);
+  // // 更新状态为上传中
+  // task.status = UploadTaskStatus.uploading;
+  // await storage.saveUploadTask(task);
 
-  try {
-    // 获取服务器配置（从 SharedPreferences 或环境变量）
-    final baseUrl = await _getBaseUrl();
-    final token = await _getToken();
+  // try {
+  //   // 获取服务器配置（从 SharedPreferences 或环境变量）
+  //   final baseUrl = await _getBaseUrl();
+  //   final token = await _getToken();
 
-    if (baseUrl.isEmpty) {
-      throw Exception('服务器地址未配置');
-    }
+  //   if (baseUrl.isEmpty) {
+  //     throw Exception('服务器地址未配置');
+  //   }
 
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: baseUrl,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 60),
-      ),
-    );
+  //   final dio = Dio(
+  //     BaseOptions(
+  //       baseUrl: baseUrl,
+  //       headers: {
+  //         'Authorization': 'Bearer $token',
+  //         'Content-Type': 'application/json',
+  //       },
+  //       connectTimeout: const Duration(seconds: 30),
+  //       receiveTimeout: const Duration(seconds: 60),
+  //     ),
+  //   );
 
-    // 初始化上传
-    if (task.uploadId == null || task.uploadId!.isEmpty) {
-      logger.info('Initializing upload: ${task.fileName}');
+  //   // 初始化上传
+  //   if (task.uploadId == null || task.uploadId!.isEmpty) {
+  //     logger.info('Initializing upload: ${task.fileName}');
 
-      // 使用 protobuf 请求
-      final initReq = InitUploadReq()
-        ..name = task.fileName
-        ..size = Int64(task.fileSize)
-        ..hash = task.fileHash ?? ''
-        ..mime = task.mime ?? '';
+  //     // 使用 protobuf 请求
+  //     final initReq = InitUploadReq()
+  //       ..name = task.fileName
+  //       ..size = Int64(task.fileSize)
+  //       ..hash = task.fileHash ?? ''
+  //       ..mime = task.mime ?? '';
 
-      if (task.parentId != null) {
-        initReq.parentId = task.parentId!;
-      }
+  //     if (task.parentId != null) {
+  //       initReq.parentId = task.parentId!;
+  //     }
 
-      final initResp = await dio.post(
-        '/native.FileService/InitUpload',
-        data: initReq.toProto3Json(),
-      );
+  //     final initResp = await dio.post(
+  //       '/native.FileService/InitUpload',
+  //       data: initReq.toProto3Json(),
+  //     );
 
-      // 使用 protobuf 解析响应
-      final initData = extractRespData<InitUploadRespData>(
-        initResp.data as Map<String, dynamic>,
-        InitUploadRespData(),
-      );
+  //     // 使用 protobuf 解析响应
+  //     final initData = extractRespData<InitUploadRespData>(
+  //       initResp.data as Map<String, dynamic>,
+  //       InitUploadRespData(),
+  //     );
 
-      final uploadId = initData.uploadId;
-      if (uploadId.isEmpty) {
-        throw Exception('Failed to get upload ID');
-      }
+  //     final uploadId = initData.uploadId;
+  //     if (uploadId.isEmpty) {
+  //       throw Exception('Failed to get upload ID');
+  //     }
 
-      task.uploadId = uploadId;
-      // 更新分片信息
-      if (initData.hasChunkTotal()) {
-        task.chunkTotal = initData.chunkTotal;
-      }
-      if (initData.hasChunkSize()) {
-        task.chunkSize = initData.chunkSize;
-      }
-      await storage.saveUploadTask(task);
+  //     task.uploadId = uploadId;
+  //     // 更新分片信息
+  //     if (initData.hasChunkTotal()) {
+  //       task.chunkTotal = initData.chunkTotal;
+  //     }
+  //     if (initData.hasChunkSize()) {
+  //       task.chunkSize = initData.chunkSize;
+  //     }
+  //     await storage.saveUploadTask(task);
 
-      // 检查是否秒传（exists 表示文件已存在）
-      if (initData.exists) {
-        task.status = UploadTaskStatusRecord.completed;
-        task.fileId = initData.fileId;
-        await storage.saveUploadTask(task);
-        logger.info('Instant upload completed: ${task.id}');
-        return;
-      }
+  //     // 检查是否秒传（exists 表示文件已存在）
+  //     if (initData.exists) {
+  //       task.status = UploadTaskStatusRecord.completed;
+  //       task.fileId = initData.fileId;
+  //       await storage.saveUploadTask(task);
+  //       logger.info('Instant upload completed: ${task.id}');
+  //       return;
+  //     }
 
-      // 获取已上传的分片
-      if (initData.uploadedChunks.isNotEmpty) {
-        task.uploadedChunks = initData.uploadedChunks.toList();
-        await storage.saveUploadTask(task);
-      }
-    }
+  //     // 获取已上传的分片
+  //     if (initData.uploadedChunks.isNotEmpty) {
+  //       task.uploadedChunks = initData.uploadedChunks.toList();
+  //       await storage.saveUploadTask(task);
+  //     }
+  //   }
 
-    // 上传分片
-    final uploadedChunksSet = Set<int>.from(task.uploadedChunks);
-    final chunkSize = task.chunkSize;
-    final totalChunks = task.chunkTotal;
+  //   // 上传分片
+  //   final uploadedChunksSet = Set<int>.from(task.uploadedChunks);
+  //   final chunkSize = task.chunkSize;
+  //   final totalChunks = task.chunkTotal;
 
-    logger.info(
-      'Uploading chunks: ${uploadedChunksSet.length}/$totalChunks completed',
-    );
+  //   logger.info(
+  //     'Uploading chunks: ${uploadedChunksSet.length}/$totalChunks completed',
+  //   );
 
-    for (int i = 1; i <= totalChunks; i++) {
-      // 检查是否被取消或暂停
-      final currentTask = await storage.getUploadTaskAsync(task.id);
-      if (currentTask?.status == UploadTaskStatusRecord.cancelled ||
-          currentTask?.status == UploadTaskStatusRecord.paused) {
-        logger.info('Task paused or cancelled: ${task.id}');
-        return;
-      }
+  //   for (int i = 1; i <= totalChunks; i++) {
+  //     // 检查是否被取消或暂停
+  //     final currentTask = await storage.getUploadTaskAsync(task.id);
+  //     if (currentTask?.status == UploadTaskStatusRecord.cancelled ||
+  //         currentTask?.status == UploadTaskStatusRecord.paused) {
+  //       logger.info('Task paused or cancelled: ${task.id}');
+  //       return;
+  //     }
 
-      if (uploadedChunksSet.contains(i)) continue;
+  //     if (uploadedChunksSet.contains(i)) continue;
 
-      final offset = (i - 1) * chunkSize;
-      final remainingBytes = task.fileSize - offset;
-      final currentChunkSize = remainingBytes > chunkSize
-          ? chunkSize
-          : remainingBytes;
+  //     final offset = (i - 1) * chunkSize;
+  //     final remainingBytes = task.fileSize - offset;
+  //     final currentChunkSize = remainingBytes > chunkSize
+  //         ? chunkSize
+  //         : remainingBytes;
 
-      // 读取分片数据
-      final raf = await file.open();
-      await raf.setPosition(offset);
-      final chunkData = await raf.read(currentChunkSize);
-      await raf.close();
+  //     // 读取分片数据
+  //     final raf = await file.open();
+  //     await raf.setPosition(offset);
+  //     final chunkData = await raf.read(currentChunkSize);
+  //     await raf.close();
 
-      // 计算分片哈希
-      final chunkHash = _computeBlake3Hash(chunkData);
+  //     // 计算分片哈希
+  //     final chunkHash = _computeBlake3Hash(chunkData);
 
-      // 使用 protobuf 请求
-      final uploadChunkReq = UploadChunkReq()
-        ..uploadId = task.uploadId!
-        ..chunkIndex = i
-        ..chunkHash = chunkHash
-        ..chunk = chunkData;
+  //     // 使用 protobuf 请求
+  //     final uploadChunkReq = UploadChunkReq()
+  //       ..uploadId = task.uploadId!
+  //       ..chunkIndex = i
+  //       ..chunkHash = chunkHash
+  //       ..chunk = chunkData;
 
-      // 上传分片
-      await dio.post(
-        '/native.FileService/UploadChunk',
-        data: uploadChunkReq.toProto3Json(),
-      );
+  //     // 上传分片
+  //     await dio.post(
+  //       '/native.FileService/UploadChunk',
+  //       data: uploadChunkReq.toProto3Json(),
+  //     );
 
-      uploadedChunksSet.add(i);
-      task.uploadedChunks = uploadedChunksSet.toList();
-      await storage.saveUploadTask(task);
+  //     uploadedChunksSet.add(i);
+  //     task.uploadedChunks = uploadedChunksSet.toList();
+  //     await storage.saveUploadTask(task);
 
-      logger.debug('Chunk $i/$totalChunks uploaded');
-    }
+  //     logger.debug('Chunk $i/$totalChunks uploaded');
+  //   }
 
-    // 完成上传
-    logger.info('Completing upload: ${task.id}');
-    final completeReq = CompleteUploadReq()..uploadId = task.uploadId!;
-    final completeResp = await dio.post(
-      '/native.FileService/CompleteUpload',
-      data: completeReq.toProto3Json(),
-    );
+  //   // 完成上传
+  //   logger.info('Completing upload: ${task.id}');
+  //   final completeReq = CompleteUploadReq()..uploadId = task.uploadId!;
+  //   final completeResp = await dio.post(
+  //     '/native.FileService/CompleteUpload',
+  //     data: completeReq.toProto3Json(),
+  //   );
 
-    final completeData = extractRespData<CompleteUploadRespData>(
-      completeResp.data as Map<String, dynamic>,
-      CompleteUploadRespData(),
-    );
+  //   final completeData = extractRespData<CompleteUploadRespData>(
+  //     completeResp.data as Map<String, dynamic>,
+  //     CompleteUploadRespData(),
+  //   );
 
-    task.status = UploadTaskStatusRecord.completed;
-    task.fileId = completeData.fileId;
-    task.completedAt = DateTime.now();
-    await storage.saveUploadTask(task);
+  //   task.status = UploadTaskStatusRecord.completed;
+  //   task.fileId = completeData.fileId;
+  //   task.completedAt = DateTime.now();
+  //   await storage.saveUploadTask(task);
 
-    logger.info('Upload completed: ${task.id}');
-  } catch (e) {
-    logger.error('Upload failed: $e');
-    task.status = UploadTaskStatusRecord.failed;
-    task.errorMessage = e.toString();
-    task.retryCount = task.retryCount + 1;
-    await storage.saveUploadTask(task);
-  }
+  //   logger.info('Upload completed: ${task.id}');
+  // } catch (e) {
+  //   logger.error('Upload failed: $e');
+  //   task.status = UploadTaskStatusRecord.failed;
+  //   task.errorMessage = e.toString();
+  //   task.retryCount = task.retryCount + 1;
+  //   await storage.saveUploadTask(task);
+  // }
 }
 
 /// 计算文件 Hash（使用 Blake3）

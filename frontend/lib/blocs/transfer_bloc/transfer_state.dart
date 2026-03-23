@@ -1,5 +1,4 @@
-import 'package:equatable/equatable.dart';
-import 'package:pfm/blocs/upload_bloc/upload_state.dart';
+part of 'transfer_bloc.dart';
 
 /// 传输标签页
 enum TransferTab { upload, download }
@@ -7,7 +6,7 @@ enum TransferTab { upload, download }
 /// 传输状态
 class TransferState extends Equatable {
   final TransferTab currentTab;
-  final List<UploadTaskState> uploadTasks;
+  final List<UploadTaskRecord> uploadTasks;
   final List<DownloadTaskState> downloadTasks;
 
   const TransferState({
@@ -16,41 +15,41 @@ class TransferState extends Equatable {
     this.downloadTasks = const [],
   });
 
+  bool get isUpload => currentTab == TransferTab.upload;
+
   /// 正在上传的任务数
-  int get uploadingCount =>
-      uploadTasks.where((t) => t.isUploading).length;
+  int get uploadingCount => uploadTasks
+      .where(
+        (t) =>
+            t.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
+            t.status == UploadStatus.UPLOAD_STATUS_PENDING,
+      )
+      .length;
 
   /// 正在下载的任务数
-  int get downloadingCount =>
-      downloadTasks.where((t) => t.status == DownloadTaskStatus.downloading).length;
+  int get downloadingCount => downloadTasks
+      .where((t) => t.status == DownloadTaskStatus.downloading)
+      .length;
 
   /// 已完成的上传任务数
-  int get completedUploadCount =>
-      uploadTasks.where((t) => t.isCompleted).length;
+  int get completedUploadCount => uploadTasks
+      .where((t) => t.status == UploadStatus.UPLOAD_STATUS_COMPLETED)
+      .length;
 
   /// 失败的上传任务数
-  int get failedUploadCount =>
-      uploadTasks.where((t) => t.isFailed).length;
-
-  /// 总上传进度
-  double get totalUploadProgress {
-    if (uploadTasks.isEmpty) return 0;
-    final activeTasks = uploadTasks.where((t) => t.isUploading || t.isCompleted);
-    if (activeTasks.isEmpty) return 0;
-    final progress = activeTasks.fold<double>(0, (sum, t) => sum + t.progress);
-    return progress / activeTasks.length;
-  }
+  int get failedUploadCount => uploadTasks
+      .where((t) => t.status == UploadStatus.UPLOAD_STATUS_FAILED)
+      .length;
 
   /// 是否有活动的传输任务
-  bool get hasActiveTransfers =>
-      uploadingCount > 0 || downloadingCount > 0;
+  bool get hasActiveTransfers => uploadingCount > 0 || downloadingCount > 0;
 
   /// 活动任务总数
   int get activeTransferCount => uploadingCount + downloadingCount;
 
   TransferState copyWith({
     TransferTab? currentTab,
-    List<UploadTaskState>? uploadTasks,
+    List<UploadTaskRecord>? uploadTasks,
     List<DownloadTaskState>? downloadTasks,
   }) {
     return TransferState(
@@ -134,13 +133,13 @@ class DownloadTaskState extends Equatable {
 
   @override
   List<Object?> get props => [
-        taskId,
-        fileName,
-        fileId,
-        fileSize,
-        downloadedSize,
-        status,
-        errorMessage,
-        localPath,
-      ];
+    taskId,
+    fileName,
+    fileId,
+    fileSize,
+    downloadedSize,
+    status,
+    errorMessage,
+    localPath,
+  ];
 }

@@ -1,40 +1,52 @@
 import 'dart:async';
 
+import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pfm/blocs/upload_bloc/upload_bloc.dart';
-import 'package:pfm/blocs/upload_bloc/upload_event.dart';
-import 'package:pfm/blocs/upload_bloc/upload_state.dart';
-import 'transfer_event.dart';
-import 'transfer_state.dart';
+import 'package:pfm/models/models.dart';
+import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/services/services.dart';
+
+part 'transfer_event.dart';
+part 'transfer_state.dart';
 
 /// 传输 Bloc - 管理上传和下载任务
 class TransferBloc extends Bloc<TransferEvent, TransferState> {
-  final UploadBloc _uploadBloc;
-  StreamSubscription<UploadState>? _uploadSubscription;
-
-  TransferBloc({
-    required UploadBloc uploadBloc,
-  })  : _uploadBloc = uploadBloc,
-        super(const TransferState()) {
+  TransferBloc(this._bgService) : super(const TransferState()) {
+    on<TransferUploadSubscribeEvent>(_onUploadSubscribe);
+    on<TransferDownloadSubscribeEvent>(_onDownloadSubscribe);
     on<TransferRefreshEvent>(_onRefresh);
     on<TransferClearCompletedEvent>(_onClearCompleted);
     on<TransferClearFailedEvent>(_onClearFailed);
-    on<TransferPauseAllUploadsEvent>(_onPauseAllUploads);
-    on<TransferResumeAllUploadsEvent>(_onResumeAllUploads);
-    on<TransferCancelAllUploadsEvent>(_onCancelAllUploads);
-
-    // 监听 UploadBloc 状态变化
-    _uploadSubscription = _uploadBloc.stream.listen((uploadState) {
-      _syncUploadTasks(uploadState);
-    });
-
-    // 初始化时同步当前状态
-    _syncUploadTasks(_uploadBloc.state);
+    on<TransferPauseEvent>(_onPause);
+    on<TransferResumeEvent>(_onResume);
+    on<TransferCancelEvent>(_onCancel);
+    on<TransferRemoveEvent>(_onRemove);
   }
 
-  /// 同步上传任务状态
-  void _syncUploadTasks(UploadState uploadState) {
-    emit(state.copyWith(uploadTasks: uploadState.tasks));
+  final BackgroundService _bgService;
+
+  Future<void> _onUploadSubscribe(
+    TransferUploadSubscribeEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    await emit.forEach(
+      _bgService.uploadTaskStream,
+      onData: (tasks) {
+        return state.copyWith(uploadTasks: tasks);
+      },
+    );
+  }
+
+  Future<void> _onDownloadSubscribe(
+    TransferDownloadSubscribeEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    // await emit.forEach(
+    //   _bgService.downloadTaskStream,
+    //   onData: (tasks) {
+    //     return state.copyWith(downloadTasks: tasks);
+    //   },
+    // );
   }
 
   /// 刷新传输列表
@@ -42,8 +54,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferRefreshEvent event,
     Emitter<TransferState> emit,
   ) async {
-    // 重新同步上传任务
-    _syncUploadTasks(_uploadBloc.state);
+    if (state.isUpload) {
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
+    }
   }
 
   /// 清除已完成的传输任务
@@ -51,57 +65,73 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferClearCompletedEvent event,
     Emitter<TransferState> emit,
   ) async {
-    _uploadBloc.add(const UploadClearCompletedEvent());
+    if (state.isUpload) {
+      await _bgService.storage.clearUploadCompleted();
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
+    }
   }
 
   /// 清除失败的传输任务
   Future<void> _onClearFailed(
     TransferClearFailedEvent event,
+
     Emitter<TransferState> emit,
   ) async {
-    final failedTaskIds = state.uploadTasks
-        .where((t) => t.isFailed)
-        .map((t) => t.taskId)
-        .toList();
-
-    for (final taskId in failedTaskIds) {
-      _uploadBloc.add(UploadRemoveEvent(taskId));
+    if (state.isUpload) {
+      await _bgService.storage.clearUploadFailed();
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
     }
   }
 
   /// 暂停所有上传
-  Future<void> _onPauseAllUploads(
-    TransferPauseAllUploadsEvent event,
+  Future<void> _onPause(
+    TransferPauseEvent event,
     Emitter<TransferState> emit,
   ) async {
-    for (final task in state.uploadTasks.where((t) => t.isUploading)) {
-      _uploadBloc.add(UploadPauseEvent(task.taskId));
+    if (state.isUpload) {
+      await _bgService.storage.pauseUploadTasks(event.taskId);
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
     }
   }
 
   /// 恢复所有上传
-  Future<void> _onResumeAllUploads(
-    TransferResumeAllUploadsEvent event,
+  Future<void> _onResume(
+    TransferResumeEvent event,
     Emitter<TransferState> emit,
   ) async {
-    for (final task in state.uploadTasks.where((t) => t.isPaused)) {
-      _uploadBloc.add(UploadResumeEvent(task.taskId));
+    if (state.isUpload) {
+      await _bgService.resumeUploadTasks(event.taskId);
+
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+
+      emit(state.copyWith(uploadTasks: tasks));
     }
   }
 
   /// 取消所有上传
-  Future<void> _onCancelAllUploads(
-    TransferCancelAllUploadsEvent event,
+  Future<void> _onCancel(
+    TransferCancelEvent event,
     Emitter<TransferState> emit,
   ) async {
-    for (final task in state.uploadTasks.where((t) => t.isUploading || t.isPaused)) {
-      _uploadBloc.add(UploadCancelEvent(task.taskId));
+    if (state.isUpload) {
+      await _bgService.storage.cancelUploadTask(event.taskId);
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
     }
   }
 
-  @override
-  Future<void> close() {
-    _uploadSubscription?.cancel();
-    return super.close();
+  /// 删除
+  Future<void> _onRemove(
+    TransferRemoveEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    if (state.isUpload) {
+      await _bgService.storage.deleteUploadTask(event.taskId);
+      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      emit(state.copyWith(uploadTasks: tasks));
+    }
   }
 }

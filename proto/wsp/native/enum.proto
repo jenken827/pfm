@@ -36,17 +36,39 @@ enum HashType {
   BLAKE3 = 7;
 }
 
+// 上传状态
+enum UploadStatus {
+  UPLOAD_TASK_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  HASHING = 2;  
+  UPLOADING = 3;
+  COMPLETED = 4;
+  FAILED = 5;
+  CANCELED = 6;
+  PAUSED = 7;
+}
 
 // RespCode 应用状态码
 enum RespCode {
   // 根据 protobuf 规范，枚举值必须从 0 开始，且建议后缀使用_UNSPECIFIED 表示未指定的状态，所以前端在处理时不要用 0 作为成功的状态码。
   CODE_UNSPECIFIED = 0;
   SUCCESS = 1;
+  // 登录失效
   TOKEN_INVALID = 2;
+  // 参数错误
   PARAMS_ERROR = 3;
-  ITEM_ALREADY_EXISTS = 4;
-  PERMISSION_DENIED = 5;
-  INTERNAL_ERROR = 6;
-  CUSTOM_ERROR = 7;
-  RATE_LIMIT_EXCEEDED = 8;
+  // 没有找到对应项
+  ITEM_NOT_FOUND = 4;
+  // 对象已存在
+  ITEM_ALREADY_EXISTS = 5;
+  // 权限不足
+  PERMISSION_DENIED = 6;
+  // 内部错误
+  INTERNAL_ERROR = 7;
+  // 自定义错误
+  CUSTOM_ERROR = 8;
+  // 请求频率过高
+  RATE_LIMIT_EXCEEDED = 9;
+  // 分片没有上传完整
+  PARTIAL_UPLOAD_ERROR = 10;
 }

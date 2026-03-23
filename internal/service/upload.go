@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,8 +11,8 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
-	"time"
 
+	"jenken827.com/jenken827/pfm/flags"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
@@ -26,200 +25,192 @@ import (
 const (
 	// DefaultChunkSize 默认分片大小 10MB
 	DefaultChunkSize = 10 * 1024 * 1024
-	// LargeFileThreshold 大文件阈值 100MB
-	LargeFileThreshold = 100 * 1024 * 1024
-	// UploadStatusPending 待上传
-	UploadStatusPending = "pending"
-	// UploadStatusUploading 上传中
-	UploadStatusUploading = "uploading"
-	// UploadStatusCompleted 已完成
-	UploadStatusCompleted = "completed"
-	// UploadStatusFailed 失败
-	UploadStatusFailed = "failed"
 )
 
 // InitUpload 初始化上传任务
 func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUploadRespData, *models.Err) {
-	// 1. 检查文件是否已存在（秒传）
-	if req.Hash != nil && *req.Hash != "" {
-		exists, fileID, err := db.CheckFileExistsByHash(*req.Hash)
-		if err != nil {
-			llog.GetLogger().Errorf("check file exists failed: %v", err)
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-		}
-		if exists {
-			llog.GetLogger().Infof("file already exists, fast upload: %s", *req.Hash)
+	// 根据hash查询文件记录
+	existingFile, err := db.GetFile("hash = ?", *req.Hash)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.GetLogger().Errorf("check file exists by hash failed: %v", err)
+		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	}
+	// 检查同目录下是否有同名文件
+	sameNameFile, err := db.GetFile("parent_id = ? and name = ?", *req.ParentId, *req.Name)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.GetLogger().Errorf("check same name file failed: %v", err)
+		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	}
+	// 文件已存在（通过hash判断）
+	if existingFile != nil {
+		llog.GetLogger().Infof("file already exists by hash: %s, name: %s, parent_id: %s",
+			*req.Hash, *existingFile.Name, *existingFile.ParentId)
+		if sameNameFile != nil {
+			// 同名文件存在，检查哈希是否匹配
+			if *sameNameFile.Hash == *req.Hash {
+				llog.GetLogger().Infof("same file exists, fast upload: %s", *req.Hash)
+				a := true
+				return &native.InitUploadRespData{
+					Exists: &a,
+				}, nil
+			}
+			//hash不匹配
+			if !*req.Overwrite { //不允许覆盖，直接返回错误
+				llog.GetLogger().Infof("same name file exists, overwrite=false: %s", *req.Name)
+				return nil, &models.Err{
+					E:    fmt.Errorf("file with same name already exists: %s", *req.Name),
+					Code: native.RespCode_ITEM_ALREADY_EXISTS,
+				}
+			}
+		} else { // 不存在同名文件，文件已经上传了，只需要添加新的记录
+			newFileID := uuid.New().String()
+			dir := "/"
+			if *req.ParentId != "" {
+				//获取父目录信息
+				parentDir, err := db.GetFile("id = ?", *req.ParentId)
+				if err != nil {
+					llog.GetLogger().Errorf("get parent dir failed: %v", err)
+					return nil, &models.Err{E: err, Code: native.RespCode_CUSTOM_ERROR}
+				}
+				dir = path.Join(*parentDir.Dir, *parentDir.Name)
+			}
+
+			// 创建新的文件记录（复用已存在的文件内容）
+			newFileRecord := &native.FileORM{
+				Id:       &newFileID,
+				Name:     req.Name,
+				ParentId: req.ParentId,
+				Dir:      &dir,
+				Size:     existingFile.Size,
+				Hash:     existingFile.Hash,
+				Type:     existingFile.Type,
+				Mime:     existingFile.Mime,
+			}
+			if err := db.CreateFile(newFileRecord); err != nil {
+				llog.GetLogger().Errorf("create file record failed: %v", err)
+				return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+			}
+			a := true
 			return &native.InitUploadRespData{
-				Exists: func() *bool { v := true; return &v }(),
-				FileId: &fileID,
+				Exists: &a,
 			}, nil
 		}
-	}
-
-	// 2. 检查是否有未完成的上传任务（断点续传）
-	var existingRecords []native.UploadChunkRecordORM
-	if req.Hash != nil && *req.Hash != "" {
-		if err := db.GetDB().Where("file_hash = ? AND status != ?", *req.Hash, UploadStatusCompleted).
-			Order("chunk_index asc").
-			Find(&existingRecords).Error; err != nil {
-			llog.GetLogger().Errorf("query existing upload records failed: %v", err)
-		}
-	}
-
-	// 如果存在未完成的上传任务，返回 upload_id 和已上传分片
-	if len(existingRecords) > 0 {
-		uploadID := *existingRecords[0].UploadId
-		var uploadedChunks []uint32
-		for _, r := range existingRecords {
-			// 只包含状态为 uploading 且 chunk_index > 0 的分片
-			if r.ChunkIndex != nil && *r.ChunkIndex > 0 &&
-				r.Status != nil && *r.Status == UploadStatusUploading {
-				uploadedChunks = append(uploadedChunks, *r.ChunkIndex)
+	} else {
+		// 文件未上传过，存在同名文件，如果覆盖标志为false，返回存在同名文件错误
+		if sameNameFile != nil && !*req.Overwrite {
+			llog.GetLogger().Infof("same name file exists, overwrite=false: %s", *req.Name)
+			return nil, &models.Err{
+				E:    fmt.Errorf("file with same name already exists: %s", *req.Name),
+				Code: native.RespCode_ITEM_ALREADY_EXISTS,
 			}
 		}
-		chunkTotal := *existingRecords[0].ChunkTotal
-		chunkSize := *existingRecords[0].ChunkSize
+	}
 
-		llog.GetLogger().Infof("resume upload: %s, uploaded chunks: %v", uploadID, uploadedChunks)
+	// 检查是否有未完成的上传任务（断点续传）
+	record, chunks, err := db.GetUploadRecord("file_hash = ?", true, *req.Hash)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.GetLogger().Errorf("get uncomplete uploads failed: %v", err)
+		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	}
+
+	// 如果存在未完成的上传任务，返回 upload_id 和已上传分片（位图）
+	if record != nil {
+		uploadID := *record.Id
+		chunkTotal := *record.ChunkTotal
+		chunkSize := *record.ChunkSize
+
+		// 构建已上传分片位图
+		uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
+		if chunks != nil {
+			uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
+		}
+		llog.GetLogger().Infof("resume upload: %s, chunk_total: %d, chunk_size: %d",
+			uploadID, chunkTotal, chunkSize)
 		return &native.InitUploadRespData{
 			UploadId:       &uploadID,
-			UploadedChunks: uploadedChunks,
+			UploadedChunks: uploadedChunksBitmap,
 			ChunkTotal:     &chunkTotal,
 			ChunkSize:      &chunkSize,
 		}, nil
 	}
 
-	// 3. 创建新的上传任务
+	// 4. 创建新的上传任务
 	uploadID := uuid.New().String()
 
 	// 计算分片大小和总数
-	chunkSize := DefaultChunkSize
-	if req.ChunkSize != nil && *req.ChunkSize > 0 {
-		chunkSize = int(*req.ChunkSize)
-	}
-	fileSize := int64(0)
-	if req.Size != nil {
-		fileSize = int64(*req.Size)
-	}
-	chunkTotal := uint32((fileSize + int64(chunkSize) - 1) / int64(chunkSize))
+	chunkSize := uint64(DefaultChunkSize)
+	chunkTotal := uint32((*req.Size + chunkSize - 1) / chunkSize)
 	if chunkTotal == 0 {
 		chunkTotal = 1
 	}
 
-	// 4. 获取第一个启用的存储介质
-	provider, group, err := getFirstEnabledProvider()
-	if err != nil {
-		llog.GetLogger().Errorf("get storage provider failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-
-	// 5. 创建分片上传记录
-	status := UploadStatusPending
-	parentID := ""
-	if req.ParentId != nil {
-		parentID = *req.ParentId
-	}
-	fileName := ""
-	if req.Name != nil {
-		fileName = *req.Name
-	}
-	fileHash := ""
-	if req.Hash != nil {
-		fileHash = *req.Hash
-	}
-	mime := ""
-	if req.Mime != nil {
-		mime = *req.Mime
-	}
-	fileType := int32(0)
-	if req.Type != nil {
-		fileType = int32(req.Type.Number())
-	}
-
-	record := &native.UploadChunkRecordORM{
-		UploadId:   &uploadID,
-		FileHash:   &fileHash,
-		FileName:   &fileName,
-		FileSize:   req.Size,
-		ParentId:   &parentID,
-		Mime:       &mime,
-		FileType:   &fileType,
-		ChunkTotal: &chunkTotal,
-		ChunkSize:  func() *uint32 { v := uint32(chunkSize); return &v }(),
-		ChunkIndex: func() *uint32 { v := uint32(0); return &v }(),
-		Status:     &status,
-		ProviderId: provider.Id,
-		GroupId:    group.Id,
-	}
-
-	if err := db.GetDB().Create(record).Error; err != nil {
-		llog.GetLogger().Errorf("create upload record failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-
-	llog.GetLogger().Infof("init upload: %s, chunk_total: %d, chunk_size: %d", uploadID, chunkTotal, chunkSize)
-
-	return &native.InitUploadRespData{
-		UploadId:       &uploadID,
-		UploadedChunks: []uint32{},
-		ChunkTotal:     &chunkTotal,
-		ChunkSize:      func() *uint32 { v := uint32(chunkSize); return &v }(),
-	}, nil
-}
-
-// UploadChunkSingle 上传单个分片（非流式）
-func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) (*native.UploadChunkRespData, *models.Err) {
-	if req.UploadId == nil || *req.UploadId == "" {
-		return nil, &models.Err{E: errors.New("upload_id is required"), Code: native.RespCode_PARAMS_ERROR}
-	}
-	if req.ChunkIndex == nil {
-		return nil, &models.Err{E: errors.New("chunk_index is required"), Code: native.RespCode_PARAMS_ERROR}
-	}
-
-	uploadID := *req.UploadId
-	chunkIndex := *req.ChunkIndex
-	chunkHash := ""
-	if req.ChunkHash != nil {
-		chunkHash = *req.ChunkHash
-	}
-
-	llog.GetLogger().Infof("upload chunk: upload_id=%s, chunk_index=%d", uploadID, chunkIndex)
-
-	// 获取上传记录
-	var record native.UploadChunkRecordORM
-	if err := db.GetDB().Where("upload_id = ?", uploadID).First(&record).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, &models.Err{E: errors.New("upload task not found"), Code: native.RespCode_PARAMS_ERROR}
-		}
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-
-	// 获取存储介质配置
-	var provider native.StorageProviderORM
-	if err := db.GetDB().Where("id = ?", *record.ProviderId).First(&provider).Error; err != nil {
-		return nil, &models.Err{E: fmt.Errorf("storage provider not found: %v", err), Code: native.RespCode_INTERNAL_ERROR}
-	}
-
-	// 解析配置获取存储路径
-	config, err := parseProviderConfig(*provider.Config)
-	if err != nil {
-		return nil, &models.Err{E: fmt.Errorf("parse provider config failed: %v", err), Code: native.RespCode_INTERNAL_ERROR}
-	}
-	rootPath := config.RootPath
-
 	// 创建临时目录
-	tempDir := filepath.Join(rootPath, ".temp", uploadID)
+	tempDir := filepath.Join(flags.TempDir, uploadID)
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		llog.GetLogger().Errorf("create temp dir failed: %v", err)
 		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 
+	ur := &native.UploadRecordORM{
+		Id:         &uploadID,
+		FileHash:   req.Hash,
+		FileName:   req.Name,
+		FileSize:   req.Size,
+		ParentId:   req.ParentId,
+		ChunkTotal: &chunkTotal,
+		ChunkSize:  &chunkSize,
+		TempPath:   &tempDir,
+	}
+
+	if err := db.GetDB().Create(ur).Error; err != nil {
+		llog.GetLogger().Errorf("create upload record failed: %v", err)
+		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	}
+
+	llog.GetLogger().Infof("init upload: %s, chunk_total: %d, chunk_size: %d",
+		uploadID, chunkTotal, chunkSize)
+
+	return &native.InitUploadRespData{
+		UploadId:       &uploadID,
+		UploadedChunks: make([]byte, (chunkTotal+7)/8), // 空位图
+		ChunkTotal:     &chunkTotal,
+		ChunkSize:      &chunkSize,
+	}, nil
+}
+
+func buildUploadedBitmap(chunks []*native.UploadChunkRecordORM, chunkTotal uint32) []byte {
+
+	// 构建已上传分片位图
+	uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
+	for _, r := range chunks {
+		chunkIdx := *r.Index // 位图索引从0开始
+		uploadedChunksBitmap[chunkIdx/8] |= (1 << (chunkIdx % 8))
+	}
+	return uploadedChunksBitmap
+
+}
+
+// UploadChunkSingle 上传单个分片（非流式）
+func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.Err {
+	uploadID := *req.UploadId
+	chunkIndex := *req.ChunkIndex
+	chunkHash := *req.ChunkHash
+
+	llog.GetLogger().Infof("upload chunk: upload_id=%s, chunk_index=%d", uploadID, chunkIndex)
+
+	// 获取上传记录
+	uploadRecord, _, err := db.GetUploadRecord("id = ?", false, uploadID)
+	if err != nil {
+		llog.GetLogger().Errorf("get upload record failed: %v", err)
+		return &models.Err{E: err, Code: native.RespCode_CUSTOM_ERROR}
+	}
+
 	// 写入分片文件
-	chunkPath := filepath.Join(tempDir, fmt.Sprintf("chunk_%d", chunkIndex))
+	chunkPath := filepath.Join(*uploadRecord.TempPath, fmt.Sprintf("chunk_%d", chunkIndex))
 	chunkFile, err := os.Create(chunkPath)
 	if err != nil {
 		llog.GetLogger().Errorf("create chunk file failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 	defer chunkFile.Close()
 
@@ -231,7 +222,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) (*native
 	if len(req.Chunk) > 0 {
 		n, err := chunkFile.Write(req.Chunk)
 		if err != nil {
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+			return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 		}
 		hasher.Write(req.Chunk)
 		totalSize += int64(n)
@@ -241,171 +232,113 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) (*native
 	actualHash := hex.EncodeToString(hasher.Sum(nil))
 	if chunkHash != "" && chunkHash != actualHash {
 		os.Remove(chunkPath)
-		return nil, &models.Err{E: errors.New("chunk hash mismatch"), Code: native.RespCode_PARAMS_ERROR}
+		llog.GetLogger().Errorf("chunk hash mismatch: expected=%s, actual=%s", chunkHash, actualHash)
+		return &models.Err{E: errors.New("chunk hash mismatch"), Code: native.RespCode_PARAMS_ERROR}
 	}
 
-	// 更新上传状态
-	status := UploadStatusUploading
-	now := time.Now()
-	tempPath := chunkPath
-
-	// 检查该分片是否已存在记录
-	var existingRecord native.UploadChunkRecordORM
-	err = db.GetDB().Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&existingRecord).Error
-
-	if err == gorm.ErrRecordNotFound {
-		// 创建新的分片记录
-		newRecord := &native.UploadChunkRecordORM{
-			UploadId:   &uploadID,
-			FileHash:   record.FileHash,
-			FileName:   record.FileName,
-			FileSize:   record.FileSize,
-			ParentId:   record.ParentId,
-			Mime:       record.Mime,
-			FileType:   record.FileType,
-			ChunkTotal: record.ChunkTotal,
-			ChunkSize:  record.ChunkSize,
-			ChunkIndex: &chunkIndex,
-			ChunkHash:  &actualHash,
-			TempPath:   &tempPath,
-			Status:     &status,
-			ProviderId: record.ProviderId,
-			GroupId:    record.GroupId,
-			UpdatedAt:  &now,
-		}
-		if err := db.GetDB().Create(newRecord).Error; err != nil {
-			llog.GetLogger().Errorf("create chunk record failed: %v", err)
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-		}
-	} else if err != nil {
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	} else {
-		// 更新已有记录
-		updates := map[string]interface{}{
-			"chunk_hash": actualHash,
-			"temp_path":  tempPath,
-			"status":     status,
-			"updated_at": now,
-		}
-		if err := db.GetDB().Model(&existingRecord).Updates(updates).Error; err != nil {
-			llog.GetLogger().Errorf("update chunk record failed: %v", err)
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-		}
+	// 创建新的分片记录
+	newRecord := &native.UploadChunkRecordORM{
+		UploadId: &uploadID,
+		Hash:     &actualHash,
+		Index:    &chunkIndex,
+	}
+	if err := db.GetDB().Create(newRecord).Error; err != nil {
+		llog.GetLogger().Errorf("create chunk record failed: %v", err)
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 
-	// 统计已上传分片数量
-	var uploadedCount int64
-	db.GetDB().Model(&native.UploadChunkRecordORM{}).
-		Where("upload_id = ? AND status = ?", uploadID, status).
-		Count(&uploadedCount)
-
-	chunkTotal := *record.ChunkTotal
-
-	llog.GetLogger().Infof("chunk uploaded: upload_id=%s, chunk_index=%d, progress=%d/%d",
-		uploadID, chunkIndex, uploadedCount, chunkTotal)
-
-	return &native.UploadChunkRespData{
-		UploadId:      &uploadID,
-		ChunkIndex:    &chunkIndex,
-		UploadedCount: func() *uint32 { v := uint32(uploadedCount); return &v }(),
-		ChunkTotal:    &chunkTotal,
-	}, nil
+	return nil
 }
 
 // CompleteUpload 完成上传
-func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) (*native.CompleteUploadRespData, *models.Err) {
+func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.Err {
 	uploadID := *req.UploadId
 
 	llog.GetLogger().Infof("complete upload: %s", uploadID)
 
-	// 获取所有分片记录
-	var records []native.UploadChunkRecordORM
-	if err := db.GetDB().Where("upload_id = ?", uploadID).
-		Order("chunk_index asc").
-		Find(&records).Error; err != nil {
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
+	uploadRecord, chunks, err := db.GetUploadRecord("id=?", true, uploadID)
 
-	if len(records) == 0 {
-		return nil, &models.Err{E: errors.New("no upload records found"), Code: native.RespCode_PARAMS_ERROR}
+	if len(chunks) == 0 {
+		llog.GetLogger().Errorf("no chunk records found")
+		return &models.Err{E: errors.New("no upload records found"), Code: native.RespCode_PARTIAL_UPLOAD_ERROR}
 	}
 
 	// 检查所有分片是否都已上传
-	chunkTotal := *records[0].ChunkTotal
-	var uploadedCount int
-	for _, r := range records {
-		if r.Status != nil && *r.Status == UploadStatusUploading {
-			uploadedCount++
+	if len(chunks) < int(*uploadRecord.ChunkTotal) {
+		llog.GetLogger().Errorf("not all chunks uploaded: %d/%d", len(chunks), *uploadRecord.ChunkTotal)
+		return &models.Err{
+			E:    fmt.Errorf("not all chunks uploaded: %d/%d", len(chunks), *uploadRecord.ChunkTotal),
+			Code: native.RespCode_PARTIAL_UPLOAD_ERROR,
 		}
 	}
 
-	if uploadedCount < int(chunkTotal) {
-		return nil, &models.Err{
-			E:    fmt.Errorf("not all chunks uploaded: %d/%d", uploadedCount, chunkTotal),
-			Code: native.RespCode_PARAMS_ERROR,
-		}
-	}
+	// 存储逻辑-----------------------------------------
 
 	// 获取存储介质配置
-	var provider native.StorageProviderORM
-	if err := db.GetDB().Where("id = ?", *records[0].ProviderId).First(&provider).Error; err != nil {
-		return nil, &models.Err{E: fmt.Errorf("storage provider not found: %v", err), Code: native.RespCode_INTERNAL_ERROR}
+	provider, err := db.GetStorageProvider("")
+	if err != nil {
+		llog.GetLogger().Errorf("get storage provider failed: %v", err)
+		return &models.Err{E: fmt.Errorf("storage provider not found: %v", err), Code: native.RespCode_INTERNAL_ERROR}
 	}
 
 	config, err := parseProviderConfig(*provider.Config)
 	if err != nil {
-		return nil, &models.Err{E: fmt.Errorf("parse provider config failed: %v", err), Code: native.RespCode_INTERNAL_ERROR}
+		llog.GetLogger().Errorf("parse provider config failed: %v", err)
+		return &models.Err{E: fmt.Errorf("parse provider config failed: %v", err), Code: native.RespCode_INTERNAL_ERROR}
 	}
 	rootPath := config.RootPath
 
+	filetype := getFileType(path.Join(*uploadRecord.TempPath, "chunk_0"), *uploadRecord.FileName)
+
 	// 生成文件存储路径
 	fileID := uuid.New().String()
-	ext := filepath.Ext(*records[0].FileName)
-	filePath := filepath.Join(rootPath, "files", fileID[:2], fileID[2:4], fileID+ext)
+	filePath := filepath.Join(rootPath, "files", fileID[:2], fileID[2:4], fileID)
 
 	// 确保目录存在
 	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		llog.GetLogger().Errorf("create file dir failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 
 	// 合并所有分片
 	outputFile, err := os.Create(filePath)
 	if err != nil {
 		llog.GetLogger().Errorf("create output file failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 	defer outputFile.Close()
 
-	hasher := sha256.New()
+	// 使用 blake3 计算文件哈希（与前端一致）
+	hasher := blake3.New(32, nil)
 	var totalSize int64
 
-	for _, record := range records {
-		if record.TempPath == nil || *record.TempPath == "" {
-			continue
-		}
-		chunkFile, err := os.Open(*record.TempPath)
+	for i := range chunks {
+		f := path.Join(*uploadRecord.TempPath, "chunk_"+strconv.Itoa(i))
+		chunkFile, err := os.Open(f)
 		if err != nil {
 			llog.GetLogger().Errorf("open chunk file failed: %v", err)
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+			return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 		}
 
 		n, err := io.Copy(io.MultiWriter(outputFile, hasher), chunkFile)
 		chunkFile.Close()
 		if err != nil {
 			llog.GetLogger().Errorf("copy chunk to output failed: %v", err)
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+			return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 		}
 		totalSize += n
 	}
 
 	finalHash := hex.EncodeToString(hasher.Sum(nil))
-
+	if finalHash != *uploadRecord.FileHash {
+		llog.GetLogger().Errorf("file hash mismatch: expected %s, got %s", *uploadRecord.FileHash, finalHash)
+		return &models.Err{E: errors.New("file hash mismatch"), Code: native.RespCode_CUSTOM_ERROR}
+	}
 	// 创建文件记录
 	dir := "/"
-	parentID := *records[0].ParentId
+	parentID := *uploadRecord.ParentId
 	if parentID != "" {
-		parentDir, err := db.GetFileByID(parentID)
+		parentDir, err := db.GetFile("id=?", parentID)
 		if err == nil {
 			dir = path.Join(*parentDir.Dir, *parentDir.Name)
 		}
@@ -413,28 +346,28 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) (*native
 
 	fileRecord := &native.FileORM{
 		Id:       &fileID,
-		Name:     records[0].FileName,
+		Name:     uploadRecord.FileName,
 		ParentId: &parentID,
 		Dir:      &dir,
 		Size:     func() *uint64 { v := uint64(totalSize); return &v }(),
 		Hash:     &finalHash,
-		Type:     records[0].FileType,
-		Mime:     records[0].Mime,
+		Type:     &filetype,
 	}
 
 	if err := db.CreateFile(fileRecord); err != nil {
 		llog.GetLogger().Errorf("create file record failed: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 
 	// 创建文件位置记录
+	ct := uint32(1)
 	providerType := *provider.ProviderType
 	locationRecord := &native.FileLocationORM{
 		Blake3Hash:   &finalHash,
 		Path:         &filePath,
 		ProviderType: &providerType,
-		ProviderId:   records[0].ProviderId,
-		ChunkTotal:   records[0].ChunkTotal,
+		ProviderId:   provider.Id,
+		ChunkTotal:   &ct,
 	}
 
 	if err := db.GetDB().Create(locationRecord).Error; err != nil {
@@ -445,60 +378,24 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) (*native
 	tempDir := filepath.Join(rootPath, ".temp", uploadID)
 	os.RemoveAll(tempDir)
 
-	// 更新所有分片记录状态为已完成
-	completedStatus := UploadStatusCompleted
-	db.GetDB().Model(&native.UploadChunkRecordORM{}).
-		Where("upload_id = ?", uploadID).
-		Update("status", completedStatus)
-
-	fileName := *records[0].FileName
-	llog.GetLogger().Infof("upload completed: file_id=%s, name=%s, size=%d", fileID, fileName, totalSize)
-
-	return &native.CompleteUploadRespData{
-		FileId: &fileID,
-		Name:   &fileName,
-		Size:   func() *uint64 { v := uint64(totalSize); return &v }(),
-	}, nil
+	return nil
 }
 
 // GetUploadProgress 获取上传进度
 func GetUploadProgress(ctx context.Context, req *native.UploadProgressReq) (*native.UploadProgressRespData, *models.Err) {
 	uploadID := *req.UploadId
 
-	var records []native.UploadChunkRecordORM
-	if err := db.GetDB().Where("upload_id = ?", uploadID).
-		Order("chunk_index asc").
-		Find(&records).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, &models.Err{E: errors.New("upload task not found"), Code: native.RespCode_PARAMS_ERROR}
-		}
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	uploadRecord, chunks, err := db.GetUploadRecord("id=?", true, uploadID)
+	if err != nil {
+		llog.GetLogger().Errorf("get upload record failed: %v", err)
+		return nil, &models.Err{E: err, Code: native.RespCode_CUSTOM_ERROR}
 	}
-
-	if len(records) == 0 {
-		return nil, &models.Err{E: errors.New("upload task not found"), Code: native.RespCode_PARAMS_ERROR}
-	}
-
-	var uploadedChunks []uint32
-	var status string
-	for _, r := range records {
-		if r.Status != nil && (*r.Status == UploadStatusUploading || *r.Status == UploadStatusCompleted) {
-			if r.ChunkIndex != nil && *r.ChunkIndex > 0 {
-				uploadedChunks = append(uploadedChunks, *r.ChunkIndex)
-			}
-		}
-		status = *r.Status
-	}
-
-	chunkTotal := *records[0].ChunkTotal
-	uploadedCount := uint32(len(uploadedChunks))
+	uploadedChunks := buildUploadedBitmap(chunks, *uploadRecord.ChunkTotal)
 
 	return &native.UploadProgressRespData{
 		UploadId:       &uploadID,
-		ChunkTotal:     &chunkTotal,
+		ChunkTotal:     uploadRecord.ChunkTotal,
 		UploadedChunks: uploadedChunks,
-		UploadedCount:  &uploadedCount,
-		Status:         &status,
 	}, nil
 }
 
@@ -508,35 +405,23 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 
 	llog.GetLogger().Infof("cancel upload: %s", uploadID)
 
-	// 获取上传记录
-	var records []native.UploadChunkRecordORM
-	if err := db.GetDB().Where("upload_id = ?", uploadID).Find(&records).Error; err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	uploadRecord, _, err := db.GetUploadRecord("id=?", true, uploadID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.GetLogger().Errorf("get upload record failed: %v", err)
+		return &models.Err{E: err, Code: native.RespCode_CUSTOM_ERROR}
 	}
-
-	if len(records) == 0 {
+	if err == gorm.ErrRecordNotFound {
 		return nil
 	}
 
-	// 获取存储介质配置
-	var provider native.StorageProviderORM
-	if err := db.GetDB().Where("id = ?", *records[0].ProviderId).First(&provider).Error; err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-
-	config, err := parseProviderConfig(*provider.Config)
-	if err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-	rootPath := config.RootPath
-
 	// 清理临时文件
-	tempDir := filepath.Join(rootPath, ".temp", uploadID)
+	tempDir := filepath.Join(*uploadRecord.TempPath, uploadID)
 	os.RemoveAll(tempDir)
 
 	// 删除数据库记录
-	if err := db.GetDB().Where("upload_id = ?", uploadID).Delete(&native.UploadChunkRecordORM{}).Error; err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	if err := db.DelUploadRecord(uploadID); err != nil {
+		llog.GetLogger().Errorf("delete upload record failed: %v", err)
+		return &models.Err{E: err, Code: native.RespCode_CUSTOM_ERROR}
 	}
 
 	return nil

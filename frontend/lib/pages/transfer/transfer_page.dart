@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_event.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_state.dart';
-import 'package:pfm/blocs/upload_bloc/upload_bloc.dart';
+import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/widgets/download_task_list.dart';
 import 'package:pfm/widgets/upload_task_list.dart';
@@ -44,8 +41,8 @@ class _TransferPageState extends State<TransferPage>
   Widget build(BuildContext context) {
     final al = AppLocalizations.of(context)!;
 
-    return BlocProvider(
-      create: (context) => TransferBloc(uploadBloc: GetIt.I.get<UploadBloc>()),
+    return BlocProvider.value(
+      value: GetIt.I.get<TransferBloc>(),
       child: Scaffold(
         appBar: AppBar(
           title: Text(al.transfer),

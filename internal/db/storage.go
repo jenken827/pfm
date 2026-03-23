@@ -8,25 +8,23 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetFileByParentID 获取指定父目录下的所有子项目
-func GetFileByParentID(parentID string) ([]*native.FileORM, error) {
+// GetStorageProvider 获取存储提供者
+func GetStorageProvider(expression string, args ...any) (*native.StorageProviderORM, error) {
+	var provider *native.StorageProviderORM
+	var err error
 	ctx := context.Background()
-	files, err := gorm.G[*native.FileORM](db).Where("parent_id = ? AND deleted_at IS NULL", parentID).Find(ctx)
-	if err != nil {
-		llog.GetLogger().Errorf("get files by parent id failed, parent_id: %s, err: %v", parentID, err)
-		return nil, err
-	}
-	return files, nil
-}
+	d := gorm.G[*native.StorageProviderORM](db)
 
-// GetFileByName 根据名称和父 ID 获取文件
-func GetFileByName(parentID, name string) (*native.FileORM, error) {
-	ctx := context.Background()
-	file, err := gorm.G[*native.FileORM](db).Where("parent_id = ? AND name = ? AND deleted_at IS NULL", parentID, name).First(ctx)
+	if expression != "" {
+		provider, err = d.Where(expression, args...).First(ctx)
+	} else {
+		provider, err = d.First(ctx)
+	}
 	if err != nil {
+		llog.GetLogger().Errorf("get storage provider failed, err: %v", err)
 		return nil, err
 	}
-	return file, nil
+	return provider, nil
 }
 
 // UpdateFile 更新文件信息

@@ -6,13 +6,16 @@ import "google/api/annotations.proto";
 import "native/common.proto";
 import "native/enum.proto";
 import "native/tables.proto";
+import "buf/validate/validate.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // 获取文件列表
 message FileListReq {
-  optional string parent_id = 1;
+  optional string parent_id = 1 [(buf.validate.field).required = true];
 }
+
+// 文件列表响应数据
 message FileListRespData {
   repeated File files = 1;
   optional int64 total = 2;
@@ -20,23 +23,19 @@ message FileListRespData {
 
 // 创建目录请求
 message CreateDirReq {
-  optional string name = 1;
-  optional bool enable_encryption = 2;
-  optional string parent_id = 3;
+  optional string name = 1 [(buf.validate.field).required = true];
+  optional bool enable_encryption = 2 [(buf.validate.field).required = true];
+  optional string parent_id = 3 [(buf.validate.field).required = true];
   optional bool encrypt_name = 4;
   optional string encryption_suffix = 5;
   optional string encryption_key = 6;
   optional string encryption_salt = 7;
 }
 
-// 创建目录响应数据
-message CreateDirRespData {
-  File detail = 1;
-}
 
 // 更新目录请求
 message UpdateDirReq {
-  optional string id = 1;
+  optional string id = 1 [(buf.validate.field).required = true];
 
   optional string name = 2;
 
@@ -51,19 +50,16 @@ message UpdateDirReq {
   optional string encryption_salt = 7;
 }
 
-// 更新目录响应数据
-message UpdateDirRespData {
-  File detail = 1;
-}
+
 
 // 删除文件请求
 message DeleteFileReq {
-  repeated string ids = 1;
+  repeated string ids = 1 [(buf.validate.field).required = true];
 }
 
 // 文件重命名
 message RenameFileReq {
-  repeated RenameObj rename_objs = 1;
+  repeated RenameObj rename_objs = 1 [(buf.validate.field).required = true];
 }
 
 // 文件重命名数据结构
@@ -73,85 +69,83 @@ message RenameObj {
 }
 
 // 文件上传请求（流式）
-message UploadFileReq {
-  // 第一次请求包含文件元数据
-  optional UploadMetadata metadata = 1;
-  // 文件内容分片
-  optional bytes chunk = 2;
-  // 分片序号（从1开始），用于断点续传
-  optional uint32 chunk_index = 3;
-}
+// message UploadFileReq {
+//   // 第一次请求包含文件元数据
+//   optional UploadMetadata metadata = 1;
+//   // 文件内容分片
+//   optional bytes chunk = 2;
+//   // 分片序号（从1开始），用于断点续传
+//   optional uint32 chunk_index = 3;
+// }
 
 // 文件上传元数据
-message UploadMetadata {
-  optional string name = 1; // 文件名
-  optional string parent_id = 2; // 父目录ID
-  optional string dir = 3; // 目录路径
-  optional uint64 size = 4; // 文件大小
-  optional string hash = 5; // 文件哈希（用于去重）
-  optional FileType type = 6; // 文件类型
-  optional string mime = 7; // MIME类型
-  // 分片信息
-  optional uint32 chunk_total = 8; // 分片总数
-  optional uint64 offset = 9; // 文件偏移量（用于断点续传）
-}
+// message UploadMetadata {
+//   optional string name = 1; // 文件名
+//   optional string parent_id = 2; // 父目录ID
+//   optional string dir = 3; // 目录路径
+//   optional uint64 size = 4; // 文件大小
+//   optional string hash = 5; // 文件哈希（用于去重）
+//   optional FileType type = 6; // 文件类型
+//   optional string mime = 7; // MIME类型
+//   // 分片信息
+//   optional uint32 chunk_total = 8; // 分片总数
+//   optional uint64 offset = 9; // 文件偏移量（用于断点续传）
+// }
 
-// 文件上传响应
-message UploadRespData {
-  optional string file_id = 1; // 文件ID
-  optional bool exists = 2; // 文件是否已存在（通过哈希判断）
-}
+// // 文件上传响应
+// message UploadRespData {
+//   optional string file_id = 1; // 文件ID
+//   optional bool exists = 2; // 文件是否已存在（通过哈希判断）
+// }
 
 // ========== 分片上传接口 ==========
 
 // 初始化上传请求
 message InitUploadReq {
-  optional string name = 1; // 文件名
-  optional string parent_id = 2; // 父目录ID
+  optional string name = 1 [(buf.validate.field).required = true]; // 文件名
+  optional string parent_id = 2 [(buf.validate.field).required = true]; // 父目录ID
   optional uint64 size = 3; // 文件大小
-  optional string hash = 4; // 文件完整哈希（blake3）
-  optional string mime = 5; // MIME类型
-  optional FileType type = 6; // 文件类型
-  optional uint32 chunk_size = 7; // 分片大小（字节），默认10MB
+
+  optional string hash = 4 [(buf.validate.field).required = true]; // 文件完整哈希（blake3）
+  optional bool overwrite = 5 [(buf.validate.field).required = true]; // 是否覆盖已存在的文件
 }
 
 // 初始化上传响应
 message InitUploadRespData {
   optional string upload_id = 1; // 上传任务ID
   optional bool exists = 2; // 文件是否已存在（秒传）
-  optional string file_id = 3; // 已存在文件的ID（秒传时返回）
-  repeated uint32 uploaded_chunks = 4; // 已上传的分片序号列表（断点续传）
-  optional uint32 chunk_total = 5; // 分片总数
-  optional uint32 chunk_size = 6; // 分片大小
+  optional bytes uploaded_chunks = 3; // 已上传分片的索引位图
+  optional uint32 chunk_total = 4; // 分片总数
+  optional uint64 chunk_size = 5; // 分片大小
 }
 
 // 上传分片请求（非流式，每次上传一个分片）
 message UploadChunkReq {
-  optional string upload_id = 1;
-  optional uint32 chunk_index = 2; // 分片序号（从1开始）
-  optional string chunk_hash = 3; // 分片哈希（用于校验）
-  optional bytes chunk = 4; // 分片内容
+  optional string upload_id = 1 [(buf.validate.field).required = true];
+  optional uint32 chunk_index = 2 [(buf.validate.field).required = true]; // 分片序号（从1开始）
+  optional string chunk_hash = 3 [(buf.validate.field).required = true]; // 分片哈希（用于校验）
+  optional bytes chunk = 4 [(buf.validate.field).required = true]; // 分片内容
 }
 
-// 上传分片响应
-message UploadChunkRespData {
-  optional string upload_id = 1;
-  optional uint32 chunk_index = 2; // 已上传的分片序号
-  optional uint32 uploaded_count = 3; // 已上传分片数量
-  optional uint32 chunk_total = 4; // 分片总数
-}
+// // 上传分片响应
+// message UploadChunkRespData {
+//   optional string upload_id = 1;
+//   optional uint32 chunk_index = 2; // 已上传的分片序号
+//   optional uint32 uploaded_count = 3; // 已上传分片数量
+//   optional uint32 chunk_total = 4; // 分片总数
+// }
 
 // 完成上传请求
 message CompleteUploadReq {
   optional string upload_id = 1;
 }
 
-// 完成上传响应
-message CompleteUploadRespData {
-  optional string file_id = 1; // 文件ID
-  optional string name = 2; // 文件名
-  optional uint64 size = 3; // 文件大小
-}
+// // 完成上传响应
+// message CompleteUploadRespData {
+//   optional string file_id = 1; // 文件ID
+//   optional string name = 2; // 文件名
+//   optional uint64 size = 3; // 文件大小
+// }
 
 // 查询上传进度请求
 message UploadProgressReq {
@@ -162,9 +156,7 @@ message UploadProgressReq {
 message UploadProgressRespData {
   optional string upload_id = 1;
   optional uint32 chunk_total = 2; // 分片总数
-  repeated uint32 uploaded_chunks = 3; // 已上传分片列表
-  optional uint32 uploaded_count = 4; // 已上传数量
-  optional string status = 5; // 状态：pending, uploading, completed, failed
+  optional bytes uploaded_chunks = 3; // 已上传分片列表
 }
 
 // 取消上传请求
@@ -187,7 +179,7 @@ service FileService {
   // 文件重命名
   rpc RenameFile(RenameFileReq) returns (BaseResp);
   // 文件上传（Client Streaming，小文件适用）
-  rpc UploadFile(stream UploadFileReq) returns (BaseResp);
+  // rpc UploadFile(stream UploadFileReq) returns (BaseResp);
 
   // ========== 分片上传接口 ==========
 

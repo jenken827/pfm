@@ -8,12 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetFileByID 根据id获取文件信息
-func GetFileByID(id string) (*native.FileORM, error) {
+// GetFile 根据id获取文件信息
+func GetFile(expression string, args ...any) (*native.FileORM, error) {
 	var f native.FileORM
 	var e error
-	if f, e = gorm.G[native.FileORM](db).Where("id = ?", id).First(context.Background()); e != nil {
-		llog.GetLogger().Errorf("get file by id failed,id: %s,err: %v", id, e)
+	if f, e = gorm.G[native.FileORM](db).Where(expression, args...).First(context.Background()); e != nil {
+		llog.GetLogger().Errorf("get file failed, err: %v", e)
 		return nil, e
 	}
 	return &f, e
@@ -156,16 +156,4 @@ func CreateFile(file *native.FileORM) error {
 		return result.Error
 	}
 	return nil
-}
-
-// CheckFileExistsByHash 通过哈希检查文件是否存在
-func CheckFileExistsByHash(hash string) (bool, string, error) {
-	var f native.FileORM
-	if err := db.Where("hash = ?", hash).First(&f).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return false, "", nil
-		}
-		return false, "", err
-	}
-	return true, *f.Id, nil
 }

@@ -5,7 +5,8 @@ package native;
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-message LocalDriver {
+// LocalDriverConfig 本地驱动器
+message LocalDriverConfig {
     // 根路径
     optional string root_path=1;
     // 分配的容量
@@ -16,6 +17,7 @@ message LocalDriver {
     optional string mkdir_permission=4;
 }
 
-message TeleDriver {
+// TeleDriverConfig 电报驱动器
+message TeleDriverConfig {
     optional string bot_token=1;
 }

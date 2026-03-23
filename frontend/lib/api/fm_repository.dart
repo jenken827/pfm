@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:fixnum/fixnum.dart';
+import 'package:pfm/models/models.dart';
 import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
@@ -29,9 +30,19 @@ class FmRepository {
   late final Dio _dio;
   Talker get _logger => getLogger();
 
-  String? get _baseUrl => GetIt.I.get<LocalStorage>().fileServer;
+  late final String? _baseUrl;
 
-  FmRepository() {
+  FmRepository._();
+
+  factory FmRepository() {
+    final inst = FmRepository._();
+    final ls = GetIt.I.get<LocalStorage>();
+    inst._init(ls.fileServer, ls.token);
+    return inst;
+  }
+
+  void _init(String? baseUrl, CasdoorToken? token) {
+    _baseUrl = baseUrl;
     _dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 30),
@@ -47,7 +58,6 @@ class FmRepository {
       InterceptorsWrapper(
         onRequest: (options, handler) {
           // 添加认证 Token
-          final token = GetIt.I.get<LocalStorage>().token;
           if (token?.accessToken != null) {
             options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
           }
@@ -68,6 +78,12 @@ class FmRepository {
         },
       ),
     );
+  }
+
+  static FmRepository isolateInit(String baseUrl, CasdoorToken token) {
+    final inst = FmRepository._();
+    inst._init(baseUrl, token);
+    return inst;
   }
 
   // ==================== File Service ====================
@@ -99,7 +115,7 @@ class FmRepository {
   }
 
   /// 创建目录
-  Future<ApiResult<File>> createDir({
+  Future<ApiResult<void>> createDir({
     required String name,
     required String parentId,
     required bool enableEncryption,
@@ -124,11 +140,8 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<CreateDirRespData>(
-        data,
-        CreateDirRespData(),
-      );
-      return ApiResult(success: true, data: respData.detail);
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('创建目录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -139,7 +152,7 @@ class FmRepository {
   }
 
   /// 更新目录
-  Future<ApiResult<File>> updateDir({
+  Future<ApiResult<void>> updateDir({
     required String id,
     String? name,
     bool? encryptName,
@@ -161,11 +174,8 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<UpdateDirRespData>(
-        data,
-        UpdateDirRespData(),
-      );
-      return ApiResult(success: true, data: respData.detail);
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('更新目录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -217,47 +227,47 @@ class FmRepository {
     }
   }
 
-  /// 上传文件
-  /// 返回文件 ID 和是否已存在（通过哈希判断）
-  Future<ApiResult<UploadRespData>> uploadFile({
-    required String name,
-    String? parentId,
-    required int size,
-    String? hash,
-    required String mime,
-    required List<int> fileBytes,
-    void Function(int, int)? onSendProgress,
-  }) async {
-    try {
-      final metadata = UploadMetadata()
-        ..name = name
-        ..size = Int64(size)
-        ..mime = mime;
-      if (parentId != null) metadata.parentId = parentId;
-      if (hash != null) metadata.hash = hash;
+  // /// 上传文件
+  // /// 返回文件 ID 和是否已存在（通过哈希判断）
+  // Future<ApiResult<UploadRespData>> uploadFile({
+  //   required String name,
+  //   String? parentId,
+  //   required int size,
+  //   String? hash,
+  //   required String mime,
+  //   required List<int> fileBytes,
+  //   void Function(int, int)? onSendProgress,
+  // }) async {
+  //   try {
+  //     final metadata = UploadMetadata()
+  //       ..name = name
+  //       ..size = Int64(size)
+  //       ..mime = mime;
+  //     if (parentId != null) metadata.parentId = parentId;
+  //     if (hash != null) metadata.hash = hash;
 
-      final formData = FormData.fromMap({
-        'metadata': metadata.toProto3Json(),
-        'file': MultipartFile.fromBytes(fileBytes, filename: name),
-      });
+  //     final formData = FormData.fromMap({
+  //       'metadata': metadata.toProto3Json(),
+  //       'file': MultipartFile.fromBytes(fileBytes, filename: name),
+  //     });
 
-      final response = await _dio.post(
-        '$_baseUrl/native.FileService/UploadFile',
-        data: formData,
-        onSendProgress: onSendProgress,
-      );
+  //     final response = await _dio.post(
+  //       '$_baseUrl/native.FileService/UploadFile',
+  //       data: formData,
+  //       onSendProgress: onSendProgress,
+  //     );
 
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<UploadRespData>(data, UploadRespData());
-      return ApiResult(success: true, data: respData);
-    } on DioException catch (e) {
-      _logger.error('上传文件失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('上传文件失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
+  //     final data = response.data as Map<String, dynamic>;
+  //     final respData = extractRespData<UploadRespData>(data, UploadRespData());
+  //     return ApiResult(success: true, data: respData);
+  //   } on DioException catch (e) {
+  //     _logger.error('上传文件失败: ${e.message}');
+  //     return ApiResult(success: false, message: _handleDioError(e));
+  //   } catch (e) {
+  //     _logger.error('上传文件失败: $e');
+  //     return ApiResult(success: false, message: e.toString());
+  //   }
+  // }
 
   /// 处理 Dio 错误
   String _handleDioError(DioException e) {
@@ -562,8 +572,6 @@ class FmRepository {
     String? parentId,
     required int size,
     String? hash,
-    String? mime,
-    FileType? type,
     int? chunkSize,
   }) async {
     try {
@@ -572,9 +580,6 @@ class FmRepository {
         ..size = Int64(size);
       if (parentId != null) req.parentId = parentId;
       if (hash != null) req.hash = hash;
-      if (mime != null) req.mime = mime;
-      if (type != null) req.type = type;
-      if (chunkSize != null) req.chunkSize = chunkSize;
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/InitUpload',
@@ -599,10 +604,10 @@ class FmRepository {
 
   /// 上传分片
   /// [uploadId] 上传任务ID
-  /// [chunkIndex] 分片序号（从1开始）
+  /// [chunkIndex] 分片序号（从0开始）
   /// [chunkData] 分片数据
   /// [chunkHash] 分片哈希（可选，用于校验）
-  Future<ApiResult<UploadChunkRespData>> uploadChunk({
+  Future<ApiResult<void>> uploadChunk({
     required String uploadId,
     required int chunkIndex,
     required List<int> chunkData,
@@ -623,14 +628,9 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<UploadChunkRespData>(
-        data,
-        UploadChunkRespData(),
-      );
-      _logger.info(
-        '上传分片成功: uploadId=$uploadId, chunkIndex=$chunkIndex, progress=${respData.uploadedCount}/${respData.chunkTotal}',
-      );
-      return ApiResult(success: true, data: respData);
+      extractRespData<Empty>(data, Empty());
+      _logger.info('上传分片成功: uploadId=$uploadId, chunkIndex=$chunkIndex');
+      return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('上传分片失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -641,9 +641,7 @@ class FmRepository {
   }
 
   /// 完成上传
-  Future<ApiResult<CompleteUploadRespData>> completeUpload({
-    required String uploadId,
-  }) async {
+  Future<ApiResult<void>> completeUpload({required String uploadId}) async {
     try {
       final req = CompleteUploadReq()..uploadId = uploadId;
 
@@ -653,12 +651,9 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<CompleteUploadRespData>(
-        data,
-        CompleteUploadRespData(),
-      );
-      _logger.info('完成上传成功: ${respData.fileId}');
-      return ApiResult(success: true, data: respData);
+      extractRespData<Empty>(data, Empty());
+      _logger.info('完成上传成功: uploadId=$uploadId');
+      return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('完成上传失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));

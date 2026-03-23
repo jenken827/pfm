@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_event.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_state.dart';
-import 'package:pfm/blocs/upload_bloc/upload_bloc.dart';
-import 'package:pfm/blocs/upload_bloc/upload_event.dart';
-import 'package:pfm/blocs/upload_bloc/upload_state.dart';
+import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/models/models.dart';
+import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/utils/format.dart';
 
 /// 上传任务列表
@@ -110,9 +107,8 @@ class UploadTaskList extends StatelessWidget {
           // 操作按钮
           if (uploadingCount > 0) ...[
             TextButton.icon(
-              onPressed: () => context.read<TransferBloc>().add(
-                TransferPauseAllUploadsEvent(),
-              ),
+              onPressed: () =>
+                  context.read<TransferBloc>().add(TransferPauseEvent(null)),
               icon: const Icon(Icons.pause, size: 18),
               label: const Text('全部暂停'),
             ),
@@ -155,7 +151,7 @@ class UploadTaskList extends StatelessWidget {
 class _UploadTaskItem extends StatelessWidget {
   const _UploadTaskItem({required this.task});
 
-  final UploadTaskState task;
+  final UploadTaskRecord task;
 
   @override
   Widget build(BuildContext context) {
@@ -201,17 +197,16 @@ class _UploadTaskItem extends StatelessWidget {
                 _buildActions(context),
               ],
             ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: task.progress,
+              backgroundColor: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+              minHeight: 6,
+            ),
+            const SizedBox(height: 8),
             // 进度条
-            if (task.isHashing) ...[
-              // 哈希计算进度
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: task.hashProgress / 100,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(4),
-                minHeight: 6,
-              ),
-              const SizedBox(height: 8),
+            if (task.status == UploadStatus.UPLOAD_STATUS_HASHING) ...[
               Row(
                 children: [
                   Text(
@@ -221,31 +216,27 @@ class _UploadTaskItem extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '${task.hashProgress.toStringAsFixed(1)}%',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+                  // Text(
+                  //   '${task.hashProgress.toStringAsFixed(1)}%',
+                  //   style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  //     color: colorScheme.onSurfaceVariant,
+                  //   ),
+                  // ),
                 ],
               ),
-            ] else if (task.isUploading || task.isPaused) ...[
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: task.progress / 100,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(4),
-                minHeight: 6,
-              ),
-              const SizedBox(height: 8),
+            ] else if (task.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
+                task.status == UploadStatus.UPLOAD_STATUS_PAUSED) ...[
               Row(
                 children: [
-                  Text(
-                    '${task.uploadedChunks}/${task.totalChunks} 分片',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                  if (task.speed > 0) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      task.formatSpeed,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
+                  ],
                   const Spacer(),
                   Text(
                     '${task.progress.toStringAsFixed(1)}%',
@@ -255,9 +246,32 @@ class _UploadTaskItem extends StatelessWidget {
                   ),
                 ],
               ),
+              // 显示已上传大小
+              if (task.uploadedBytes > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        '已上传: ${_formatBytes(task.uploadedBytes)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '总计: ${_formatBytes(task.fileSize)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
             // 错误信息
-            if (task.isFailed && task.errorMessage != null)
+            if (task.status == UploadStatus.UPLOAD_STATUS_FAILED &&
+                task.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -273,6 +287,19 @@ class _UploadTaskItem extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 格式化字节大小
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    }
   }
 
   IconData _getFileIcon() {
@@ -316,42 +343,37 @@ class _UploadTaskItem extends StatelessWidget {
     Color color;
 
     switch (task.status) {
-      case UploadTaskStatus.pending:
-        if (task.isHashing) {
-          label = '计算中';
-          color = Colors.blue;
-        } else {
-          label = '等待中';
-          color = Colors.grey;
-        }
+      case UploadStatus.UPLOAD_STATUS_PENDING:
+        label = '等待中';
+        color = Colors.grey;
         break;
-      case UploadTaskStatus.initializing:
-        label = '初始化';
-        color = Colors.blue;
-        break;
-      case UploadTaskStatus.uploading:
+      case UploadStatus.UPLOAD_STATUS_UPLOADING:
         label = '上传中';
         color = Theme.of(context).colorScheme.primary;
         break;
-      case UploadTaskStatus.completing:
-        label = '完成中';
-        color = Theme.of(context).colorScheme.tertiary;
-        break;
-      case UploadTaskStatus.completed:
+      case UploadStatus.UPLOAD_STATUS_COMPLETED:
         label = '已完成';
         color = Colors.green;
         break;
-      case UploadTaskStatus.paused:
+      case UploadStatus.UPLOAD_STATUS_PAUSED:
         label = '已暂停';
         color = Colors.orange;
         break;
-      case UploadTaskStatus.cancelled:
+      case UploadStatus.UPLOAD_STATUS_CANCELED:
         label = '已取消';
         color = Colors.grey;
         break;
-      case UploadTaskStatus.failed:
+      case UploadStatus.UPLOAD_STATUS_FAILED:
         label = '失败';
         color = Theme.of(context).colorScheme.error;
+        break;
+      case UploadStatus.UPLOAD_STATUS_HASHING:
+        label = '初始化';
+        color = Colors.grey;
+        break;
+      default:
+        label = '未知';
+        color = Colors.grey;
         break;
     }
 
@@ -378,34 +400,35 @@ class _UploadTaskItem extends StatelessWidget {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 20),
       onSelected: (value) {
-        final uploadBloc = GetIt.I.get<UploadBloc>();
+        final uploadBloc = GetIt.I.get<TransferBloc>();
         switch (value) {
           case 'pause':
-            uploadBloc.add(UploadPauseEvent(task.taskId));
+            uploadBloc.add(TransferPauseEvent(task.id));
             break;
           case 'resume':
-            uploadBloc.add(UploadResumeEvent(task.taskId));
+            uploadBloc.add(TransferResumeEvent(task.id));
             break;
           case 'cancel':
-            uploadBloc.add(UploadCancelEvent(task.taskId));
+            uploadBloc.add(TransferCancelEvent(task.id));
             break;
           case 'retry':
-            uploadBloc.add(UploadRetryEvent(task.taskId));
+            uploadBloc.add(TransferResumeEvent(task.id));
             break;
           case 'remove':
-            uploadBloc.add(UploadRemoveEvent(task.taskId));
+            uploadBloc.add(TransferRemoveEvent(task.id));
             break;
         }
       },
       itemBuilder: (context) => [
-        if (task.isUploading)
+        if (task.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
+            task.status == UploadStatus.UPLOAD_STATUS_PENDING)
           const PopupMenuItem(value: 'pause', child: Text('暂停')),
-        if (task.isPaused)
+        if (task.status == UploadStatus.UPLOAD_STATUS_PAUSED)
           const PopupMenuItem(value: 'resume', child: Text('继续')),
-        if (task.isFailed)
+        if (task.status == UploadStatus.UPLOAD_STATUS_FAILED)
           const PopupMenuItem(value: 'retry', child: Text('重试')),
-        if (task.isUploading || task.isPaused)
-          const PopupMenuItem(value: 'cancel', child: Text('取消')),
+
+        const PopupMenuItem(value: 'cancel', child: Text('取消')),
         const PopupMenuItem(value: 'remove', child: Text('移除')),
       ],
     );

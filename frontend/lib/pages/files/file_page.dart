@@ -4,8 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
-import 'package:pfm/blocs/upload_bloc/upload_bloc.dart';
-import 'package:pfm/blocs/upload_bloc/upload_event.dart';
 import 'package:pfm/proto/native/tables.pb.dart';
 import 'package:pfm/utils/utils.dart';
 
@@ -493,11 +491,8 @@ class _FileView extends StatelessWidget {
 
         for (final file in result.files) {
           if (file.path != null) {
-            GetIt.I.get<UploadBloc>().add(
-              UploadStartEvent(
-                filePath: file.path!,
-                parentId: parentId.isEmpty ? null : parentId,
-              ),
+            GetIt.I.get<TransferBloc>().add(
+              TransferAddUploadEvent(file.path!, parentId),
             );
           }
         }
@@ -519,16 +514,16 @@ class _FileView extends StatelessWidget {
     try {
       final result = await FilePicker.platform.getDirectoryPath();
 
-      if (result != null) {
+      if (result != null && context.mounted) {
         final state = context.read<FileBloc>().state;
         final parentId = state.currentDirId;
 
-        GetIt.I.get<UploadBloc>().add(
-          UploadStartEvent(
-            filePath: result,
-            parentId: parentId.isEmpty ? null : parentId,
-          ),
-        );
+        // GetIt.I.get<TransferBloc>().add(
+        //   UploadStartEvent(
+        //     filePath: result,
+        //     parentId: parentId.isEmpty ? null : parentId,
+        //   ),
+        // );
       }
     } catch (e) {
       if (context.mounted) {

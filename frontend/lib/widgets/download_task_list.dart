@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
-import 'package:pfm/blocs/transfer_bloc/transfer_state.dart';
+import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/utils/format.dart';
 
 /// 下载任务列表
@@ -45,15 +44,15 @@ class DownloadTaskList extends StatelessWidget {
           Text(
             '暂无下载任务',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             '点击文件开始下载',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -101,8 +100,8 @@ class _DownloadTaskItem extends StatelessWidget {
                       Text(
                         formatCapacityString(task.fileSize),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -143,15 +142,15 @@ class _DownloadTaskItem extends StatelessWidget {
                   Text(
                     '${formatCapacityString(task.downloadedSize)} / ${formatCapacityString(task.fileSize)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const Spacer(),
                   Text(
                     '${task.progress.toStringAsFixed(1)}%',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -162,9 +161,9 @@ class _DownloadTaskItem extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   task.errorMessage!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.error,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -11,7 +11,9 @@ import (
 var (
 	// DataDir 数据目录
 	DataDir string
-	// ConfigPath 存储目录
+	// TempDir 临时目录
+	TempDir string
+	// ConfigPath 配置文件路径
 	ConfigPath string
 	// Version 版本号
 	Version string
@@ -81,4 +83,10 @@ func normalizePath() {
 	if !filepath.IsAbs(ConfigPath) {
 		ConfigPath = path.Join(DataDir, "config.yaml")
 	}
+	//创建临时文件夹
+	tempDir := filepath.Join(DataDir, ".temp")
+	if _, err := os.Stat(tempDir); os.IsNotExist(err) {
+		os.MkdirAll(tempDir, 0755)
+	}
+	TempDir = tempDir
 }

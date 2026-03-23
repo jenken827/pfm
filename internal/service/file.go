@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"path"
 
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -10,7 +9,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // GetFileList 获取文件列表
@@ -34,21 +32,11 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.File, 
 }
 
 // CreateDir 创建文件夹
-func CreateDir(ctx context.Context, req *native.CreateDirReq) (*native.File, *models.Err) {
-	dir := "/"
-	if *req.ParentId != "" {
-		parentDir, err := db.GetFileByID(*req.ParentId)
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, &models.Err{E: errors.New("parent dir not exists"), Code: native.RespCode_PARAMS_ERROR}
-			}
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-		}
-		dir = path.Join(*parentDir.Dir, *parentDir.Name)
-	}
+func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
+	dir := getParentDir(*req.ParentId)
 	uuid, err := uuid.NewV7()
 	if err != nil {
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}
 	id := uuid.String()
 	t := int32(native.FileType_FOLDER.Number())
@@ -71,14 +59,10 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (*native.File, *mo
 	}
 	e := db.CreateDir(f, fc)
 	if e != nil {
-		return nil, &models.Err{E: e, Code: native.RespCode_INTERNAL_ERROR}
+		return &models.Err{E: e, Code: native.RespCode_INTERNAL_ERROR}
 	}
-	ff, err := f.ToPB(context.Background())
-	if err != nil {
-		llog.GetLogger().Errorf("convert file to pb failed, err: %v", err)
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-	return &ff, nil
+
+	return nil
 }
 
 // UpdateDir 更新文件夹
@@ -114,71 +98,71 @@ func RenameFile(ctx context.Context, req *native.RenameFileReq) *models.Err {
 }
 
 // UploadFile 文件上传
-func UploadFile(ctx context.Context, metadata *native.UploadMetadata, chunks [][]byte) (*native.UploadRespData, *models.Err) {
-	// 检查文件是否已存在（通过哈希）
-	if metadata.Hash != nil && *metadata.Hash != "" {
-		exists, fileID, err := db.CheckFileExistsByHash(*metadata.Hash)
-		if err != nil {
-			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-		}
-		if exists {
-			return &native.UploadRespData{
-				FileId: &fileID,
-				Exists: func() *bool { v := true; return &v }(),
-			}, nil
-		}
-	}
+// func UploadFile(ctx context.Context, metadata *native.UploadMetadata, chunks [][]byte) (*native.UploadRespData, *models.Err) {
+// 	// 检查文件是否已存在（通过哈希）
+// 	if metadata.Hash != nil && *metadata.Hash != "" {
+// 		file, err := db.GetFile("hash=?", *metadata.Hash)
+// 		if err != nil {
+// 			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+// 		}
+// 		if file != nil {
+// 			return &native.UploadRespData{
+// 				FileId: file.Id,
+// 				Exists: func() *bool { v := true; return &v }(),
+// 			}, nil
+// 		}
+// 	}
 
-	// 生成文件ID
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
+// 	// 生成文件ID
+// 	id, err := uuid.NewV7()
+// 	if err != nil {
+// 		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+// 	}
 
-	// 合并文件内容
-	var totalSize uint64
-	var content []byte
-	for _, chunk := range chunks {
-		content = append(content, chunk...)
-		totalSize += uint64(len(chunk))
-	}
+// 	// 合并文件内容
+// 	var totalSize uint64
+// 	var content []byte
+// 	for _, chunk := range chunks {
+// 		content = append(content, chunk...)
+// 		totalSize += uint64(len(chunk))
+// 	}
 
-	// 构建文件对象
-	dir := "/"
-	if metadata.ParentId != nil && *metadata.ParentId != "" {
-		parentDir, err := db.GetFileByID(*metadata.ParentId)
-		if err != nil {
-			if err != gorm.ErrRecordNotFound {
-				return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-			}
-		} else {
-			dir = path.Join(*parentDir.Dir, *parentDir.Name)
-		}
-	}
+// 	// 构建文件对象
+// 	dir := getParentDir(*metadata.ParentId)
+// 	if metadata.ParentId != nil && *metadata.ParentId != "" {
+// 		parentDir, err := db.GetFile("id=?", *metadata.ParentId)
+// 		if err != nil {
+// 			if err != gorm.ErrRecordNotFound {
+// 				return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+// 			}
+// 		} else {
+// 			dir = path.Join(*parentDir.Dir, *parentDir.Name)
+// 		}
+// 	}
 
-	t := int32(native.FileType_TYPE_UNSPECIFIED.Number())
-	f := &native.FileORM{
-		Id:       func() *string { v := id.String(); return &v }(),
-		Name:     metadata.Name,
-		ParentId: metadata.ParentId,
-		Dir:      &dir,
-		Size:     &totalSize,
-		Hash:     metadata.Hash,
-		Type:     &t,
-		Mime:     metadata.Mime,
-	}
+// 	t := int32(native.FileType_TYPE_UNSPECIFIED.Number())
+// 	f := &native.FileORM{
+// 		Id:       func() *string { v := id.String(); return &v }(),
+// 		Name:     metadata.Name,
+// 		ParentId: metadata.ParentId,
+// 		Dir:      &dir,
+// 		Size:     &totalSize,
+// 		Hash:     metadata.Hash,
+// 		Type:     &t,
+// 		Mime:     metadata.Mime,
+// 	}
 
-	// 保存文件到数据库
-	if err := db.CreateFile(f); err != nil {
-		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
+// 	// 保存文件到数据库
+// 	if err := db.CreateFile(f); err != nil {
+// 		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+// 	}
 
-	// TODO: 实际保存文件内容到存储介质
+// 	// TODO: 实际保存文件内容到存储介质
 
-	result := &native.UploadRespData{
-		FileId: func() *string { v := id.String(); return &v }(),
-		Exists: func() *bool { v := false; return &v }(),
-	}
+// 	result := &native.UploadRespData{
+// 		FileId: func() *string { v := id.String(); return &v }(),
+// 		Exists: func() *bool { v := false; return &v }(),
+// 	}
 
-	return result, nil
-}
+// 	return result, nil
+// }

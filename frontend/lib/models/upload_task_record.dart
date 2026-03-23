@@ -1,144 +1,133 @@
-/// 上传任务状态
-enum UploadTaskStatusRecord {
-  pending,
-  initializing,
-  uploading,
-  paused,
-  completing,
-  completed,
-  failed,
-  cancelled,
-}
+import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/services/services.dart';
+import 'package:pfm/utils/format.dart';
 
 /// 上传任务持久化记录
 ///
 /// 纯 Dart 模型类，支持 SQLite 存储
 class UploadTaskRecord {
   String id;
+  // 文件本地路径
   String filePath;
   String fileName;
   int fileSize;
-  String? parentId;
+  // 文件父ID，服务器端父目录ID
+  String parentId;
+  // Blake3 哈希值
   String? fileHash;
-  String? mime;
-  int? fileType;
   int chunkSize;
   int chunkTotal;
-  int chunkIndex;
-  List<int> uploadedChunks;
-  UploadTaskStatusRecord status;
+  // 任务状态
+  UploadStatus status;
   String? errorMessage;
   String? uploadId;
-  String? fileId;
   DateTime createdAt;
   DateTime? completedAt;
   int retryCount;
-  int uploadedBytes;
-  double hashProgress; // 哈希计算进度 (0-100)
+  int uploadedBytes; // 已上传字节数
+  int speed; // 上传速度 (字节）
 
   UploadTaskRecord({
     required this.id,
     required this.filePath,
     required this.fileName,
     required this.fileSize,
-    this.parentId,
+    required this.parentId,
     this.fileHash,
-    this.mime,
-    this.fileType,
     required this.chunkSize,
     required this.chunkTotal,
-    this.chunkIndex = 0,
-    List<int>? uploadedChunks,
-    this.status = UploadTaskStatusRecord.pending,
+    this.status = UploadStatus.UPLOAD_STATUS_PENDING,
     this.errorMessage,
     this.uploadId,
-    this.fileId,
     DateTime? createdAt,
     this.completedAt,
-    this.retryCount = 0,
     this.uploadedBytes = 0,
-    this.hashProgress = 0,
-  })  : uploadedChunks = uploadedChunks ?? [],
-        createdAt = createdAt ?? DateTime.now();
+    this.speed = 0,
+    this.retryCount = 0,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   /// 上传进度（0-100）
   double get progress {
     if (chunkTotal == 0) return 0;
-    return (uploadedChunks.length / chunkTotal) * 100;
+    final currentProgress =
+        (uploadedBytes >= fileSize ? 1.0 : uploadedBytes / fileSize) * 100;
+    return currentProgress;
   }
 
-  /// 是否正在上传
-  bool get isUploading => status == UploadTaskStatusRecord.uploading;
+  String get formatSpeed {
+    return '${formatCapacityString(speed)}/s';
+  }
 
-  /// 是否正在初始化（计算 Hash）
-  bool get isInitializing => status == UploadTaskStatusRecord.initializing;
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'filePath': filePath,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'parentId': parentId,
+      'fileHash': fileHash,
+      'chunkSize': chunkSize,
+      'chunkTotal': chunkTotal,
+      'status': status.value,
+      'errorMessage': errorMessage,
+      'uploadId': uploadId,
+      'createdAt': createdAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'retryCount': retryCount,
+      'uploadedBytes': uploadedBytes,
+      'speed': speed,
+    };
+  }
 
-  /// 是否已完成
-  bool get isCompleted => status == UploadTaskStatusRecord.completed;
-
-  /// 是否失败
-  bool get isFailed => status == UploadTaskStatusRecord.failed;
-
-  /// 是否暂停
-  bool get isPaused => status == UploadTaskStatusRecord.paused;
-
-  /// 是否取消
-  bool get isCancelled => status == UploadTaskStatusRecord.cancelled;
-
-  /// 是否可以重试
-  bool get canRetry => isFailed && retryCount < 3;
-
-  /// 复制并更新
-  UploadTaskRecord copyWith({
-    String? id,
-    String? filePath,
-    String? fileName,
-    int? fileSize,
-    String? parentId,
-    String? fileHash,
-    String? mime,
-    int? fileType,
-    int? chunkSize,
-    int? chunkTotal,
-    int? chunkIndex,
-    List<int>? uploadedChunks,
-    UploadTaskStatusRecord? status,
-    String? errorMessage,
-    String? uploadId,
-    String? fileId,
-    DateTime? createdAt,
-    DateTime? completedAt,
-    int? retryCount,
-    int? uploadedBytes,
-    double? hashProgress,
-  }) {
+  static UploadTaskRecord fromJson(Map<String, dynamic> json) {
     return UploadTaskRecord(
-      id: id ?? this.id,
-      filePath: filePath ?? this.filePath,
-      fileName: fileName ?? this.fileName,
-      fileSize: fileSize ?? this.fileSize,
-      parentId: parentId ?? this.parentId,
-      fileHash: fileHash ?? this.fileHash,
-      mime: mime ?? this.mime,
-      fileType: fileType ?? this.fileType,
-      chunkSize: chunkSize ?? this.chunkSize,
-      chunkTotal: chunkTotal ?? this.chunkTotal,
-      chunkIndex: chunkIndex ?? this.chunkIndex,
-      uploadedChunks: uploadedChunks ?? List.from(this.uploadedChunks),
-      status: status ?? this.status,
-      errorMessage: errorMessage ?? this.errorMessage,
-      uploadId: uploadId ?? this.uploadId,
-      fileId: fileId ?? this.fileId,
-      createdAt: createdAt ?? this.createdAt,
-      completedAt: completedAt ?? this.completedAt,
-      retryCount: retryCount ?? this.retryCount,
-      uploadedBytes: uploadedBytes ?? this.uploadedBytes,
-      hashProgress: hashProgress ?? this.hashProgress,
+      id: json['id'],
+      filePath: json['filePath'],
+      fileName: json['fileName'],
+      fileSize: json['fileSize'],
+      parentId: json['parentId'],
+      fileHash: json['fileHash'],
+      chunkSize: json['chunkSize'],
+      chunkTotal: json['chunkTotal'],
+      status: json['status'] != null
+          ? UploadStatus.values[json['status']]
+          : UploadStatus.UPLOAD_STATUS_PENDING,
+      errorMessage: json['errorMessage'],
+      uploadId: json['uploadId'],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'])
+          : null,
+      retryCount: json['retryCount'] ?? 0,
+      uploadedBytes: json['uploadedBytes'] ?? 0,
+      speed: json['speed'] ?? 0,
     );
   }
 
-  @override
-  String toString() {
-    return 'UploadTaskRecord(id: $id, fileName: $fileName, status: $status, progress: ${progress.toStringAsFixed(1)}%)';
+  static String createSql() {
+    return '''
+      CREATE TABLE IF NOT EXISTS upload_tasks (
+        id TEXT PRIMARY KEY,
+        filePath TEXT,
+        fileName TEXT,
+        fileSize INTEGER,
+        parentId TEXT,
+        fileHash TEXT,
+        chunkSize INTEGER,
+        chunkTotal INTEGER,
+        status INTEGER,
+        errorMessage TEXT,
+        uploadId TEXT,
+        createdAt TEXT,
+        completedAt TEXT,
+        retryCount INTEGER,
+        uploadedBytes INTEGER,
+        speed INTEGER
+      );
+      CREATE INDEX idx_upload_tasks_status ON ${Sqlite3Storage.uploadTaskTableName} (status);
+      CREATE INDEX idx_upload_tasks_created_at ON ${Sqlite3Storage.uploadTaskTableName} (createdAt);
+    ''';
   }
 }

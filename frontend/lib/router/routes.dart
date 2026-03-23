@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/services/services.dart';
 import 'home_route.dart' as home;
 import 'files_route.dart' as files;
 import 'transfer_route.dart' as transfer;
 import 'settings_route.dart' as settings;
 import 'login_route.dart' as login;
 import '../l10n/app_localizations.dart';
-import '../blocs/upload_bloc/upload_bloc.dart';
-import '../blocs/upload_bloc/upload_state.dart';
 
 /// 全局路由配置
 final GoRouter approuter = GoRouter(
@@ -59,41 +59,45 @@ class MainScaffold extends StatelessWidget {
     final al = AppLocalizations.of(context)!;
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: BlocBuilder<UploadBloc, UploadState>(
-        bloc: GetIt.I.get<UploadBloc>(),
-        builder: (context, uploadState) {
-          final activeCount = uploadState.uploadingTasks.length;
-          return BottomNavigationBar(
-            selectedFontSize: 16,
-            unselectedFontSize: 14,
-            showUnselectedLabels: false,
-            type: BottomNavigationBarType.fixed,
-            items: <BottomNavigationBarItem>[
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.home_outlined),
-                activeIcon: Icon(Icons.home),
-                label: '主页',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.folder_outlined),
-                activeIcon: Icon(Icons.folder),
-                label: '文件',
-              ),
-              BottomNavigationBarItem(
-                icon: _buildTransferIcon(activeCount, false),
-                activeIcon: _buildTransferIcon(activeCount, true),
-                label: al.transfer,
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.settings_outlined),
-                activeIcon: Icon(Icons.settings),
-                label: '设置',
-              ),
-            ],
-            currentIndex: navigationShell.currentIndex,
-            onTap: (index) => _onTap(context, index),
-          );
-        },
+      bottomNavigationBar: BlocProvider.value(
+        value: GetIt.I.get<TransferBloc>(),
+        child: Builder(
+          builder: (context) {
+            final activeCount = context.select(
+              (TransferBloc bloc) => bloc.state.activeTransferCount,
+            );
+            return BottomNavigationBar(
+              selectedFontSize: 16,
+              unselectedFontSize: 14,
+              showUnselectedLabels: false,
+              type: BottomNavigationBarType.fixed,
+              items: <BottomNavigationBarItem>[
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: '主页',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.folder_outlined),
+                  activeIcon: Icon(Icons.folder),
+                  label: '文件',
+                ),
+                BottomNavigationBarItem(
+                  icon: _buildTransferIcon(activeCount, false),
+                  activeIcon: _buildTransferIcon(activeCount, true),
+                  label: al.transfer,
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.settings_outlined),
+                  activeIcon: Icon(Icons.settings),
+                  label: '设置',
+                ),
+              ],
+              currentIndex: navigationShell.currentIndex,
+              onTap: (index) => _onTap(context, index),
+            );
+          },
+        ),
       ),
     );
   }
@@ -143,39 +147,46 @@ class MainScaffold extends StatelessWidget {
             removeBottom: true,
             removeTop: true,
             removeRight: true,
-            child: BlocBuilder<UploadBloc, UploadState>(
-              bloc: GetIt.I.get<UploadBloc>(),
-              builder: (context, uploadState) {
-                final activeCount = uploadState.uploadingTasks.length;
-                return NavigationRail(
-                  selectedIndex: navigationShell.currentIndex,
-                  onDestinationSelected: (index) => _onTap(context, index),
-                  labelType: NavigationRailLabelType.all,
-                  leading: const SizedBox(height: 8),
-                  destinations: <NavigationRailDestination>[
-                    const NavigationRailDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home),
-                      label: Text('主页'),
-                    ),
-                    const NavigationRailDestination(
-                      icon: Icon(Icons.folder_outlined),
-                      selectedIcon: Icon(Icons.folder),
-                      label: Text('文件'),
-                    ),
-                    NavigationRailDestination(
-                      icon: _buildTransferIcon(activeCount, false),
-                      selectedIcon: _buildTransferIcon(activeCount, true),
-                      label: Text(al.transfer),
-                    ),
-                    const NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: Text('设置'),
-                    ),
-                  ],
-                );
-              },
+            child: BlocProvider(
+              create: (context) =>
+                  TransferBloc(GetIt.I.get<BackgroundService>())
+                    ..add(TransferUploadSubscribeEvent())
+                    ..add(TransferDownloadSubscribeEvent()),
+              child: Builder(
+                builder: (context) {
+                  final activeCount = context.select(
+                    (TransferBloc bloc) => bloc.state.activeTransferCount,
+                  );
+                  return NavigationRail(
+                    selectedIndex: navigationShell.currentIndex,
+                    onDestinationSelected: (index) => _onTap(context, index),
+                    labelType: NavigationRailLabelType.all,
+                    leading: const SizedBox(height: 8),
+                    destinations: <NavigationRailDestination>[
+                      const NavigationRailDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home),
+                        label: Text('主页'),
+                      ),
+                      const NavigationRailDestination(
+                        icon: Icon(Icons.folder_outlined),
+                        selectedIcon: Icon(Icons.folder),
+                        label: Text('文件'),
+                      ),
+                      NavigationRailDestination(
+                        icon: _buildTransferIcon(activeCount, false),
+                        selectedIcon: _buildTransferIcon(activeCount, true),
+                        label: Text(al.transfer),
+                      ),
+                      const NavigationRailDestination(
+                        icon: Icon(Icons.settings_outlined),
+                        selectedIcon: Icon(Icons.settings),
+                        label: Text('设置'),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
           const VerticalDivider(thickness: 1, width: 1),

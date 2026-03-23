@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:fixnum/fixnum.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:pfm/models/upload_task_record.dart';
+import 'package:pfm/models/models.dart';
+import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/services/services.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -14,8 +17,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class Sqlite3Storage {
   static const String _dbName = 'pfm.db';
   static const int _dbVersion = 1;
-  static const String _uploadTaskTableName = 'upload_tasks';
-  static const String _downloadTaskTableName = 'download_tasks';
+  static const String uploadTaskTableName = 'upload_tasks';
+  static const String downloadTaskTableName = 'download_tasks';
 
   static Sqlite3Storage? _instance;
   static String? _dbPath;
@@ -62,6 +65,7 @@ class Sqlite3Storage {
     if (_dbPath != null) return _dbPath!;
 
     final dbDir = await getApplicationSupportDirectory();
+    getLogger().info('sqlite3_storage: dbDir: ${dbDir.path}');
     // 默认使用应用文档目录
     final dbPath = p.join(dbDir.path, '.pfm', 'data');
     if (!await Directory(dbPath).exists()) {
@@ -107,59 +111,7 @@ class Sqlite3Storage {
 
   /// 创建表
   Future<void> _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE $_uploadTaskTableName (
-        id TEXT PRIMARY KEY,
-        file_path TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        file_size INTEGER NOT NULL,
-        parent_id TEXT,
-        file_hash TEXT,
-        mime TEXT,
-        file_type INTEGER,
-        chunk_size INTEGER NOT NULL,
-        chunk_total INTEGER NOT NULL,
-        chunk_index INTEGER DEFAULT 0,
-        uploaded_chunks TEXT DEFAULT '[]',
-        status INTEGER DEFAULT 0,
-        error_message TEXT,
-        upload_id TEXT,
-        file_id TEXT,
-        created_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        retry_count INTEGER DEFAULT 0,
-        uploaded_bytes INTEGER DEFAULT 0,
-        hash_progress REAL DEFAULT 0
-      );
-      CREATE TABLE $_downloadTaskTableName (
-        id TEXT PRIMARY KEY,
-        file_path TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        file_size INTEGER NOT NULL,       
-        file_hash TEXT,       
-        status INTEGER DEFAULT 0,
-        error_message TEXT,  
-        file_id TEXT,
-        created_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        retry_count INTEGER DEFAULT 0
-      );
-
-    ''');
-
-    // 创建索引
-    await db.execute(
-      'CREATE INDEX idx_upload_tasks_status ON $_uploadTaskTableName (status)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_upload_tasks_created_at ON $_uploadTaskTableName (created_at)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_download_tasks_status ON $_downloadTaskTableName (status)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_download_tasks_created_at ON $_downloadTaskTableName (created_at)',
-    );
+    await db.execute(UploadTaskRecord.createSql());
 
     getLogger().info('Sqlite3Storage tables created');
   }
@@ -172,248 +124,217 @@ class Sqlite3Storage {
     // 未来版本升级逻辑
   }
 
-  // /// 获取数据库连接
-  // Future<Database> _getDb() async {
-  //   if (_database != null && _database!.isOpen) {
-  //     return _database!;
-  //   }
-
-  //   final dbPath = await _getDatabasePath();
-  //   _database = await databaseFactoryFfi.openDatabase(
-  //     dbPath,
-  //     options: OpenDatabaseOptions(
-  //       version: _dbVersion,
-  //       onCreate: _onCreate,
-  //       onUpgrade: _onUpgrade,
-  //     ),
-  //   );
-  //   // 启用 WAL 模式
-  //   await _database!.execute('PRAGMA journal_mode = WAL');
-  //   await _database!.execute('PRAGMA busy_timeout = 30000');
-
-  //   return _database!;
-  // }
-
-  /// 将记录转换为 Map
-  Map<String, dynamic> _recordToMap(UploadTaskRecord record) {
-    return {
-      'id': record.id,
-      'file_path': record.filePath,
-      'file_name': record.fileName,
-      'file_size': record.fileSize,
-      'parent_id': record.parentId,
-      'file_hash': record.fileHash,
-      'mime': record.mime,
-      'file_type': record.fileType,
-      'chunk_size': record.chunkSize,
-      'chunk_total': record.chunkTotal,
-      'chunk_index': record.chunkIndex,
-      'uploaded_chunks': jsonEncode(record.uploadedChunks),
-      'status': record.status.index,
-      'error_message': record.errorMessage,
-      'upload_id': record.uploadId,
-      'file_id': record.fileId,
-      'created_at': record.createdAt.millisecondsSinceEpoch,
-      'completed_at': record.completedAt?.millisecondsSinceEpoch,
-      'retry_count': record.retryCount,
-      'uploaded_bytes': record.uploadedBytes,
-      'hash_progress': record.hashProgress,
-    };
-  }
-
-  /// 将 Map 转换为记录
-  UploadTaskRecord _mapToRecord(Map<String, dynamic> map) {
-    return UploadTaskRecord(
-      id: map['id'] as String,
-      filePath: map['file_path'] as String,
-      fileName: map['file_name'] as String,
-      fileSize: map['file_size'] as int,
-      parentId: map['parent_id'] as String?,
-      fileHash: map['file_hash'] as String?,
-      mime: map['mime'] as String?,
-      fileType: map['file_type'] as int?,
-      chunkSize: map['chunk_size'] as int,
-      chunkTotal: map['chunk_total'] as int,
-      chunkIndex: map['chunk_index'] as int? ?? 0,
-      uploadedChunks: _parseUploadedChunks(map['uploaded_chunks'] as String?),
-      status: UploadTaskStatusRecord.values[map['status'] as int? ?? 0],
-      errorMessage: map['error_message'] as String?,
-      uploadId: map['upload_id'] as String?,
-      fileId: map['file_id'] as String?,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(
-        map['created_at'] as int? ?? DateTime.now().millisecondsSinceEpoch,
-      ),
-      completedAt: map['completed_at'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['completed_at'] as int)
-          : null,
-      retryCount: map['retry_count'] as int? ?? 0,
-      uploadedBytes: map['uploaded_bytes'] as int? ?? 0,
-      hashProgress: map['hash_progress'] as double? ?? 0,
-    );
-  }
-
-  /// 解析已上传分片列表
-  List<int> _parseUploadedChunks(String? json) {
-    if (json == null || json.isEmpty) return [];
-    try {
-      final list = jsonDecode(json) as List;
-      return list.cast<int>();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /// 获取所有任务
-  List<UploadTaskRecord> getAllTasks() {
-    // 同步方法：从缓存获取
-    if (_database == null) return [];
-    // 这里需要异步查询，返回空列表
-    // 实际使用时应该调用 getAllTasksAsync
-    return [];
-  }
-
   /// 获取所有任务（异步）
   Future<List<UploadTaskRecord>> getAllUploadTasksAsync() async {
     final List<Map<String, dynamic>> maps = await _database!.query(
-      _uploadTaskTableName,
+      uploadTaskTableName,
       orderBy: 'created_at DESC',
     );
-    return maps.map(_mapToRecord).toList();
+    return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
   }
 
-  /// 获取待处理的任务
-  List<UploadTaskRecord> getPendingUploadTasks() {
-    // 同步方法：从缓存获取
-    return [];
-  }
-
-  /// 获取待处理的任务（异步）
+  /// 获取待处理的上传任务（异步）
   Future<List<UploadTaskRecord>> getPendingUploadTasksAsync() async {
     final List<Map<String, dynamic>> maps = await _database!.query(
-      _uploadTaskTableName,
-      where: 'status IN (?, ?, ?, ?)',
-      whereArgs: [
-        UploadTaskStatusRecord.pending.index,
-        UploadTaskStatusRecord.uploading.index,
-        UploadTaskStatusRecord.paused.index,
-        UploadTaskStatusRecord.initializing.index,
-      ],
+      uploadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [UploadStatus.UPLOAD_STATUS_PENDING.value],
       orderBy: 'created_at ASC',
     );
-    return maps.map(_mapToRecord).toList();
+    return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
   }
 
-  /// 获取任务
-  UploadTaskRecord? getUploadTask(String id) {
-    // 同步方法：从缓存获取
-    return null;
+  /// 获取暂停的上传任务
+  Future<List<UploadTaskRecord>> getPausedUploadTasksAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      uploadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [UploadStatus.UPLOAD_STATUS_PAUSED.value],
+      orderBy: 'created_at ASC',
+    );
+    return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
   }
 
-  /// 获取任务（异步）
+  /// 获取下一个待处理的上传任务（异步）
+  Future<UploadTaskRecord?> getNextPendingUploadTaskAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      uploadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [UploadStatus.UPLOAD_STATUS_PENDING.value],
+      orderBy: 'created_at ASC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return UploadTaskRecord.fromJson(maps.first);
+  }
+
+  /// 获取指定任务
   Future<UploadTaskRecord?> getUploadTaskAsync(String id) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
-      _uploadTaskTableName,
+      uploadTaskTableName,
       where: 'id = ?',
       whereArgs: [id],
       limit: 1,
     );
     if (maps.isEmpty) return null;
-    return _mapToRecord(maps.first);
+    return UploadTaskRecord.fromJson(maps.first);
   }
 
-  /// 保存任务
-  Future<void> saveUploadTask(UploadTaskRecord task) async {
+  /// 新增上传任务
+  Future<void> addUploadTask(UploadTaskRecord task) async {
     await _withRetry(
       () => _database!.insert(
-        _uploadTaskTableName,
-        _recordToMap(task),
+        uploadTaskTableName,
+        task.toJson(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       ),
     );
     getLogger().debug('Saved task: ${task.id}, status: ${task.status}');
   }
 
-  /// 更新任务字段
+  /// 更新上传任务
   Future<void> updateUploadTask(
     String id, {
-    UploadTaskStatusRecord? status,
-    int? chunkIndex,
-    List<int>? uploadedChunks,
+    UploadStatus? status,
     String? errorMessage,
+    int? chunkTotal,
+    Int64? chunkSize,
     String? uploadId,
-    String? fileId,
     int? retryCount,
     int? uploadedBytes,
     String? fileHash,
-    double? hashProgress,
+    int? speed,
   }) async {
     final values = <String, dynamic>{};
 
     if (status != null) {
-      values['status'] = status.index;
-      if (status == UploadTaskStatusRecord.completed) {
+      values['status'] = status.value;
+      if (status == UploadStatus.UPLOAD_STATUS_COMPLETED) {
         values['completed_at'] = DateTime.now().millisecondsSinceEpoch;
       }
     }
-    if (chunkIndex != null) values['chunk_index'] = chunkIndex;
-    if (uploadedChunks != null) {
-      values['uploaded_chunks'] = jsonEncode(uploadedChunks);
-    }
     if (errorMessage != null) values['error_message'] = errorMessage;
     if (uploadId != null) values['upload_id'] = uploadId;
-    if (fileId != null) values['file_id'] = fileId;
     if (retryCount != null) values['retry_count'] = retryCount;
     if (uploadedBytes != null) values['uploaded_bytes'] = uploadedBytes;
     if (fileHash != null) values['file_hash'] = fileHash;
-    if (hashProgress != null) values['hash_progress'] = hashProgress;
+    if (speed != null) values['speed'] = speed;
+    if (chunkTotal != null) values['chunk_total'] = chunkTotal;
+    if (chunkSize != null) values['chunk_size'] = chunkSize;
 
     if (values.isEmpty) return;
 
     await _withRetry(
       () => _database!.update(
-        _uploadTaskTableName,
+        uploadTaskTableName,
         values,
         where: 'id = ?',
         whereArgs: [id],
       ),
     );
-    getLogger().debug('Updated task: $id');
   }
 
   /// 删除任务
-  Future<void> deleteTask(String id) async {
+  Future<void> deleteUploadTask(String? id) async {
+    final where = id == null ? '' : 'id=?';
+    final whereArgs = id == null ? [] : [id];
     await _withRetry(
       () => _database!.delete(
-        _uploadTaskTableName,
-        where: 'id = ?',
-        whereArgs: [id],
+        uploadTaskTableName,
+        where: where,
+        whereArgs: whereArgs,
       ),
     );
     getLogger().debug('Deleted task: $id');
   }
 
   /// 清除已完成的任务
-  Future<void> clearCompleted() async {
+  Future<void> clearUploadCompleted() async {
     final count = await _withRetry(
       () => _database!.delete(
-        _uploadTaskTableName,
+        uploadTaskTableName,
         where: 'status = ?',
-        whereArgs: [UploadTaskStatusRecord.completed.index],
+        whereArgs: [UploadStatus.UPLOAD_STATUS_COMPLETED.value],
       ),
     );
     getLogger().info('Cleared $count completed tasks');
   }
 
   /// 清除失败的任务
-  Future<void> clearFailed() async {
+  Future<void> clearUploadFailed() async {
     final count = await _withRetry(
       () => _database!.delete(
-        _uploadTaskTableName,
+        uploadTaskTableName,
         where: 'status = ?',
-        whereArgs: [UploadTaskStatusRecord.failed.index],
+        whereArgs: [UploadStatus.UPLOAD_STATUS_FAILED.value],
       ),
     );
     getLogger().info('Cleared $count failed tasks');
+  }
+
+  /// 暂停任务
+  Future<void> pauseUploadTasks(String? taskId) async {
+    final where = taskId == null ? 'status in (?, ?)' : 'id=?';
+    final whereArgs = taskId == null
+        ? [
+            UploadStatus.UPLOAD_STATUS_UPLOADING.value,
+            UploadStatus.UPLOAD_STATUS_PENDING.value,
+          ]
+        : [taskId];
+    await _withRetry(
+      () => _database!.update(
+        uploadTaskTableName,
+        {'status': UploadStatus.UPLOAD_STATUS_PAUSED.value},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+  }
+
+  // 恢复任务
+  Future<List<String>> resumeUploadTasks(String? taskId) async {
+    List<String> taskIds = [];
+    String where;
+    List<dynamic> whereArgs;
+    if (taskId == null) {
+      final tasks = await getPausedUploadTasksAsync();
+      taskIds = tasks.map((t) => t.id).toList();
+      where = 'status=?';
+      whereArgs = [UploadStatus.UPLOAD_STATUS_PAUSED.value];
+    } else {
+      taskIds.add(taskId);
+      where = 'id = ?';
+      whereArgs = [taskId];
+    }
+
+    await _withRetry(
+      () => _database!.update(
+        uploadTaskTableName,
+        {'status': UploadStatus.UPLOAD_STATUS_PENDING.value},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+
+    return taskIds;
+  }
+
+  Future<void> cancelUploadTask(String? taskId) async {
+    final where = taskId == null ? 'status in (?, ?)' : 'id=?';
+    final whereArgs = taskId == null
+        ? [
+            UploadStatus.UPLOAD_STATUS_UPLOADING.value,
+            UploadStatus.UPLOAD_STATUS_PENDING.value,
+          ]
+        : [taskId];
+    await _withRetry(
+      () => _database!.update(
+        uploadTaskTableName,
+        {'status': UploadStatus.UPLOAD_STATUS_PENDING.value},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
   }
 
   /// 关闭数据库连接
