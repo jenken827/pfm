@@ -68,22 +68,27 @@ class BackgroundService {
     _instance = BackgroundService._(storage);
 
     _instance!._syncTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
-      final uploadTasks = await storage.getAllUploadTasksAsync();
-      final activeUploads = uploadTasks
-          .where(
-            (task) =>
-                task.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
-                task.status == UploadStatus.UPLOAD_STATUS_PENDING,
-          )
-          .toList();
-      _instance!._uploadTaskController.add(activeUploads);
-      if (activeUploads.isEmpty) {
-        _instance!._syncTimer?.cancel();
-        _instance!._syncTimer = null;
-      }
+      await _instance!._timerHandler(timer);
     });
 
     return _instance!;
+  }
+
+  Future<void> _timerHandler(Timer timer) async {
+    final uploadTasks = await storage.getAllUploadTasksAsync();
+    final activeUploads = uploadTasks.where((task) => task.isActive).toList();
+    getLogger().debug(
+      'background_service timer ----------, active uploads ${activeUploads.length},total ${uploadTasks.length}',
+    );
+
+    _uploadTaskController.add(uploadTasks);
+    if (activeUploads.isEmpty) {
+      getLogger().debug(
+        'background_service timer, no active uploads,stop timer',
+      );
+      timer.cancel();
+      _syncTimer = null;
+    }
   }
 
   /// 初始化后台服务
@@ -113,7 +118,7 @@ class BackgroundService {
   Future<void> scheduleNewUploadTask(UploadTaskRecord task) async {
     _logger.info('Adding new upload task: ${task.id}');
     // 保存新任务记录
-    task.status = UploadStatus.UPLOAD_STATUS_PENDING;
+    task.status = UploadStatus.PENDING;
     await _storage.addUploadTask(task);
     await scheduleUpload(task.id, true);
   }
@@ -135,6 +140,9 @@ class BackgroundService {
   /// 其它情况，比如新增任务，或者之前用户暂停了，恢复任务，都需要重新注册一次
   Future<void> scheduleUpload(String taskId, bool isNew) async {
     _logger.info('Scheduling upload task: $taskId');
+    _syncTimer ??= Timer.periodic(Duration(seconds: 1), (timer) async {
+      await _timerHandler(timer);
+    });
 
     if (isWorkManagerSupported && isNew) {
       await _scheduleWithWorkManager(taskId);
@@ -147,11 +155,9 @@ class BackgroundService {
   /// workmanager任务只需要注册一次，后续由系统管理，即使后面应用关闭，系统也会自动调度，不需要重复注册
   Future<void> _scheduleWithWorkManager(String taskId) async {
     await Workmanager().registerOneOffTask(
-      kUploadTaskName,
-      '${kUploadTaskName}_$taskId',
-
-      inputData: {'taskId': taskId},
-
+      taskId,
+      taskId,
+      inputData: {'taskId': taskId, 'taskType': TaskType.upload},
       constraints: Constraints(networkType: NetworkType.connected),
     );
 
@@ -273,19 +279,13 @@ class BackgroundService {
     _logger.info('Cancelling upload task: $taskId');
 
     // 更新任务状态
-    await _storage.updateUploadTask(
-      taskId,
-      status: UploadStatus.UPLOAD_STATUS_CANCELED,
-    );
+    await _storage.updateUploadTask(taskId, status: UploadStatus.CANCELED);
   }
 
   /// 暂停上传任务
   Future<void> pauseUpload(String taskId) async {
     _logger.info('Pausing upload task: $taskId');
-    await _storage.updateUploadTask(
-      taskId,
-      status: UploadStatus.UPLOAD_STATUS_PAUSED,
-    );
+    await _storage.updateUploadTask(taskId, status: UploadStatus.PAUSED);
   }
 
   /// 恢复上传任务

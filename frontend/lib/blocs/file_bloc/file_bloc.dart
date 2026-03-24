@@ -1,6 +1,5 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/tables.pb.dart';
@@ -29,23 +28,6 @@ class FileBloc extends Bloc<FileEvent, FileState> {
   }
 
   final FmRepository fmRepository;
-  final _ls = GetIt.I.get<LocalStorage>();
-
-  // // 监听文件服务器变化
-  // Future<void> _onFileServerSubscription(
-  //   FileServerSubScriptionEvent event,
-  //   Emitter<FileState> emit,
-  // ) async {
-  //   emit.forEach(
-  //     fmRepository.baseUrl,
-  //     onData: (value) {
-  //       if (value != null) {
-  //         add(FileListEvent(state.currentDirId));
-  //       }
-  //       return state;
-  //     },
-  //   );
-  // }
 
   /// 获取文件列表
   Future<void> _onFileList(FileListEvent event, Emitter<FileState> emit) async {

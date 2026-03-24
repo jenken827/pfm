@@ -43,48 +43,50 @@ class _TransferPageState extends State<TransferPage>
 
     return BlocProvider.value(
       value: GetIt.I.get<TransferBloc>(),
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(al.transfer),
-          centerTitle: true,
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(
-                icon: const Icon(Icons.cloud_upload_outlined),
-                text: '上传', // al.upload,
-              ),
-              Tab(
-                icon: const Icon(Icons.cloud_download_outlined),
-                text: '下载', // al.download,
+      child: Builder(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text(al.transfer),
+            centerTitle: true,
+            bottom: TabBar(
+              controller: _tabController,
+              tabs: [
+                Tab(
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  text: '上传', // al.upload,
+                ),
+                Tab(
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  text: '下载', // al.download,
+                ),
+              ],
+            ),
+            actions: [
+              // 刷新按钮
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  context.read<TransferBloc>().add(TransferRefreshEvent());
+                },
+                tooltip: '刷新',
               ),
             ],
           ),
-          actions: [
-            // 刷新按钮
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                context.read<TransferBloc>().add(TransferRefreshEvent());
-              },
-              tooltip: '刷新',
-            ),
-          ],
-        ),
-        body: BlocBuilder<TransferBloc, TransferState>(
-          buildWhen: (previous, current) =>
-              previous.currentTab != current.currentTab,
-          builder: (context, state) {
-            return TabBarView(
-              controller: _tabController,
-              children: [
-                // 上传任务列表
-                UploadTaskList(),
-                // 下载任务列表
-                DownloadTaskList(),
-              ],
-            );
-          },
+          body: BlocBuilder<TransferBloc, TransferState>(
+            // buildWhen: (previous, current) =>
+            //     previous.currentTab != current.currentTab,
+            builder: (context, state) {
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  // 上传任务列表
+                  UploadTaskList(),
+                  // 下载任务列表
+                  DownloadTaskList(),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

@@ -8,3 +8,4 @@ export 'background_service.dart';
 export 'sqlite3_storage.dart';
 export 'workmanager_task.dart';
 export 'isolate.dart';
+export 'upload.dart';

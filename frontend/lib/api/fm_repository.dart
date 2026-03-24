@@ -11,7 +11,6 @@ import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/group.pb.dart';
 import '../proto/native/provider.pb.dart';
-import '../proto/native/tables.pb.dart';
 import '../services/local_storage.dart';
 import '../services/logger.dart';
 import 'util.dart';
@@ -573,10 +572,12 @@ class FmRepository {
     required int size,
     String? hash,
     int? chunkSize,
+    bool overwrite = false,
   }) async {
     try {
       final req = InitUploadReq()
         ..name = name
+        ..overwrite = overwrite
         ..size = Int64(size);
       if (parentId != null) req.parentId = parentId;
       if (hash != null) req.hash = hash;

@@ -90,6 +90,7 @@ func autoMigrate() error {
 		&native.FileLocationORM{},
 		&native.StorageGroupORM{},
 		&native.StorageProviderORM{},
+		&native.UploadRecordORM{},
 		&native.UploadChunkRecordORM{},
 	)
 }

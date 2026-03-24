@@ -99,7 +99,7 @@ class CasdoorTokenExchange {
 
 /// Casdoor 登录辅助类
 class CasdoorLoginHelper {
-  static const int listenPort = 8899;
+  static const int listenPort = 58899;
   static const String redirectUri = "http://localhost:$listenPort/callback";
 
   /// 从 token 解析用户信息并保存

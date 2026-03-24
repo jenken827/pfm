@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
@@ -176,7 +175,7 @@ class _UploadTaskItem extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        task.fileName,
+                        task.filename,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall,
@@ -201,12 +200,13 @@ class _UploadTaskItem extends StatelessWidget {
             LinearProgressIndicator(
               value: task.progress,
               backgroundColor: colorScheme.surfaceContainerHighest,
+              color: colorScheme.primary,
               borderRadius: BorderRadius.circular(4),
               minHeight: 6,
             ),
             const SizedBox(height: 8),
             // 进度条
-            if (task.status == UploadStatus.UPLOAD_STATUS_HASHING) ...[
+            if (task.status == UploadStatus.HASHING) ...[
               Row(
                 children: [
                   Text(
@@ -224,8 +224,8 @@ class _UploadTaskItem extends StatelessWidget {
                   // ),
                 ],
               ),
-            ] else if (task.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
-                task.status == UploadStatus.UPLOAD_STATUS_PAUSED) ...[
+            ] else if (task.status == UploadStatus.UPLOADING ||
+                task.status == UploadStatus.PAUSED) ...[
               Row(
                 children: [
                   if (task.speed > 0) ...[
@@ -270,8 +270,7 @@ class _UploadTaskItem extends StatelessWidget {
                 ),
             ],
             // 错误信息
-            if (task.status == UploadStatus.UPLOAD_STATUS_FAILED &&
-                task.errorMessage != null)
+            if (task.status == UploadStatus.FAILED && task.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -304,7 +303,7 @@ class _UploadTaskItem extends StatelessWidget {
 
   IconData _getFileIcon() {
     // 根据文件名后缀返回图标
-    final ext = task.fileName.split('.').last.toLowerCase();
+    final ext = task.filename.split('.').last.toLowerCase();
     switch (ext) {
       case 'jpg':
       case 'jpeg':
@@ -343,32 +342,32 @@ class _UploadTaskItem extends StatelessWidget {
     Color color;
 
     switch (task.status) {
-      case UploadStatus.UPLOAD_STATUS_PENDING:
+      case UploadStatus.PENDING:
         label = '等待中';
         color = Colors.grey;
         break;
-      case UploadStatus.UPLOAD_STATUS_UPLOADING:
+      case UploadStatus.UPLOADING:
         label = '上传中';
         color = Theme.of(context).colorScheme.primary;
         break;
-      case UploadStatus.UPLOAD_STATUS_COMPLETED:
+      case UploadStatus.COMPLETED:
         label = '已完成';
         color = Colors.green;
         break;
-      case UploadStatus.UPLOAD_STATUS_PAUSED:
+      case UploadStatus.PAUSED:
         label = '已暂停';
         color = Colors.orange;
         break;
-      case UploadStatus.UPLOAD_STATUS_CANCELED:
+      case UploadStatus.CANCELED:
         label = '已取消';
         color = Colors.grey;
         break;
-      case UploadStatus.UPLOAD_STATUS_FAILED:
+      case UploadStatus.FAILED:
         label = '失败';
         color = Theme.of(context).colorScheme.error;
         break;
-      case UploadStatus.UPLOAD_STATUS_HASHING:
-        label = '初始化';
+      case UploadStatus.HASHING:
+        label = '计算指纹中';
         color = Colors.grey;
         break;
       default:
@@ -400,37 +399,48 @@ class _UploadTaskItem extends StatelessWidget {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 20),
       onSelected: (value) {
-        final uploadBloc = GetIt.I.get<TransferBloc>();
+        final bloc = context.read<TransferBloc>();
         switch (value) {
           case 'pause':
-            uploadBloc.add(TransferPauseEvent(task.id));
+            bloc.add(TransferPauseEvent(task.id));
             break;
           case 'resume':
-            uploadBloc.add(TransferResumeEvent(task.id));
+            bloc.add(TransferResumeEvent(task.id));
             break;
           case 'cancel':
-            uploadBloc.add(TransferCancelEvent(task.id));
+            bloc.add(TransferCancelEvent(task.id));
             break;
           case 'retry':
-            uploadBloc.add(TransferResumeEvent(task.id));
+            bloc.add(TransferResumeEvent(task.id));
             break;
           case 'remove':
-            uploadBloc.add(TransferRemoveEvent(task.id));
+            bloc.add(TransferRemoveEvent(task.id));
             break;
         }
       },
-      itemBuilder: (context) => [
-        if (task.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
-            task.status == UploadStatus.UPLOAD_STATUS_PENDING)
-          const PopupMenuItem(value: 'pause', child: Text('暂停')),
-        if (task.status == UploadStatus.UPLOAD_STATUS_PAUSED)
-          const PopupMenuItem(value: 'resume', child: Text('继续')),
-        if (task.status == UploadStatus.UPLOAD_STATUS_FAILED)
-          const PopupMenuItem(value: 'retry', child: Text('重试')),
-
-        const PopupMenuItem(value: 'cancel', child: Text('取消')),
-        const PopupMenuItem(value: 'remove', child: Text('移除')),
-      ],
+      itemBuilder: (context) {
+        if (task.isActive) {
+          return [
+            const PopupMenuItem(value: 'pause', child: Text('暂停')),
+            const PopupMenuItem(value: 'cancel', child: Text('取消')),
+            const PopupMenuItem(value: 'remove', child: Text('移除')),
+          ];
+        } else if (task.status == UploadStatus.PAUSED) {
+          return [
+            const PopupMenuItem(value: 'resume', child: Text('继续')),
+            const PopupMenuItem(value: 'cancel', child: Text('取消')),
+            const PopupMenuItem(value: 'remove', child: Text('移除')),
+          ];
+        } else if (task.status == UploadStatus.FAILED) {
+          return [
+            const PopupMenuItem(value: 'retry', child: Text('重试')),
+            const PopupMenuItem(value: 'cancel', child: Text('取消')),
+            const PopupMenuItem(value: 'remove', child: Text('移除')),
+          ];
+        } else {
+          return [const PopupMenuItem(value: 'remove', child: Text('移除'))];
+        }
+      },
     );
   }
 }

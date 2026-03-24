@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:path/path.dart' as p;
@@ -138,7 +136,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       where: 'status = ?',
-      whereArgs: [UploadStatus.UPLOAD_STATUS_PENDING.value],
+      whereArgs: [UploadStatus.PENDING.value],
       orderBy: 'created_at ASC',
     );
     return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
@@ -149,7 +147,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       where: 'status = ?',
-      whereArgs: [UploadStatus.UPLOAD_STATUS_PAUSED.value],
+      whereArgs: [UploadStatus.PAUSED.value],
       orderBy: 'created_at ASC',
     );
     return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
@@ -160,7 +158,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       where: 'status = ?',
-      whereArgs: [UploadStatus.UPLOAD_STATUS_PENDING.value],
+      whereArgs: [UploadStatus.PENDING.value],
       orderBy: 'created_at ASC',
       limit: 1,
     );
@@ -182,6 +180,9 @@ class Sqlite3Storage {
 
   /// 新增上传任务
   Future<void> addUploadTask(UploadTaskRecord task) async {
+    getLogger().info('add new task  $task');
+    final mp = task.toJson();
+    getLogger().info('add new task json $mp');
     await _withRetry(
       () => _database!.insert(
         uploadTaskTableName,
@@ -209,8 +210,8 @@ class Sqlite3Storage {
 
     if (status != null) {
       values['status'] = status.value;
-      if (status == UploadStatus.UPLOAD_STATUS_COMPLETED) {
-        values['completed_at'] = DateTime.now().millisecondsSinceEpoch;
+      if (status == UploadStatus.COMPLETED) {
+        values['completed_at'] = DateTime.now().toIso8601String();
       }
     }
     if (errorMessage != null) values['error_message'] = errorMessage;
@@ -220,7 +221,7 @@ class Sqlite3Storage {
     if (fileHash != null) values['file_hash'] = fileHash;
     if (speed != null) values['speed'] = speed;
     if (chunkTotal != null) values['chunk_total'] = chunkTotal;
-    if (chunkSize != null) values['chunk_size'] = chunkSize;
+    if (chunkSize != null) values['chunk_size'] = chunkSize.toInt();
 
     if (values.isEmpty) return;
 
@@ -254,7 +255,7 @@ class Sqlite3Storage {
       () => _database!.delete(
         uploadTaskTableName,
         where: 'status = ?',
-        whereArgs: [UploadStatus.UPLOAD_STATUS_COMPLETED.value],
+        whereArgs: [UploadStatus.COMPLETED.value],
       ),
     );
     getLogger().info('Cleared $count completed tasks');
@@ -266,7 +267,7 @@ class Sqlite3Storage {
       () => _database!.delete(
         uploadTaskTableName,
         where: 'status = ?',
-        whereArgs: [UploadStatus.UPLOAD_STATUS_FAILED.value],
+        whereArgs: [UploadStatus.FAILED.value],
       ),
     );
     getLogger().info('Cleared $count failed tasks');
@@ -277,14 +278,15 @@ class Sqlite3Storage {
     final where = taskId == null ? 'status in (?, ?)' : 'id=?';
     final whereArgs = taskId == null
         ? [
-            UploadStatus.UPLOAD_STATUS_UPLOADING.value,
-            UploadStatus.UPLOAD_STATUS_PENDING.value,
+            UploadStatus.UPLOADING.value,
+            UploadStatus.PENDING.value,
+            UploadStatus.HASHING.value,
           ]
         : [taskId];
     await _withRetry(
       () => _database!.update(
         uploadTaskTableName,
-        {'status': UploadStatus.UPLOAD_STATUS_PAUSED.value},
+        {'status': UploadStatus.PAUSED.value},
         where: where,
         whereArgs: whereArgs,
       ),
@@ -300,7 +302,7 @@ class Sqlite3Storage {
       final tasks = await getPausedUploadTasksAsync();
       taskIds = tasks.map((t) => t.id).toList();
       where = 'status=?';
-      whereArgs = [UploadStatus.UPLOAD_STATUS_PAUSED.value];
+      whereArgs = [UploadStatus.PAUSED.value];
     } else {
       taskIds.add(taskId);
       where = 'id = ?';
@@ -310,7 +312,7 @@ class Sqlite3Storage {
     await _withRetry(
       () => _database!.update(
         uploadTaskTableName,
-        {'status': UploadStatus.UPLOAD_STATUS_PENDING.value},
+        {'status': UploadStatus.PENDING.value},
         where: where,
         whereArgs: whereArgs,
       ),
@@ -323,14 +325,15 @@ class Sqlite3Storage {
     final where = taskId == null ? 'status in (?, ?)' : 'id=?';
     final whereArgs = taskId == null
         ? [
-            UploadStatus.UPLOAD_STATUS_UPLOADING.value,
-            UploadStatus.UPLOAD_STATUS_PENDING.value,
+            UploadStatus.UPLOADING.value,
+            UploadStatus.PENDING.value,
+            UploadStatus.HASHING.value,
           ]
         : [taskId];
     await _withRetry(
       () => _database!.update(
         uploadTaskTableName,
-        {'status': UploadStatus.UPLOAD_STATUS_PENDING.value},
+        {'status': UploadStatus.CANCELED.value},
         where: where,
         whereArgs: whereArgs,
       ),

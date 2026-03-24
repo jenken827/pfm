@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
-import 'package:pfm/api/api.dart';
-import 'package:pfm/models/models.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
 

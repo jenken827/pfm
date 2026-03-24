@@ -69,43 +69,6 @@ func (s *FileServer) RenameFile(ctx context.Context, req *connect.Request[native
 	return response.SuccessResp(nil)
 }
 
-// UploadFile 文件上传（Client Streaming）
-// func (s *FileServer) UploadFile(ctx context.Context, stream *connect.ClientStream[native.UploadFileReq]) (*connect.Response[native.BaseResp], error) {
-// 	// 接收第一个消息获取元数据
-// 	if !stream.Receive() {
-// 		if err := stream.Err(); err != nil {
-// 			return response.ErrResp(native.RespCode_PARAMS_ERROR, err), nil
-// 		}
-// 		return response.ErrResp(native.RespCode_PARAMS_ERROR, errors.New("no data received")), nil
-// 	}
-
-// 	msg := stream.Msg()
-// 	metadata := msg.Metadata
-// 	if metadata == nil {
-// 		return response.ErrResp(native.RespCode_PARAMS_ERROR, errors.New("missing metadata")), nil
-// 	}
-
-// 	// 收集所有文件内容
-// 	var chunks [][]byte
-// 	for stream.Receive() {
-// 		msg := stream.Msg()
-// 		if msg.Chunk != nil {
-// 			chunks = append(chunks, msg.Chunk)
-// 		}
-// 	}
-
-// 	if err := stream.Err(); err != nil && !errors.Is(err, io.EOF) {
-// 		return response.ErrResp(native.RespCode_INTERNAL_ERROR, err), nil
-// 	}
-
-// 	result, err := service.UploadFile(ctx, metadata, chunks)
-// 	if err != nil {
-// 		return response.ErrResp(err.Code, err.E), nil
-// 	}
-
-// 	return response.SuccessResp(result)
-// }
-
 // InitUpload 初始化上传任务
 func (s *FileServer) InitUpload(ctx context.Context, req *connect.Request[native.InitUploadReq]) (*connect.Response[native.BaseResp], error) {
 	llog.GetLogger().Info("InitUpload request", *req.Msg.Hash)

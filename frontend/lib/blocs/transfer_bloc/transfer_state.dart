@@ -8,23 +8,19 @@ class TransferState extends Equatable {
   final TransferTab currentTab;
   final List<UploadTaskRecord> uploadTasks;
   final List<DownloadTaskState> downloadTasks;
+  final int fakeStatus;
 
   const TransferState({
     this.currentTab = TransferTab.upload,
     this.uploadTasks = const [],
     this.downloadTasks = const [],
+    this.fakeStatus = 0,
   });
 
   bool get isUpload => currentTab == TransferTab.upload;
 
   /// 正在上传的任务数
-  int get uploadingCount => uploadTasks
-      .where(
-        (t) =>
-            t.status == UploadStatus.UPLOAD_STATUS_UPLOADING ||
-            t.status == UploadStatus.UPLOAD_STATUS_PENDING,
-      )
-      .length;
+  int get uploadingCount => uploadTasks.where((t) => t.isActive).length;
 
   /// 正在下载的任务数
   int get downloadingCount => downloadTasks
@@ -32,14 +28,12 @@ class TransferState extends Equatable {
       .length;
 
   /// 已完成的上传任务数
-  int get completedUploadCount => uploadTasks
-      .where((t) => t.status == UploadStatus.UPLOAD_STATUS_COMPLETED)
-      .length;
+  int get completedUploadCount =>
+      uploadTasks.where((t) => t.status == UploadStatus.COMPLETED).length;
 
   /// 失败的上传任务数
-  int get failedUploadCount => uploadTasks
-      .where((t) => t.status == UploadStatus.UPLOAD_STATUS_FAILED)
-      .length;
+  int get failedUploadCount =>
+      uploadTasks.where((t) => t.status == UploadStatus.FAILED).length;
 
   /// 是否有活动的传输任务
   bool get hasActiveTransfers => uploadingCount > 0 || downloadingCount > 0;
@@ -51,16 +45,23 @@ class TransferState extends Equatable {
     TransferTab? currentTab,
     List<UploadTaskRecord>? uploadTasks,
     List<DownloadTaskState>? downloadTasks,
+    int? fakeStatus,
   }) {
     return TransferState(
       currentTab: currentTab ?? this.currentTab,
       uploadTasks: uploadTasks ?? this.uploadTasks,
       downloadTasks: downloadTasks ?? this.downloadTasks,
+      fakeStatus: fakeStatus ?? this.fakeStatus,
     );
   }
 
   @override
-  List<Object?> get props => [currentTab, uploadTasks, downloadTasks];
+  List<Object?> get props => [
+    currentTab,
+    uploadTasks,
+    downloadTasks,
+    fakeStatus,
+  ];
 }
 
 /// 下载任务状态

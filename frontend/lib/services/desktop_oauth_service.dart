@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:get_it/get_it.dart';
+import 'package:pfm/services/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'casdoor_auth_service.dart';
-import 'local_storage.dart';
 import '../models/models.dart';
 
 class DesktopOAuthService {
@@ -81,6 +80,7 @@ class DesktopOAuthService {
 
     // 等待回调
     final code = await _startCallbackServer(_pkce.state);
+    getLogger().info('login callback code $code');
 
     try {
       // 交换 access token
@@ -89,12 +89,14 @@ class DesktopOAuthService {
         clientId: _config.clientId,
       );
       final token = await tokenExchange.exchange(code, _pkce.codeVerifier);
+      getLogger().info('token exchanged :$token');
       if (token.accessToken == null) {
         return null;
       }
       // 保存登录信息并返回用户
       return await CasdoorLoginHelper.saveLoginInfo(token);
     } catch (e) {
+      getLogger().error('exchange token failed, message: $e');
       return null;
     }
   }

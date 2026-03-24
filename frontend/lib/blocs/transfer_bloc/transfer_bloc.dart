@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path/path.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/services/services.dart';
+import 'package:uuid/uuid.dart';
 
 part 'transfer_event.dart';
 part 'transfer_state.dart';
@@ -21,6 +24,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferResumeEvent>(_onResume);
     on<TransferCancelEvent>(_onCancel);
     on<TransferRemoveEvent>(_onRemove);
+    on<TransferAddUploadEvent>(_onAddUpload);
   }
 
   final BackgroundService _bgService;
@@ -32,7 +36,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     await emit.forEach(
       _bgService.uploadTaskStream,
       onData: (tasks) {
-        return state.copyWith(uploadTasks: tasks);
+        return state.copyWith(
+          uploadTasks: tasks,
+          fakeStatus: state.fakeStatus + 1,
+        );
       },
     );
   }
@@ -56,7 +63,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) async {
     if (state.isUpload) {
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -68,7 +77,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state.isUpload) {
       await _bgService.storage.clearUploadCompleted();
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -81,7 +92,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state.isUpload) {
       await _bgService.storage.clearUploadFailed();
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -93,7 +106,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state.isUpload) {
       await _bgService.storage.pauseUploadTasks(event.taskId);
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -107,7 +122,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
 
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -119,7 +136,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state.isUpload) {
       await _bgService.storage.cancelUploadTask(event.taskId);
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 
@@ -131,7 +150,48 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state.isUpload) {
       await _bgService.storage.deleteUploadTask(event.taskId);
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-      emit(state.copyWith(uploadTasks: tasks));
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
+    }
+  }
+
+  Future<void> _onAddUpload(
+    TransferAddUploadEvent event,
+
+    Emitter<TransferState> emit,
+  ) async {
+    try {
+      final fileName = basename(event.filePath);
+
+      // 获取文件信息
+      final file = File(event.filePath);
+      if (!await file.exists()) {
+        getLogger().error('文件不存在：${event.filePath}');
+        return;
+      }
+
+      final stat = await file.stat();
+      final fileSize = stat.size;
+
+      // 创建持久化记录（Hash 会在后台计算）
+      final record = UploadTaskRecord(
+        id: Uuid().v8(),
+        filepath: event.filePath,
+        filename: fileName,
+        fileSize: fileSize,
+        parentId: event.parentId,
+        status: UploadStatus.PENDING,
+      );
+
+      // 调度后台任务（包含 Hash 计算）
+      await _bgService.scheduleNewUploadTask(record);
+
+      getLogger().info(
+        'Scheduled upload task: ${record.id}, hash will be computed in background',
+      );
+    } catch (e) {
+      getLogger().error('Start upload failed: $e');
     }
   }
 }

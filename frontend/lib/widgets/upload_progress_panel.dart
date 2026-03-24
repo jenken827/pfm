@@ -219,7 +219,7 @@
 //     Color color;
 
 //     switch (task.status) {
-//       case UploadStatus.UPLOAD_STATUS_PENDING:
+//       case UploadStatus.PENDING:
 //         label = '等待中';
 //         color = Colors.grey;
 //         break;
