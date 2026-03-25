@@ -28,6 +28,10 @@ message StorageProviderAddReq {
   optional bool enabled = 6;
   // 优先级
   optional uint32 order = 7;
+  // 总容量
+  optional uint64 total_capacity = 8;
+  // 文件大小限制
+  optional uint64 file_size_limit = 9;
 }
 
 // StorageProviderAddRespData 添加存储提供者响应
@@ -61,6 +65,7 @@ message StorageProviderItem {
   optional uint32                    order              = 10;
   optional google.protobuf.Timestamp created_at         = 11;
   optional string                    config             = 12;  // 配置信息（JSON 格式）
+  optional uint64 file_size_limit = 13;
 }
 
 // StorageProviderListReq 获取存储提供者列表请求
@@ -109,6 +114,8 @@ message StorageProviderUpdateReq {
   optional bool enabled = 8;
   // 优先级（可选）
   optional uint32 order = 9;
+  // 文件大小限制
+  optional uint64 file_size_limit = 10;
 }
 
 // StorageProviderDeleteReq 删除存储提供者请求

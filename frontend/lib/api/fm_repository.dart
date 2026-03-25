@@ -339,9 +339,12 @@ class FmRepository {
   Future<ApiResult<StorageGroupAddRespData>> addStorageGroup({
     required String name,
     String? description,
+    int order = 0,
   }) async {
     try {
-      final req = StorageGroupAddReq()..name = name;
+      final req = StorageGroupAddReq()
+        ..name = name
+        ..order = order;
       if (description != null) req.description = description;
 
       final response = await _dio.post(
@@ -369,11 +372,13 @@ class FmRepository {
     required int id,
     String? name,
     String? description,
+    int? order,
   }) async {
     try {
       final req = StorageGroupUpdateReq()..id = id;
       if (name != null) req.name = name;
       if (description != null) req.description = description;
+      if (order != null) req.order = order;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageGroupService/UpdateStorageGroup',
@@ -415,6 +420,30 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('删除存储组失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 批量更新存储组排序
+  Future<ApiResult<void>> sortStorageGroups(
+    List<StorageGroupSortItem> items,
+  ) async {
+    try {
+      final req = StorageGroupSortReq(items: items);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.StorageGroupService/SortStorageGroups',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('批量更新存储组排序失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('批量更新存储组排序失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

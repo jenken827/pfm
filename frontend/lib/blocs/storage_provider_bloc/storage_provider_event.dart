@@ -10,6 +10,11 @@ class StorageProviderLoadEvent extends StorageProviderEvent {
   const StorageProviderLoadEvent();
 }
 
+/// 加载存储组列表
+class StorageProviderGroupsEvent extends StorageProviderEvent {
+  const StorageProviderGroupsEvent();
+}
+
 /// 添加存储介质
 class StorageProviderAddEvent extends StorageProviderEvent {
   const StorageProviderAddEvent({
@@ -20,6 +25,8 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     required this.groupId,
     this.enabled = true,
     this.order = 0,
+    required this.capacity,
+    required this.fileSizeLimit,
   });
 
   final StorageProviderType providerType;
@@ -29,6 +36,8 @@ class StorageProviderAddEvent extends StorageProviderEvent {
   final int groupId;
   final bool enabled;
   final int order;
+  final int capacity;
+  final int fileSizeLimit;
 }
 
 /// 更新存储介质
@@ -41,6 +50,8 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     this.groupId,
     this.enabled,
     this.order,
+    this.capacity,
+    this.fileSizeLimit,
   });
 
   final int id;
@@ -50,6 +61,8 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
   final int? groupId;
   final bool? enabled;
   final int? order;
+  final int? capacity;
+  final int? fileSizeLimit;
 }
 
 /// 删除存储介质
@@ -61,10 +74,7 @@ class StorageProviderDeleteEvent extends StorageProviderEvent {
 
 /// 切换存储介质启用状态
 class StorageProviderToggleEvent extends StorageProviderEvent {
-  const StorageProviderToggleEvent({
-    required this.id,
-    required this.enabled,
-  });
+  const StorageProviderToggleEvent({required this.id, required this.enabled});
 
   final int id;
   final bool enabled;

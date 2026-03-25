@@ -66,3 +66,13 @@ func (s *StorageGroupServer) DeleteStorageGroup(ctx context.Context, req *connec
 
 	return response.SuccessResp(nil)
 }
+
+// SortStorageGroups 批量更新存储组排序
+func (s *StorageGroupServer) SortStorageGroups(ctx context.Context, req *connect.Request[native.StorageGroupSortReq]) (*connect.Response[native.BaseResp], error) {
+	err := service.SortStorageGroups(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err.Code, err.E), nil
+	}
+
+	return response.SuccessResp(nil)
+}

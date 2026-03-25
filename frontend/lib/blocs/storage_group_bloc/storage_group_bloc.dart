@@ -15,6 +15,7 @@ class StorageGroupBloc extends Bloc<StorageGroupEvent, StorageGroupState> {
     on<StorageGroupAddEvent>(_onAdd);
     on<StorageGroupUpdateEvent>(_onUpdate);
     on<StorageGroupDeleteEvent>(_onDelete);
+    on<StorageGroupReorderEvent>(_onReorder);
   }
 
   Future<void> _onLoad(
@@ -26,15 +27,19 @@ class StorageGroupBloc extends Bloc<StorageGroupEvent, StorageGroupState> {
     final result = await _repository.listStorageGroups(withStats: true);
 
     if (result.success) {
-      emit(state.copyWith(
-        status: StorageGroupStatus.success,
-        groups: result.data?.groups.toList() ?? [],
-      ));
+      emit(
+        state.copyWith(
+          status: StorageGroupStatus.success,
+          groups: result.data?.groups.toList() ?? [],
+        ),
+      );
     } else {
-      emit(state.copyWith(
-        status: StorageGroupStatus.failure,
-        message: result.message ?? '获取失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageGroupStatus.failure,
+          message: result.message ?? '获取失败',
+        ),
+      );
     }
   }
 
@@ -45,15 +50,18 @@ class StorageGroupBloc extends Bloc<StorageGroupEvent, StorageGroupState> {
     final result = await _repository.addStorageGroup(
       name: event.name,
       description: event.description,
+      order: event.order,
     );
 
     if (result.success) {
       add(const StorageGroupLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageGroupStatus.failure,
-        message: result.message ?? '添加失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageGroupStatus.failure,
+          message: result.message ?? '添加失败',
+        ),
+      );
     }
   }
 
@@ -65,15 +73,18 @@ class StorageGroupBloc extends Bloc<StorageGroupEvent, StorageGroupState> {
       id: event.id,
       name: event.name,
       description: event.description,
+      order: event.order,
     );
 
     if (result.success) {
       add(const StorageGroupLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageGroupStatus.failure,
-        message: result.message ?? '更新失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageGroupStatus.failure,
+          message: result.message ?? '更新失败',
+        ),
+      );
     }
   }
 
@@ -86,10 +97,27 @@ class StorageGroupBloc extends Bloc<StorageGroupEvent, StorageGroupState> {
     if (result.success) {
       add(const StorageGroupLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageGroupStatus.failure,
-        message: result.message ?? '删除失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageGroupStatus.failure,
+          message: result.message ?? '删除失败',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onReorder(
+    StorageGroupReorderEvent event,
+    Emitter<StorageGroupState> emit,
+  ) async {
+    // Build items list for batch update
+    final items = event.groups.asMap().entries.map((entry) {
+      return StorageGroupSortItem(id: entry.value.id.toInt(), order: entry.key);
+    }).toList();
+
+    final result = await _repository.sortStorageGroups(items);
+    if (result.success) {
+      add(const StorageGroupLoadEvent());
     }
   }
 }

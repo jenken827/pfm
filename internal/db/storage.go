@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -62,8 +64,8 @@ func ListStorageGroups(offset, limit int, keyword string, sortBy string, desc bo
 		return nil, 0, err
 	}
 
-	// Order
-	order := "created_at ASC"
+	// Order: 默认按 order 升序，order 相同则按 created_at 升序
+	order := "`order` ASC, created_at ASC"
 	if sortBy != "" {
 		order = sortBy + " ASC"
 		if desc {
@@ -100,6 +102,56 @@ func DeleteStorageGroup(id uint32) error {
 	ctx := context.Background()
 	_, err := gorm.G[native.StorageGroupORM](db).Where("id = ?", id).Delete(ctx)
 	return err
+}
+
+// BatchUpdateStorageGroupOrder 批量更新存储组排序
+func BatchUpdateStorageGroupOrder(items []*native.StorageGroupSortItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	// 构建 CASE WHEN 表达式，使用预编译风格的参数绑定
+	var caseWhenParts []string
+	var idValues []uint32
+	var orderValues []uint32
+
+	for _, item := range items {
+		caseWhenParts = append(caseWhenParts, fmt.Sprintf("WHEN $%d THEN $%d", len(idValues)+1, len(idValues)+2))
+		idValues = append(idValues, *item.Id)
+		orderValues = append(orderValues, *item.Order)
+	}
+
+	// 构建 WHERE IN 子句的占位符
+	var wherePlaceholders []string
+	for i := range items {
+		wherePlaceholders = append(wherePlaceholders, fmt.Sprintf("$%d", len(idValues)+i+1))
+	}
+
+	// 合并所有参数值
+	args := make([]any, 0, len(idValues)+len(orderValues)+len(items))
+	for _, v := range orderValues {
+		args = append(args, v)
+	}
+	for _, v := range idValues {
+		args = append(args, v)
+	}
+	for _, v := range idValues {
+		args = append(args, v)
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE storage_groups
+		SET "order" = CASE id %s END
+		WHERE id IN (%s)`,
+		strings.Join(caseWhenParts, " "),
+		strings.Join(wherePlaceholders, ","))
+
+	err := db.Exec(query, args...).Error
+	if err != nil {
+		llog.GetLogger().Errorf("batch update storage group order failed, err: %v", err)
+		return err
+	}
+	return nil
 }
 
 // GetStorageProviderByID 根据 ID 获取存储提供者

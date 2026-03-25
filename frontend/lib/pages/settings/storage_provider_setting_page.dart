@@ -15,20 +15,10 @@ class StorageProviderSettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (context) =>
-              StorageProviderBloc(context.read<FmRepository>())
-                ..add(const StorageProviderLoadEvent()),
-        ),
-        BlocProvider(
-          create: (context) =>
-              StorageGroupBloc(context.read<FmRepository>())
-                ..add(const StorageGroupLoadEvent()),
-          lazy: false,
-        ),
-      ],
+    return BlocProvider(
+      create: (context) => StorageProviderBloc(context.read<FmRepository>())
+        ..add(const StorageProviderLoadEvent())
+        ..add(const StorageProviderGroupsEvent()),
       child: const _StorageProviderView(),
     );
   }
@@ -113,7 +103,7 @@ class _StorageProviderView extends StatelessWidget {
 
   /// Shows dialog for adding or editing storage provider
   void _showProviderDialog({
-    BuildContext? context,
+    required BuildContext context,
     StorageProviderItem? provider,
   }) {
     final formKey = GlobalKey<FormBuilderState>();
@@ -138,9 +128,7 @@ class _StorageProviderView extends StatelessWidget {
       }
     }
 
-    // Get storage groups from BLoC BEFORE showing dialog
-    final groupState = context!.read<StorageGroupBloc>().state;
-    final groups = groupState.groups;
+    final groups = context.read<StorageProviderBloc>().state.groups;
     if (groups.isNotEmpty) {
       selectedGroupId = provider?.groupId.toInt() ?? groups.first.id.toInt();
     }
@@ -148,14 +136,30 @@ class _StorageProviderView extends StatelessWidget {
     // Calculate capacity value and unit for display
     String capacityValue = '';
     String capacityUnit = 'GB';
-    if (existingConfig.containsKey('capacity')) {
-      final capacityInBytes = existingConfig['capacity'] as int;
+    String fileSizeLimitValue = '';
+    String fileSizeLimitUnit = 'MB';
+    if (provider != null) {
+      final capacityInBytes = provider.totalCapacity.toInt();
       final result = formatCapacity(capacityInBytes);
       capacityValue = result.value == result.value.toInt()
           ? result.value.toInt().toString()
           : result.value.toString();
       capacityUnit = result.unit.label;
+
+      final fileSizeInBytes = provider.fileSizeLimit.toInt();
+      final res = formatCapacity(fileSizeInBytes);
+      fileSizeLimitValue = res.value == res.value.toInt()
+          ? res.value.toInt().toString()
+          : res.value.toString();
+      fileSizeLimitUnit = res.unit.label;
     }
+    final unitDropItems = const [
+      DropdownMenuItem(value: 'KB', child: Text('KB')),
+      DropdownMenuItem(value: 'MB', child: Text('MB')),
+      DropdownMenuItem(value: 'GB', child: Text('GB')),
+      DropdownMenuItem(value: 'TB', child: Text('TB')),
+      DropdownMenuItem(value: 'PB', child: Text('PB')),
+    ];
 
     showDialog(
       context: context,
@@ -201,7 +205,10 @@ class _StorageProviderView extends StatelessWidget {
                   if (groups.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text('请先创建存储组', style: TextStyle(color: Colors.red)),
+                      child: Text(
+                        '请先创建存储组',
+                        style: TextStyle(color: Colors.red),
+                      ),
                     )
                   else
                     FormBuilderDropdown<int>(
@@ -237,7 +244,9 @@ class _StorageProviderView extends StatelessWidget {
                     ),
                     autofocus: provider == null,
                     initialValue: provider?.name,
-                    validator: FormBuilderValidators.required(errorText: '请输入名称'),
+                    validator: FormBuilderValidators.required(
+                      errorText: '请输入名称',
+                    ),
                   ),
                   const SizedBox(height: 16),
                   // 描述
@@ -262,6 +271,70 @@ class _StorageProviderView extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 24),
+                  // 容量限制
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: FormBuilderTextField(
+                          name: 'capacity_value',
+                          decoration: const InputDecoration(
+                            labelText: '容量限制',
+                            hintText: '100',
+                            helperText: '输入数值',
+                            prefixIcon: Icon(Icons.storage),
+                          ),
+                          keyboardType: TextInputType.number,
+                          initialValue: capacityValue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 100,
+                        child: FormBuilderDropdown<String>(
+                          name: 'capacity_unit',
+                          decoration: const InputDecoration(labelText: '单位'),
+                          initialValue: capacityUnit,
+                          items: unitDropItems,
+                          onChanged: (value) {},
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // 单文件大小限制配置
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: FormBuilderTextField(
+                          name: 'file_size_limit_value',
+                          decoration: const InputDecoration(
+                            labelText: '单文件大小限制',
+                            hintText: '100',
+                            helperText: '输入数值',
+                            prefixIcon: Icon(Icons.storage),
+                          ),
+                          keyboardType: TextInputType.number,
+                          initialValue: fileSizeLimitValue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 100,
+                        child: FormBuilderDropdown<String>(
+                          name: 'file_size_limit_unit',
+                          decoration: const InputDecoration(labelText: '单位'),
+                          initialValue: fileSizeLimitUnit,
+                          items: unitDropItems,
+                          onChanged: (value) {},
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
                   // 配置信息标题
                   Text(
                     '配置信息',
@@ -285,68 +358,7 @@ class _StorageProviderView extends StatelessWidget {
                           initialValue: existingConfig['root_path'],
                         ),
                         const SizedBox(height: 16),
-                        // 容量限制
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: FormBuilderTextField(
-                                name: 'capacity_value',
-                                decoration: const InputDecoration(
-                                  labelText: '容量限制',
-                                  hintText: '100',
-                                  helperText: '输入数值',
-                                  prefixIcon: Icon(Icons.storage),
-                                ),
-                                keyboardType: TextInputType.number,
-                                initialValue: capacityValue,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 100,
-                              child: FormBuilderDropdown<String>(
-                                name: 'capacity_unit',
-                                decoration: const InputDecoration(
-                                  labelText: '单位',
-                                ),
-                                initialValue: capacityUnit,
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'KB',
-                                    child: Text('KB'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'MB',
-                                    child: Text('MB'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'GB',
-                                    child: Text('GB'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'TB',
-                                    child: Text('TB'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'PB',
-                                    child: Text('PB'),
-                                  ),
-                                ],
-                                onChanged: (value) {},
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        FormBuilderSwitch(
-                          name: 'show_hidden',
-                          title: const Text('显示隐藏文件'),
-                          subtitle: const Text('是否显示隐藏的文件'),
-                          initialValue:
-                              existingConfig['show_hidden'] ?? false,
-                        ),
-                        const SizedBox(height: 16),
+
                         FormBuilderTextField(
                           name: 'mkdir_permission',
                           decoration: const InputDecoration(
@@ -383,98 +395,86 @@ class _StorageProviderView extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () {
-              if (formKey.currentState?.saveAndValidate() ?? false) {
-                final formData = formKey.currentState!.value;
+                if (formKey.currentState?.saveAndValidate() ?? false) {
+                  final formData = formKey.currentState!.value;
 
-                // Build configuration JSON
-                String? configJson;
-                final effectiveProviderType =
-                    provider?.providerType ??
-                    (formData['provider_type'] as StorageProviderType);
+                  final capacity = parseCapacityFromUnit(
+                    formData['capacity_value'],
+                    formData['capacity_unit'],
+                  );
+                  final fileSizeLimit = parseCapacityFromUnit(
+                    formData['file_size_limit_value'],
+                    formData['file_size_limit_unit'],
+                  );
 
-                if (effectiveProviderType == StorageProviderType.LOCAL) {
-                  int? capacityInBytes;
-                  final capacityValue = formData['capacity_value']?.toString();
-                  final capacityUnit = formData['capacity_unit'] ?? 'GB';
+                  // Build configuration JSON
+                  String? configJson;
+                  final effectiveProviderType =
+                      provider?.providerType ??
+                      (formData['provider_type'] as StorageProviderType);
 
-                  if (capacityValue?.isNotEmpty == true) {
-                    final value = int.tryParse(capacityValue!);
-                    if (value != null) {
-                      switch (capacityUnit) {
-                        case 'KB':
-                          capacityInBytes = value * 1024;
-                          break;
-                        case 'MB':
-                          capacityInBytes = value * 1024 * 1024;
-                          break;
-                        case 'GB':
-                          capacityInBytes = value * 1024 * 1024 * 1024;
-                          break;
-                        case 'TB':
-                          capacityInBytes = value * 1024 * 1024 * 1024 * 1024;
-                          break;
-                        case 'PB':
-                          capacityInBytes =
-                              value * 1024 * 1024 * 1024 * 1024 * 1024;
-                          break;
-                      }
+                  if (effectiveProviderType == StorageProviderType.LOCAL) {
+                    // 使用 Map 和 jsonEncode 构建 JSON，确保正确转义
+                    final configMap = <String, dynamic>{
+                      if (formData['root_path']?.isNotEmpty == true)
+                        'root_path': formData['root_path'],
+                      if (formData['mkdir_permission']?.isNotEmpty == true)
+                        'mkdir_permission': formData['mkdir_permission'],
+                    };
+                    configJson = jsonEncode(configMap);
+                  } else if (effectiveProviderType ==
+                      StorageProviderType.TELEGRAM) {
+                    if (formData['bot_token']?.isNotEmpty == true) {
+                      configJson = jsonEncode({
+                        'bot_token': formData['bot_token'],
+                      });
                     }
                   }
 
-                  // 使用 Map 和 jsonEncode 构建 JSON，确保正确转义
-                  final configMap = <String, dynamic>{
-                    if (formData['root_path']?.isNotEmpty == true)
-                      'root_path': formData['root_path'],
-                    if (capacityInBytes != null) 'capacity': capacityInBytes,
-                    'show_hidden': formData['show_hidden'] ?? false,
-                    if (formData['mkdir_permission']?.isNotEmpty == true)
-                      'mkdir_permission': formData['mkdir_permission'],
-                  };
-                  configJson = jsonEncode(configMap);
-                } else if (effectiveProviderType ==
-                    StorageProviderType.TELEGRAM) {
-                  if (formData['bot_token']?.isNotEmpty == true) {
-                    configJson = jsonEncode({'bot_token': formData['bot_token']});
-                  }
+                  context.read<StorageProviderBloc>().add(
+                    provider == null
+                        ? StorageProviderAddEvent(
+                            providerType: effectiveProviderType,
+                            name: formData['name'],
+                            description:
+                                formData['description']?.isNotEmpty == true
+                                ? formData['description']
+                                : null,
+                            config: configJson,
+                            groupId: selectedGroupId!,
+                            enabled: formData['enabled'] as bool? ?? true,
+                            order: formData['order'] as int? ?? 0,
+                            capacity: capacity,
+                            fileSizeLimit: fileSizeLimit,
+                          )
+                        : StorageProviderUpdateEvent(
+                            id: provider.id.toInt(),
+                            name: formData['name'],
+                            description:
+                                formData['description']?.isNotEmpty == true
+                                ? formData['description']
+                                : null,
+                            config: configJson,
+                            groupId: selectedGroupId!,
+                            enabled: formData['enabled'] as bool? ?? true,
+                            order: formData['order'] as int? ?? 0,
+                            capacity: capacity,
+                            fileSizeLimit: fileSizeLimit,
+                          ),
+                  );
+
+                  Navigator.pop(ctx);
+                } else if (selectedGroupId == null) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('请先创建存储组')));
                 }
-
-                context.read<StorageProviderBloc>().add(
-                  provider == null
-                      ? StorageProviderAddEvent(
-                          providerType: effectiveProviderType,
-                          name: formData['name'],
-                          description:
-                              formData['description']?.isNotEmpty == true
-                              ? formData['description']
-                              : null,
-                          config: configJson,
-                          groupId: selectedGroupId!,
-                        )
-                      : StorageProviderUpdateEvent(
-                          id: provider.id.toInt(),
-                          name: formData['name'],
-                          description:
-                              formData['description']?.isNotEmpty == true
-                              ? formData['description']
-                              : null,
-                          config: configJson,
-                          groupId: selectedGroupId!,
-                          enabled: formData['enabled'] as bool? ?? true,
-                        ),
-                );
-
-                Navigator.pop(ctx);
-              } else if (selectedGroupId == null) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('请先创建存储组')));
-              }
-            },
-            child: Text(provider == null ? '添加' : '保存'),
-          ),
-        ],
+              },
+              child: Text(provider == null ? '添加' : '保存'),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -551,7 +551,8 @@ class _StorageProviderTile extends StatelessWidget {
   }
 
   /// 是否有容量信息
-  bool get _hasCapacity => provider.hasTotalCapacity() && provider.totalCapacity.toInt() > 0;
+  bool get _hasCapacity =>
+      provider.hasTotalCapacity() && provider.totalCapacity.toInt() > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -583,7 +584,10 @@ class _StorageProviderTile extends StatelessWidget {
                       ),
                       // 状态标签
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: provider.enabled
                               ? theme.colorScheme.primaryContainer
@@ -639,13 +643,14 @@ class _StorageProviderTile extends StatelessWidget {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: _capacityPercent,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           _capacityPercent > 0.9
                               ? theme.colorScheme.error
                               : _capacityPercent > 0.7
-                                  ? Colors.orange
-                                  : theme.colorScheme.primary,
+                              ? Colors.orange
+                              : theme.colorScheme.primary,
                         ),
                         minHeight: 6,
                       ),

@@ -16,6 +16,7 @@ func AddStorageGroup(ctx context.Context, req *native.StorageGroupAddReq) (*nati
 	group := &native.StorageGroupORM{
 		Name:        req.Name,
 		Description: req.Description,
+		Order:       req.Order,
 	}
 
 	err := db.CreateStorageGroup(group)
@@ -55,17 +56,20 @@ func GetStorageGroup(ctx context.Context, req *native.StorageGroupGetReq) (*nati
 	var totalCapacity, remainingCapacity uint64
 	for _, member := range members {
 		totalCapacity += *member.TotalCapacity
-		remainingCapacity += *member.TotalCapacity
+		remainingCapacity += *member.RemainingCapacity
 	}
 
+	memberCount := uint32(len(members))
 	return &native.StorageGroupGetRespData{
-		Id:                pb.Id,
-		Name:              pb.Name,
-		Description:       pb.Description,
-		MemberCount:       func() *uint32 { c := uint32(len(members)); return &c }(),
-		TotalCapacity:     &totalCapacity,
-		RemainingCapacity: &remainingCapacity,
-		CreatedAt:         pb.CreatedAt,
+		Detail: &native.StorageGroupItem{
+			Id:                pb.Id,
+			Name:              pb.Name,
+			Description:       pb.Description,
+			CreatedAt:         pb.CreatedAt,
+			TotalCapacity:     &totalCapacity,
+			RemainingCapacity: &remainingCapacity,
+			MemberCount:       &memberCount,
+		},
 	}, nil
 }
 
@@ -99,12 +103,31 @@ func ListStorageGroups(ctx context.Context, req *native.StorageGroupListReq) (*n
 			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 		}
 
-		item := &native.StorageGroupItem{
-			Id:          pb.Id,
-			Name:        pb.Name,
-			Description: pb.Description,
-			CreatedAt:   pb.CreatedAt,
+		// Get member count and capacity stats if with_stats is true
+		var memberCount uint32
+		var totalCapacity, remainingCapacity uint64
+		// if req.GetWithStats() {
+		members, _, err := db.ListStorageProviders(0, -1, "", nil, pb.Id, false, "", false)
+		if err != nil {
+			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 		}
+		memberCount = uint32(len(members))
+		for _, member := range members {
+			totalCapacity += *member.TotalCapacity
+			remainingCapacity += *member.RemainingCapacity
+		}
+		// }
+
+	item := &native.StorageGroupItem{
+		Id:                pb.Id,
+		Name:              pb.Name,
+		Description:       pb.Description,
+		MemberCount:       &memberCount,
+		TotalCapacity:     &totalCapacity,
+		RemainingCapacity: &remainingCapacity,
+		Order:             pb.Order,
+		CreatedAt:         pb.CreatedAt,
+	}
 
 		items = append(items, item)
 	}
@@ -130,6 +153,9 @@ func UpdateStorageGroup(ctx context.Context, req *native.StorageGroupUpdateReq) 
 	}
 	if req.Description != nil {
 		group.Description = req.Description
+	}
+	if req.Order != nil {
+		group.Order = req.Order
 	}
 
 	err = db.UpdateStorageGroup(group)
@@ -161,6 +187,16 @@ func DeleteStorageGroup(ctx context.Context, req *native.StorageGroupDeleteReq) 
 	}
 
 	err = db.DeleteStorageGroup(*req.Id)
+	if err != nil {
+		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	}
+
+	return nil
+}
+
+// SortStorageGroups 批量更新存储组排序
+func SortStorageGroups(ctx context.Context, req *native.StorageGroupSortReq) *models.Err {
+	err := db.BatchUpdateStorageGroupOrder(req.Items)
 	if err != nil {
 		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
 	}

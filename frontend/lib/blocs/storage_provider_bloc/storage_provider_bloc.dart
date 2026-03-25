@@ -2,17 +2,20 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
+import 'package:pfm/proto/native/group.pb.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 
 part 'storage_provider_event.dart';
 part 'storage_provider_state.dart';
 
 /// 存储介质 Bloc
-class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderState> {
+class StorageProviderBloc
+    extends Bloc<StorageProviderEvent, StorageProviderState> {
   final FmRepository _repository;
 
   StorageProviderBloc(this._repository) : super(const StorageProviderState()) {
     on<StorageProviderLoadEvent>(_onLoad);
+    on<StorageProviderGroupsEvent>(_onGroups);
     on<StorageProviderAddEvent>(_onAdd);
     on<StorageProviderUpdateEvent>(_onUpdate);
     on<StorageProviderDeleteEvent>(_onDelete);
@@ -28,15 +31,43 @@ class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderStat
     final result = await _repository.listStorageProviders();
 
     if (result.success) {
-      emit(state.copyWith(
-        status: StorageProviderStatus.success,
-        providers: result.data?.providers.toList() ?? [],
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.success,
+          providers: result.data?.providers.toList() ?? [],
+        ),
+      );
     } else {
-      emit(state.copyWith(
-        status: StorageProviderStatus.failure,
-        message: result.message ?? '获取失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '获取失败',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onGroups(
+    StorageProviderGroupsEvent event,
+    Emitter<StorageProviderState> emit,
+  ) async {
+    emit(state.copyWith(status: StorageProviderStatus.loading));
+    final result = await _repository.listStorageGroups();
+
+    if (result.success) {
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.success,
+          groups: result.data?.groups.toList() ?? [],
+        ),
+      );
+    } else {
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '获取失败',
+        ),
+      );
     }
   }
 
@@ -57,10 +88,12 @@ class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderStat
     if (result.success) {
       add(const StorageProviderLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageProviderStatus.failure,
-        message: result.message ?? '添加失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '添加失败',
+        ),
+      );
     }
   }
 
@@ -81,10 +114,12 @@ class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderStat
     if (result.success) {
       add(const StorageProviderLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageProviderStatus.failure,
-        message: result.message ?? '更新失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '更新失败',
+        ),
+      );
     }
   }
 
@@ -97,10 +132,12 @@ class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderStat
     if (result.success) {
       add(const StorageProviderLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageProviderStatus.failure,
-        message: result.message ?? '删除失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '删除失败',
+        ),
+      );
     }
   }
 
@@ -116,10 +153,12 @@ class StorageProviderBloc extends Bloc<StorageProviderEvent, StorageProviderStat
     if (result.success) {
       add(const StorageProviderLoadEvent());
     } else {
-      emit(state.copyWith(
-        status: StorageProviderStatus.failure,
-        message: result.message ?? '更新失败',
-      ));
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '更新失败',
+        ),
+      );
     }
   }
 }

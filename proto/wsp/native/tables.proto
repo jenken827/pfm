@@ -175,15 +175,16 @@ message StorageProvider {
   // 所属组 id
   optional uint32 group_id = 9;
   // 总容量
-  optional uint64 total_capacity = 10;
+  optional uint64 total_capacity = 10 [(gorm.field).tag= {default:"0",not_null:true}];
   // 剩余容量
-  optional uint64 remaining_capacity = 11;
+  optional uint64 remaining_capacity = 11[(gorm.field).tag={default:"0",not_null:true}];
   // 是否启用
   optional bool enabled = 12;
   // 优先级
   optional uint32 order = 13;
+  // 文件大小限制
+  optional uint64 file_size_limit = 14;
 }
-
 // 存储组
 // 一个存储组里面的实例会被看作一个整体，操作的时候会以组为单位
 message StorageGroup {

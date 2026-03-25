@@ -15,10 +15,12 @@ class StorageGroupAddEvent extends StorageGroupEvent {
   const StorageGroupAddEvent({
     required this.name,
     this.description,
+    this.order = 0,
   });
 
   final String name;
   final String? description;
+  final int order;
 }
 
 /// 更新存储组
@@ -27,11 +29,20 @@ class StorageGroupUpdateEvent extends StorageGroupEvent {
     required this.id,
     this.name,
     this.description,
+    this.order,
   });
 
   final int id;
   final String? name;
   final String? description;
+  final int? order;
+}
+
+/// 批量更新存储组顺序
+class StorageGroupReorderEvent extends StorageGroupEvent {
+  const StorageGroupReorderEvent(this.groups);
+
+  final List<StorageGroupItem> groups;
 }
 
 /// 删除存储组

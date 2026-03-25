@@ -9,6 +9,8 @@ enum StorageProviderType {
   PROVIDER_UNSPECIFIED = 0;
   LOCAL = 1;
   TELEGRAM = 2;
+  DISCORD = 3;
+  HUGGINGFACE = 4;
 }
 
 // FileType 文件类型
