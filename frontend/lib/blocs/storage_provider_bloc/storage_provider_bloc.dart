@@ -83,6 +83,8 @@ class StorageProviderBloc
       groupId: event.groupId,
       enabled: event.enabled,
       order: event.order,
+      totalCapacity: event.capacity,
+      fileSizeLimit: event.fileSizeLimit,
     );
 
     if (result.success) {

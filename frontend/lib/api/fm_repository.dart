@@ -495,16 +495,22 @@ class FmRepository {
     String? description,
     String? config,
     required int groupId,
-    bool enabled = true,
-    int order = 0,
+    required bool enabled,
+    required int order,
+    required int totalCapacity,
+    required int fileSizeLimit,
   }) async {
     try {
-      final req = StorageProviderAddReq()
-        ..providerType = providerType
-        ..name = name
-        ..groupId = groupId
-        ..enabled = enabled
-        ..order = order;
+      final req = StorageProviderAddReq(
+        providerType: providerType,
+        name: name,
+        groupId: groupId,
+        enabled: enabled,
+        order: order,
+        totalCapacity: Int64(totalCapacity),
+        fileSizeLimit: Int64(fileSizeLimit),
+      );
+
       if (description != null) req.description = description;
       if (config != null) req.config = config;
 
@@ -537,6 +543,8 @@ class FmRepository {
     int? groupId,
     bool? enabled,
     int? order,
+    int? totalCapacity,
+    int? fileSizeLimit,
   }) async {
     try {
       final req = StorageProviderUpdateReq()..id = id;
@@ -546,6 +554,8 @@ class FmRepository {
       if (groupId != null) req.groupId = groupId;
       if (enabled != null) req.enabled = enabled;
       if (order != null) req.order = order;
+      if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
+      if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',

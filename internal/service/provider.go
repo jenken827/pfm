@@ -15,13 +15,15 @@ import (
 func AddStorageProvider(ctx context.Context, req *native.StorageProviderAddReq) (*native.StorageProvider, *models.Err) {
 	t := int32(*req.ProviderType)
 	provider := &native.StorageProviderORM{
-		ProviderType: &t,
-		Name:         req.Name,
-		Description:  req.Description,
-		Config:       req.Config,
-		GroupId:      req.GroupId,
-		Enabled:      req.Enabled,
-		Order:        req.Order,
+		ProviderType:  &t,
+		Name:          req.Name,
+		Description:   req.Description,
+		Config:        req.Config,
+		GroupId:       req.GroupId,
+		Enabled:       req.Enabled,
+		Order:         req.Order,
+		TotalCapacity: req.TotalCapacity,
+		FileSizeLimit: req.FileSizeLimit,
 	}
 
 	err := db.CreateStorageProvider(provider)

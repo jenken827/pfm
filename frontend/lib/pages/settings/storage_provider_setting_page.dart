@@ -260,16 +260,16 @@ class _StorageProviderView extends StatelessWidget {
                     initialValue: provider?.description,
                     maxLines: 2,
                   ),
+
                   // 启用状态开关（仅编辑模式显示）
-                  if (provider != null) ...[
-                    const SizedBox(height: 16),
-                    FormBuilderSwitch(
-                      name: 'enabled',
-                      title: const Text('启用状态'),
-                      subtitle: const Text('禁用后将无法使用此存储介质'),
-                      initialValue: provider.enabled,
-                    ),
-                  ],
+                  const SizedBox(height: 16),
+                  FormBuilderSwitch(
+                    name: 'enabled',
+                    title: const Text('启用状态'),
+                    subtitle: const Text('禁用后将无法使用此存储介质'),
+                    initialValue: provider?.enabled ?? true,
+                  ),
+
                   const SizedBox(height: 24),
                   // 容量限制
                   Row(
@@ -321,7 +321,7 @@ class _StorageProviderView extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       SizedBox(
-                        width: 100,
+                        width: 110,
                         child: FormBuilderDropdown<String>(
                           name: 'file_size_limit_unit',
                           decoration: const InputDecoration(labelText: '单位'),
@@ -356,6 +356,9 @@ class _StorageProviderView extends StatelessWidget {
                             prefixIcon: Icon(Icons.folder_open),
                           ),
                           initialValue: existingConfig['root_path'],
+                          validator: FormBuilderValidators.required(
+                            errorText: '请输入根目录路径',
+                          ),
                         ),
                         const SizedBox(height: 16),
 
@@ -399,11 +402,11 @@ class _StorageProviderView extends StatelessWidget {
                   final formData = formKey.currentState!.value;
 
                   final capacity = parseCapacityFromUnit(
-                    formData['capacity_value'],
+                    double.parse(formData['capacity_value']),
                     formData['capacity_unit'],
                   );
                   final fileSizeLimit = parseCapacityFromUnit(
-                    formData['file_size_limit_value'],
+                    double.parse(formData['file_size_limit_value']),
                     formData['file_size_limit_unit'],
                   );
 

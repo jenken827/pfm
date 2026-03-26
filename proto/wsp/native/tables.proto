@@ -93,16 +93,13 @@ message FileHistory {
   optional uint32 version_number = 4 [(gorm.field).tag = {index: "idx_fh_version"}];
 
   // 文件内容哈希（与 FileLocation.blake3_hash 对应）
-  optional string content_hash = 5;
+  optional string hash = 5;
 
   // 文件大小
   optional uint64 size = 6;
 
-  // MIME 类型
-  optional string mime_type = 7;
-
   // 变更说明
-  optional string change_log = 8;
+  optional string change_log = 7;
 }
 
 // FileTag 文件标签
@@ -152,6 +149,10 @@ message FileLocation {
   optional uint32 chunk_number = 13;
   // 分块总数
   optional uint32 chunk_total = 14;
+  // 分块大小
+  optional uint64 chunk_size = 15;
+  // 分块hash
+  optional string chunk_hash = 16;
 }
 
 // StorageProvider 存储提供者实例
@@ -176,8 +177,8 @@ message StorageProvider {
   optional uint32 group_id = 9;
   // 总容量
   optional uint64 total_capacity = 10 [(gorm.field).tag= {default:"0",not_null:true}];
-  // 剩余容量
-  optional uint64 remaining_capacity = 11[(gorm.field).tag={default:"0",not_null:true}];
+  // 已用容量
+  optional uint64 used_capacity = 11[(gorm.field).tag={default:"0",not_null:true}];
   // 是否启用
   optional bool enabled = 12;
   // 优先级
