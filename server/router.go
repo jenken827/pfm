@@ -7,6 +7,11 @@ import (
 	"connectrpc.com/validate"
 	"connectrpc.com/vanguard"
 	"jenken827.com/jenken827/pfm/api"
+	"jenken827.com/jenken827/pfm/driver/telegram"
+	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/middleware"
 )
@@ -14,9 +19,10 @@ import (
 var vanguardServices []*vanguard.Service = make([]*vanguard.Service, 0)
 
 func route(mux *http.ServeMux) {
+	telegramWebhookRoute(mux)
 
 	fileRoute(mux)
-	storageGroupRoute(mux)
+	uploadRoute(mux)
 	storageProviderRoute(mux)
 
 	// Then create transcoder with all registered services
@@ -45,20 +51,6 @@ func fileRoute(mux *http.ServeMux) {
 	vanguardServices = append(vanguardServices, service)
 }
 
-// StorageGroupRoute 存储组服务
-func storageGroupRoute(mux *http.ServeMux) {
-	group := &api.StorageGroupServer{}
-	path, handler := nativeconnect.NewStorageGroupServiceHandler(
-		group,
-		connect.WithInterceptors(middleware.GInterceptor(), validate.NewInterceptor()),
-	)
-
-	mux.Handle(path, handler)
-
-	service := vanguard.NewService(path, handler)
-	vanguardServices = append(vanguardServices, service)
-}
-
 // StorageProviderRoute 存储提供者服务
 func storageProviderRoute(mux *http.ServeMux) {
 	provider := &api.StorageProviderServer{}
@@ -71,4 +63,42 @@ func storageProviderRoute(mux *http.ServeMux) {
 
 	service := vanguard.NewService(path, handler)
 	vanguardServices = append(vanguardServices, service)
+}
+
+// 上传服务路由
+func uploadRoute(mux *http.ServeMux) {
+
+	upload := &api.UploadServer{}
+	path, handler := nativeconnect.NewUploadServiceHandler(
+		upload,
+		connect.WithInterceptors(middleware.GInterceptor(), validate.NewInterceptor()),
+	)
+
+	mux.Handle(path, handler)
+
+	service := vanguard.NewService(path, handler)
+	vanguardServices = append(vanguardServices, service)
+}
+
+// 电报回调路由
+func telegramWebhookRoute(mux *http.ServeMux) {
+	mux.HandleFunc(globals.TelegramWebhookPath, func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+		sts := storage.GetStorages()
+		llog.L().Info("Received Telegram webhook request", r.Header, r.PostForm)
+		sts.Range(func(k any, v any) bool {
+			st := storage.GetStorage(k.(uint32))
+			if st.GetType() != native.StorageProviderType_TELEGRAM {
+				return true
+			}
+			d := st.StorageDriver.(*telegram.TelegramDriver)
+
+			if *d.Config.WebhookSecretToken == token {
+				d.Bot.WebhookHandler().ServeHTTP(w, r)
+				return false
+			}
+			return true
+		})
+
+	})
 }

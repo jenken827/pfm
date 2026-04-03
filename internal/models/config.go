@@ -8,6 +8,9 @@ type Config struct {
 	Log     Log     `json:"log" yaml:"log"`
 	DB      DB      `json:"db" yaml:"db"`
 	Casdoor Casdoor `json:"casdoor" yaml:"casdoor"`
+	//服务对外地址，用于telegram回调，i.e. https://example.com
+	ServerURL string      `json:"server_url" yaml:"server_url"`
+	Aria2     Aria2Config `json:"aria2" yaml:"aria2"`
 }
 
 // Schema http server config
@@ -62,4 +65,11 @@ type Casdoor struct {
 	Certificate      string `json:"certificate" yaml:"certificate"`
 	OrganizationName string `json:"organization_name" yaml:"organization_name"`
 	ApplicationName  string `json:"application_name" yaml:"application_name"`
+}
+
+// Aria2Config aria2 downloader config
+type Aria2Config struct {
+	Endpoint string `json:"endpoint" yaml:"endpoint"`
+	Token    string `json:"token" yaml:"token"`
+	Timeout  int64  `json:"timeout" yaml:"timeout"`
 }

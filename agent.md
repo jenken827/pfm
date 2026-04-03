@@ -3,7 +3,7 @@
 
 # 开发环境约束
 1. 后端：Golang环境已配置完成，可直接使用go命令；Protobuf编译使用buf命令（需要在proto目录下执行）（编译Go：buf generate；编译Dart：buf generate --template=buf.gen.dart.yaml）；系统支持Git和bash（MINGW64环境）。
-2. 前端：Flutter环境使用puro管理版本，需通过puro flutter/puro dart命令运行；需兼容移动端优先的设计原则。
+2. 前端：Flutter环境使用puro管理版本，需通过puro flutter/puro dart命令运行
 3. 数据交互：所有数据结构/接口优先复用proto/文件夹下的Protobuf定义，新增需先定义在proto中确保前后端复用。
 
 # 目录结构规范
@@ -22,7 +22,7 @@
 2. 业务逻辑层：遵循“api对接→业务逻辑处理→数据访问”三步走原则，可对接数据层、存储抽象层。
 3. 数据访问层：仅负责数据库访问，逻辑简洁。
 4. 存储抽象层：封装存储介质访问接口，隐藏实现细节。
-5. 存储介质实现层：实现本地存储、对象存储、Telegram存储等具体介质；引入“存储组（group）”概念（虚拟磁盘，管理多个存储介质，解耦系统与存储介质的交互）。
+5. 存储介质实现层：实现本地存储、对象存储、Telegram存储等具体介质；引入“存储组（group）”概念。
 
 # 前端开发规范（Flutter）
 ## 核心技术栈

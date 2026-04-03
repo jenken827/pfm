@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
+	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
@@ -20,7 +21,8 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 		) (connect.AnyResponse, error) {
 			if req.Header().Get(tokenHeader) == "" {
 				// Check token in handlers.
-				return response.ErrResp(native.RespCode_TOKEN_INVALID, errors.New("no token provided")), nil
+				return response.ErrResp(&models.Err{
+					E: errors.New("no token provided"), C: native.RespCode_TOKEN_INVALID})
 
 			} else {
 				//TODO: 解析token，验证权限等

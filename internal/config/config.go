@@ -5,7 +5,7 @@ import (
 
 	"os"
 
-	"jenken827.com/jenken827/pfm/flags"
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"github.com/spf13/viper"
 )
@@ -30,22 +30,22 @@ func GetConfig() *models.Config {
 func initViper() {
 	checkConfigFile()
 
-	viper.SetConfigFile(flags.ConfigPath)
+	viper.SetConfigFile(globals.ConfigPath)
 
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("read config file: %v, err: %v ", flags.ConfigPath, err))
+		panic(fmt.Errorf("read config file: %v, err: %v ", globals.ConfigPath, err))
 	}
 
 }
 
 func checkConfigFile() {
-	fmt.Printf("config path: %s", flags.ConfigPath)
-	stat, err := os.Stat(flags.ConfigPath)
+	fmt.Printf("config path: %s", globals.ConfigPath)
+	stat, err := os.Stat(globals.ConfigPath)
 	if err != nil {
-		panic(fmt.Errorf("parse config file: %v err: %v", flags.ConfigPath, err))
+		panic(fmt.Errorf("parse config file: %v err: %v", globals.ConfigPath, err))
 	}
 	if stat.IsDir() {
-		panic(fmt.Sprintf("config file: %v is a directory", flags.ConfigPath))
+		panic(fmt.Sprintf("config file: %v is a directory", globals.ConfigPath))
 	}
 
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path"
 
-	"jenken827.com/jenken827/pfm/flags"
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -54,7 +54,7 @@ func Init() {
 	case "sqlite3":
 		{
 			db, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental",
-				path.Join(flags.DataDir, cdb.Name))), gormConfig)
+				path.Join(globals.DataDir, cdb.Name))), gormConfig)
 		}
 	default:
 		panic(fmt.Sprintf("not supported database type: %s", cdb.Type))
@@ -68,10 +68,8 @@ func Init() {
 		panic(fmt.Sprintf("failed to migrate database:%s", err.Error()))
 
 	}
-	// if err := initData(); err != nil {
-	// 	panic(fmt.Sprintf("failed to init data:%s", err.Error()))
-	// }
-	llog.GetLogger().Info("db init success")
+
+	llog.L().Info("db init success")
 
 }
 
@@ -84,13 +82,11 @@ func GetDB() *gorm.DB {
 func autoMigrate() error {
 	return db.AutoMigrate(
 		&native.FileORM{},
-		&native.FileHistoryORM{},
-		&native.DirConfigORM{},
 		&native.FileTagORM{},
 		&native.FileLocationORM{},
-		&native.StorageGroupORM{},
 		&native.StorageProviderORM{},
 		&native.UploadRecordORM{},
 		&native.UploadChunkRecordORM{},
+		&native.DownloadRecordORM{},
 	)
 }

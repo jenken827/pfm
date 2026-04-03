@@ -13,4 +13,3 @@ message BaseResp {
   optional string message = 2;
   optional google.protobuf.Any data = 3;
 }
-

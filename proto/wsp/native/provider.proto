@@ -2,41 +2,94 @@ syntax = "proto3";
 
 package native;
 
-import "google/protobuf/timestamp.proto";
-import "native/common.proto";
-import "native/enum.proto";
-import "native/tables.proto";
 import "buf/validate/validate.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "gorm/gorm.proto";
+import "native/common.proto";
+import "native/driver.proto";
+import "native/enum.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// ==================== Request/Response Messages ====================
+// StorageProvider 存储提供者
+message StorageProvider {
+  option (gorm.opts).ormable = true;
 
-// StorageProviderAddReq 添加存储提供者请求
-message StorageProviderAddReq {
-  // 存储类型
-  optional StorageProviderType provider_type = 1 [(buf.validate.field).required = true];
+  optional uint32 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+
+  // 类型
+  optional StorageProviderType provider_type = 5 [
+    (gorm.field).tag = {not_null: true},
+    (buf.validate.field).required = true
+  ];
   // 实例名称
-  optional string name = 2 [(buf.validate.field).required = true];
+  optional string name = 6 [
+    (gorm.field).tag = {
+      not_null: true
+      unique_index: "idx_sp_n"
+    },
+    (buf.validate.field).required = true
+  ];
   // 实例描述
-  optional string description = 3;
-  // 实例配置（JSON 格式）
-  optional string config = 4;
-  // 所属组 ID
-  optional uint32 group_id = 5 [(buf.validate.field).required = true];
-  // 是否启用
-  optional bool enabled = 6;
-  // 优先级
-  optional uint32 order = 7;
+  optional string description = 7;
+  // 实例配置
+  optional string config = 8 [
+    (gorm.field).tag = {not_null: true},
+    (buf.validate.field).required = true
+  ];
   // 总容量
-  optional uint64 total_capacity = 8;
+  optional uint64 total_capacity = 10 [(gorm.field).tag = {
+    default: "0"
+    not_null: true
+  }];
+  optional uint64 used_capacity = 11 [(gorm.field).tag = {
+    default: "0"
+    not_null: true
+  }];
+  // 是否启用
+  optional bool enabled = 12 [(gorm.field).tag = {
+    default: "true"
+    not_null: true
+  }];
+  // 优先级
+  optional uint32 order = 13 [(gorm.field).tag = {
+    default: "0"
+    not_null: true
+  }];
   // 文件大小限制
-  optional uint64 file_size_limit = 9;
-}
-
-// StorageProviderAddRespData 添加存储提供者响应
-message StorageProviderAddRespData {
-  optional uint32 id = 1;
+  optional uint64 file_size_limit = 14 [(gorm.field).tag = {
+    default: "0"
+    not_null: true
+  }];
+  // 加密密钥
+  optional string encryption_key = 15 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+  }];
+  // 是否加密文件名
+  optional bool encrypt_filename = 16 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
+  // 加密后缀
+  optional string encryption_suffix = 17 [(gorm.field).tag = {
+    not_null: true
+    default: "bin"
+  }];
+  // 存储提供者所提供的存储类型
+  optional HashType hash_type = 18;
+  // 是否为默认绑定的存储提供者
+  optional bool default_bound = 19 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
 }
 
 // StorageProviderGetReq 获取存储提供者请求
@@ -47,117 +100,58 @@ message StorageProviderGetReq {
 
 // StorageProviderGetRespData 获取存储提供者详情响应
 message StorageProviderGetRespData {
-  StorageProvider detail     = 1;
-  optional string group_name = 2;
+  StorageProvider detail = 1;
+  // optional string group_name = 2;
 }
 
-// StorageProviderItem 存储提供者列表项
-message StorageProviderItem {
-  optional uint32                    id                 = 1;
-  optional StorageProviderType       provider_type      = 2;
-  optional string                    name               = 3;
-  optional string                    description        = 4;
-  optional uint32                    group_id           = 5;
-  optional string                    group_name         = 6;
-  optional uint64                    total_capacity     = 7;
-  optional uint64                    remaining_capacity = 8;
-  optional bool                      enabled            = 9;
-  optional uint32                    order              = 10;
-  optional google.protobuf.Timestamp created_at         = 11;
-  optional string                    config             = 12;  // 配置信息（JSON 格式）
-  optional uint64 file_size_limit = 13;
-}
 
-// StorageProviderListReq 获取存储提供者列表请求
-message StorageProviderListReq {
-  // 页码（从 1 开始）
-  optional uint32 page = 1;
-  // 每页数量
-  optional uint32 page_size = 2;
-  // 搜索关键词（匹配名称或描述）
-  optional string keyword = 3;
-  // 存储类型过滤
-  optional StorageProviderType provider_type = 4;
-  // 组 ID 过滤
-  optional uint32 group_id = 5;
-  // 是否只查询启用的
-  optional bool enabled_only = 6;
-  // 排序字段：created_at, updated_at, name, order
-  optional string sort_by = 7;
-  // 是否降序
-  optional bool desc = 8;
-}
+
+
 
 // StorageProviderListRespData 获取存储提供者列表响应
 message StorageProviderListRespData {
-  repeated StorageProviderItem providers = 1;
-  optional uint32              total     = 2;  // 总数
+  repeated StorageProvider providers = 1;
 }
 
-// StorageProviderUpdateReq 更新存储提供者请求
-message StorageProviderUpdateReq {
-  // 存储实例 ID
-  optional uint32 id = 1;
-  // 新名称（可选）
-  optional string name = 2;
-  // 新描述（可选）
-  optional string description = 3;
-  // 新配置（可选）
-  optional string config = 4;
-  // 新组 ID（可选，0 表示移除组）
-  optional uint32 group_id = 5;
-  // 总容量（可选）
-  optional uint64 total_capacity = 6;
-  // 剩余容量（可选）
-  optional uint64 remaining_capacity = 7;
-  // 是否启用（可选）
-  optional bool enabled = 8;
-  // 优先级（可选）
-  optional uint32 order = 9;
-  // 文件大小限制
-  optional uint64 file_size_limit = 10;
-}
 
 // StorageProviderDeleteReq 删除存储提供者请求
 message StorageProviderDeleteReq {
   // 存储实例 ID
-  optional uint32 id = 1;
-  // 是否硬删除（默认 false，软删除）
-  optional bool force = 2;
+  repeated uint32 ids = 1;
 }
 
-// StorageProviderStatsReq 获取存储提供者统计信息请求
-message StorageProviderStatsReq {
-  optional uint32 id = 1;
-}
+// // StorageProviderStatsReq 获取存储提供者统计信息请求
+// message StorageProviderStatsReq {
+//   optional uint32 id = 1;
+// }
 
 // StorageProviderStatsRespData 获取存储提供者统计信息响应
-message StorageProviderStatsRespData {
-  optional uint32                    file_count    = 1;         // 文件总数
-  optional uint64                    total_size    = 2;          // 总大小
-  optional uint32                    version_count = 3;       // 版本总数
-  optional google.protobuf.Timestamp last_used_at  = 4;  // 最后使用时间
-}
+// message StorageProviderStatsRespData {
+//   optional uint32                    file_count    = 1;         // 文件总数
+//   optional uint64                    total_size    = 2;          // 总大小
+//   optional uint32                    version_count = 3;       // 版本总数
+//   optional google.protobuf.Timestamp last_used_at  = 4;  // 最后使用时间
+// }
 
 // ==================== Service Definition ====================
 
 // StorageProviderService 存储提供者管理服务
 service StorageProviderService {
   // 创建存储提供者
-  rpc AddStorageProvider(StorageProviderAddReq) returns (BaseResp);
+  rpc AddStorageProvider(StorageProvider) returns (BaseResp);
 
   // 获取存储提供者详情
   rpc GetStorageProvider(StorageProviderGetReq) returns (BaseResp);
 
   // 获取存储提供者列表
-  rpc ListStorageProviders(StorageProviderListReq) returns (BaseResp);
+  rpc ListStorageProviders(google.protobuf.Empty) returns (BaseResp);
 
   // 更新存储提供者
-  rpc UpdateStorageProvider(StorageProviderUpdateReq) returns (BaseResp);
+  rpc UpdateStorageProvider(StorageProvider) returns (BaseResp);
 
   // 删除存储提供者
   rpc DeleteStorageProvider(StorageProviderDeleteReq) returns (BaseResp);
 
   // 获取存储提供者统计信息
-  rpc GetStorageProviderStats(StorageProviderStatsReq) returns (BaseResp);
+  // rpc GetStorageProviderStats(StorageProviderStatsReq) returns (BaseResp);
 }

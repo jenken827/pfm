@@ -11,11 +11,11 @@ import (
 )
 
 // getFileType 根据文件内容或扩展名获取文件类型
-func getFileType(path string, filename string) int32 {
+func getFileType(path string, filename string) (int32, string) {
 	// 优先尝试从文件内容检测（如果path有效）
 	if path != "" {
-		if fileType := detectFileTypeFromContent(path); fileType != native.FileType_TYPE_UNSPECIFIED {
-			return int32(fileType)
+		if fileType, mime := detectFileTypeFromContent(path); fileType != native.FileType_FILE_TYPE_UNKNOWN {
+			return int32(fileType), mime
 		}
 	}
 
@@ -24,28 +24,28 @@ func getFileType(path string, filename string) int32 {
 }
 
 // detectFileTypeFromContent 从文件内容检测文件类型
-func detectFileTypeFromContent(path string) native.FileType {
+func detectFileTypeFromContent(path string) (native.FileType, string) {
 	// 读取文件前512字节用于检测
 	file, err := os.Open(path)
 	if err != nil {
-		return native.FileType_TYPE_UNSPECIFIED
+		return native.FileType_FILE_TYPE_UNKNOWN, ""
 	}
 	defer file.Close()
 
 	buffer := make([]byte, 512)
 	n, err := file.Read(buffer)
 	if err != nil && err != io.EOF {
-		return native.FileType_TYPE_UNSPECIFIED
+		return native.FileType_FILE_TYPE_UNKNOWN, ""
 	}
 	if n == 0 {
-		return native.FileType_TYPE_UNSPECIFIED
+		return native.FileType_FILE_TYPE_UNKNOWN, ""
 	}
 
 	// 使用http.DetectContentType检测MIME类型
 	mimeType := http.DetectContentType(buffer[:n])
 
 	// 从MIME类型映射到FileType
-	return mimeTypeToFileType(mimeType)
+	return mimeTypeToFileType(mimeType), mimeType
 }
 
 // mimeTypeToFileType 将MIME类型转换为FileType枚举
@@ -79,20 +79,20 @@ func mimeTypeToFileType(mimeType string) native.FileType {
 		return native.FileType_FONT
 	}
 
-	return native.FileType_TYPE_UNSPECIFIED
+	return native.FileType_FILE_TYPE_UNKNOWN
 }
 
 // detectFileTypeFromExt 根据文件扩展名获取文件类型
-func detectFileTypeFromExt(filename string) int32 {
+func detectFileTypeFromExt(filename string) (int32, string) {
 	ext := filepath.Ext(filename)
 	if ext == "" {
-		return int32(native.FileType_APPLICATION)
+		return int32(native.FileType_APPLICATION), "application/octet-stream"
 	}
 
 	// 转换小写以便比较
 	ext = string(bytes.ToLower([]byte(ext)))
 
-	// 使用map快速查找
+	// 使用 map 快速查找
 	fileTypeMap := map[string]native.FileType{
 		".jpg":   native.FileType_IMAGE,
 		".jpeg":  native.FileType_IMAGE,
@@ -149,8 +149,70 @@ func detectFileTypeFromExt(filename string) int32 {
 		".eot":   native.FileType_FONT,
 	}
 
-	if fileType, ok := fileTypeMap[string(ext)]; ok {
-		return int32(fileType)
+	// MIME 类型映射
+	mimeTypesMap := map[string]string{
+		".jpg":   "image/jpeg",
+		".jpeg":  "image/jpeg",
+		".png":   "image/png",
+		".gif":   "image/gif",
+		".webp":  "image/webp",
+		".bmp":   "image/bmp",
+		".ico":   "image/x-icon",
+		".svg":   "image/svg+xml",
+		".raw":   "image/raw",
+		".tiff":  "image/tiff",
+		".mp4":   "video/mp4",
+		".avi":   "video/x-msvideo",
+		".mkv":   "video/x-matroska",
+		".mov":   "video/quicktime",
+		".wmv":   "video/x-ms-wmv",
+		".webm":  "video/webm",
+		".flv":   "video/x-flv",
+		".m4v":   "video/x-m4v",
+		".mp3":   "audio/mpeg",
+		".wav":   "audio/wav",
+		".ogg":   "audio/ogg",
+		".flac":  "audio/flac",
+		".aac":   "audio/aac",
+		".m4a":   "audio/mp4",
+		".wma":   "audio/x-ms-wma",
+		".ape":   "audio/ape",
+		".pdf":   "application/pdf",
+		".doc":   "application/msword",
+		".docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		".xls":   "application/vnd.ms-excel",
+		".xlsx":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		".ppt":   "application/vnd.ms-powerpoint",
+		".pptx":  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		".txt":   "text/plain",
+		".md":    "text/markdown",
+		".rtf":   "application/rtf",
+		".odt":   "application/vnd.oasis.opendocument.text",
+		".ods":   "application/vnd.oasis.opendocument.spreadsheet",
+		".odp":   "application/vnd.oasis.opendocument.presentation",
+		".zip":   "application/zip",
+		".rar":   "application/vnd.rar",
+		".7z":    "application/x-7z-compressed",
+		".tar":   "application/x-tar",
+		".gz":    "application/gzip",
+		".bz2":   "application/x-bzip2",
+		".xz":    "application/x-xz",
+		".iso":   "application/x-iso9660-image",
+		".dmg":   "application/x-apple-diskimage",
+		".ttf":   "font/ttf",
+		".otf":   "font/otf",
+		".woff":  "font/woff",
+		".woff2": "font/woff2",
+		".eot":   "application/vnd.ms-fontobject",
 	}
-	return int32(native.FileType_APPLICATION)
+
+	if fileType, ok := fileTypeMap[string(ext)]; ok {
+		mimeType, exists := mimeTypesMap[string(ext)]
+		if !exists {
+			mimeType = "application/octet-stream"
+		}
+		return int32(fileType), mimeType
+	}
+
+	return int32(native.FileType_APPLICATION), "application/octet-stream"
 }

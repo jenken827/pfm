@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
@@ -160,8 +161,7 @@ func RateLimitInterceptor() connect.UnaryInterceptorFunc {
 
 			// Check rate limit
 			if !rateLimiter.Allow(ip, endpoint) {
-				return response.ErrResp(native.RespCode_RATE_LIMIT_EXCEEDED,
-					connect.NewError(connect.CodeResourceExhausted, nil)), nil
+				return response.ErrResp(&models.Err{C: native.RespCode_RATE_LIMIT_EXCEEDED, E: connect.NewError(connect.CodeResourceExhausted, nil)})
 			}
 
 			return next(ctx, req)

@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/flags"
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -19,9 +19,9 @@ func Init() {
 	lc := config.GetConfig().Log
 
 	if lc.Filename == "" {
-		lc.Filename = path.Join(flags.DataDir, "logs", "log.log")
+		lc.Filename = path.Join(globals.DataDir, "logs", "log.log")
 	} else if !path.IsAbs(lc.Filename) {
-		lc.Filename = path.Join(flags.DataDir, lc.Filename)
+		lc.Filename = path.Join(globals.DataDir, lc.Filename)
 	}
 
 	lv := getLogLevel(lc.Level)
@@ -71,7 +71,7 @@ func SetLogLevel(l string) {
 	logger.SetLevel(lv)
 }
 
-// GetLogger 获取日志实例
-func GetLogger() *logrus.Logger {
+// L 获取日志实例
+func L() *logrus.Logger {
 	return logger
 }

@@ -1,4 +1,4 @@
-package flags
+package globals
 
 import (
 	"flag"

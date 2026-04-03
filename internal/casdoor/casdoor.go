@@ -12,5 +12,5 @@ func Init() {
 
 	casdoorsdk.InitConfig(cd.Endpoint, cd.ClientID, cd.ClientSecret, cd.Certificate, cd.OrganizationName, cd.ApplicationName)
 
-	llog.GetLogger().Info("casdoor init success")
+	llog.L().Info("casdoor init success")
 }

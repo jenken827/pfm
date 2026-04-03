@@ -2,167 +2,167 @@ package service
 
 import (
 	"context"
-	"path"
+	"encoding/json"
+	"errors"
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"github.com/google/uuid"
 )
 
 // GetFileList 获取文件列表
-func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.File, int64, *models.Err) {
-	files, total, err := db.GetFileList(*req.ParentId)
+func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, *models.Err) {
+	files, total, err := db.Query[native.FileORM](ctx, &db.DBQuery{Where: "parent_id = ?", Args: []any{req.ParentId}}, true)
 	if err != nil {
-		return nil, 0, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+		llog.L().Errorf("GetFileList failed, err: %v", err)
+		return nil, 0, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	var result []*native.File
-	for _, f := range files {
-		pb, err := f.ToPB(ctx)
-		if err != nil {
-			llog.GetLogger().Errorf("convert file to pb failed, err: %v", err)
-			continue
-		}
-		result = append(result, &pb)
-	}
-
-	return result, total, nil
+	return files, total, nil
 }
 
 // CreateDir 创建文件夹
 func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
-	dir := getParentDir(*req.ParentId)
-	uuid, err := uuid.NewV7()
-	if err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-	}
-	id := uuid.String()
-	t := int32(native.FileType_FOLDER.Number())
-	f := &native.FileORM{
-		Name:     req.Name,
-		ParentId: req.ParentId,
-		Dir:      &dir,
-		Id:       &id,
-		Type:     &t,
-	}
-	dp := path.Join(dir, *req.Name)
-	fc := &native.DirConfigORM{
-		EnableEncryption: req.EnableEncryption,
-		EncryptName:      req.EncryptName,
-		EncryptionKey:    req.EncryptionKey,
-		EncryptionSalt:   req.EncryptionSalt,
-		EncryptionSuffix: req.EncryptionSuffix,
-		Path:             &dp,
-		FileId:           &id,
-	}
-	e := db.CreateDir(f, fc)
-	if e != nil {
-		return &models.Err{E: e, Code: native.RespCode_INTERNAL_ERROR}
+	providerIds := req.ProviderIds
+
+	// 如果客户端未传 provider_ids，使用默认绑定的存储提供者
+	if len(providerIds) == 0 {
+		defaultProviders, err := getDefaultBoundProviders(ctx)
+		if err != nil {
+			llog.L().Errorf("get default bound providers failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		if len(defaultProviders) == 0 {
+			return &models.Err{
+				E: errors.New("no default bound provider available, please specify provider_ids or set default_bound in storage providers"),
+				C: native.RespCode_PARAMS_ERROR,
+			}
+		}
+
+		// 提取ID列表
+		providerIds = make([]uint32, len(defaultProviders))
+		for i, p := range defaultProviders {
+			providerIds[i] = *p.Id
+		}
+	} else {
+		// 验证提供者是否存在且启用（批量查询）
+		providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
+			Where: "id IN ? AND enabled = ?",
+			Args:  []any{providerIds, true},
+		}, false)
+		if err != nil {
+			llog.L().Errorf("query providers failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		// 验证所有提供的ID都有效
+		if len(providers) != len(providerIds) {
+			return &models.Err{
+				E: errors.New("some providers are invalid or disabled"),
+				C: native.RespCode_PARAMS_ERROR,
+			}
+		}
 	}
 
+	// 转换为JSON字符串存储
+	providerIdsJSON, err := json.Marshal(providerIds)
+	if err != nil {
+		llog.L().Errorf("marshal provider_ids failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+	boundProviderIds := string(providerIdsJSON)
+
+	t := int32(native.FileType_FOLDER.Number())
+	f := &native.FileORM{
+		Name:             req.Name,
+		ParentId:         req.ParentId,
+		Type:             &t,
+		EnableEncryption: req.EnableEncryption,
+		EncryptFilename:  req.EncryptFilename,
+		BoundProviderIds: &boundProviderIds,
+	}
+	e := db.Create[native.FileORM](ctx, f, nil)
+	if e != nil {
+		return &models.Err{E: e, C: native.RespCode_DB_ERROR}
+	}
 	return nil
 }
 
 // UpdateDir 更新文件夹
+// 文件夹加密信息不可以更改
 func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
-	if err := db.UpdateDir(*req.Id, req); err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	orm := native.FileORM{
+		Name:             req.Name,
+		EnableEncryption: req.EnableEncryption,
+		EncryptFilename:  req.EncryptFilename,
+	}
+
+	// 如果提供了 provider_ids，更新绑定关系
+	if len(req.ProviderIds) > 0 {
+		providerIds := req.ProviderIds
+
+		// 批量查询验证提供者是否存在且启用
+		providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
+			Where: "id IN ? AND enabled = ?",
+			Args:  []any{providerIds, true},
+		}, false)
+		if err != nil {
+			llog.L().Errorf("query providers failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+
+		// 验证所有提供的ID都有效
+		if len(providers) != len(providerIds) {
+			return &models.Err{
+				E: errors.New("some providers are invalid or disabled"),
+				C: native.RespCode_PARAMS_ERROR,
+			}
+		}
+
+		// 转换为JSON字符串存储
+		providerIdsJSON, err := json.Marshal(providerIds)
+		if err != nil {
+			llog.L().Errorf("marshal provider_ids failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		}
+		boundProviderIds := string(providerIdsJSON)
+		orm.BoundProviderIds = &boundProviderIds
+	}
+
+	if err := db.Update[native.FileORM](ctx, &orm, "id=?", *req.Id); err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil
 }
 
+// getDefaultBoundProviders 获取默认绑定的存储提供者
+func getDefaultBoundProviders(ctx context.Context) ([]*native.StorageProvider, error) {
+	providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
+		Where: "default_bound = ? AND enabled = ?",
+		Args:  []any{true, true},
+	}, false)
+	return providers, err
+}
+
 // DeleteFile 删除文件
 func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
-	if err := db.DeleteFiles(req.Ids); err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	// Convert []string to []any for db.Delete
+	ids := make([]any, len(req.Ids))
+	for i, id := range req.Ids {
+		ids[i] = id
+	}
+	if err := db.Delete[native.FileORM](ctx, ids); err != nil {
+		llog.L().Errorf("DeleteFiles failed, err: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil
 }
 
 // RenameFile 重命名文件
 func RenameFile(ctx context.Context, req *native.RenameFileReq) *models.Err {
-	renames := make([]map[string]string, 0, len(req.RenameObjs))
-	for _, obj := range req.RenameObjs {
-		renames = append(renames, map[string]string{
-			"id":       *obj.Id,
-			"new_name": *obj.NewName,
-		})
-	}
-
-	if err := db.RenameFiles(renames); err != nil {
-		return &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
+	if err := db.RenameFiles(req.RenameObjs); err != nil {
+		llog.L().Errorf("RenameFiles failed, err: %v", err)
+		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 	return nil
 }
-
-// UploadFile 文件上传
-// func UploadFile(ctx context.Context, metadata *native.UploadMetadata, chunks [][]byte) (*native.UploadRespData, *models.Err) {
-// 	// 检查文件是否已存在（通过哈希）
-// 	if metadata.Hash != nil && *metadata.Hash != "" {
-// 		file, err := db.GetFile("hash=?", *metadata.Hash)
-// 		if err != nil {
-// 			return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-// 		}
-// 		if file != nil {
-// 			return &native.UploadRespData{
-// 				FileId: file.Id,
-// 				Exists: func() *bool { v := true; return &v }(),
-// 			}, nil
-// 		}
-// 	}
-
-// 	// 生成文件ID
-// 	id, err := uuid.NewV7()
-// 	if err != nil {
-// 		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-// 	}
-
-// 	// 合并文件内容
-// 	var totalSize uint64
-// 	var content []byte
-// 	for _, chunk := range chunks {
-// 		content = append(content, chunk...)
-// 		totalSize += uint64(len(chunk))
-// 	}
-
-// 	// 构建文件对象
-// 	dir := getParentDir(*metadata.ParentId)
-// 	if metadata.ParentId != nil && *metadata.ParentId != "" {
-// 		parentDir, err := db.GetFile("id=?", *metadata.ParentId)
-// 		if err != nil {
-// 			if err != gorm.ErrRecordNotFound {
-// 				return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-// 			}
-// 		} else {
-// 			dir = path.Join(*parentDir.Dir, *parentDir.Name)
-// 		}
-// 	}
-
-// 	t := int32(native.FileType_TYPE_UNSPECIFIED.Number())
-// 	f := &native.FileORM{
-// 		Id:       func() *string { v := id.String(); return &v }(),
-// 		Name:     metadata.Name,
-// 		ParentId: metadata.ParentId,
-// 		Dir:      &dir,
-// 		Size:     &totalSize,
-// 		Hash:     metadata.Hash,
-// 		Type:     &t,
-// 		Mime:     metadata.Mime,
-// 	}
-
-// 	// 保存文件到数据库
-// 	if err := db.CreateFile(f); err != nil {
-// 		return nil, &models.Err{E: err, Code: native.RespCode_INTERNAL_ERROR}
-// 	}
-
-// 	// TODO: 实际保存文件内容到存储介质
-
-// 	result := &native.UploadRespData{
-// 		FileId: func() *string { v := id.String(); return &v }(),
-// 		Exists: func() *bool { v := false; return &v }(),
-// 	}
-
-// 	return result, nil
-// }

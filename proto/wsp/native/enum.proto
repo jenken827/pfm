@@ -4,7 +4,8 @@ package native;
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// StorageProviderType 存储提供者类型
+// StorageProviderType
+// 存储提供者类型
 enum StorageProviderType {
   PROVIDER_UNSPECIFIED = 0;
   LOCAL = 1;
@@ -13,9 +14,10 @@ enum StorageProviderType {
   HUGGINGFACE = 4;
 }
 
-// FileType 文件类型
+// FileType
+// 文件类型，表中还同时存储了文件的mime类型
 enum FileType {
-  TYPE_UNSPECIFIED = 0;
+  FILE_TYPE_UNKNOWN = 0;
   FOLDER = 1;
   IMAGE = 2;
   VIDEO = 3;
@@ -26,19 +28,19 @@ enum FileType {
   APPLICATION = 8;
 }
 
-// HashType 哈希类型
+// HashType
 enum HashType {
   HASH_TYPE_UNSPECIFIED = 0;
   MD5 = 1;
   SHA1 = 2;
   SHA256 = 3;
   SHA512 = 4;
-  BLAKE2B = 5; //64位
-  BLAKE2S = 6; //32位
+  BLAKE2B = 5; //64 bit
+  BLAKE2S = 6; //32 bit
   BLAKE3 = 7;
 }
 
-// 上传状态
+// UploadStatus used by client
 enum UploadStatus {
   UPLOAD_TASK_STATUS_UNSPECIFIED = 0;
   PENDING = 1;
@@ -50,27 +52,69 @@ enum UploadStatus {
   PAUSED = 7;
 }
 
-// RespCode 应用状态码
+// UploadProviderStatus
+// After the file is uploaded to our server, it still needs to be uploaded to the storage provider's server.
+// This field represents the status of the file's upload to the storage provider's server.
+enum UploadProviderStatus {
+  UPLOAD_PROVIDER_STATUS_UNSPECIFIED = 0;
+  PPENDING = 1;
+  PUPLOADING = 2;
+  PCOMPLETED = 3;
+  PFAILED = 4;
+}
+
+// UploadMethod
+enum UploadMethod {
+  UPLOAD_METHOD_UNSPECIFIED = 0;
+  // form data
+  FORM = 1;
+  // stream
+  STREAM = 2;
+  // chunk 
+  CHUNK = 3;
+}
+
+//上传到组的状态
+enum GroupUploadStatus {
+  GROUP_UPLOAD_STATUS_UNSPECIFIED = 0;
+  GPENDING = 1;
+  GUPLOADING = 2;
+  GCOMPLETED = 3;
+  GFAILED = 4;
+}
+
+// DownloadRecordState
+// 下载记录状态
+enum DownloadRecordState {
+  DOWNLOAD_RECORD_STATE_UNSPECIFIED = 0;
+  DOWNLOAD_PENDING = 1;
+  DOWNLOADING = 2;
+  DOWNLOAD_COMPLETED = 3;
+  DOWNLOAD_FAILED = 4;
+}
+
+// SourceType
+// 上传到存储提供者服务器时，源文件的来源
+// 一般情况是从客户端上传到服务器，然后再上传到存储提供者服务器
+// 如果一个文件已经上传过一次了（通过hash查询），那么就不需要再上传到服务器了
+// 可以从已上传的存储提供者服务器下载下来，然后上传到需要的存储提供者服务器
+// enum SourceType {
+//   SOURCE_TYPE_UNSPECIFIED = 0;
+//   CLIENT_UPLOAD = 1;
+//   REMOTE_DOWNLOAD = 2;
+// }
+
+// RespCode response status code
 enum RespCode {
-  // 根据 protobuf 规范，枚举值必须从 0 开始，且建议后缀使用_UNSPECIFIED 表示未指定的状态，所以前端在处理时不要用 0 作为成功的状态码。
   CODE_UNSPECIFIED = 0;
   SUCCESS = 1;
-  // 登录失效
   TOKEN_INVALID = 2;
-  // 参数错误
   PARAMS_ERROR = 3;
-  // 没有找到对应项
-  ITEM_NOT_FOUND = 4;
-  // 对象已存在
-  ITEM_ALREADY_EXISTS = 5;
-  // 权限不足
+  NOT_FOUND = 4;
+  ALREADY_EXISTS = 5;
   PERMISSION_DENIED = 6;
-  // 内部错误
   INTERNAL_ERROR = 7;
-  // 自定义错误
-  CUSTOM_ERROR = 8;
-  // 请求频率过高
+  DB_ERROR = 8;
   RATE_LIMIT_EXCEEDED = 9;
-  // 分片没有上传完整
   PARTIAL_UPLOAD_ERROR = 10;
 }

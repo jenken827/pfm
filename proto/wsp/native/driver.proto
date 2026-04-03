@@ -14,7 +14,10 @@ message LocalDriverConfig {
 }
 
 
-// TeleDriverConfig 电报驱动器
-message TeleDriverConfig {
+// TelegramDriverConfig 电报驱动器
+message TelegramDriverConfig {
     optional string bot_token=1;
+    optional string bot_server=2;
+    optional string webhook_secret_token=3;
+    optional string chat_id=4;
 }

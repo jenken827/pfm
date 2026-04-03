@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 	"github.com/google/uuid"
@@ -20,25 +21,28 @@ func GInterceptor() connect.UnaryInterceptorFunc {
 			req connect.AnyRequest,
 		) (r connect.AnyResponse, e error) {
 			uuid := uuid.New().String()
-			llog.GetLogger().Infof("request received, uuid:%s, procedure:%s", uuid, req.Spec().Procedure)
+			llog.L().Infof("request received, uuid:%s, procedure:%s", uuid, req.Spec().Procedure)
 			defer func() {
 				if p := recover(); p != nil {
-					llog.GetLogger().Errorf("panic occurred: %v", p)
-					llog.GetLogger().Error(string(debug.Stack()))
-					r = response.ErrResp(native.RespCode_CUSTOM_ERROR, errors.New("internal server error"))
+					llog.L().Errorf("panic occurred: %v", p)
+					llog.L().Error(string(debug.Stack()))
+					r, e = response.ErrResp(&models.Err{
+						C: native.RespCode_INTERNAL_ERROR,
+						E: errors.New("internal server error")})
+
 				}
-				llog.GetLogger().Infof("request completed! uuid: %s", uuid)
+				llog.L().Infof("request completed! uuid: %s", uuid)
 			}()
 			r, e = next(ctx, req)
 			if e != nil {
 				switch er := e.(type) {
 				case *connect.Error:
 					if er.Code() == connect.CodeInvalidArgument {
-						return response.ErrResp(native.RespCode_PARAMS_ERROR, er), nil
+						return response.ErrResp(&models.Err{C: native.RespCode_PARAMS_ERROR, E: er})
 					}
-					return response.ErrResp(native.RespCode_CUSTOM_ERROR, er), nil
+					return
 				default:
-					return response.ErrResp(native.RespCode_CUSTOM_ERROR, e), nil
+					return
 				}
 			}
 			return

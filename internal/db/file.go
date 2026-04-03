@@ -2,158 +2,134 @@ package db
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"gorm.io/gorm"
 )
 
-// GetFile 根据id获取文件信息
-func GetFile(expression string, args ...any) (*native.FileORM, error) {
-	var f native.FileORM
-	var e error
-	if f, e = gorm.G[native.FileORM](db).Where(expression, args...).First(context.Background()); e != nil {
-		llog.GetLogger().Errorf("get file failed, err: %v", e)
-		return nil, e
-	}
-	return &f, e
+// GetFiles 获取文件
+func GetFiles(expression string, args ...any) ([]*native.FileORM, error) {
+	return gorm.G[*native.FileORM](db).Where(expression, args...).Find(context.Background())
 }
 
 // CreateDir 创建文件夹
-func CreateDir(file *native.FileORM, dirConfig *native.DirConfigORM) error {
-	ctx := context.Background()
-
-	err := db.Transaction(func(tx *gorm.DB) error {
-		if err := gorm.G[native.FileORM](tx).Create(ctx, file); err != nil {
-			llog.GetLogger().Errorf("create file failed, err: %v", err)
-			return err
-		}
-
-		if err := gorm.G[native.DirConfigORM](tx).Create(ctx, dirConfig); err != nil {
-			llog.GetLogger().Errorf("create dir config failed, err: %v", err)
-			return err
-		}
-		return nil
-	})
-	return err
-}
-
-// DeleteFile 删除文件（软删除）
-func DeleteFile(id string) error {
-	ctx := context.Background()
-	_, err := gorm.G[native.FileORM](db).Where("id = ?", id).Delete(ctx)
-	return err
+func CreateDir(file *native.FileORM) error {
+	return db.Where(map[string]any{"parent_id": *file.ParentId, "name": *file.Name}).Attrs(file).FirstOrCreate(file).Error
 }
 
 // DeleteFiles 批量删除文件（软删除）
 func DeleteFiles(ids []string) error {
-	err := db.Transaction(func(tx *gorm.DB) error {
-		if result := tx.Where("id IN ?", ids).Delete(&native.FileORM{}); result.Error != nil {
-			llog.GetLogger().Errorf("delete files failed, err: %v", result.Error)
-			return result.Error
-		}
-		return nil
-	})
+	_, err := gorm.G[native.FileORM](db).Where("id IN ?", ids).Delete(context.Background())
 	return err
+
 }
 
 // GetFileList 获取文件列表
-func GetFileList(parentID string) ([]native.FileORM, int64, error) {
-	var files []native.FileORM
+func GetFileList(parentID string) ([]*native.FileORM, int64, error) {
+	var files []*native.FileORM
 	var total int64
-
-	if err := db.Model(&native.FileORM{}).Where("parent_id IS NULL OR parent_id = ?", parentID).Count(&total).Error; err != nil {
-		llog.GetLogger().Errorf("count files failed, err: %v", err)
+	var err error
+	ctx := context.Background()
+	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID)
+	if total, err = gdb.Count(ctx, "*"); err != nil {
 		return nil, 0, err
 	}
 
-	if err := db.Where("parent_id IS NULL OR parent_id = ?", parentID).Find(&files).Error; err != nil {
-		llog.GetLogger().Errorf("get file list failed, err: %v", err)
+	if files, err = gdb.Find(ctx); err != nil {
 		return nil, 0, err
 	}
-
 	return files, total, nil
 }
 
 // UpdateDir 更新文件夹配置
-func UpdateDir(id string, req *native.UpdateDirReq) error {
-	// 更新文件表中的名称
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-
-	err := db.Transaction(func(tx *gorm.DB) error {
-		// 更新文件
-		if len(updates) > 0 {
-			if result := tx.Model(&native.FileORM{}).Where("id = ?", id).Updates(updates); result.Error != nil {
-				llog.GetLogger().Errorf("update file failed, err: %v", result.Error)
-				return result.Error
-			}
-		}
-
-		// 更新文件夹配置
-		dirUpdates := make(map[string]interface{})
-		if req.EncryptName != nil {
-			dirUpdates["encrypt_name"] = *req.EncryptName
-		}
-		if req.EncryptionSuffix != nil {
-			dirUpdates["encryption_suffix"] = *req.EncryptionSuffix
-		}
-		if req.EncryptionKey != nil {
-			dirUpdates["encryption_key"] = *req.EncryptionKey
-		}
-		if req.EncryptionSalt != nil {
-			dirUpdates["encryption_salt"] = *req.EncryptionSalt
-		}
-
-		if len(dirUpdates) > 0 {
-			if result := tx.Model(&native.DirConfigORM{}).Where("file_id = ?", id).Updates(dirUpdates); result.Error != nil {
-				llog.GetLogger().Errorf("update dir config failed, err: %v", result.Error)
-				return result.Error
-			}
-		}
-
-		return nil
-	})
-
+func UpdateDir(orm native.FileORM) error {
+	ctx := context.Background()
+	_, err := gorm.G[native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
 	return err
-}
-
-// RenameFile 重命名文件
-func RenameFile(id string, newName string) error {
-	if result := db.Model(&native.FileORM{}).Where("id = ?", id).Update("name", newName); result.Error != nil {
-		llog.GetLogger().Errorf("rename file failed, id: %s, err: %v", id, result.Error)
-		return result.Error
-	}
-	return nil
 }
 
 // RenameFiles 批量重命名文件
-func RenameFiles(renames []map[string]string) error {
-	err := db.Transaction(func(tx *gorm.DB) error {
-		for _, r := range renames {
-			id, ok := r["id"]
-			newName, ok2 := r["new_name"]
-			if !ok || !ok2 {
-				continue
-			}
-			if result := tx.Model(&native.FileORM{}).Where("id = ?", id).Update("name", newName); result.Error != nil {
-				llog.GetLogger().Errorf("rename file failed, id: %s, err: %v", id, result.Error)
-				return result.Error
-			}
-		}
+func RenameFiles(renames []*native.RenameObj) error {
+	if len(renames) == 0 {
 		return nil
-	})
+	}
+	// 过滤有效数据
+	var validRenames []*native.RenameObj
+	for _, r := range renames {
+		if r.GetId() != "" && r.GetNewName() != "" {
+			validRenames = append(validRenames, r)
+		}
+	}
+	if len(validRenames) == 0 {
+		return nil
+	}
 
-	return err
+	// 使用参数化查询构建 CASE WHEN 语句
+	// 构建 CASE WHEN 部分的占位符: WHEN ? THEN ?
+	var caseWhenParts []string
+	var args []interface{}
+
+	for _, r := range validRenames {
+		caseWhenParts = append(caseWhenParts, "WHEN ? THEN ?")
+		args = append(args, r.GetId(), r.GetNewName())
+	}
+
+	// 构建 WHERE IN 部分的占位符
+	var wherePlaceholders []string
+	for _, r := range validRenames {
+		wherePlaceholders = append(wherePlaceholders, "?")
+		args = append(args, r.GetId())
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE files SET name = CASE id %s END WHERE id IN (%s)",
+		strings.Join(caseWhenParts, " "),
+		strings.Join(wherePlaceholders, ","),
+	)
+
+	if err := db.Exec(query, args...).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateFile 创建文件记录
 func CreateFile(file *native.FileORM) error {
-	if result := db.Create(file); result.Error != nil {
-		llog.GetLogger().Errorf("create file failed, err: %v", result.Error)
-		return result.Error
-	}
-	return nil
+	ctx := context.Background()
+	return gorm.G[native.FileORM](db).Create(ctx, file)
+}
+
+// UpdateFile 更新文件记录
+func UpdateFile(file *native.FileORM) error {
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *file.Id).Updates(ctx, file)
+
+	return err
+
+}
+
+// UpdateFileWithHistory 更新文件记录并记录历史
+func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *native.FileORM) error {
+
+	err := db.Transaction(func(tx *gorm.DB) error {
+		// Use Generics API inside the transaction
+		if _, err := gorm.G[*native.FileORM](tx).Where("id=?", *file.Id).Select("*").Updates(ctx, file); err != nil {
+			return err
+		}
+		history := &native.FileHistoryORM{
+			FileId:        file.Id,
+			Hash:          oldFile.Hash,
+			Size:          oldFile.Size,
+			VersionNumber: oldFile.UpdatedAt,
+		}
+
+		if err := gorm.G[native.FileHistoryORM](tx).Create(ctx, history); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return err
 }

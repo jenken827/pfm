@@ -2,13 +2,187 @@ syntax = "proto3";
 
 package native;
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
-import "native/tables.proto";
-import "buf/validate/validate.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// File 文件信息
+message File {
+  option (gorm.opts).ormable = true;
+  // 文件id
+  optional string id = 1 [(gorm.field).tag = {
+    primary_key: true
+    type: "char(36)"
+  }];
+  // ct,mt,dt 三件套
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  // 文件名称，与父id组成唯一索引
+  optional string name = 5 [(gorm.field).tag = {
+    unique_index: "idx_f_npi,length:10"
+    not_null: true
+  }];
+  // 父文件夹id
+  optional string parent_id = 6 [(gorm.field).tag = {
+    unique_index: "idx_f_npi"
+    not_null: true
+    default: "0"
+  }];
+  // 文件大小，以字节为单位
+  optional uint64 size = 7 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
+  // 文件blake3哈希值，这个值可以重复，相同内容的文件可以不同名或不同目录
+  optional string hash = 8 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+    index: "idx_f_hash,length:10"
+  }];
+  // 文件类型
+  optional FileType type = 9 [(gorm.field).tag = {not_null: true}];
+  // 文件mime类型
+  optional string mime = 10 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+  }];
+  // ----------------------下面的字段仅针对文件夹
+  optional bool enable_encryption = 11 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
+  optional bool encrypt_filename = 12 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
+  // 绑定的存储提供者ID列表（逗号分隔字符串）
+  optional string bound_provider_ids = 13 [(gorm.field).tag = {
+    not_null: true
+    type: "text"
+  }];
+}
+
+// // FileHistory 文件历史版本信息
+message FileHistory {
+  option (gorm.opts).ormable = true;
+  // 主键 ID
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+
+  // 创建时间
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+
+  // 关联的文件 ID
+  optional string file_id = 3 [(gorm.field).tag = {index: "idx_fh_fid,length:15"}];
+
+  // 使用上次更新时间作为版本号
+  optional google.protobuf.Timestamp version_number = 4 [(gorm.field).tag = {index: "idx_fh_version"}];
+
+  // 文件内容哈希（与 FileLocation.blake3_hash 对应）
+  optional string hash = 5 [(gorm.field).tag = {index: "idx_fh_hash, length:10"}];
+
+  // 文件大小
+  optional uint64 size = 6;
+
+
+}
+
+// FileTag 文件标签
+message FileTag {
+  option (gorm.opts).ormable = true;
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  // 文件id
+  optional string file_id = 3 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_ft_fid, length:15"
+  }];
+  // 标签名称
+  optional string tag_name = 4 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_ft_name"
+  }];
+}
+
+// FileLocation 文件存储位置信息
+// 这个表与File是通过blake3_hash和hash对应起来的，是多对多的关系
+// 比如File中可能存储多个相同hash的文件，可能名称不同，位置不同
+// 同样，这个表中也可能存储多个相同hash的文件，不是重复，是为了安全，不同介质可能都存在副本
+message FileLocation {
+  option (gorm.opts).ormable = true;
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  // 文件blake3哈希值，
+  optional string blake3_hash = 5 [(gorm.field).tag = {
+    index: "idx_fl_bh, length:10"
+    not_null: true
+  }];
+  // 存储介质文件id，可能不存在
+  optional string provider_file_id = 6 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+  }];
+
+  // 存储实例id，同一存储类型可能有多个实例
+  optional uint32 provider_id = 7 [(gorm.field).tag = {not_null: true}];
+  // 文件在存储介质中的路径
+  optional string path = 8 [(gorm.field).tag = {
+    not_null: true
+    default: "/"
+  }];
+  // 文件在存储介质中的哈希值
+  optional string hash = 9 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+  }];
+  // 上传状态，文件一般会先上传到本地服务，然后再上传到存储介质的服务
+  // 所以客户端虽然上传完成了，但是文件实际还未上传到存储介质，此时无法获取到下载链接
+  optional UploadProviderStatus status = 10;
+  // 失败信息
+  optional string message = 11;
+  // 上传进度，百分比*1000, 也就是保留一位小数，比如543, 表示54.3%
+  optional uint32 progress = 12;
+  // 文件过期时间
+  optional google.protobuf.Timestamp expired_at = 13;
+  // 分块编号
+  optional uint32 chunk_number = 14 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
+  // 分块总数
+  optional uint32 chunk_total = 15 [(gorm.field).tag = {
+    not_null: true
+    default: "1"
+  }];
+  // 分块大小
+  optional uint64 chunk_size = 16;
+  // 分块hash
+  optional string chunk_hash = 17;
+  optional bool encrypted = 18;
+
+  // 加密salt，加密salt是随机生成的，每个文件可能会生成多个salt，这些是所有salt组成的字节数组
+  optional bytes encryption_salt = 19 [(gorm.field).tag = {type: "blob"}];
+  optional bool encrypt_filename = 20 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
+}
 
 // 获取文件列表
 message FileListReq {
@@ -18,39 +192,31 @@ message FileListReq {
 // 文件列表响应数据
 message FileListRespData {
   repeated File files = 1;
-  optional int64 total = 2;
+  optional uint32 total = 2;
 }
 
 // 创建目录请求
 message CreateDirReq {
   optional string name = 1 [(buf.validate.field).required = true];
-  optional bool enable_encryption = 2 [(buf.validate.field).required = true];
-  optional string parent_id = 3 [(buf.validate.field).required = true];
-  optional bool encrypt_name = 4;
-  optional string encryption_suffix = 5;
-  optional string encryption_key = 6;
-  optional string encryption_salt = 7;
+  optional string parent_id = 2 [(buf.validate.field).required = true];
+  optional bool enable_encryption = 3;
+  optional bool encrypt_filename = 4;
+  // 绑定的存储提供者ID列表（可选，不传则使用默认绑定）
+  repeated uint32 provider_ids = 5;
 }
-
 
 // 更新目录请求
 message UpdateDirReq {
-  optional string id = 1 [(buf.validate.field).required = true];
-
+  optional string id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 2
+  ];
   optional string name = 2;
-
   optional bool enable_encryption = 3;
-
-  optional bool encrypt_name = 4;
-
-  optional string encryption_suffix = 5;
-
-  optional string encryption_key = 6;
-
-  optional string encryption_salt = 7;
+  optional bool encrypt_filename = 4;
+  // 更新绑定的存储提供者ID列表
+  repeated uint32 provider_ids = 5;
 }
-
-
 
 // 删除文件请求
 message DeleteFileReq {
@@ -68,73 +234,6 @@ message RenameObj {
   optional string new_name = 2;
 }
 
-
-// ========== 分片上传接口 ==========
-
-// 初始化上传请求
-message InitUploadReq {
-  optional string name = 1 [(buf.validate.field).required = true]; // 文件名
-  optional string parent_id = 2 [(buf.validate.field).required = true]; // 父目录ID
-  optional uint64 size = 3; // 文件大小
-
-  optional string hash = 4 [(buf.validate.field).required = true]; // 文件完整哈希（blake3）
-  optional bool overwrite = 5 [(buf.validate.field).required = true]; // 是否覆盖已存在的文件
-}
-
-// 初始化上传响应
-message InitUploadRespData {
-  optional string upload_id = 1; // 上传任务ID
-  optional bool exists = 2; // 文件是否已存在（秒传）
-  optional bytes uploaded_chunks = 3; // 已上传分片的索引位图
-  optional uint32 chunk_total = 4; // 分片总数
-  optional uint64 chunk_size = 5; // 分片大小
-}
-
-// 上传分片请求（非流式，每次上传一个分片）
-message UploadChunkReq {
-  optional string upload_id = 1 [(buf.validate.field).required = true];
-  optional uint32 chunk_index = 2 [(buf.validate.field).required = true]; // 分片序号（从1开始）
-  optional string chunk_hash = 3 [(buf.validate.field).required = true]; // 分片哈希（用于校验）
-  optional bytes chunk = 4 [(buf.validate.field).required = true]; // 分片内容
-}
-
-// // 上传分片响应
-// message UploadChunkRespData {
-//   optional string upload_id = 1;
-//   optional uint32 chunk_index = 2; // 已上传的分片序号
-//   optional uint32 uploaded_count = 3; // 已上传分片数量
-//   optional uint32 chunk_total = 4; // 分片总数
-// }
-
-// 完成上传请求
-message CompleteUploadReq {
-  optional string upload_id = 1;
-}
-
-// // 完成上传响应
-// message CompleteUploadRespData {
-//   optional string file_id = 1; // 文件ID
-//   optional string name = 2; // 文件名
-//   optional uint64 size = 3; // 文件大小
-// }
-
-// 查询上传进度请求
-message UploadProgressReq {
-  optional string upload_id = 1;
-}
-
-// 查询上传进度响应
-message UploadProgressRespData {
-  optional string upload_id = 1;
-  optional uint32 chunk_total = 2; // 分片总数
-  optional bytes uploaded_chunks = 3; // 已上传分片列表
-}
-
-// 取消上传请求
-message CancelUploadReq {
-  optional string upload_id = 1;
-}
-
 // FileService文件服务
 service FileService {
   // 获取文件列表
@@ -149,22 +248,4 @@ service FileService {
   rpc DeleteFile(DeleteFileReq) returns (BaseResp);
   // 文件重命名
   rpc RenameFile(RenameFileReq) returns (BaseResp);
-  // 文件上传（Client Streaming，小文件适用）
-  // rpc UploadFile(stream UploadFileReq) returns (BaseResp);
-
-  // ========== 分片上传接口 ==========
-
-  // 初始化上传任务
-  // 返回上传ID和已上传分片信息（支持断点续传）
-  rpc InitUpload(InitUploadReq) returns (BaseResp);
-  // 上传分片（非流式，每次上传一个分片）
-  rpc UploadChunk(UploadChunkReq) returns (BaseResp);
-  // 完成上传
-  // 合并所有分片并创建文件记录
-  rpc CompleteUpload(CompleteUploadReq) returns (BaseResp);
-  // 查询上传进度
-  rpc GetUploadProgress(UploadProgressReq) returns (BaseResp);
-  // 取消上传
-  // 删除临时分片文件
-  rpc CancelUpload(CancelUploadReq) returns (BaseResp);
 }
