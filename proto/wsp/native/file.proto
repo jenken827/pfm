@@ -176,8 +176,8 @@ message FileLocation {
   optional string chunk_hash = 17;
   optional bool encrypted = 18;
 
-  // 加密salt，加密salt是随机生成的，每个文件可能会生成多个salt，这些是所有salt组成的字节数组
-  optional bytes encryption_salt = 19 [(gorm.field).tag = {type: "blob"}];
+  // 加密salt，随机生成的字符串
+  optional string encryption_salt = 19 [(gorm.field).tag = {default: "''"}];
   optional bool encrypt_filename = 20 [(gorm.field).tag = {
     not_null: true
     default: "false"

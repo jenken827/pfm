@@ -9,28 +9,24 @@ class StorageProviderState extends Equatable {
     this.status = StorageProviderStatus.initial,
     this.message = '',
     this.providers = const [],
-    this.groups = const [],
   });
 
   final StorageProviderStatus status;
   final String message;
-  final List<StorageProviderItem> providers;
-  final List<StorageGroupItem> groups;
+  final List<StorageProvider> providers;
 
   @override
-  List<Object?> get props => [status, message, providers, groups];
+  List<Object?> get props => [status, message, providers];
 
   StorageProviderState copyWith({
     StorageProviderStatus? status,
     String? message,
-    List<StorageProviderItem>? providers,
-    List<StorageGroupItem>? groups,
+    List<StorageProvider>? providers,
   }) {
     return StorageProviderState(
       status: status ?? this.status,
       message: message ?? this.message,
       providers: providers ?? this.providers,
-      groups: groups ?? this.groups,
     );
   }
 }

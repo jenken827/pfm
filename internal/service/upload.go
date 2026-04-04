@@ -9,9 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
-	"strconv"
 
-	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
@@ -246,13 +244,13 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 创建临时目录
-	_, err = utils.CreateUploadTempDir(blake3, false)
+	err = utils.CreateFileTempDir(blake3)
 	if err != nil {
 		llog.L().Errorf("create temp dir failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	tp := utils.GetUploadTempPath(blake3, *req.Name)
+	tp := utils.GetFileTempPath(blake3, *req.Name)
 	status := int32(native.GroupUploadStatus_GPENDING)
 	ur := &native.UploadRecordORM{
 		FileHash:          &blake3,
@@ -299,7 +297,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	chunkIndex := *req.ChunkIndex
 	chunkHash := *req.ChunkHash
 
-	llog.L().Infof("upload chunk: upload_id=%s, chunk_index=%d", uploadID, chunkIndex)
+	llog.L().Infof("upload chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 
 	// 获取上传记录
 	uploadRecord, _, err := db.GetUploadRecord("id = ?", false, uploadID)
@@ -309,7 +307,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	}
 
 	// 写入分片文件
-	chunkPath := path.Join(utils.GetUploadTempDir(*uploadRecord.FileHash), globals.ChunksDirName, fmt.Sprintf("chunk_%d", chunkIndex))
+	chunkPath := utils.GetChunkTempPath(*uploadRecord.FileHash, int(chunkIndex))
 	chunkFile, err := os.Create(chunkPath)
 	if err != nil {
 		llog.L().Errorf("create chunk file failed: %v", err)
@@ -388,7 +386,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 	var totalSize int64
 
 	for i := range chunks {
-		f := path.Join(utils.GetUploadChunkTempDir(*uploadRecord.FileHash), "chunk_"+strconv.Itoa(i))
+		f := utils.GetChunkTempPath(*uploadRecord.FileHash, i)
 		chunkFile, err := os.Open(f)
 		if err != nil {
 			llog.L().Errorf("open chunk file failed: %v", err)
@@ -409,7 +407,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		llog.L().Errorf("file hash mismatch: expected %s, got %s", *uploadRecord.FileHash, finalHash)
 		return &models.Err{E: errors.New("file hash mismatch"), C: native.RespCode_INTERNAL_ERROR}
 	}
-	filetype, mime := getFileType(path.Join(utils.GetUploadChunkTempDir(*uploadRecord.FileHash), "chunk_0"), *uploadRecord.FileName)
+	filetype, mime := getFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, 0), *uploadRecord.FileName)
 
 	fileRecord := &native.FileORM{
 		Name:     uploadRecord.FileName,
@@ -420,12 +418,40 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		Mime:     &mime,
 	}
 
-	if err := db.CreateFile(fileRecord); err != nil {
-		llog.L().Errorf("create file record failed: %v", err)
-		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	// 检查是否是覆盖上传
+	if uploadRecord.OverwriteId != nil && *uploadRecord.OverwriteId != "" {
+		// 覆盖上传：更新现有文件记录并创建历史
+		fileRecord.Id = uploadRecord.OverwriteId
+		oldFiles, err := db.GetFiles("id = ?", *uploadRecord.OverwriteId)
+		if err != nil {
+			llog.L().Errorf("get old file record failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		if len(oldFiles) > 0 {
+			oldFile := oldFiles[0]
+			if err := db.UpdateFileWithHistory(ctx, fileRecord, oldFile); err != nil {
+				llog.L().Errorf("update file with history failed: %v", err)
+				return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+			}
+			llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s", *fileRecord.Id, *oldFile.Hash, finalHash)
+		} else {
+			// 旧文件不存在（可能被删除了），创建新记录
+			if err := db.CreateFile(fileRecord); err != nil {
+				llog.L().Errorf("create file record failed: %v", err)
+				return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+			}
+			llog.L().Warnf("overwrite file not found, created new record, id: %s", *fileRecord.Id)
+		}
+	} else {
+		// 新上传：创建新的文件记录
+		if err := db.CreateFile(fileRecord); err != nil {
+			llog.L().Errorf("create file record failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		}
+		llog.L().Infof("new file created, id: %s, hash: %s", *fileRecord.Id, finalHash)
 	}
 	// 移除分片
-	if err := os.RemoveAll(utils.GetUploadChunkTempDir(*uploadRecord.FileHash)); err != nil {
+	if err := os.RemoveAll(utils.GetChunkTempDir(*uploadRecord.FileHash)); err != nil {
 		llog.L().Warnf("remove temp path failed: %v", err)
 	}
 	// 上传到存储
@@ -437,7 +463,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err {
 	uploadID := *req.UploadId
 
-	llog.L().Infof("cancel upload: %s", uploadID)
+	llog.L().Infof("cancel upload: %d", uploadID)
 
 	uploadRecord, _, err := db.GetUploadRecord("id=?", true, uploadID)
 	if err != nil && err != gorm.ErrRecordNotFound {

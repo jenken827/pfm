@@ -19,7 +19,7 @@ func GetUploadRecord(expression string, withChunks bool, args ...any) (*native.U
 	if withChunks {
 		chunks, err := gorm.G[*native.UploadChunkRecordORM](db).Where("upload_id = ?", *record.Id).Find(context.Background())
 		if err != nil {
-			llog.L().Warnf("get uploading chunks failed, uploadID: %s, err: %v", *record.Id, err)
+			llog.L().Warnf("get uploading chunks failed, uploadID: %d, err: %v", *record.Id, err)
 			return record, nil, err
 		}
 		return record, chunks, nil
@@ -42,11 +42,11 @@ func DelUploadRecord(id uint32) error {
 	ctx := context.Background()
 	err := db.Transaction(func(tx *gorm.DB) error {
 		if _, err := gorm.G[*native.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
-			llog.L().Errorf("delete upload record failed, id: %s, err: %v", id, err)
+			llog.L().Errorf("delete upload record failed, id: %d, err: %v", id, err)
 			return err
 		}
 		if _, err := gorm.G[*native.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
-			llog.L().Errorf("delete upload chunk record failed, id: %s, err: %v", id, err)
+			llog.L().Errorf("delete upload chunk record failed, id: %d, err: %v", id, err)
 			return err
 		}
 		return nil
@@ -68,11 +68,11 @@ func CreateUploadRecord(r *native.UploadRecordORM) error {
 func ClearUploadRecords(ctx context.Context, id uint32) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if _, err := gorm.G[*native.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
-			llog.L().Errorf("delete upload record failed, id: %s, err: %v", id, err)
+			llog.L().Errorf("delete upload record failed, id: %d, err: %v", id, err)
 			return err
 		}
 		if _, err := gorm.G[*native.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
-			llog.L().Errorf("delete upload chunk record failed, id: %s, err: %v", id, err)
+			llog.L().Errorf("delete upload chunk record failed, id: %d, err: %v", id, err)
 			return err
 		}
 		return nil

@@ -28,17 +28,6 @@ func GetDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
 	return &dr, nil
 }
 
-// GetDownloadRecordsByUploadRecordId 根据上传记录ID获取下载记录
-func GetDownloadRecordsByUploadRecordId(uploadRecordId uint32) ([]*native.DownloadRecordORM, error) {
-	ctx := context.Background()
-	var drs []*native.DownloadRecordORM
-	if err := GetDB().WithContext(ctx).Where("upload_record_id = ?", uploadRecordId).Find(&drs).Error; err != nil {
-		llog.L().Errorf("get download records by upload record id failed, uploadRecordId: %d, err: %v", uploadRecordId, err)
-		return nil, err
-	}
-	return drs, nil
-}
-
 // UpdateDownloadRecord 更新下载记录
 func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) error {
 	ctx := context.Background()

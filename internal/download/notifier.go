@@ -2,13 +2,18 @@ package download
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/internal/utils"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
@@ -147,8 +152,71 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 		return
 	}
 
-	// 3. 更新上传记录的临时文件路径
-	uploadRecord.TempPath = &downloadedFilePath
+	// 3. 获取源文件位置记录
+	var sourceLocation *native.FileLocationORM
+	if dr.SourceLocationId != nil {
+		locations, err := db.GetFileLocations(&db.DBQuery{
+			Where: "id = ?",
+			Args:  []any{*dr.SourceLocationId},
+		})
+		if err == nil && len(locations) > 0 {
+			sourceLocation = locations[0]
+		}
+	}
+
+	// 4. 检查是否需要解密
+	blake3Hash := *dr.Blake3Hash
+	var finalFilePath string = downloadedFilePath
+	
+	if sourceLocation != nil && sourceLocation.Encrypted != nil && *sourceLocation.Encrypted {
+		// 需要解密
+		llog.L().Infof("source file is encrypted, decrypting...")
+
+		// 4.1 获取加密盐
+		if sourceLocation.EncryptionSalt == nil || *sourceLocation.EncryptionSalt == "" {
+			llog.L().Errorf("encryption salt not found in source location")
+			return
+		}
+		salt := *sourceLocation.EncryptionSalt
+
+		// 4.2 获取存储提供者的加密密钥
+		st := storage.GetStorage(*sourceLocation.ProviderId)
+		if st == nil {
+			llog.L().Errorf("storage provider not found: %d", *sourceLocation.ProviderId)
+			return
+		}
+
+		orm := st.GetOrm()
+		if orm == nil || orm.EncryptionKey == nil || *orm.EncryptionKey == "" {
+			llog.L().Errorf("encryption key not found in storage provider")
+			return
+		}
+		encryptionKey := *orm.EncryptionKey
+
+		// 4.3 创建解密器
+		decryptor, err := storage.NewCryptEncryptor(encryptionKey, salt)
+		if err != nil {
+			llog.L().Errorf("create decryptor failed: %v", err)
+			return
+		}
+
+		// 4.4 解密文件到同一目录，添加"decrypted_"前缀
+		tempDir := utils.GetFileTempDir(blake3Hash)
+		originalFileName := filepath.Base(downloadedFilePath)
+		decryptedFileName := "decrypted_" + originalFileName
+		decryptedFilePath := filepath.Join(tempDir, decryptedFileName)
+		
+		if err := decryptFileTo(downloadedFilePath, decryptedFilePath, decryptor); err != nil {
+			llog.L().Errorf("decrypt file failed: %v", err)
+			return
+		}
+		finalFilePath = decryptedFilePath
+
+		llog.L().Infof("file decrypted successfully: %s -> %s", downloadedFilePath, decryptedFilePath)
+	}
+
+	// 5. 更新上传记录的临时文件路径
+	uploadRecord.TempPath = &finalFilePath
 	syncStatus := int32(native.GroupUploadStatus_GUPLOADING)
 	uploadRecord.Status = &syncStatus
 	if err := db.GetDB().Save(uploadRecord).Error; err != nil {
@@ -156,13 +224,45 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 		return
 	}
 
-	llog.L().Infof("resuming sync from download, hash: %s, file: %s", *dr.Blake3Hash, downloadedFilePath)
+	llog.L().Infof("resuming sync from download, hash: %s, file: %s", blake3Hash, finalFilePath)
 
-	// 4. 调用 storage.Dispatch 继续上传流程
+	// 6. 调用 storage.Dispatch 继续上传流程
 	// Dispatch 会检测到 TempPath 存在，从该文件批量上传到所有目标提供者
 	storage.Dispatch(context.Background(), uploadRecord)
 
-	llog.L().Infof("sync task resumed successfully, hash: %s", *dr.Blake3Hash)
+	llog.L().Infof("sync task resumed successfully, hash: %s", blake3Hash)
+}
+
+// decryptFileTo 解密文件到指定路径
+func decryptFileTo(encryptedFilePath string, decryptedFilePath string, decryptor types.Encryptor) error {
+	// 1. 打开加密文件
+	encryptedFile, err := os.Open(encryptedFilePath)
+	if err != nil {
+		return fmt.Errorf("open encrypted file failed: %w", err)
+	}
+	defer encryptedFile.Close()
+
+	// 2. 创建解密后的文件
+	decryptedFile, err := os.Create(decryptedFilePath)
+	if err != nil {
+		return fmt.Errorf("create decrypted file failed: %w", err)
+	}
+	defer decryptedFile.Close()
+
+	// 3. 解密数据
+	decryptedReader, err := decryptor.Decrypt(encryptedFile)
+	if err != nil {
+		return fmt.Errorf("create decrypt reader failed: %w", err)
+	}
+	defer decryptedReader.Close()
+
+	// 4. 复制解密后的数据到文件
+	_, err = io.Copy(decryptedFile, decryptedReader)
+	if err != nil {
+		return fmt.Errorf("copy decrypted data failed: %w", err)
+	}
+
+	return nil
 }
 
 

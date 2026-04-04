@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
-import 'package:pfm/proto/native/tables.pb.dart';
+import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/utils/utils.dart';
 
 /// 文件列表页面
@@ -584,8 +584,7 @@ class _FileView extends StatelessWidget {
   void _showCreateDirDialog(BuildContext context) {
     final nameController = TextEditingController();
     bool enableEncryption = false;
-    bool encryptName = false;
-    final encryptionSuffixController = TextEditingController(text: '.enc');
+    bool encryptFilename = false;
 
     showDialog(
       context: context,
@@ -618,20 +617,12 @@ class _FileView extends StatelessWidget {
                 if (enableEncryption) ...[
                   const Divider(),
                   SwitchListTile(
-                    title: const Text('加密文件夹名称'),
-                    subtitle: const Text('隐藏文件夹的真实名称'),
-                    value: encryptName,
+                    title: const Text('加密文件名'),
+                    subtitle: const Text('隐藏文件的真实名称'),
+                    value: encryptFilename,
                     onChanged: (value) {
-                      setState(() => encryptName = value);
+                      setState(() => encryptFilename = value);
                     },
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: encryptionSuffixController,
-                    decoration: const InputDecoration(
-                      labelText: '加密后缀',
-                      hintText: '加密文件的后缀名',
-                    ),
                   ),
                 ],
               ],
@@ -649,10 +640,7 @@ class _FileView extends StatelessWidget {
                     FileCreateDirEvent(
                       name: nameController.text,
                       enableEncryption: enableEncryption,
-                      encryptName: encryptName,
-                      encryptionSuffix: enableEncryption
-                          ? encryptionSuffixController.text
-                          : null,
+                      encryptFilename: encryptFilename,
                     ),
                   );
                   Navigator.pop(ctx);

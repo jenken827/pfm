@@ -2,529 +2,551 @@ package crypt
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
-	"crypto/cipher"
+	gocipher "crypto/cipher"
 	"crypto/rand"
-	"encoding/base32"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"strings"
 	"sync"
 
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/scrypt"
 )
 
-// ============================================================================
-// 加密模块 - 参考rclone crypt驱动实现，完全兼容 rclone crypt
-// ============================================================================
-//
-// 算法说明：
-// 1. 文件头：8字节 magic "RCLONE\x00\x00" + 24字节 nonce = 32字节
-// 2. 数据加密：NaCl secretbox (XSalsa20-Poly1305)
-//    - 每个块 64KB 数据 + 16字节 Poly1305 认证
-//    - nonce 24字节，每块递增
-// 3. 密钥派生：scrypt(password, salt, N=16384, r=8, p=1) -> 80字节
-//    - 32字节 dataKey (secretbox 加密)
-//    - 32字节 nameKey (文件名 AES 加密)
-//    - 16字节 nameTweak (文件名加密 tweak)
-// 4. 文件名加密：EME (ECB-Mix-ECB) 宽块加密 + base32 编码
-// ============================================================================
-
 const (
-	// 文件头常量
-	fileMagic      = "RCLONE\x00\x00" // 8字节魔数
-	fileMagicSize  = 8
-	fileNonceSize  = 24                            // NaCl secretbox nonce 长度
-	fileHeaderSize = fileMagicSize + fileNonceSize // 32字节
-
-	// 块大小
-	blockHeaderSize = secretbox.Overhead              // 16字节 Poly1305 认证
-	blockDataSize   = 64 * 1024                       // 64KB 数据
-	blockSize       = blockHeaderSize + blockDataSize // 65552 字节
-
-	// 密钥大小
-	dataKeyLen   = 32                                     // secretbox 密钥
-	nameKeyLen   = 32                                     // 文件名 AES 密钥
-	nameTweakLen = 16                                     // 文件名 tweak
-	totalKeyLen  = dataKeyLen + nameKeyLen + nameTweakLen // 80字节
+	nameCipherBlockSize = aes.BlockSize
+	fileMagic           = "PFMXXXX\x00\x00"
+	fileMagicSize       = len(fileMagic)
+	fileNonceSize       = 24
+	fileHeaderSize      = fileMagicSize + fileNonceSize
+	blockHeaderSize     = secretbox.Overhead
+	blockDataSize       = 64 * 1024
+	blockSize           = blockHeaderSize + blockDataSize
 )
 
-// 错误定义
 var (
-	ErrBadDecryptUTF8          = errors.New("bad decryption - utf-8 invalid")
-	ErrBadDecryptControlChar   = errors.New("bad decryption - contains control chars")
-	ErrFileTooShort            = errors.New("file is too short to be encrypted")
-	ErrBadMagic                = errors.New("not an encrypted file - bad magic string")
-	ErrBadBlock                = errors.New("failed to authenticate decrypted block - bad password?")
-	ErrBadBase32Encoding       = errors.New("bad base32 filename encoding")
-	ErrNotAMultipleOfBlocksize = errors.New("not a multiple of blocksize")
-	ErrTooShortAfterDecode     = errors.New("too short after base32 decode")
-	ErrTooLongAfterDecode      = errors.New("too long after base32 decode")
+	ErrorEncryptedFileTooShort  = errors.New("file is too short to be encrypted")
+	ErrorEncryptedFileBadHeader = errors.New("file has truncated block header")
+	ErrorEncryptedBadMagic      = errors.New("not an encrypted file - bad magic string")
+	ErrorFileClosed             = errors.New("file already closed")
+	ErrorBadSeek                = errors.New("Seek beyond end of file")
 )
 
-// 默认盐值 (rclone 使用)
-var defaultSalt = []byte{0xA8, 0x0D, 0xF4, 0x3A, 0x8F, 0xBD, 0x03, 0x08, 0xA7, 0xCA, 0xB8, 0x3E, 0x58, 0x1F, 0x86, 0xB1}
+var (
+	fileMagicBytes = []byte(fileMagic)
+)
 
-// ============================================================================
-// 文件加密器 - 用于文件内容加密/解密
-// ============================================================================
-
-// FileCryptor 文件加密器，使用 rclone 兼容的 NaCl secretbox 算法
-type FileCryptor struct {
-	dataKey    [dataKeyLen]byte   // secretbox 加密密钥
-	nameKey    [nameKeyLen]byte   // 文件名加密密钥
-	nameTweak  [nameTweakLen]byte // 文件名加密 tweak
-	nameCipher cipher.Block       // AES cipher for EME
-	buffers    sync.Pool
+type ReadSeekCloser interface {
+	io.Reader
+	io.Seeker
+	io.Closer
 }
 
-// NewFileCryptor 根据密码和盐值创建文件加密器
-// 使用 rclone 兼容的密钥派生算法
-func NewFileCryptor(password, salt string) (*FileCryptor, error) {
-	fc := &FileCryptor{}
-	fc.buffers.New = func() any {
+type OpenRangeSeek func(ctx context.Context, offset, limit int64) (io.ReadCloser, error)
+
+func readFill(r io.Reader, buf []byte) (n int, err error) {
+	var nn int
+	for n < len(buf) && err == nil {
+		nn, err = r.Read(buf[n:])
+		n += nn
+	}
+	return n, err
+}
+
+type Cipher struct {
+	dataKey    [32]byte
+	nameKey    [32]byte
+	nameTweak  [nameCipherBlockSize]byte
+	block      gocipher.Block
+	buffers    sync.Pool
+	cryptoRand io.Reader
+}
+
+func NewCipher(password, salt string) (*Cipher, error) {
+	c := &Cipher{
+		cryptoRand: rand.Reader,
+	}
+	c.buffers.New = func() any {
 		return new([blockSize]byte)
 	}
+	err := c.Key(password, salt)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
 
-	var saltBytes []byte
-	if salt == "" {
-		saltBytes = defaultSalt
-	} else {
-		saltBytes = []byte(salt)
+func (c *Cipher) Key(password, salt string) (err error) {
+	const keySize = len(c.dataKey) + len(c.nameKey) + len(c.nameTweak)
+	saltBytes := []byte(salt)
+	key, err := scrypt.Key([]byte(password), saltBytes, 16384, 8, 1, keySize)
+	if err != nil {
+		return err
 	}
 
-	var key []byte
-	var err error
+	copy(c.dataKey[:], key)
+	copy(c.nameKey[:], key[len(c.dataKey):])
+	copy(c.nameTweak[:], key[len(c.dataKey)+len(c.nameKey):])
 
-	if password == "" {
-		// 空密码生成全零密钥（用于测试）
-		key = make([]byte, totalKeyLen)
+	c.block, err = aes.NewCipher(c.nameKey[:])
+	return err
+}
+
+func (c *Cipher) getBlock() *[blockSize]byte {
+	return c.buffers.Get().(*[blockSize]byte)
+}
+
+func (c *Cipher) putBlock(buf *[blockSize]byte) {
+	c.buffers.Put(buf)
+}
+
+type nonce [fileNonceSize]byte
+
+func (n *nonce) pointer() *[fileNonceSize]byte {
+	return (*[fileNonceSize]byte)(n)
+}
+
+func (n *nonce) fromReader(in io.Reader) error {
+	read, err := readFill(in, (*n)[:])
+	if read != fileNonceSize {
+		return fmt.Errorf("short read of nonce: %w", err)
+	}
+	return nil
+}
+
+func (n *nonce) fromBuf(buf []byte) error {
+	read := copy((*n)[:], buf)
+
+	if read != fileNonceSize {
+		return errors.New("buffer to short to read nonce")
+	}
+	return nil
+}
+
+func (n *nonce) carry(i int) {
+	for ; i < len(*n); i++ {
+		digit := (*n)[i]
+		newDigit := digit + 1
+		(*n)[i] = newDigit
+		if newDigit >= digit {
+			// exit if no carry
+			break
+		}
+	}
+}
+
+func (n *nonce) increment() {
+	n.carry(0)
+}
+
+func (n *nonce) add(x uint64) {
+	carry := uint16(0)
+	for i := range 8 {
+		digit := (*n)[i]
+		xDigit := byte(x)
+		x >>= 8
+		carry += uint16(digit) + uint16(xDigit)
+		(*n)[i] = byte(carry)
+		carry >>= 8
+	}
+	if carry != 0 {
+		n.carry(8)
+	}
+}
+
+type encrypter struct {
+	mu       sync.Mutex
+	in       io.Reader
+	c        *Cipher
+	nonce    nonce
+	buf      *[blockSize]byte
+	readBuf  *[blockSize]byte
+	bufIndex int
+	bufSize  int
+	err      error
+}
+
+func (c *Cipher) newEncrypter(in io.Reader, nonce *nonce) (*encrypter, error) {
+	fh := &encrypter{
+		in:      in,
+		c:       c,
+		buf:     c.getBlock(),
+		readBuf: c.getBlock(),
+		bufSize: fileHeaderSize,
+	}
+
+	if nonce != nil {
+		fh.nonce = *nonce
 	} else {
-		// 使用 scrypt 派生密钥：N=16384, r=8, p=1
-		key, err = scrypt.Key([]byte(password), saltBytes, 16384, 8, 1, totalKeyLen)
+		err := fh.nonce.fromReader(c.cryptoRand)
 		if err != nil {
-			return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
+			return nil, err
 		}
 	}
 
-	// 分割密钥
-	copy(fc.dataKey[:], key[:dataKeyLen])
-	copy(fc.nameKey[:], key[dataKeyLen:dataKeyLen+nameKeyLen])
-	copy(fc.nameTweak[:], key[dataKeyLen+nameKeyLen:])
+	copy((*fh.buf)[:], fileMagicBytes)
 
-	// 初始化文件名加密的 AES cipher (用于 EME)
-	fc.nameCipher, err = aes.NewCipher(fc.nameKey[:])
-	if err != nil {
-		return nil, fmt.Errorf("failed to create name cipher: %w", err)
-	}
-
-	return fc, nil
+	copy((*fh.buf)[fileMagicSize:], fh.nonce[:])
+	return fh, nil
 }
 
-// getBlock 从池中获取块缓冲区
-func (fc *FileCryptor) getBlock() *[blockSize]byte {
-	return fc.buffers.Get().(*[blockSize]byte)
-}
+func (fh *encrypter) Read(p []byte) (n int, err error) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
 
-// putBlock 归还块缓冲区到池
-func (fc *FileCryptor) putBlock(buf *[blockSize]byte) {
-	fc.buffers.Put(buf)
-}
-
-// ============================================================================
-// 文件数据加密/解密 (使用 NaCl secretbox)
-// ============================================================================
-
-// EncryptFile 对文件进行加密，输出到目标路径
-// 加密格式：fileHeader (32字节) + 多个加密块
-func (fc *FileCryptor) EncryptFile(srcPath, dstPath string) (int64, error) {
-	srcFile, err := os.Open(srcPath)
-	if err != nil {
-		return 0, fmt.Errorf("打开源文件失败: %w", err)
+	if fh.err != nil {
+		return 0, fh.err
 	}
-	defer srcFile.Close()
+	if fh.bufIndex >= fh.bufSize {
 
-	dstFile, err := os.Create(dstPath)
-	if err != nil {
-		return 0, fmt.Errorf("创建目标文件失败: %w", err)
-	}
-	defer dstFile.Close()
-
-	return fc.EncryptStream(dstFile, srcFile)
-}
-
-// DecryptFile 对加密的文件进行解密，输出到目标路径
-func (fc *FileCryptor) DecryptFile(srcPath, dstPath string) (int64, error) {
-	srcFile, err := os.Open(srcPath)
-	if err != nil {
-		return 0, fmt.Errorf("打开源文件失败: %w", err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dstPath)
-	if err != nil {
-		return 0, fmt.Errorf("创建目标文件失败: %w", err)
-	}
-	defer dstFile.Close()
-
-	return fc.DecryptStream(dstFile, srcFile)
-}
-
-// EncryptStream 对数据流进行加密
-// 输出格式：magic (8字节) + nonce (24字节) + 加密块1 + 加密块2 + ...
-func (fc *FileCryptor) EncryptStream(w io.Writer, r io.Reader) (int64, error) {
-	// 分配块缓冲区
-	buf := fc.getBlock()
-	defer fc.putBlock(buf)
-	readBuf := fc.getBlock()
-	defer fc.putBlock(readBuf)
-
-	// 写入文件头
-	// 1. 写入 magic
-	copy((*buf)[:fileMagicSize], fileMagic)
-	// 2. 写入随机 nonce (24字节)
-	nonce := (*[fileNonceSize]byte)(nil)
-	nonce = new([fileNonceSize]byte)
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return 0, fmt.Errorf("生成 nonce 失败: %w", err)
-	}
-	copy((*buf)[fileMagicSize:], nonce[:])
-
-	// 写入文件头到输出
-	if _, err := w.Write((*buf)[:fileHeaderSize]); err != nil {
-		return 0, fmt.Errorf("写入文件头失败: %w", err)
-	}
-
-	var totalBytes int64
-
-	// 循环读取并加密数据块
-	for {
-		// 读取最多 blockDataSize 字节数据
-		n, readErr := io.ReadFull(r, (*readBuf)[:blockDataSize])
-
+		readBuf := (*fh.readBuf)[:blockDataSize]
+		n, err = readFill(fh.in, readBuf)
 		if n == 0 {
-			if readErr == io.ErrUnexpectedEOF {
-				readErr = io.EOF
-			}
-			if readErr == io.EOF {
-				break
-			}
-			return totalBytes, fmt.Errorf("读取数据失败: %w", readErr)
+			return fh.finish(err)
 		}
 
-		// 使用 secretbox 加密当前块
-		// nonce 每块递增
-		secretbox.Seal((*buf)[:0], (*readBuf)[:n], nonce, &fc.dataKey)
-
-		// 写入加密块 (包含 16 字节 Poly1305 认证)
-		written, writeErr := w.Write((*buf)[:blockHeaderSize+n])
-		if writeErr != nil {
-			return totalBytes, fmt.Errorf("写入加密数据失败: %w", writeErr)
-		}
-		totalBytes += int64(written)
-
-		// 递增 nonce
-		fc.incrementNonce(nonce)
-
-		if readErr == io.EOF {
-			break
-		}
+		secretbox.Seal((*fh.buf)[:0], readBuf[:n], fh.nonce.pointer(), &fh.c.dataKey)
+		fh.bufIndex = 0
+		fh.bufSize = blockHeaderSize + n
+		fh.nonce.increment()
 	}
-
-	return totalBytes, nil
+	n = copy(p, (*fh.buf)[fh.bufIndex:fh.bufSize])
+	fh.bufIndex += n
+	return n, nil
 }
 
-// DecryptStream 对数据流进行解密
-// 输入格式：magic (8字节) + nonce (24字节) + 加密块1 + 加密块2 + ...
-func (fc *FileCryptor) DecryptStream(w io.Writer, r io.Reader) (int64, error) {
-	// 分配块缓冲区
-	buf := fc.getBlock()
-	defer fc.putBlock(buf)
-	readBuf := fc.getBlock()
-	defer fc.putBlock(readBuf)
-
-	// 读取并验证文件头
-	headerBuf := (*readBuf)[:fileHeaderSize]
-	if _, err := io.ReadFull(r, headerBuf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return 0, ErrFileTooShort
-		}
-		return 0, fmt.Errorf("读取文件头失败: %w", err)
+func (fh *encrypter) finish(err error) (int, error) {
+	if fh.err != nil {
+		return 0, fh.err
 	}
-
-	// 验证 magic
-	if !bytes.Equal(headerBuf[:fileMagicSize], []byte(fileMagic)) {
-		return 0, ErrBadMagic
-	}
-
-	// 提取 nonce
-	var nonce [fileNonceSize]byte
-	copy(nonce[:], headerBuf[fileMagicSize:])
-
-	var totalBytes int64
-
-	// 循环读取并解密数据块
-	for {
-		// 读取加密块 (16字节头 + 数据)
-		n, readErr := io.ReadFull(r, (*readBuf)[:blockSize])
-
-		if n == 0 {
-			if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
-				break
-			}
-			return totalBytes, fmt.Errorf("读取加密数据失败: %w", readErr)
-		}
-
-		// 至少需要 blockHeaderSize 字节才能解密
-		if n <= blockHeaderSize {
-			return totalBytes, ErrBadBlock
-		}
-
-		// 使用 secretbox 解密
-		plaintext, ok := secretbox.Open((*buf)[:0], (*readBuf)[:n], &nonce, &fc.dataKey)
-		if !ok {
-			return totalBytes, ErrBadBlock
-		}
-
-		// 写入解密数据
-		written, writeErr := w.Write(plaintext)
-		if writeErr != nil {
-			return totalBytes, fmt.Errorf("写入解密数据失败: %w", writeErr)
-		}
-		totalBytes += int64(written)
-
-		// 递增 nonce
-		fc.incrementNonce(&nonce)
-
-		if readErr == io.EOF {
-			break
-		}
-	}
-
-	return totalBytes, nil
+	fh.err = err
+	fh.c.putBlock(fh.buf)
+	fh.buf = nil
+	fh.c.putBlock(fh.readBuf)
+	fh.readBuf = nil
+	return 0, err
 }
 
-// incrementNonce 将 24 字节 nonce 视为大端序 uint64 + 16 字节计数器递增
-func (fc *FileCryptor) incrementNonce(nonce *[fileNonceSize]byte) {
-	// 前 8 字节是大端序 uint64，每块递增
-	for i := 7; i >= 0; i-- {
-		nonce[i]++
-		if nonce[i] != 0 {
-			break
-		}
-	}
+func (fh *encrypter) Close() error {
+	return nil
 }
 
-// ============================================================================
-// 文件名加密 (使用 EME + Base32)
-// ============================================================================
-
-// EncryptFileName 加密文件名，使用 rclone 兼容的 EME 算法
-func (fc *FileCryptor) EncryptFileName(name string) string {
-	if name == "" {
-		return ""
-	}
-	// EME 加密
-	encrypted := fc.emeEncrypt([]byte(name))
-	// Base32 编码 (rclone 使用小写、无填充的 base32)
-	return base32.HexEncoding.EncodeToString(encrypted)
+func (c *Cipher) EncryptData(in io.Reader) (io.ReadCloser, error) {
+	return c.newEncrypter(in, nil)
 }
 
-// DecryptFileName 解密文件名
-func (fc *FileCryptor) DecryptFileName(encryptedName string) (string, error) {
-	if encryptedName == "" {
-		return "", nil
+type decrypter struct {
+	mu           sync.Mutex
+	rc           io.ReadCloser
+	nonce        nonce
+	initialNonce nonce
+	c            *Cipher
+	buf          *[blockSize]byte
+	readBuf      *[blockSize]byte
+	bufIndex     int
+	bufSize      int
+	err          error
+	limit        int64
+	open         OpenRangeSeek
+	ctx          context.Context
+}
+
+func (c *Cipher) newDecrypter(rc io.ReadCloser) (*decrypter, error) {
+	fh := &decrypter{
+		rc:      rc,
+		c:       c,
+		buf:     c.getBlock(),
+		readBuf: c.getBlock(),
+		limit:   -1,
 	}
-	// Base32 解码
-	decoded, err := base32.HexEncoding.DecodeString(strings.ToUpper(encryptedName))
+
+	readBuf := (*fh.readBuf)[:fileHeaderSize]
+	n, err := readFill(fh.rc, readBuf)
+	if n < fileHeaderSize && err == io.EOF {
+
+		return nil, fh.finishAndClose(ErrorEncryptedFileTooShort)
+	} else if err != io.EOF && err != nil {
+		return nil, fh.finishAndClose(err)
+	}
+
+	if !bytes.Equal(readBuf[:fileMagicSize], fileMagicBytes) {
+		return nil, fh.finishAndClose(ErrorEncryptedBadMagic)
+	}
+
+	err = fh.nonce.fromBuf(readBuf[fileMagicSize:])
 	if err != nil {
-		return "", ErrBadBase32Encoding
-	}
-	// EME 解密
-	decrypted := fc.emeDecrypt(decoded)
-	return string(decrypted), nil
-}
-
-// emeEncrypt 使用 EME (ECB-Mix-ECB) 宽块模式加密
-// EME 提高安全性，用于加密可能重复的文件名
-func (fc *FileCryptor) emeEncrypt(plaintext []byte) []byte {
-	blockSize := aes.BlockSize
-
-	// PKCS7 填充
-	padded := pkcs7Pad(plaintext, blockSize)
-
-	// 将填充后的数据分成多个 AES 块
-	numBlocks := len(padded) / blockSize
-	output := make([]byte, len(padded))
-
-	// EME 加密过程：
-	// 1. 对每个块进行 ECB 加密
-	// 2. 混合所有加密块
-	// 3. 对混合结果再次 ECB 加密
-	// 4. 与原始加密块 XOR
-
-	// 第一轮：ECB 加密
-	ec := make([]byte, len(padded))
-	for i := 0; i < numBlocks; i++ {
-		fc.nameCipher.Encrypt(ec[i*blockSize:(i+1)*blockSize], padded[i*blockSize:(i+1)*blockSize])
-	}
-
-	// 混合：计算所有块的 XOR，并混入 tweak
-	mixed := make([]byte, blockSize)
-	for i := 0; i < numBlocks; i++ {
-		for j := 0; j < blockSize; j++ {
-			mixed[j] ^= ec[i*blockSize+j]
-		}
-	}
-	// 混入 tweak
-	for i := 0; i < blockSize; i++ {
-		mixed[i] ^= fc.nameTweak[i]
-	}
-
-	// 对混合结果进行 ECB 加密
-	cipher := make([]byte, blockSize)
-	fc.nameCipher.Encrypt(cipher, mixed)
-
-	// 第二轮：每个块与 cipher XOR 后再 ECB 加密
-	for i := 0; i < numBlocks; i++ {
-		for j := 0; j < blockSize; j++ {
-			output[i*blockSize+j] = ec[i*blockSize+j] ^ cipher[j]
-		}
-		fc.nameCipher.Encrypt(output[i*blockSize:(i+1)*blockSize], output[i*blockSize:(i+1)*blockSize])
-	}
-
-	return output
-}
-
-// emeDecrypt 使用 EME 宽块模式解密
-func (fc *FileCryptor) emeDecrypt(ciphertext []byte) []byte {
-	blockSize := aes.BlockSize
-
-	// 密文长度必须是块大小的倍数
-	if len(ciphertext)%blockSize != 0 {
-		return nil
-	}
-
-	numBlocks := len(ciphertext) / blockSize
-	intermediate := make([]byte, len(ciphertext))
-
-	// EME 解密过程：
-	// 1. 对每个密文块进行 ECB 解密
-	// 2. 混合所有解密块
-	// 3. 对混合结果再次 ECB 加密
-	// 4. 与解密块 XOR 得到明文
-
-	// 第一轮：ECB 解密
-	for i := 0; i < numBlocks; i++ {
-		fc.nameCipher.Decrypt(intermediate[i*blockSize:(i+1)*blockSize], ciphertext[i*blockSize:(i+1)*blockSize])
-	}
-
-	// 混合：计算所有块的 XOR，并混入 tweak
-	mixed := make([]byte, blockSize)
-	for i := 0; i < numBlocks; i++ {
-		for j := 0; j < blockSize; j++ {
-			mixed[j] ^= intermediate[i*blockSize+j]
-		}
-	}
-	// 混入 tweak
-	for i := 0; i < blockSize; i++ {
-		mixed[i] ^= fc.nameTweak[i]
-	}
-
-	// 对混合结果进行 ECB 加密
-	cipher := make([]byte, blockSize)
-	fc.nameCipher.Encrypt(cipher, mixed)
-
-	// 第二轮：每个块与 cipher XOR 后再 ECB 解密
-	output := make([]byte, len(ciphertext))
-	for i := 0; i < numBlocks; i++ {
-		for j := 0; j < blockSize; j++ {
-			output[i*blockSize+j] = intermediate[i*blockSize+j] ^ cipher[j]
-		}
-		fc.nameCipher.Decrypt(output[i*blockSize:(i+1)*blockSize], output[i*blockSize:(i+1)*blockSize])
-	}
-
-	// 移除 PKCS7 填充
-	return pkcs7Unpad(output, blockSize)
-}
-
-// pkcs7Pad 使用 PKCS7 填充数据
-func pkcs7Pad(data []byte, blockSize int) []byte {
-	padding := blockSize - len(data)%blockSize
-	padBytes := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(data, padBytes...)
-}
-
-// pkcs7Unpad 移除 PKCS7 填充
-func pkcs7Unpad(data []byte, blockSize int) []byte {
-	if len(data) == 0 {
-		return nil
-	}
-	padding := int(data[len(data)-1])
-	if padding == 0 || padding > blockSize {
-		return nil
-	}
-	// 验证填充
-	for i := len(data) - padding; i < len(data); i++ {
-		if int(data[i]) != padding {
-			return nil
-		}
-	}
-	return data[:len(data)-padding]
-}
-
-// ============================================================================
-// 便捷方法
-// ============================================================================
-
-// EncryptBytes 对字节数据进行加密
-func (fc *FileCryptor) EncryptBytes(data []byte) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	if _, err := fc.EncryptStream(buf, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	fh.initialNonce = fh.nonce
+	return fh, nil
 }
 
-// DecryptBytes 对加密的字节数据进行解密
-func (fc *FileCryptor) DecryptBytes(encryptedData []byte) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	if _, err := fc.DecryptStream(buf, bytes.NewReader(encryptedData)); err != nil {
+func (c *Cipher) newDecrypterSeek(ctx context.Context, open OpenRangeSeek, offset, limit int64) (fh *decrypter, err error) {
+	var rc io.ReadCloser
+	doRangeSeek := false
+	setLimit := false
+
+	if offset == 0 && limit < 0 {
+
+		rc, err = open(ctx, 0, -1)
+	} else if offset == 0 {
+
+		_, underlyingLimit, _, _ := calculateUnderlying(offset, limit)
+		rc, err = open(ctx, 0, int64(fileHeaderSize)+underlyingLimit)
+		setLimit = true
+	} else {
+
+		rc, err = open(ctx, 0, int64(fileHeaderSize))
+		doRangeSeek = true
+	}
+	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+
+	fh, err = c.newDecrypter(rc)
+	if err != nil {
+		return nil, err
+	}
+	fh.open = open
+	fh.ctx = ctx
+	if doRangeSeek {
+		_, err = fh.RangeSeek(ctx, offset, io.SeekStart, limit)
+		if err != nil {
+			fh.Close()
+			return nil, err
+		}
+	}
+	if setLimit {
+		fh.limit = limit
+	}
+	return fh, nil
 }
 
-// EncryptedSize 计算加密后的文件大小
-func (fc *FileCryptor) EncryptedSize(size int64) int64 {
-	if size == 0 {
-		return fileHeaderSize
+func (fh *decrypter) fillBuffer() (err error) {
+
+	readBuf := fh.readBuf
+	n, err := readFill(fh.rc, (*readBuf)[:])
+	if n == 0 {
+		return err
 	}
-	blocks := size / blockDataSize
-	residue := size % blockDataSize
-	encryptedSize := fileHeaderSize + blocks*(blockHeaderSize+blockDataSize)
+
+	if n <= blockHeaderSize {
+		if err != nil && err != io.EOF {
+			return err
+		}
+		return ErrorEncryptedFileBadHeader
+	}
+
+	_, ok := secretbox.Open((*fh.buf)[:0], (*readBuf)[:n], fh.nonce.pointer(), &fh.c.dataKey)
+	if !ok {
+		if err != nil && err != io.EOF {
+			return err
+		}
+
+		for i := range (*fh.buf)[:n] {
+			(*fh.buf)[i] = 0
+		}
+	}
+	fh.bufIndex = 0
+	fh.bufSize = n - blockHeaderSize
+	fh.nonce.increment()
+	return nil
+}
+
+func (fh *decrypter) Read(p []byte) (n int, err error) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+
+	if fh.err != nil {
+		return 0, fh.err
+	}
+	if fh.bufIndex >= fh.bufSize {
+		err = fh.fillBuffer()
+		if err != nil {
+			return 0, fh.finish(err)
+		}
+	}
+	toCopy := fh.bufSize - fh.bufIndex
+	if fh.limit >= 0 && fh.limit < int64(toCopy) {
+		toCopy = int(fh.limit)
+	}
+	n = copy(p, (*fh.buf)[fh.bufIndex:fh.bufIndex+toCopy])
+	fh.bufIndex += n
+	if fh.limit >= 0 {
+		fh.limit -= int64(n)
+		if fh.limit == 0 {
+			return n, fh.finish(io.EOF)
+		}
+	}
+	return n, nil
+}
+
+func calculateUnderlying(offset, limit int64) (underlyingOffset, underlyingLimit, discard, blocks int64) {
+
+	blocks, discard = offset/blockDataSize, offset%blockDataSize
+
+	underlyingOffset = int64(fileHeaderSize) + blocks*(blockHeaderSize+blockDataSize)
+
+	underlyingLimit = int64(-1)
+	if limit >= 0 {
+
+		bytesToRead := limit - (blockDataSize - discard)
+
+		blocksToRead := int64(1)
+
+		if bytesToRead > 0 {
+
+			extraBlocksToRead, endBytes := bytesToRead/blockDataSize, bytesToRead%blockDataSize
+			if endBytes != 0 {
+
+				extraBlocksToRead++
+			}
+			blocksToRead += extraBlocksToRead
+		}
+
+		underlyingLimit = blocksToRead * (blockHeaderSize + blockDataSize)
+	}
+	return
+}
+
+func (fh *decrypter) RangeSeek(ctx context.Context, offset int64, whence int, limit int64) (int64, error) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+
+	if fh.open == nil {
+		return 0, fh.finish(errors.New("can't seek - not initialised with newDecrypterSeek"))
+	}
+	if whence != io.SeekStart {
+		return 0, fh.finish(errors.New("can only seek from the start"))
+	}
+
+	if fh.err == io.EOF {
+		fh.unFinish()
+	} else if fh.err != nil {
+		return 0, fh.err
+	}
+
+	underlyingOffset, underlyingLimit, discard, blocks := calculateUnderlying(offset, limit)
+
+	fh.nonce = fh.initialNonce
+	fh.nonce.add(uint64(blocks))
+
+	rc, err := fh.open(ctx, underlyingOffset, underlyingLimit)
+	if err != nil {
+		return 0, fh.finish(fmt.Errorf("couldn't reopen file with offset and limit: %w", err))
+	}
+
+	fh.rc = rc
+
+	err = fh.fillBuffer()
+	if err != nil {
+		return 0, fh.finish(err)
+	}
+
+	if int(discard) > fh.bufSize {
+		return 0, fh.finish(ErrorBadSeek)
+	}
+	fh.bufIndex = int(discard)
+
+	fh.limit = limit
+
+	return offset, nil
+}
+
+func (fh *decrypter) Seek(offset int64, whence int) (int64, error) {
+	ctx := fh.ctx
+	if ctx == nil {
+		ctx = context.TODO()
+	}
+	return fh.RangeSeek(ctx, offset, whence, -1)
+}
+
+func (fh *decrypter) finish(err error) error {
+	if fh.err != nil {
+		return fh.err
+	}
+	fh.err = err
+	fh.c.putBlock(fh.buf)
+	fh.buf = nil
+	fh.c.putBlock(fh.readBuf)
+	fh.readBuf = nil
+	return err
+}
+
+func (fh *decrypter) unFinish() {
+
+	fh.err = nil
+
+	fh.buf = fh.c.getBlock()
+	fh.readBuf = fh.c.getBlock()
+
+	fh.bufIndex = 0
+	fh.bufSize = 0
+}
+
+func (fh *decrypter) Close() error {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+
+	if fh.err == ErrorFileClosed {
+		return fh.err
+	}
+
+	if fh.err == nil {
+		fh.finish(io.EOF)
+	}
+
+	fh.err = ErrorFileClosed
+	if fh.rc == nil {
+		return nil
+	}
+	return fh.rc.Close()
+}
+
+func (fh *decrypter) finishAndClose(err error) error {
+	fh.finish(err)
+	fh.Close()
+	return err
+}
+
+func (c *Cipher) DecryptData(rc io.ReadCloser) (io.ReadCloser, error) {
+	out, err := c.newDecrypter(rc)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Cipher) DecryptDataSeek(ctx context.Context, open OpenRangeSeek, offset, limit int64) (ReadSeekCloser, error) {
+	out, err := c.newDecrypterSeek(ctx, open, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func EncryptedSize(size int64) int64 {
+	blocks, residue := size/blockDataSize, size%blockDataSize
+	encryptedSize := int64(fileHeaderSize) + blocks*(blockHeaderSize+blockDataSize)
 	if residue != 0 {
 		encryptedSize += blockHeaderSize + residue
 	}
 	return encryptedSize
 }
 
-// DecryptedSize 计算解密后的文件大小
-func (fc *FileCryptor) DecryptedSize(size int64) (int64, error) {
-	size -= fileHeaderSize
+func DecryptedSize(size int64) (int64, error) {
+	size -= int64(fileHeaderSize)
 	if size < 0 {
-		return 0, ErrFileTooShort
+		return 0, ErrorEncryptedFileTooShort
 	}
-	blocks := size / blockSize
-	residue := size % blockSize
+	blocks, residue := size/blockSize, size%blockSize
 	decryptedSize := blocks * blockDataSize
 	if residue != 0 {
 		residue -= blockHeaderSize
 		if residue <= 0 {
-			return 0, ErrBadBlock
+			return 0, ErrorEncryptedFileBadHeader
 		}
 	}
 	decryptedSize += residue

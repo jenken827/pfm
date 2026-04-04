@@ -91,7 +91,7 @@ func telegramWebhookRoute(mux *http.ServeMux) {
 			if st.GetType() != native.StorageProviderType_TELEGRAM {
 				return true
 			}
-			d := st.StorageDriver.(*telegram.TelegramDriver)
+			d := st.(*telegram.TelegramDriver)
 
 			if *d.Config.WebhookSecretToken == token {
 				d.Bot.WebhookHandler().ServeHTTP(w, r)

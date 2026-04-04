@@ -12,7 +12,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   initTalkerLogger();
-  await Hive.initFlutter();
+  await Hive.initFlutter('pfm');
   Hive.registerAdapters();
 
   final ls = await LocalStorage.instance();

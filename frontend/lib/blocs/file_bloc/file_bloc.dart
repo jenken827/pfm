@@ -2,7 +2,6 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/file.pb.dart';
-import 'package:pfm/proto/native/tables.pb.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/utils.dart';
 
@@ -125,10 +124,8 @@ class FileBloc extends Bloc<FileEvent, FileState> {
       name: event.name,
       parentId: state.currentDirId,
       enableEncryption: event.enableEncryption,
-      encryptName: event.encryptName,
-      encryptionSuffix: event.encryptionSuffix,
-      encryptionKey: event.encryptionKey,
-      encryptionSalt: event.encryptionSalt,
+      encryptFilename: event.encryptFilename,
+      providerIds: event.providerIds,
     );
 
     if (resp.success) {

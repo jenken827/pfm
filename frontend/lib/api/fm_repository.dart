@@ -9,8 +9,8 @@ import 'package:talker_flutter/talker_flutter.dart';
 
 import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
-import '../proto/native/group.pb.dart';
 import '../proto/native/provider.pb.dart';
+import '../proto/native/upload.pb.dart';
 import '../services/local_storage.dart';
 import '../services/logger.dart';
 import 'util.dart';
@@ -29,7 +29,7 @@ class FmRepository {
   late final Dio _dio;
   Talker get _logger => getLogger();
 
-  late final String? _baseUrl;
+  String? _baseUrl;
 
   FmRepository._();
 
@@ -85,6 +85,10 @@ class FmRepository {
     return inst;
   }
 
+  void setBaseUrl(String baseUrl) {
+    _baseUrl = baseUrl;
+  }
+
   // ==================== File Service ====================
 
   /// 获取文件列表
@@ -118,20 +122,16 @@ class FmRepository {
     required String name,
     required String parentId,
     required bool enableEncryption,
-    bool encryptName = false,
-    String? encryptionSuffix,
-    String? encryptionKey,
-    String? encryptionSalt,
+    bool encryptFilename = false,
+    List<int>? providerIds,
   }) async {
     try {
       final req = CreateDirReq(
         name: name,
         parentId: parentId,
-        encryptName: encryptName,
+        encryptFilename: encryptFilename,
         enableEncryption: enableEncryption,
-        encryptionSuffix: encryptionSuffix,
-        encryptionKey: encryptionKey,
-        encryptionSalt: encryptionSalt,
+        providerIds: providerIds,
       );
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateDir',
@@ -154,18 +154,14 @@ class FmRepository {
   Future<ApiResult<void>> updateDir({
     required String id,
     String? name,
-    bool? encryptName,
-    String? encryptionSuffix,
-    String? encryptionKey,
-    String? encryptionSalt,
+    bool? encryptFilename,
+    List<int>? providerIds,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
-      if (encryptName != null) req.encryptName = encryptName;
-      if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
-      if (encryptionKey != null) req.encryptionKey = encryptionKey;
-      if (encryptionSalt != null) req.encryptionSalt = encryptionSalt;
+      if (encryptFilename != null) req.encryptFilename = encryptFilename;
+      if (providerIds != null) req.providerIds.addAll(providerIds);
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/UpdateDir',
@@ -298,179 +294,14 @@ class FmRepository {
     }
   }
 
-  // ==================== Storage Group Service ====================
-
-  /// 获取存储组列表
-  Future<ApiResult<StorageGroupListRespData>> listStorageGroups({
-    int page = 1,
-    int pageSize = 20,
-    String? keyword,
-    bool withStats = false,
-  }) async {
-    try {
-      final req = StorageGroupListReq()
-        ..page = page
-        ..pageSize = pageSize
-        ..withStats = withStats;
-      if (keyword != null) req.keyword = keyword;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.StorageGroupService/ListStorageGroups',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<StorageGroupListRespData>(
-        data,
-        StorageGroupListRespData(),
-      );
-      _logger.info('获取存储组列表成功 total ${respData.total}');
-      return ApiResult(success: true, data: respData);
-    } on DioException catch (e) {
-      _logger.error('获取存储组列表失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取存储组列表失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 添加存储组
-  Future<ApiResult<StorageGroupAddRespData>> addStorageGroup({
-    required String name,
-    String? description,
-    int order = 0,
-  }) async {
-    try {
-      final req = StorageGroupAddReq()
-        ..name = name
-        ..order = order;
-      if (description != null) req.description = description;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.StorageGroupService/AddStorageGroup',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<StorageGroupAddRespData>(
-        data,
-        StorageGroupAddRespData(),
-      );
-      return ApiResult(success: true, data: respData);
-    } on DioException catch (e) {
-      _logger.error('添加存储组失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('添加存储组失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 更新存储组
-  Future<ApiResult<void>> updateStorageGroup({
-    required int id,
-    String? name,
-    String? description,
-    int? order,
-  }) async {
-    try {
-      final req = StorageGroupUpdateReq()..id = id;
-      if (name != null) req.name = name;
-      if (description != null) req.description = description;
-      if (order != null) req.order = order;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.StorageGroupService/UpdateStorageGroup',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on DioException catch (e) {
-      _logger.error('更新存储组失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('更新存储组失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 删除存储组
-  Future<ApiResult<void>> deleteStorageGroup(
-    int id, {
-    bool force = false,
-  }) async {
-    try {
-      final req = StorageGroupDeleteReq()
-        ..id = id
-        ..force = force;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.StorageGroupService/DeleteStorageGroup',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on DioException catch (e) {
-      _logger.error('删除存储组失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('删除存储组失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 批量更新存储组排序
-  Future<ApiResult<void>> sortStorageGroups(
-    List<StorageGroupSortItem> items,
-  ) async {
-    try {
-      final req = StorageGroupSortReq(items: items);
-
-      final response = await _dio.post(
-        '$_baseUrl/native.StorageGroupService/SortStorageGroups',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on DioException catch (e) {
-      _logger.error('批量更新存储组排序失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('批量更新存储组排序失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
   // ==================== Storage Provider Service ====================
 
   /// 获取存储提供者列表
-  Future<ApiResult<StorageProviderListRespData>> listStorageProviders({
-    int page = 1,
-    int pageSize = 20,
-    String? keyword,
-    StorageProviderType? providerType,
-    int? groupId,
-    bool enabledOnly = false,
-  }) async {
+  Future<ApiResult<StorageProviderListRespData>> listStorageProviders() async {
     try {
-      final req = StorageProviderListReq()
-        ..page = page
-        ..pageSize = pageSize
-        ..enabledOnly = enabledOnly;
-      if (keyword != null) req.keyword = keyword;
-      if (providerType != null) req.providerType = providerType;
-      if (groupId != null) req.groupId = groupId;
-
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/ListStorageProviders',
-        data: req.toProto3Json(),
+        data: Empty().toProto3Json(),
       );
       _logger.info('获取存储提供者列表成功 $response');
       final data = response.data as Map<String, dynamic>;
@@ -489,22 +320,24 @@ class FmRepository {
   }
 
   /// 添加存储提供者
-  Future<ApiResult<StorageProviderAddRespData>> addStorageProvider({
+  Future<ApiResult<void>> addStorageProvider({
     required StorageProviderType providerType,
     required String name,
     String? description,
     String? config,
-    required int groupId,
     required bool enabled,
     required int order,
     required int totalCapacity,
     required int fileSizeLimit,
+    String? encryptionKey,
+    bool? encryptFilename,
+    String? encryptionSuffix,
+    bool? defaultBound,
   }) async {
     try {
-      final req = StorageProviderAddReq(
+      final req = StorageProvider(
         providerType: providerType,
         name: name,
-        groupId: groupId,
         enabled: enabled,
         order: order,
         totalCapacity: Int64(totalCapacity),
@@ -513,6 +346,10 @@ class FmRepository {
 
       if (description != null) req.description = description;
       if (config != null) req.config = config;
+      if (encryptionKey != null) req.encryptionKey = encryptionKey;
+      if (encryptFilename != null) req.encryptFilename = encryptFilename;
+      if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
+      if (defaultBound != null) req.defaultBound = defaultBound;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
@@ -520,11 +357,8 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<StorageProviderAddRespData>(
-        data,
-        StorageProviderAddRespData(),
-      );
-      return ApiResult(success: true, data: respData);
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
     } on DioException catch (e) {
       _logger.error('添加存储提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -540,22 +374,22 @@ class FmRepository {
     String? name,
     String? description,
     String? config,
-    int? groupId,
     bool? enabled,
     int? order,
     int? totalCapacity,
     int? fileSizeLimit,
+    bool? defaultBound,
   }) async {
     try {
-      final req = StorageProviderUpdateReq()..id = id;
+      final req = StorageProvider(id: id);
       if (name != null) req.name = name;
       if (description != null) req.description = description;
       if (config != null) req.config = config;
-      if (groupId != null) req.groupId = groupId;
       if (enabled != null) req.enabled = enabled;
       if (order != null) req.order = order;
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
+      if (defaultBound != null) req.defaultBound = defaultBound;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',
@@ -575,14 +409,9 @@ class FmRepository {
   }
 
   /// 删除存储提供者
-  Future<ApiResult<void>> deleteStorageProvider(
-    int id, {
-    bool force = false,
-  }) async {
+  Future<ApiResult<void>> deleteStorageProvider(List<int> ids) async {
     try {
-      final req = StorageProviderDeleteReq()
-        ..id = id
-        ..force = force;
+      final req = StorageProviderDeleteReq()..ids.addAll(ids);
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/DeleteStorageProvider',
@@ -622,7 +451,7 @@ class FmRepository {
       if (hash != null) req.hash = hash;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/InitUpload',
+        '$_baseUrl/native.UploadService/InitUpload',
         data: req.toProto3Json(),
       );
 
@@ -648,7 +477,7 @@ class FmRepository {
   /// [chunkData] 分片数据
   /// [chunkHash] 分片哈希（可选，用于校验）
   Future<ApiResult<void>> uploadChunk({
-    required String uploadId,
+    required int uploadId,
     required int chunkIndex,
     required List<int> chunkData,
     String? chunkHash,
@@ -662,7 +491,7 @@ class FmRepository {
       if (chunkHash != null) req.chunkHash = chunkHash;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/UploadChunk',
+        '$_baseUrl/native.UploadService/UploadChunk',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
       );
@@ -681,12 +510,12 @@ class FmRepository {
   }
 
   /// 完成上传
-  Future<ApiResult<void>> completeUpload({required String uploadId}) async {
+  Future<ApiResult<void>> completeUpload({required int uploadId}) async {
     try {
       final req = CompleteUploadReq()..uploadId = uploadId;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/CompleteUpload',
+        '$_baseUrl/native.UploadService/CompleteUpload',
         data: req.toProto3Json(),
       );
 
@@ -703,40 +532,13 @@ class FmRepository {
     }
   }
 
-  /// 获取上传进度
-  Future<ApiResult<UploadProgressRespData>> getUploadProgress({
-    required String uploadId,
-  }) async {
-    try {
-      final req = UploadProgressReq()..uploadId = uploadId;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetUploadProgress',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<UploadProgressRespData>(
-        data,
-        UploadProgressRespData(),
-      );
-      return ApiResult(success: true, data: respData);
-    } on DioException catch (e) {
-      _logger.error('获取上传进度失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取上传进度失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
   /// 取消上传
-  Future<ApiResult<void>> cancelUpload({required String uploadId}) async {
+  Future<ApiResult<void>> cancelUpload({required int uploadId}) async {
     try {
       final req = CancelUploadReq()..uploadId = uploadId;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/CancelUpload',
+        '$_baseUrl/native.UploadService/CancelUpload',
         data: req.toProto3Json(),
       );
 

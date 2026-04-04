@@ -31,20 +31,11 @@ class SettingPage extends StatelessWidget {
           ),
           const Divider(height: 1),
 
-          // 存储组设置
-          _SettingsTile(
-            icon: Icons.folder_outlined,
-            title: '存储组设置',
-            subtitle: '管理存储组',
-            onTap: () => const StorageGroupSettingRoute().push(context),
-          ),
-          const Divider(height: 1),
-
           // 存储介质设置
           _SettingsTile(
             icon: Icons.storage_outlined,
-            title: '存储介质设置',
-            subtitle: '管理存储介质',
+            title: '存储提供者设置',
+            subtitle: '管理存储提供者',
             onTap: () => const StorageProviderSettingRoute().push(context),
           ),
           const Divider(height: 1),

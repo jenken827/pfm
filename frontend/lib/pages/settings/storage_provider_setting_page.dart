@@ -16,9 +16,9 @@ class StorageProviderSettingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => StorageProviderBloc(context.read<FmRepository>())
-        ..add(const StorageProviderLoadEvent())
-        ..add(const StorageProviderGroupsEvent()),
+      create: (context) =>
+          StorageProviderBloc(context.read<FmRepository>())
+            ..add(const StorageProviderLoadEvent()),
       child: const _StorageProviderView(),
     );
   }
@@ -104,10 +104,9 @@ class _StorageProviderView extends StatelessWidget {
   /// Shows dialog for adding or editing storage provider
   void _showProviderDialog({
     required BuildContext context,
-    StorageProviderItem? provider,
+    StorageProvider? provider,
   }) {
     final formKey = GlobalKey<FormBuilderState>();
-    int? selectedGroupId;
     StorageProviderType currentType =
         provider?.providerType ?? StorageProviderType.LOCAL;
 
@@ -126,11 +125,6 @@ class _StorageProviderView extends StatelessWidget {
       } catch (e) {
         debugPrint('Failed to parse config: $e');
       }
-    }
-
-    final groups = context.read<StorageProviderBloc>().state.groups;
-    if (groups.isNotEmpty) {
-      selectedGroupId = provider?.groupId.toInt() ?? groups.first.id.toInt();
     }
 
     // Calculate capacity value and unit for display
@@ -166,228 +160,270 @@ class _StorageProviderView extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(provider == null ? '添加存储介质' : '编辑存储介质'),
-          content: FormBuilder(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 12),
-                  // Show type selector only for add dialog
-                  if (provider == null) ...[
-                    FormBuilderDropdown<StorageProviderType>(
-                      name: 'provider_type',
-                      decoration: const InputDecoration(
-                        labelText: '存储类型',
-                        prefixIcon: Icon(Icons.category),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 500, // 桌面端最大宽度
+              minWidth: MediaQuery.of(ctx).size.width < 600
+                  ? MediaQuery.of(ctx).size.width * 0.9
+                  : 300,
+            ),
+            child: FormBuilder(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 12),
+                    // Show type selector only for add dialog
+                    if (provider == null) ...[
+                      FormBuilderDropdown<StorageProviderType>(
+                        name: 'provider_type',
+                        decoration: const InputDecoration(
+                          labelText: '存储类型',
+                          prefixIcon: Icon(Icons.category),
+                        ),
+                        initialValue: StorageProviderType.LOCAL,
+                        items: const [
+                          DropdownMenuItem(
+                            value: StorageProviderType.LOCAL,
+                            child: Text('本地存储'),
+                          ),
+                          DropdownMenuItem(
+                            value: StorageProviderType.TELEGRAM,
+                            child: Text('Telegram'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => currentType = value);
+                          }
+                        },
                       ),
-                      initialValue: StorageProviderType.LOCAL,
-                      items: const [
-                        DropdownMenuItem(
-                          value: StorageProviderType.LOCAL,
-                          child: Text('本地存储'),
-                        ),
-                        DropdownMenuItem(
-                          value: StorageProviderType.TELEGRAM,
-                          child: Text('Telegram'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() => currentType = value);
-                        }
-                      },
+                      const SizedBox(height: 16),
+                    ],
+                    const SizedBox(height: 16),
+                    // 名称
+                    FormBuilderTextField(
+                      name: 'name',
+                      decoration: const InputDecoration(
+                        labelText: '名称',
+                        hintText: '请输入存储介质名称',
+                        prefixIcon: Icon(Icons.label),
+                      ),
+                      autofocus: provider == null,
+                      initialValue: provider?.name,
+                      validator: FormBuilderValidators.required(
+                        errorText: '请输入名称',
+                      ),
                     ),
                     const SizedBox(height: 16),
-                  ],
-                  // 存储组选择
-                  if (groups.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        '请先创建存储组',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    )
-                  else
-                    FormBuilderDropdown<int>(
-                      name: 'group_id',
+                    // 描述
+                    FormBuilderTextField(
+                      name: 'description',
                       decoration: const InputDecoration(
-                        labelText: '所属存储组',
-                        prefixIcon: Icon(Icons.folder),
+                        labelText: '描述',
+                        hintText: '请输入描述（可选）',
+                        prefixIcon: Icon(Icons.description),
                       ),
-                      initialValue: selectedGroupId,
-                      items: groups.map((group) {
-                        return DropdownMenuItem(
-                          value: group.id.toInt(),
-                          child: Text(group.name),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          selectedGroupId = value;
-                        }
-                      },
-                      validator: FormBuilderValidators.required(
-                        errorText: '请选择存储组',
-                      ),
+                      initialValue: provider?.description,
+                      maxLines: 2,
                     ),
-                  const SizedBox(height: 16),
-                  // 名称
-                  FormBuilderTextField(
-                    name: 'name',
-                    decoration: const InputDecoration(
-                      labelText: '名称',
-                      hintText: '请输入存储介质名称',
-                      prefixIcon: Icon(Icons.label),
-                    ),
-                    autofocus: provider == null,
-                    initialValue: provider?.name,
-                    validator: FormBuilderValidators.required(
-                      errorText: '请输入名称',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 描述
-                  FormBuilderTextField(
-                    name: 'description',
-                    decoration: const InputDecoration(
-                      labelText: '描述',
-                      hintText: '请输入描述（可选）',
-                      prefixIcon: Icon(Icons.description),
-                    ),
-                    initialValue: provider?.description,
-                    maxLines: 2,
-                  ),
 
-                  // 启用状态开关（仅编辑模式显示）
-                  const SizedBox(height: 16),
-                  FormBuilderSwitch(
-                    name: 'enabled',
-                    title: const Text('启用状态'),
-                    subtitle: const Text('禁用后将无法使用此存储介质'),
-                    initialValue: provider?.enabled ?? true,
-                  ),
-
-                  const SizedBox(height: 24),
-                  // 容量限制
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: FormBuilderTextField(
-                          name: 'capacity_value',
-                          decoration: const InputDecoration(
-                            labelText: '容量限制',
-                            hintText: '100',
-                            helperText: '输入数值',
-                            prefixIcon: Icon(Icons.storage),
-                          ),
-                          keyboardType: TextInputType.number,
-                          initialValue: capacityValue,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: FormBuilderDropdown<String>(
-                          name: 'capacity_unit',
-                          decoration: const InputDecoration(labelText: '单位'),
-                          initialValue: capacityUnit,
-                          items: unitDropItems,
-                          onChanged: (value) {},
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // 单文件大小限制配置
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: FormBuilderTextField(
-                          name: 'file_size_limit_value',
-                          decoration: const InputDecoration(
-                            labelText: '单文件大小限制',
-                            hintText: '100',
-                            helperText: '输入数值',
-                            prefixIcon: Icon(Icons.storage),
-                          ),
-                          keyboardType: TextInputType.number,
-                          initialValue: fileSizeLimitValue,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 110,
-                        child: FormBuilderDropdown<String>(
-                          name: 'file_size_limit_unit',
-                          decoration: const InputDecoration(labelText: '单位'),
-                          initialValue: fileSizeLimitUnit,
-                          items: unitDropItems,
-                          onChanged: (value) {},
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 配置信息标题
-                  Text(
-                    '配置信息',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    const SizedBox(height: 16),
+                    // 启用状态开关
+                    FormBuilderSwitch(
+                      name: 'enabled',
+                      title: const Text('启用状态'),
+                      subtitle: const Text('禁用后将无法使用此存储介质'),
+                      initialValue: provider?.enabled ?? true,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Type-specific configuration - 使用 currentType 响应变化
-                  if (currentType == StorageProviderType.LOCAL)
-                    Column(
+
+                    const SizedBox(height: 16),
+                    // 默认绑定开关
+                    FormBuilderSwitch(
+                      name: 'default_bound',
+                      title: const Text('默认绑定'),
+                      subtitle: const Text('设为默认存储提供者'),
+                      initialValue: provider?.defaultBound ?? true,
+                    ),
+
+                    const SizedBox(height: 16),
+                    // 优先级
+                    FormBuilderTextField(
+                      name: 'order',
+                      decoration: const InputDecoration(
+                        labelText: '优先级',
+                        hintText: '0',
+                        helperText: '数值越小优先级越高',
+                        prefixIcon: Icon(Icons.sort),
+                      ),
+                      keyboardType: TextInputType.number,
+                      initialValue: (provider?.order ?? 0).toString(),
+                    ),
+
+                    const SizedBox(height: 24),
+                    // 容量限制
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        FormBuilderTextField(
-                          name: 'root_path',
-                          decoration: const InputDecoration(
-                            labelText: '根路径',
-                            hintText: '例如：/data/storage',
-                            helperText: '存储文件的根目录路径',
-                            prefixIcon: Icon(Icons.folder_open),
-                          ),
-                          initialValue: existingConfig['root_path'],
-                          validator: FormBuilderValidators.required(
-                            errorText: '请输入根目录路径',
+                        Expanded(
+                          child: FormBuilderTextField(
+                            name: 'capacity_value',
+                            decoration: const InputDecoration(
+                              labelText: '容量限制',
+                              hintText: '100',
+                              helperText: '输入数值',
+                              prefixIcon: Icon(Icons.storage),
+                            ),
+                            keyboardType: TextInputType.number,
+                            initialValue: capacityValue,
                           ),
                         ),
-                        const SizedBox(height: 16),
-
-                        FormBuilderTextField(
-                          name: 'mkdir_permission',
-                          decoration: const InputDecoration(
-                            labelText: '文件夹权限',
-                            hintText: '0755',
-                            helperText: '新建文件夹的权限（八进制）',
-                            prefixIcon: Icon(Icons.security),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 100,
+                          child: FormBuilderDropdown<String>(
+                            name: 'capacity_unit',
+                            decoration: const InputDecoration(labelText: '单位'),
+                            initialValue: capacityUnit,
+                            items: unitDropItems,
+                            onChanged: (value) {},
                           ),
-                          initialValue:
-                              existingConfig['mkdir_permission'] ?? '0755',
                         ),
                       ],
-                    )
-                  else if (currentType == StorageProviderType.TELEGRAM)
-                    FormBuilderTextField(
-                      name: 'bot_token',
-                      decoration: const InputDecoration(
-                        labelText: 'Bot Token',
-                        hintText: '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
-                        helperText: '从 @BotFather 获取的 Telegram Bot Token',
-                        prefixIcon: Icon(Icons.send),
-                      ),
-                      initialValue: existingConfig['bot_token'],
-                      maxLines: 1,
                     ),
-                ],
+                    const SizedBox(height: 16),
+                    // 单文件大小限制配置
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: FormBuilderTextField(
+                            name: 'file_size_limit_value',
+                            decoration: const InputDecoration(
+                              labelText: '单文件大小限制',
+                              hintText: '100',
+                              helperText: '输入数值',
+                              prefixIcon: Icon(Icons.storage),
+                            ),
+                            keyboardType: TextInputType.number,
+                            initialValue: fileSizeLimitValue,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 100,
+                          child: FormBuilderDropdown<String>(
+                            name: 'file_size_limit_unit',
+                            decoration: const InputDecoration(labelText: '单位'),
+                            initialValue: fileSizeLimitUnit,
+                            items: unitDropItems,
+                            onChanged: (value) {},
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 配置信息标题
+                    Text(
+                      '配置信息',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Type-specific configuration - 使用 currentType 响应变化
+                    if (currentType == StorageProviderType.LOCAL)
+                      Column(
+                        children: [
+                          FormBuilderTextField(
+                            name: 'root_path',
+                            decoration: const InputDecoration(
+                              labelText: '根路径',
+                              hintText: '例如：/data/storage',
+                              helperText: '存储文件的根目录路径',
+                              prefixIcon: Icon(Icons.folder_open),
+                            ),
+                            initialValue: existingConfig['root_path'],
+                            validator: FormBuilderValidators.required(
+                              errorText: '请输入根目录路径',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          FormBuilderTextField(
+                            name: 'mkdir_permission',
+                            decoration: const InputDecoration(
+                              labelText: '文件夹权限',
+                              hintText: '0755',
+                              helperText: '新建文件夹的权限（八进制）',
+                              prefixIcon: Icon(Icons.security),
+                            ),
+                            initialValue:
+                                existingConfig['mkdir_permission'] ?? '0755',
+                          ),
+                        ],
+                      )
+                    else if (currentType == StorageProviderType.TELEGRAM)
+                      FormBuilderTextField(
+                        name: 'bot_token',
+                        decoration: const InputDecoration(
+                          labelText: 'Bot Token',
+                          hintText: '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
+                          helperText: '从 @BotFather 获取的 Telegram Bot Token',
+                          prefixIcon: Icon(Icons.send),
+                        ),
+                        initialValue: existingConfig['bot_token'],
+                        maxLines: 1,
+                      ),
+
+                    // 加密设置（仅添加时显示，编辑时不显示）
+                    if (provider == null) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        '加密设置',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+
+                      FormBuilderTextField(
+                        name: 'encryption_key',
+                        decoration: const InputDecoration(
+                          labelText: '加密密钥',
+                          hintText: '请输入加密密钥（可选）',
+                          helperText: '用于文件加密的密钥',
+                          prefixIcon: Icon(Icons.vpn_key),
+                        ),
+                        initialValue: provider?.encryptionKey,
+                        maxLines: 1,
+                      ),
+                      const SizedBox(height: 16),
+
+                      FormBuilderSwitch(
+                        name: 'encrypt_filename',
+                        title: const Text('加密文件名'),
+                        subtitle: const Text('上传时对文件名进行混淆处理'),
+                        initialValue: provider?.encryptFilename ?? false,
+                      ),
+                      const SizedBox(height: 16),
+
+                      FormBuilderTextField(
+                        name: 'encryption_suffix',
+                        decoration: const InputDecoration(
+                          labelText: '加密文件后缀',
+                          hintText: 'bin',
+                          helperText: '加密后的文件后缀（如：bin、enc）',
+                          prefixIcon: Icon(Icons.extension),
+                        ),
+                        initialValue: provider?.encryptionSuffix ?? 'bin',
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -434,6 +470,10 @@ class _StorageProviderView extends StatelessWidget {
                     }
                   }
 
+                  // 解析优先级
+                  final orderValue =
+                      int.tryParse(formData['order']?.toString() ?? '0') ?? 0;
+
                   context.read<StorageProviderBloc>().add(
                     provider == null
                         ? StorageProviderAddEvent(
@@ -444,11 +484,22 @@ class _StorageProviderView extends StatelessWidget {
                                 ? formData['description']
                                 : null,
                             config: configJson,
-                            groupId: selectedGroupId!,
                             enabled: formData['enabled'] as bool? ?? true,
-                            order: formData['order'] as int? ?? 0,
+                            order: orderValue,
                             capacity: capacity,
                             fileSizeLimit: fileSizeLimit,
+                            encryptionKey:
+                                formData['encryption_key']?.isNotEmpty == true
+                                ? formData['encryption_key']
+                                : null,
+                            encryptFilename:
+                                formData['encrypt_filename'] as bool?,
+                            encryptionSuffix:
+                                formData['encryption_suffix']?.isNotEmpty ==
+                                    true
+                                ? formData['encryption_suffix']
+                                : null,
+                            defaultBound: formData['default_bound'] as bool?,
                           )
                         : StorageProviderUpdateEvent(
                             id: provider.id.toInt(),
@@ -458,19 +509,15 @@ class _StorageProviderView extends StatelessWidget {
                                 ? formData['description']
                                 : null,
                             config: configJson,
-                            groupId: selectedGroupId!,
                             enabled: formData['enabled'] as bool? ?? true,
-                            order: formData['order'] as int? ?? 0,
+                            order: orderValue,
                             capacity: capacity,
                             fileSizeLimit: fileSizeLimit,
+                            defaultBound: formData['default_bound'] as bool?,
                           ),
                   );
 
                   Navigator.pop(ctx);
-                } else if (selectedGroupId == null) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('请先创建存储组')));
                 }
               },
               child: Text(provider == null ? '添加' : '保存'),
@@ -481,7 +528,7 @@ class _StorageProviderView extends StatelessWidget {
     );
   }
 
-  void _showDeleteDialog(BuildContext context, StorageProviderItem provider) {
+  void _showDeleteDialog(BuildContext context, StorageProvider provider) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -518,7 +565,7 @@ class _StorageProviderTile extends StatelessWidget {
     required this.onDelete,
   });
 
-  final StorageProviderItem provider;
+  final StorageProvider provider;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -547,9 +594,8 @@ class _StorageProviderTile extends StatelessWidget {
   /// 计算容量使用百分比
   double get _capacityPercent {
     final total = provider.totalCapacity.toInt();
-    final remaining = provider.remainingCapacity.toInt();
+    final used = provider.usedCapacity.toInt();
     if (total <= 0) return 0;
-    final used = total - remaining;
     return (used / total).clamp(0.0, 1.0);
   }
 
@@ -631,9 +677,9 @@ class _StorageProviderTile extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // 第二行：类型和存储组
+                  // 第二行：类型
                   Text(
-                    '$_typeName · ${provider.groupName}',
+                    _typeName,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -664,7 +710,7 @@ class _StorageProviderTile extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${formatCapacityString(provider.remainingCapacity.toInt())} / ${formatCapacityString(provider.totalCapacity.toInt())}',
+                          '${formatCapacityString(provider.usedCapacity.toInt())} / ${formatCapacityString(provider.totalCapacity.toInt())}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),

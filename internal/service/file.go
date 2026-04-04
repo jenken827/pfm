@@ -81,7 +81,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		EncryptFilename:  req.EncryptFilename,
 		BoundProviderIds: &boundProviderIds,
 	}
-	e := db.Create[native.FileORM](ctx, f, nil)
+	e := db.Create(ctx, f, nil)
 	if e != nil {
 		return &models.Err{E: e, C: native.RespCode_DB_ERROR}
 	}
@@ -129,7 +129,7 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		orm.BoundProviderIds = &boundProviderIds
 	}
 
-	if err := db.Update[native.FileORM](ctx, &orm, "id=?", *req.Id); err != nil {
+	if err := db.Update(ctx, &orm, "id=?", *req.Id); err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil

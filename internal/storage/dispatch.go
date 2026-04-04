@@ -2,13 +2,15 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"sync"
 
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -25,7 +27,7 @@ const (
 // uploadKey 并发控制键
 type uploadKey struct {
 	blake3Hash string
-	providerId uint32
+	providerID uint32
 }
 
 // dispatcher 分发器
@@ -48,7 +50,11 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 
 	// 2. 如果是同步任务，检查是否已经触发过异步下载
 	if isSyncTask && ur.Id != nil {
-		downloadRecords, err := db.GetDownloadRecordsByUploadRecordId(*ur.Id)
+		downloadRecords, _, err := db.Query[native.DownloadRecordORM](ctx, &db.DBQuery{
+			Where: "upload_record_id = ?",
+			Args:  []any{*ur.Id},
+		}, false)
+
 		if err == nil && len(downloadRecords) > 0 {
 			return
 		}
@@ -232,10 +238,9 @@ func isLocalPath(path string) bool {
 
 // triggerAsyncDownload 触发异步下载任务
 func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
-	// 1. 创建下载临时目录
-	downloadDir, err := utils.CreateDownloadTempDir(*ur.FileHash)
-	if err != nil {
-		llog.L().Errorf("create download temp dir failed: %v", err)
+	// 1. 创建文件临时目录
+	if err := utils.CreateFileTempDir(*ur.FileHash); err != nil {
+		llog.L().Errorf("create file temp dir failed: %v", err)
 		return err
 	}
 
@@ -258,6 +263,8 @@ func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourc
 		return fmt.Errorf("aria2 downloader not initialized")
 	}
 
+	// 下载到文件临时目录
+	downloadDir := utils.GetFileTempDir(*ur.FileHash)
 	gid, err := downloader.Aria2Downloader.AddURI([]string{downloadLink}, aria2.Option{
 		"dir": downloadDir,
 	})
@@ -274,7 +281,7 @@ func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourc
 		return err
 	}
 
-	llog.L().Infof("download task created, gid: %s, record_id: %d, hash: %s, waiting for aria2 callback", gid, *downloadRecord.Id, *ur.FileHash)
+	llog.L().Infof("download task created, gid: %s, record_id: %d, hash: %s, dir: %s, waiting for aria2 callback", gid, *downloadRecord.Id, *ur.FileHash, downloadDir)
 
 	// 5. 返回成功，等待 aria2 下载完成回调
 	return nil
@@ -286,7 +293,13 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	var wg sync.WaitGroup
 	var failedCount int32
 
-	for _, targetId := range targetProviderIds {
+	// 获取文件名
+	fileName := "unknown"
+	if ur.FileName != nil {
+		fileName = *ur.FileName
+	}
+
+	for _, targetID := range targetProviderIds {
 		// 获取并发控制信号量（阻塞等待可用槽位）
 		globalDispatcher.semaphore <- struct{}{}
 
@@ -298,7 +311,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			// 并发控制
 			key := uploadKey{
 				blake3Hash: *ur.FileHash,
-				providerId: tid,
+				providerID: tid,
 			}
 
 			if !acquireLock(key) {
@@ -320,12 +333,12 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 				return
 			}
 
-			// 上传到目标提供者
-			if err := uploadToProvider(ctx, ur, sourcePath, tid, fl); err != nil {
+			// 上传到目标提供者（加密器在uploadToProvider内部生成）
+			if err := uploadToProvider(ctx, sourcePath, fileName, tid, fl); err != nil {
 				llog.L().Errorf("upload to provider %d failed: %v", tid, err)
 				failedCount++
 			}
-		}(targetId)
+		}(targetID)
 	}
 
 	// 等待所有上传完成
@@ -341,16 +354,29 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 }
 
 // uploadToProvider 上传到单个提供者
-func uploadToProvider(ctx context.Context, ur *native.UploadRecordORM, sourcePath string, providerId uint32, fl *native.FileLocationORM) error {
+// sourcePath: 源文件路径（明文）
+// fileName: 目标文件名
+// providerId: 目标存储提供者ID
+func uploadToProvider(ctx context.Context, sourcePath string, fileName string, providerID uint32, fl *native.FileLocationORM) error {
 	// 更新状态为上传中
 	status := int32(native.UploadProviderStatus_PUPLOADING)
 	fl.Status = &status
 	db.UpdateFileLocation(fl, []string{"status"})
 
 	// 获取存储实例
-	st := GetStorage(providerId)
-	if st == nil || !*st.Enabled {
-		msg := fmt.Sprintf("storage provider not found or disabled, id: %d", providerId)
+	st := GetStorage(providerID)
+	if st == nil {
+		msg := fmt.Sprintf("storage provider not found, id: %d", providerID)
+		fl.Message = &msg
+		fl.Status = (*int32)(native.UploadProviderStatus_PFAILED.Enum())
+		db.UpdateFileLocation(fl, []string{"status", "message"})
+		return errors.New(msg)
+	}
+
+	// 获取ORM对象
+	orm := st.GetOrm()
+	if orm == nil || !*orm.Enabled {
+		msg := fmt.Sprintf("storage provider not enabled, id: %d", providerID)
 		fl.Message = &msg
 		fl.Status = (*int32)(native.UploadProviderStatus_PFAILED.Enum())
 		db.UpdateFileLocation(fl, []string{"status", "message"})
@@ -366,8 +392,41 @@ func uploadToProvider(ctx context.Context, ur *native.UploadRecordORM, sourcePat
 		return errors.New(msg)
 	}
 
+	// 生成加密器（如果需要加密）
+	var encryptor types.Encryptor = &types.NullEncryptor{}
+	var saltStr string
+
+	if orm.EncryptionKey != nil && *orm.EncryptionKey != "" {
+		// 生成随机salt（32字节）
+		saltBytes := make([]byte, 32)
+		if _, err := rand.Read(saltBytes); err != nil {
+			msg := fmt.Sprintf("generate salt failed: %v", err)
+			fl.Message = &msg
+			fl.Status = (*int32)(native.UploadProviderStatus_PFAILED.Enum())
+			db.UpdateFileLocation(fl, []string{"status", "message"})
+			return errors.New(msg)
+		}
+		saltStr = hex.EncodeToString(saltBytes)
+
+		// 创建加密器
+		enc, err := NewCryptEncryptor(*orm.EncryptionKey, saltStr)
+		if err != nil {
+			msg := fmt.Sprintf("create encryptor failed: %v", err)
+			fl.Message = &msg
+			fl.Status = (*int32)(native.UploadProviderStatus_PFAILED.Enum())
+			db.UpdateFileLocation(fl, []string{"status", "message"})
+			return errors.New(msg)
+		}
+		encryptor = enc
+
+		// 标记为已加密
+		encrypted := true
+		fl.Encrypted = &encrypted
+		fl.EncryptionSalt = &saltStr
+	}
+
 	// 执行上传
-	pinfo, err := st.Upload(ctx, ur, nil)
+	pinfo, err := st.Upload(ctx, sourcePath, fileName, encryptor)
 	if err != nil {
 		msg := err.Error()
 		fl.Message = &msg
@@ -383,18 +442,25 @@ func uploadToProvider(ctx context.Context, ur *native.UploadRecordORM, sourcePat
 		fl.Hash = &pinfo.Hash
 	}
 	fl.Status = (*int32)(native.UploadProviderStatus_PCOMPLETED.Enum())
-	db.UpdateFileLocation(fl, []string{"provider_file_id", "path", "hash", "status"})
 
-	llog.L().Infof("upload completed, hash: %s, provider: %d", *ur.FileHash, providerId)
+	// 更新字段列表
+	updateFields := []string{"provider_file_id", "path", "hash", "status"}
+	if fl.Encrypted != nil {
+		updateFields = append(updateFields, "encrypted", "encryption_salt")
+	}
+
+	db.UpdateFileLocation(fl, updateFields)
+
+	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v", *fl.Blake3Hash, providerID, fl.Encrypted != nil)
 	return nil
 }
 
 // getOrCreateFileLocation 获取或创建文件位置记录
-func getOrCreateFileLocation(providerId uint32, blake3Hash string) *native.FileLocationORM {
+func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileLocationORM {
 	// 先查询是否已存在
 	locations, err := db.GetFileLocations(&db.DBQuery{
 		Where: "provider_id = ? AND blake3_hash = ?",
-		Args:  []any{providerId, blake3Hash},
+		Args:  []any{providerID, blake3Hash},
 	})
 	if err == nil && len(locations) > 0 {
 		return locations[0]
@@ -402,7 +468,7 @@ func getOrCreateFileLocation(providerId uint32, blake3Hash string) *native.FileL
 
 	// 不存在则创建
 	fl := &native.FileLocationORM{
-		ProviderId: &providerId,
+		ProviderId: &providerID,
 		Blake3Hash: &blake3Hash,
 		Status:     (*int32)(native.UploadProviderStatus_PPENDING.Enum()),
 	}
@@ -438,20 +504,25 @@ func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native
 		}
 
 		st := GetStorage(*loc.ProviderId)
-		if st == nil || !*st.Enabled {
+		if st == nil {
+			continue
+		}
+
+		orm := st.GetOrm()
+		if orm == nil || !*orm.Enabled {
 			continue
 		}
 
 		order := uint32(0)
-		if st.Order != nil {
-			order = *st.Order
+		if orm.Order != nil {
+			order = *orm.Order
 		}
 
-		isLocal := st.ProviderType != nil && *st.ProviderType == int32(native.StorageProviderType_LOCAL)
-		isEncrypted := st.EncryptionKey != nil && *st.EncryptionKey != ""
+		isLocal := orm.ProviderType != nil && *orm.ProviderType == int32(native.StorageProviderType_LOCAL)
+		isEncrypted := orm.EncryptionKey != nil && *orm.EncryptionKey != ""
 
 		c := &candidate{
-			provider:    st.StorageProviderORM,
+			provider:    orm,
 			location:    loc,
 			order:       order,
 			isLocal:     isLocal,
@@ -531,14 +602,13 @@ func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {
 		// 所有上传都完成
 		if ur.Id != nil {
 			status := int32(native.GroupUploadStatus_GCOMPLETED)
-			db.Update[native.UploadRecordORM](ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+			db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
 		}
 
-		// 清理临时文件（仅当有临时文件时）
-		if ur.TempPath != nil && *ur.TempPath != "" {
-			if err := os.RemoveAll(path.Dir(*ur.TempPath)); err != nil {
-				llog.L().Warnf("remove temp file failed: %v", err)
-			}
+		// 清理整个文件临时目录
+		if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
+			llog.L().Warnf("cleanup file temp dir failed: %v", err)
+
 		}
 
 		// 删除上传记录（仅当有ID时）
@@ -562,7 +632,7 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 	}
 
 	status := int32(native.GroupUploadStatus_GFAILED)
-	db.Update[native.UploadRecordORM](ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+	db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
 	llog.L().Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
 }
 
@@ -573,7 +643,7 @@ func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
 	}
 
 	status := int32(native.GroupUploadStatus_GUPLOADING)
-	db.Update[native.UploadRecordORM](ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+	db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
 }
 
 // acquireLock 获取并发控制锁（非阻塞）
@@ -600,7 +670,7 @@ func resumeDispatch() {
 	// 从数据库恢复未完成的上传任务
 	records, _, err := db.Query[native.UploadRecordORM](context.Background(), &db.DBQuery{
 		Where: "status IN ?",
-		Args:  []any{int32(native.GroupUploadStatus_GPENDING), int32(native.GroupUploadStatus_GUPLOADING)},
+		Args:  []any{[]int32{int32(native.GroupUploadStatus_GPENDING), int32(native.GroupUploadStatus_GUPLOADING)}},
 	}, false)
 	if err != nil {
 		llog.L().Errorf("get upload record failed: %v", err)

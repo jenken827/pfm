@@ -11,6 +11,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-telegram/bot v1.20.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/infobloxopen/atlas-app-toolkit/v2 v2.2.2
 	github.com/infobloxopen/protoc-gen-gorm v1.1.5
 	github.com/rs/cors v1.11.1
@@ -41,7 +42,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/pprof v0.0.0-20240509144519-723abb6459b7 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

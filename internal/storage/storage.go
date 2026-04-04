@@ -10,12 +10,6 @@ import (
 	"golang.org/x/sync/syncmap"
 )
 
-// StorageInstance 存储实例
-type StorageInstance struct {
-	*native.StorageProviderORM
-	types.StorageDriver
-}
-
 var storages syncmap.Map
 
 // Init 初始化存储
@@ -31,12 +25,12 @@ func Init() {
 			llog.L().Error("storage provider driver constructor is nil", *sp.ProviderType)
 			continue
 		}
-		ins, err := dc(*sp.Config)
+		ins, err := dc(sp)
 		if err != nil {
 			llog.L().Errorf("create storage provider failed, err: %v", err)
 			continue
 		}
-		storages.Store(*sp.Id, &StorageInstance{StorageProviderORM: sp, StorageDriver: ins})
+		storages.Store(*sp.Id, ins)
 	}
 
 	// 启动时恢复未完成的上传任务
@@ -49,9 +43,9 @@ func GetStorages() *syncmap.Map {
 }
 
 // GetStorage 获取指定存储实例
-func GetStorage(id uint32) *StorageInstance {
+func GetStorage(id uint32) types.StorageDriver {
 	if v, ok := storages.Load(id); ok {
-		return v.(*StorageInstance)
+		return v.(types.StorageDriver)
 	}
 	return nil
 }

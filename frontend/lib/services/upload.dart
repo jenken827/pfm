@@ -57,7 +57,7 @@ Future<void> uploadFile({
       }
       final data = result.data!;
 
-      final uploadId = data.uploadId;
+      final uploadId = data.uploadId.toString();
       l.info(
         'InitUpload result: uploadId=$uploadId, '
         'chunkTotal=${data.chunkTotal}, chunkSize=${data.chunkSize}, '
@@ -77,7 +77,7 @@ Future<void> uploadFile({
       if (data.uploadedChunks.isNotEmpty) {
         await storage.updateUploadTask(
           task.id,
-          uploadId: uploadId,
+          uploadId: data.uploadId.toString(),
           chunkTotal: data.chunkTotal,
           chunkSize: data.chunkSize,
         );
@@ -160,7 +160,7 @@ Future<void> uploadFile({
         int initUploadedBytes = realUploadedBytes;
         // 上传分片
         final result = await fmRepo.uploadChunk(
-          uploadId: task.uploadId!,
+          uploadId: int.parse(task.uploadId!),
           chunkIndex: chunkIndex,
           chunkData: chunkData,
           chunkHash: chunkHash,
@@ -197,7 +197,7 @@ Future<void> uploadFile({
     }
 
     // 4. 完成上传
-    final result = await fmRepo.completeUpload(uploadId: task.uploadId!);
+    final result = await fmRepo.completeUpload(uploadId: int.parse(task.uploadId!));
     if (!result.success) {
       await storage.updateUploadTask(
         task.id,

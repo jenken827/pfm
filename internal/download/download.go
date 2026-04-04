@@ -10,8 +10,6 @@ import (
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 )
 
-// var aria2Client aria2.Client
-
 // Init 初始化下载器
 func Init() {
 	cfg := config.GetConfig().Aria2
@@ -29,8 +27,3 @@ func Init() {
 	downloader.Aria2Downloader = c
 
 }
-
-// GetAria2 获取aria2客户端
-// func GetAria2() aria2.Client {
-// 	return aria2Client
-// }

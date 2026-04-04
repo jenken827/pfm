@@ -17,7 +17,7 @@ func AddStorageProvider(ctx context.Context, req *native.StorageProvider) *model
 		return &models.Err{E: err, C: native.RespCode_PARAMS_ERROR}
 	}
 
-	err = db.Create[native.StorageProviderORM](ctx, &orm, db.FilterProviderCreate)
+	err = db.Create(ctx, &orm, db.FilterProviderCreate)
 	if err != nil {
 		llog.L().Errorf("CreateStorageProvider err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -58,7 +58,7 @@ func UpdateStorageProvider(ctx context.Context, req *native.StorageProvider) *mo
 		Order:         req.Order,
 		FileSizeLimit: req.FileSizeLimit,
 	}
-	err := db.Update[native.StorageProviderORM](ctx, orm, "id = ?", req.Id)
+	err := db.Update(ctx, orm, "id = ?", req.Id)
 	if err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}

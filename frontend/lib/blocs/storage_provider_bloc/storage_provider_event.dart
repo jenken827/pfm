@@ -10,11 +10,6 @@ class StorageProviderLoadEvent extends StorageProviderEvent {
   const StorageProviderLoadEvent();
 }
 
-/// 加载存储组列表
-class StorageProviderGroupsEvent extends StorageProviderEvent {
-  const StorageProviderGroupsEvent();
-}
-
 /// 添加存储介质
 class StorageProviderAddEvent extends StorageProviderEvent {
   const StorageProviderAddEvent({
@@ -22,22 +17,28 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     required this.name,
     this.description,
     this.config,
-    required this.groupId,
     this.enabled = true,
     this.order = 0,
     required this.capacity,
     required this.fileSizeLimit,
+    this.encryptionKey,
+    this.encryptFilename,
+    this.encryptionSuffix,
+    this.defaultBound,
   });
 
   final StorageProviderType providerType;
   final String name;
   final String? description;
   final String? config;
-  final int groupId;
   final bool enabled;
   final int order;
   final int capacity;
   final int fileSizeLimit;
+  final String? encryptionKey;
+  final bool? encryptFilename;
+  final String? encryptionSuffix;
+  final bool? defaultBound;
 }
 
 /// 更新存储介质
@@ -47,22 +48,22 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     this.name,
     this.description,
     this.config,
-    this.groupId,
     this.enabled,
     this.order,
     this.capacity,
     this.fileSizeLimit,
+    this.defaultBound,
   });
 
   final int id;
   final String? name;
   final String? description;
   final String? config;
-  final int? groupId;
   final bool? enabled;
   final int? order;
   final int? capacity;
   final int? fileSizeLimit;
+  final bool? defaultBound;
 }
 
 /// 删除存储介质

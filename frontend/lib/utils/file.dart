@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:pfm/proto/native/tables.pb.dart';
+import 'package:pfm/proto/native/file.pb.dart';
 
 enum FileSortType { type, name, size, modifiedTime, createdTime }
 
@@ -16,17 +16,17 @@ class FileSort extends Equatable {
           return _compareString(a.name, b.name);
         case FileSortType.modifiedTime:
           return _compareNum(
-            a.updatedAt.seconds as num,
-            b.updatedAt.seconds as num,
+            a.updatedAt.seconds as num? ?? 0,
+            b.updatedAt.seconds as num? ?? 0,
           );
         case FileSortType.createdTime:
           return _compareNum(
-            a.createdAt.seconds as num,
-            b.createdAt.seconds as num,
+            a.createdAt.seconds as num? ?? 0,
+            b.createdAt.seconds as num? ?? 0,
           );
 
         case FileSortType.size:
-          return _compareNum(a.size as num, b.size as num);
+          return _compareNum(a.size.toInt(), b.size.toInt());
         case FileSortType.type:
           final typeCompare = _compareNum(a.type.value, b.type.value);
           return typeCompare != 0

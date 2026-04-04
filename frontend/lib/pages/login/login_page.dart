@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/api/api.dart';
 import '../../models/models.dart';
 import '../../router/router.dart';
 import '../../services/services.dart';
@@ -61,9 +63,7 @@ class _LoginPageState extends State<LoginPage> {
 
   /// 显示设置文件服务器对话框
   Future<void> _showServerConfigDialog() async {
-    final controller = TextEditingController(
-      text: _ls.fileServer ?? 'http://localhost:8080',
-    );
+    final controller = TextEditingController(text: _ls.fileServer ?? '');
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -88,6 +88,7 @@ class _LoginPageState extends State<LoginPage> {
               if (url.isNotEmpty) {
                 await _ls.saveFileServer(url);
                 if (ctx.mounted && mounted) {
+                  context.read<FmRepository>().setBaseUrl(url);
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(
                     context,

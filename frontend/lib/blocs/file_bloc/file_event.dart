@@ -58,18 +58,14 @@ class FileCreateDirEvent extends FileEvent {
   const FileCreateDirEvent({
     required this.name,
     this.enableEncryption = false,
-    this.encryptName = false,
-    this.encryptionSuffix,
-    this.encryptionKey,
-    this.encryptionSalt,
+    this.encryptFilename = false,
+    this.providerIds,
   });
 
   final String name;
   final bool enableEncryption;
-  final bool encryptName;
-  final String? encryptionSuffix;
-  final String? encryptionKey;
-  final String? encryptionSalt;
+  final bool encryptFilename;
+  final List<int>? providerIds;
 }
 
 /// 删除文件事件
