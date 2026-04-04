@@ -14,6 +14,16 @@ enum StorageProviderType {
   HUGGINGFACE = 4;
 }
 
+// ConfigFieldType
+// 配置字段类型
+enum ConfigFieldType {
+  CONFIG_FIELD_TYPE_UNSPECIFIED = 0;
+  STRING = 1;   // 字符串
+  NUMBER = 2;   // 数字
+  BOOLEAN = 3;  // 布尔值
+  SELECT = 4;   // 下拉选择
+}
+
 // FileType
 // 文件类型，表中还同时存储了文件的mime类型
 enum FileType {

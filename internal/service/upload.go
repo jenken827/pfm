@@ -14,8 +14,8 @@ import (
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/internal/utils"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 	"gorm.io/gorm"
 	"lukechampine.com/blake3"
 )
@@ -162,12 +162,11 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 
 			// 创建真实的同步任务记录（TempPath 为空表示同步任务）
 			emptyStr := ""
-			syncStatus := int32(native.GroupUploadStatus_GPENDING)
 			syncRecord := &native.UploadRecordORM{
 				FileHash:          &blake3,
 				TargetProviderIds: &targetProviderIds,
 				TempPath:          &emptyStr, // 空路径表示这是同步任务
-				Status:            &syncStatus,
+				Status:            utils.EnumPtr(native.GroupUploadStatus_GPENDING),
 			}
 
 			// 保存到数据库，确保可以恢复
@@ -251,7 +250,6 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	tp := utils.GetFileTempPath(blake3, *req.Name)
-	status := int32(native.GroupUploadStatus_GPENDING)
 	ur := &native.UploadRecordORM{
 		FileHash:          &blake3,
 		FileName:          req.Name,
@@ -261,7 +259,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		ChunkSize:         &chunkSize,
 		TempPath:          &tp,
 		OverwriteId:       &overwriteID,
-		Status:            &status,
+		Status:            utils.EnumPtr(native.GroupUploadStatus_GPENDING),
 		TargetProviderIds: parentFile.BoundProviderIds,
 	}
 

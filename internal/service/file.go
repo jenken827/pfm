@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // GetFileList 获取文件列表
@@ -47,7 +48,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		}
 	} else {
 		// 验证提供者是否存在且启用（批量查询）
-		providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
+		providers, _, err := db.Query[native.StorageProviderORM](ctx, &db.DBQuery{
 			Where: "id IN ? AND enabled = ?",
 			Args:  []any{providerIds, true},
 		}, false)
@@ -72,11 +73,10 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	}
 	boundProviderIds := string(providerIdsJSON)
 
-	t := int32(native.FileType_FOLDER.Number())
 	f := &native.FileORM{
 		Name:             req.Name,
 		ParentId:         req.ParentId,
-		Type:             &t,
+		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		EnableEncryption: req.EnableEncryption,
 		EncryptFilename:  req.EncryptFilename,
 		BoundProviderIds: &boundProviderIds,

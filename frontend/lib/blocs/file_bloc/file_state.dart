@@ -20,6 +20,7 @@ class FileState extends Equatable {
     this.isSelectMode = false,
     this.breadcrumbs = const [],
     this.searchKeyword = '',
+    this.storageProviders = const [],
   });
 
   final FileStateStatus status;
@@ -33,6 +34,7 @@ class FileState extends Equatable {
   final bool isSelectMode;
   final List<Breadcrumb> breadcrumbs;
   final String searchKeyword;
+  final List<StorageProvider> storageProviders;
 
   @override
   List<Object?> get props => [
@@ -47,6 +49,7 @@ class FileState extends Equatable {
     isSelectMode,
     breadcrumbs,
     searchKeyword,
+    storageProviders,
   ];
 
   FileState copyWith({
@@ -61,6 +64,7 @@ class FileState extends Equatable {
     bool? isSelectMode,
     List<Breadcrumb>? breadcrumbs,
     String? searchKeyword,
+    List<StorageProvider>? storageProviders,
   }) {
     return FileState(
       status: status ?? this.status,
@@ -74,6 +78,7 @@ class FileState extends Equatable {
       isSelectMode: isSelectMode ?? this.isSelectMode,
       breadcrumbs: breadcrumbs ?? this.breadcrumbs,
       searchKeyword: searchKeyword ?? this.searchKeyword,
+      storageProviders: storageProviders ?? this.storageProviders,
     );
   }
 }

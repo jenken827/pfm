@@ -13,9 +13,9 @@ import (
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/internal/utils"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // DNotifier 下载通知器
@@ -123,9 +123,6 @@ func handleDownloadComplete(gid string) {
 		return
 	}
 
-
-
-
 	llog.L().Infof("download record updated, gid: %s, file: %s, size: %s", gid, filePath, totalLength)
 
 	// 恢复同步任务：从下载的文件批量上传到目标提供者
@@ -167,7 +164,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 	// 4. 检查是否需要解密
 	blake3Hash := *dr.Blake3Hash
 	var finalFilePath string = downloadedFilePath
-	
+
 	if sourceLocation != nil && sourceLocation.Encrypted != nil && *sourceLocation.Encrypted {
 		// 需要解密
 		llog.L().Infof("source file is encrypted, decrypting...")
@@ -205,7 +202,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 		originalFileName := filepath.Base(downloadedFilePath)
 		decryptedFileName := "decrypted_" + originalFileName
 		decryptedFilePath := filepath.Join(tempDir, decryptedFileName)
-		
+
 		if err := decryptFileTo(downloadedFilePath, decryptedFilePath, decryptor); err != nil {
 			llog.L().Errorf("decrypt file failed: %v", err)
 			return
@@ -217,8 +214,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 
 	// 5. 更新上传记录的临时文件路径
 	uploadRecord.TempPath = &finalFilePath
-	syncStatus := int32(native.GroupUploadStatus_GUPLOADING)
-	uploadRecord.Status = &syncStatus
+	uploadRecord.Status = utils.EnumPtr(native.GroupUploadStatus_GUPLOADING)
 	if err := db.GetDB().Save(uploadRecord).Error; err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return
@@ -264,7 +260,6 @@ func decryptFileTo(encryptedFilePath string, decryptedFilePath string, decryptor
 
 	return nil
 }
-
 
 // updateDownloadRecordState 更新下载记录状态
 func updateDownloadRecordState(gid string, state native.DownloadRecordState, errMsg string) {

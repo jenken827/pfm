@@ -97,3 +97,8 @@ class FileSearchEvent extends FileEvent {
 
   final String keyword;
 }
+
+/// 加载存储提供者列表事件
+class FileLoadStorageProvidersEvent extends FileEvent {
+  const FileLoadStorageProvidersEvent();
+}

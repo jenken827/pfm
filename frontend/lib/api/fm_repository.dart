@@ -319,6 +319,29 @@ class FmRepository {
     }
   }
 
+  /// 获取支持的存储提供者类型列表
+  Future<ApiResult<GetStorageProviderTypesRespData>> getStorageProviderTypes() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.StorageProviderService/GetStorageProviderTypes',
+        data: GetStorageProviderTypesReq().toProto3Json(),
+      );
+      _logger.info('获取存储提供者类型列表成功');
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetStorageProviderTypesRespData>(
+        data,
+        GetStorageProviderTypesRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取存储提供者类型列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取存储提供者类型列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 添加存储提供者
   Future<ApiResult<void>> addStorageProvider({
     required StorageProviderType providerType,

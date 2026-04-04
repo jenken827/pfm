@@ -45,48 +45,48 @@ message StorageProvider {
     (buf.validate.field).required = true
   ];
   // 总容量
-  optional uint64 total_capacity = 10 [(gorm.field).tag = {
+  optional uint64 total_capacity = 9 [(gorm.field).tag = {
     default: "0"
     not_null: true
   }];
-  optional uint64 used_capacity = 11 [(gorm.field).tag = {
+  optional uint64 used_capacity = 10 [(gorm.field).tag = {
     default: "0"
     not_null: true
   }];
   // 是否启用
-  optional bool enabled = 12 [(gorm.field).tag = {
+  optional bool enabled = 11 [(gorm.field).tag = {
     default: "true"
     not_null: true
   }];
   // 优先级
-  optional uint32 order = 13 [(gorm.field).tag = {
+  optional uint32 order = 12 [(gorm.field).tag = {
     default: "0"
     not_null: true
   }];
   // 文件大小限制
-  optional uint64 file_size_limit = 14 [(gorm.field).tag = {
+  optional uint64 file_size_limit = 13 [(gorm.field).tag = {
     default: "0"
     not_null: true
   }];
   // 加密密钥
-  optional string encryption_key = 15 [(gorm.field).tag = {
+  optional string encryption_key = 14 [(gorm.field).tag = {
     not_null: true
     default: "''"
   }];
   // 是否加密文件名
-  optional bool encrypt_filename = 16 [(gorm.field).tag = {
+  optional bool encrypt_filename = 15 [(gorm.field).tag = {
     not_null: true
     default: "false"
   }];
   // 加密后缀
-  optional string encryption_suffix = 17 [(gorm.field).tag = {
+  optional string encryption_suffix = 16 [(gorm.field).tag = {
     not_null: true
     default: "bin"
   }];
   // 存储提供者所提供的存储类型
-  optional HashType hash_type = 18;
+  optional HashType hash_type = 17;
   // 是否为默认绑定的存储提供者
-  optional bool default_bound = 19 [(gorm.field).tag = {
+  optional bool default_bound = 18 [(gorm.field).tag = {
     not_null: true
     default: "false"
   }];
@@ -113,6 +113,76 @@ message StorageProviderListRespData {
   repeated StorageProvider providers = 1;
 }
 
+// ConfigField 配置字段定义
+message ConfigField {
+  // 字段名称（用于提交时的key）
+  optional string name = 1;
+  // 字段类型
+  optional ConfigFieldType field_type = 2;
+  // 显示标签
+  optional string label = 3;
+  // 占位提示
+  optional string placeholder = 4;
+  // 帮助文本
+  optional string helper_text = 5;
+  // 是否必填
+  optional bool required = 6;
+  // 默认值（JSON格式）
+  optional string default_value = 7;
+  // 验证规则（如正则表达式）
+  optional string validation_pattern = 8;
+  // 验证错误提示
+  optional string validation_message = 9;
+  // 下拉选项（用于SELECT类型）
+  repeated ConfigSelectOption select_options = 10;
+  // 图标名称（前端使用的图标标识）
+  optional string icon_name = 11;
+  // 输入类型（如password, text, number等）
+  optional string input_type = 12;
+  // 最大长度（用于字符串）
+  optional int32 max_length = 13;
+  // 最小值（用于数字）
+  optional double min_value = 14;
+  // 最大值（用于数字）
+  optional double max_value = 15;
+  // 多行文本行数（用于文本域）
+  optional int32 multiline_rows = 16;
+}
+
+// ConfigSelectOption 下拉选择选项
+message ConfigSelectOption {
+  // 选项值
+  string value = 1;
+  // 显示文本
+  string label = 2;
+}
+
+// StorageProviderTypeInfo 存储提供者类型信息
+message StorageProviderTypeInfo {
+  // 类型枚举值
+  optional StorageProviderType type = 1;
+  // 类型名称
+  optional string name = 2;
+  // 显示名称
+  optional string display_name = 3;
+  // 描述
+  optional string description = 4;
+  // 图标名称
+  optional string icon_name = 5;
+  // 配置字段列表
+  repeated ConfigField config_fields = 6;
+}
+
+// GetStorageProviderTypesReq 获取存储提供者类型列表请求
+message GetStorageProviderTypesReq {
+  // 暂时不需要参数，预留扩展
+}
+
+// GetStorageProviderTypesRespData 获取存储提供者类型列表响应
+message GetStorageProviderTypesRespData {
+  repeated StorageProviderTypeInfo types = 1;
+}
+
 
 // StorageProviderDeleteReq 删除存储提供者请求
 message StorageProviderDeleteReq {
@@ -137,6 +207,9 @@ message StorageProviderDeleteReq {
 
 // StorageProviderService 存储提供者管理服务
 service StorageProviderService {
+  // 获取支持的存储提供者类型列表
+  rpc GetStorageProviderTypes(GetStorageProviderTypesReq) returns (BaseResp);
+
   // 创建存储提供者
   rpc AddStorageProvider(StorageProvider) returns (BaseResp);
 

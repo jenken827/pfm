@@ -14,9 +14,9 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/llog"
-	"jenken827.com/jenken827/pfm/internal/utils"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 const (
@@ -359,8 +359,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 // providerId: 目标存储提供者ID
 func uploadToProvider(ctx context.Context, sourcePath string, fileName string, providerID uint32, fl *native.FileLocationORM) error {
 	// 更新状态为上传中
-	status := int32(native.UploadProviderStatus_PUPLOADING)
-	fl.Status = &status
+	fl.Status = utils.EnumPtr(native.UploadProviderStatus_PUPLOADING)
 	db.UpdateFileLocation(fl, []string{"status"})
 
 	// 获取存储实例
@@ -601,8 +600,7 @@ func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {
 	if completedCount == len(targetProviderIds) {
 		// 所有上传都完成
 		if ur.Id != nil {
-			status := int32(native.GroupUploadStatus_GCOMPLETED)
-			db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+			db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GCOMPLETED)}, "id=?", *ur.Id)
 		}
 
 		// 清理整个文件临时目录
@@ -631,8 +629,7 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 		return
 	}
 
-	status := int32(native.GroupUploadStatus_GFAILED)
-	db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+	db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GFAILED)}, "id=?", *ur.Id)
 	llog.L().Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
 }
 
@@ -642,8 +639,7 @@ func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
 		return
 	}
 
-	status := int32(native.GroupUploadStatus_GUPLOADING)
-	db.Update(ctx, &native.UploadRecordORM{Status: &status}, "id=?", *ur.Id)
+	db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GUPLOADING)}, "id=?", *ur.Id)
 }
 
 // acquireLock 获取并发控制锁（非阻塞）

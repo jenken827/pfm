@@ -4,7 +4,8 @@ import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
-import 'package:pfm/proto/native/enum.pbenum.dart';
+import 'package:pfm/pages/settings/components/config_field_widget.dart';
+import 'package:pfm/pages/settings/components/storage_provider_tile.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/utils/format.dart';
 import 'dart:convert';
@@ -16,9 +17,9 @@ class StorageProviderSettingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          StorageProviderBloc(context.read<FmRepository>())
-            ..add(const StorageProviderLoadEvent()),
+      create: (context) => StorageProviderBloc(context.read<FmRepository>())
+        ..add(const StorageProviderLoadTypesEvent())
+        ..add(const StorageProviderLoadEvent()),
       child: const _StorageProviderView(),
     );
   }
@@ -84,8 +85,9 @@ class _StorageProviderView extends StatelessWidget {
             itemCount: state.providers.length,
             itemBuilder: (context, index) {
               final provider = state.providers[index];
-              return _StorageProviderTile(
+              return StorageProviderTile(
                 provider: provider,
+                providerTypes: state.providerTypes,
                 onEdit: () =>
                     _showProviderDialog(context: context, provider: provider),
                 onDelete: () => _showDeleteDialog(context, provider),
@@ -106,20 +108,38 @@ class _StorageProviderView extends StatelessWidget {
     required BuildContext context,
     StorageProvider? provider,
   }) {
+    // 获取存储提供者类型列表
+    final state = context.read<StorageProviderBloc>().state;
+    final providerTypes = state.providerTypes;
+
+    if (providerTypes.isEmpty && provider == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('存储提供者类型列表未加载，请稍后重试')));
+      return;
+    }
+
     final formKey = GlobalKey<FormBuilderState>();
-    StorageProviderType currentType =
-        provider?.providerType ?? StorageProviderType.LOCAL;
+    StorageProviderTypeInfo? selectedTypeInfo;
+
+    // 初始化选中的类型
+    if (provider != null) {
+      selectedTypeInfo = providerTypes.isNotEmpty
+          ? providerTypes.firstWhere(
+              (t) => t.type == provider.providerType,
+              orElse: () => providerTypes.first,
+            )
+          : null;
+    } else if (providerTypes.isNotEmpty) {
+      selectedTypeInfo = providerTypes.first;
+    }
 
     // Parse existing config for edit mode
     Map<String, dynamic> existingConfig = {};
     if (provider != null && provider.config.isNotEmpty) {
       try {
-        // 处理 Windows 路径中的反斜杠转义问题
-        // 后端返回的 JSON 字符串中，反斜杠可能没有正确双重转义
         String configStr = provider.config;
-        // 将单个反斜杠替换为双反斜杠（但跳过已经是双反斜杠的情况）
         configStr = configStr.replaceAll(r'\', r'\\');
-        // 然后将过度转义的双反斜杠还原（\" 应该保持为 \"）
         configStr = configStr.replaceAll(r'\\\"', r'\"');
         existingConfig = jsonDecode(configStr);
       } catch (e) {
@@ -176,27 +196,23 @@ class _StorageProviderView extends StatelessWidget {
                   children: [
                     const SizedBox(height: 12),
                     // Show type selector only for add dialog
-                    if (provider == null) ...[
-                      FormBuilderDropdown<StorageProviderType>(
+                    if (provider == null && providerTypes.isNotEmpty) ...[
+                      FormBuilderDropdown<StorageProviderTypeInfo>(
                         name: 'provider_type',
                         decoration: const InputDecoration(
                           labelText: '存储类型',
                           prefixIcon: Icon(Icons.category),
                         ),
-                        initialValue: StorageProviderType.LOCAL,
-                        items: const [
-                          DropdownMenuItem(
-                            value: StorageProviderType.LOCAL,
-                            child: Text('本地存储'),
-                          ),
-                          DropdownMenuItem(
-                            value: StorageProviderType.TELEGRAM,
-                            child: Text('Telegram'),
-                          ),
-                        ],
+                        initialValue: selectedTypeInfo,
+                        items: providerTypes.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Text(type.displayName),
+                          );
+                        }).toList(),
                         onChanged: (value) {
                           if (value != null) {
-                            setDialogState(() => currentType = value);
+                            setDialogState(() => selectedTypeInfo = value);
                           }
                         },
                       ),
@@ -325,60 +341,21 @@ class _StorageProviderView extends StatelessWidget {
                       ],
                     ),
 
-                    const SizedBox(height: 16),
-
-                    // 配置信息标题
-                    Text(
-                      '配置信息',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    // 动态配置字段
+                    if (selectedTypeInfo != null &&
+                        selectedTypeInfo!.configFields.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        '配置信息',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Type-specific configuration - 使用 currentType 响应变化
-                    if (currentType == StorageProviderType.LOCAL)
-                      Column(
-                        children: [
-                          FormBuilderTextField(
-                            name: 'root_path',
-                            decoration: const InputDecoration(
-                              labelText: '根路径',
-                              hintText: '例如：/data/storage',
-                              helperText: '存储文件的根目录路径',
-                              prefixIcon: Icon(Icons.folder_open),
-                            ),
-                            initialValue: existingConfig['root_path'],
-                            validator: FormBuilderValidators.required(
-                              errorText: '请输入根目录路径',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          FormBuilderTextField(
-                            name: 'mkdir_permission',
-                            decoration: const InputDecoration(
-                              labelText: '文件夹权限',
-                              hintText: '0755',
-                              helperText: '新建文件夹的权限（八进制）',
-                              prefixIcon: Icon(Icons.security),
-                            ),
-                            initialValue:
-                                existingConfig['mkdir_permission'] ?? '0755',
-                          ),
-                        ],
-                      )
-                    else if (currentType == StorageProviderType.TELEGRAM)
-                      FormBuilderTextField(
-                        name: 'bot_token',
-                        decoration: const InputDecoration(
-                          labelText: 'Bot Token',
-                          hintText: '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
-                          helperText: '从 @BotFather 获取的 Telegram Bot Token',
-                          prefixIcon: Icon(Icons.send),
-                        ),
-                        initialValue: existingConfig['bot_token'],
-                        maxLines: 1,
+                      const SizedBox(height: 16),
+                      // 动态渲染配置字段
+                      ...selectedTypeInfo!.configFields.map(
+                        (field) => buildConfigField(field, existingConfig),
                       ),
+                    ],
 
                     // 加密设置（仅添加时显示，编辑时不显示）
                     if (provider == null) ...[
@@ -437,36 +414,40 @@ class _StorageProviderView extends StatelessWidget {
                 if (formKey.currentState?.saveAndValidate() ?? false) {
                   final formData = formKey.currentState!.value;
 
+                  // 解析容量值，空值默认为0
+                  final capacityValueStr = formData['capacity_value']?.toString() ?? '';
+                  final capacityValue = capacityValueStr.isEmpty ? 0.0 : (double.tryParse(capacityValueStr) ?? 0.0);
                   final capacity = parseCapacityFromUnit(
-                    double.parse(formData['capacity_value']),
-                    formData['capacity_unit'],
+                    capacityValue,
+                    formData['capacity_unit'] ?? 'GB',
                   );
+
+                  // 解析文件大小限制，空值默认为0
+                  final fileSizeLimitValueStr = formData['file_size_limit_value']?.toString() ?? '';
+                  final fileSizeLimitValue = fileSizeLimitValueStr.isEmpty ? 0.0 : (double.tryParse(fileSizeLimitValueStr) ?? 0.0);
                   final fileSizeLimit = parseCapacityFromUnit(
-                    double.parse(formData['file_size_limit_value']),
-                    formData['file_size_limit_unit'],
+                    fileSizeLimitValue,
+                    formData['file_size_limit_unit'] ?? 'MB',
                   );
 
-                  // Build configuration JSON
+                  // Build configuration JSON dynamically
                   String? configJson;
+                  // 获取有效的提供者类型（确保非空）
+                  final effectiveTypeInfo = selectedTypeInfo;
                   final effectiveProviderType =
-                      provider?.providerType ??
-                      (formData['provider_type'] as StorageProviderType);
+                      provider?.providerType ?? effectiveTypeInfo?.type;
 
-                  if (effectiveProviderType == StorageProviderType.LOCAL) {
-                    // 使用 Map 和 jsonEncode 构建 JSON，确保正确转义
-                    final configMap = <String, dynamic>{
-                      if (formData['root_path']?.isNotEmpty == true)
-                        'root_path': formData['root_path'],
-                      if (formData['mkdir_permission']?.isNotEmpty == true)
-                        'mkdir_permission': formData['mkdir_permission'],
-                    };
-                    configJson = jsonEncode(configMap);
-                  } else if (effectiveProviderType ==
-                      StorageProviderType.TELEGRAM) {
-                    if (formData['bot_token']?.isNotEmpty == true) {
-                      configJson = jsonEncode({
-                        'bot_token': formData['bot_token'],
-                      });
+                  if (effectiveTypeInfo != null) {
+                    final configMap = <String, dynamic>{};
+                    for (final field in effectiveTypeInfo.configFields) {
+                      final fieldValue = formData[field.name];
+                      if (fieldValue != null &&
+                          fieldValue.toString().isNotEmpty) {
+                        configMap[field.name] = fieldValue;
+                      }
+                    }
+                    if (configMap.isNotEmpty) {
+                      configJson = jsonEncode(configMap);
                     }
                   }
 
@@ -477,7 +458,9 @@ class _StorageProviderView extends StatelessWidget {
                   context.read<StorageProviderBloc>().add(
                     provider == null
                         ? StorageProviderAddEvent(
-                            providerType: effectiveProviderType,
+                            providerType:
+                                effectiveProviderType ??
+                                effectiveTypeInfo!.type,
                             name: formData['name'],
                             description:
                                 formData['description']?.isNotEmpty == true
@@ -552,185 +535,6 @@ class _StorageProviderView extends StatelessWidget {
             child: const Text('删除'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 存储介质列表项
-class _StorageProviderTile extends StatelessWidget {
-  const _StorageProviderTile({
-    required this.provider,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final StorageProvider provider;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  IconData get _typeIcon {
-    switch (provider.providerType.value) {
-      case 1:
-        return Icons.storage;
-      case 2:
-        return Icons.telegram;
-      default:
-        return Icons.storage;
-    }
-  }
-
-  String get _typeName {
-    switch (provider.providerType.value) {
-      case 1:
-        return '本地存储';
-      case 2:
-        return 'Telegram';
-      default:
-        return '未知';
-    }
-  }
-
-  /// 计算容量使用百分比
-  double get _capacityPercent {
-    final total = provider.totalCapacity.toInt();
-    final used = provider.usedCapacity.toInt();
-    if (total <= 0) return 0;
-    return (used / total).clamp(0.0, 1.0);
-  }
-
-  /// 是否有容量信息
-  bool get _hasCapacity =>
-      provider.hasTotalCapacity() && provider.totalCapacity.toInt() > 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return InkWell(
-      onTap: onEdit,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // 图标
-            Icon(_typeIcon, size: 40),
-            const SizedBox(width: 16),
-            // 内容区域
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 第一行：名称和状态标签
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          provider.name,
-                          style: theme.textTheme.titleMedium,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      // 状态标签
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: provider.enabled
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          provider.enabled ? '已启用' : '已禁用',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: provider.enabled
-                                ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // 操作菜单
-                      PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            onEdit();
-                          } else if (value == 'delete') {
-                            onDelete();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('编辑')),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text(
-                              '删除',
-                              style: TextStyle(color: theme.colorScheme.error),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // 第二行：类型
-                  Text(
-                    _typeName,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  // 第三行：容量信息（如果有）
-                  if (_hasCapacity) ...[
-                    const SizedBox(height: 8),
-                    // 进度条
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: _capacityPercent,
-                        backgroundColor:
-                            theme.colorScheme.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          _capacityPercent > 0.9
-                              ? theme.colorScheme.error
-                              : _capacityPercent > 0.7
-                              ? Colors.orange
-                              : theme.colorScheme.primary,
-                        ),
-                        minHeight: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // 容量文字
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${formatCapacityString(provider.usedCapacity.toInt())} / ${formatCapacityString(provider.totalCapacity.toInt())}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        Text(
-                          '已用 ${(_capacityPercent * 100).toStringAsFixed(1)}%',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: _capacityPercent > 0.9
-                                ? theme.colorScheme.error
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

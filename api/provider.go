@@ -18,6 +18,16 @@ type StorageProviderServer struct{}
 
 var _ = (nativeconnect.StorageProviderServiceHandler)((*StorageProviderServer)(nil))
 
+// GetStorageProviderTypes 获取支持的存储提供者类型列表
+func (s *StorageProviderServer) GetStorageProviderTypes(ctx context.Context, req *connect.Request[native.GetStorageProviderTypesReq]) (*connect.Response[native.BaseResp], error) {
+	data, err := service.GetStorageProviderTypes(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+
+	return response.SuccessResp(data)
+}
+
 // AddStorageProvider 添加存储提供者
 func (s *StorageProviderServer) AddStorageProvider(ctx context.Context, req *connect.Request[native.StorageProvider]) (*connect.Response[native.BaseResp], error) {
 	err := service.AddStorageProvider(ctx, req.Msg)

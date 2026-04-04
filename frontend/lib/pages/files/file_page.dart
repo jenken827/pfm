@@ -18,7 +18,8 @@ class FilePage extends StatelessWidget {
     return BlocProvider(
       create: (context) =>
           FileBloc(context.read<FmRepository>())
-            ..add(FileListEvent(dirId: dirId)),
+            ..add(FileListEvent(dirId: dirId))
+            ..add(const FileLoadStorageProvidersEvent()),
       child: const _FileView(),
     );
   }
@@ -585,6 +586,16 @@ class _FileView extends StatelessWidget {
     final nameController = TextEditingController();
     bool enableEncryption = false;
     bool encryptFilename = false;
+    List<int> selectedProviderIds = [];
+
+    // 从 Bloc 获取存储提供者列表
+    final fileState = context.read<FileBloc>().state;
+    final providers = fileState.storageProviders;
+    // 默认选中所有启用的存储提供者
+    selectedProviderIds = providers
+        .where((p) => p.enabled)
+        .map((p) => p.id)
+        .toList();
 
     showDialog(
       context: context,
@@ -605,6 +616,33 @@ class _FileView extends StatelessWidget {
                   autofocus: true,
                 ),
                 const SizedBox(height: 16),
+                // 存储提供者选择
+                if (providers.isNotEmpty) ...[
+                  Text(
+                    '绑定存储提供者',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  ...providers.map((provider) => CheckboxListTile(
+                    title: Text(provider.name),
+                    subtitle: Text(provider.enabled ? '已启用' : '已禁用'),
+                    value: selectedProviderIds.contains(provider.id),
+                    enabled: provider.enabled,
+                    onChanged: (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          selectedProviderIds.add(provider.id);
+                        } else {
+                          selectedProviderIds.remove(provider.id);
+                        }
+                      });
+                    },
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  )),
+                  const SizedBox(height: 16),
+                ],
                 // 加密选项
                 SwitchListTile(
                   title: const Text('启用加密'),
@@ -641,6 +679,9 @@ class _FileView extends StatelessWidget {
                       name: nameController.text,
                       enableEncryption: enableEncryption,
                       encryptFilename: encryptFilename,
+                      providerIds: selectedProviderIds.isEmpty 
+                          ? null 
+                          : selectedProviderIds,
                     ),
                   );
                   Navigator.pop(ctx);

@@ -67,3 +67,37 @@ func SliceToMapWithOverride[K comparable, V any](slice []V, keyFunc func(V) K) m
 	}
 	return result
 }
+
+// ==================== 指针辅助函数 ====================
+
+// StringPtr 辅助函数：字符串指针
+func StringPtr(s string) *string {
+	return &s
+}
+
+// Int32Ptr 辅助函数：int32指针
+func Int32Ptr(i int32) *int32 {
+	return &i
+}
+
+// Int64Ptr 辅助函数：int64指针
+func Int64Ptr(i int64) *int64 {
+	return &i
+}
+
+// Float64Ptr 辅助函数：float64指针
+func Float64Ptr(f float64) *float64 {
+	return &f
+}
+
+// BoolPtr 辅助函数：bool指针
+func BoolPtr(b bool) *bool {
+	return &b
+}
+
+// EnumPtr 泛型辅助函数：枚举类型转int32指针
+// 支持所有枚举类型，返回*int32以便与protobuf的optional int32字段兼容
+func EnumPtr[T ~int32](v T) *int32 {
+	p := int32(v)
+	return &p
+}

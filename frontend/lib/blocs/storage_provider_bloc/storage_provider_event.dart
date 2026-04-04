@@ -5,6 +5,11 @@ sealed class StorageProviderEvent {
   const StorageProviderEvent();
 }
 
+/// 加载存储提供者类型列表
+class StorageProviderLoadTypesEvent extends StorageProviderEvent {
+  const StorageProviderLoadTypesEvent();
+}
+
 /// 加载存储介质列表
 class StorageProviderLoadEvent extends StorageProviderEvent {
   const StorageProviderLoadEvent();

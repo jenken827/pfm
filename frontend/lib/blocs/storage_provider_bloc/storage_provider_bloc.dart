@@ -13,11 +13,37 @@ class StorageProviderBloc
   final FmRepository _repository;
 
   StorageProviderBloc(this._repository) : super(const StorageProviderState()) {
+    on<StorageProviderLoadTypesEvent>(_onLoadTypes);
     on<StorageProviderLoadEvent>(_onLoad);
     on<StorageProviderAddEvent>(_onAdd);
     on<StorageProviderUpdateEvent>(_onUpdate);
     on<StorageProviderDeleteEvent>(_onDelete);
     on<StorageProviderToggleEvent>(_onToggle);
+  }
+
+  Future<void> _onLoadTypes(
+    StorageProviderLoadTypesEvent event,
+    Emitter<StorageProviderState> emit,
+  ) async {
+    emit(state.copyWith(status: StorageProviderStatus.loading));
+
+    final result = await _repository.getStorageProviderTypes();
+
+    if (result.success) {
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.success,
+          providerTypes: result.data?.types.toList() ?? [],
+        ),
+      );
+    } else {
+      emit(
+        state.copyWith(
+          status: StorageProviderStatus.failure,
+          message: result.message ?? '获取存储提供者类型失败',
+        ),
+      );
+    }
   }
 
   Future<void> _onLoad(

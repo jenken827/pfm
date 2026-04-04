@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/syncmap"
 )
 
+// storages 存储实例映射
 var storages syncmap.Map
 
 // Init 初始化存储
@@ -20,17 +21,7 @@ func Init() {
 		panic(err)
 	}
 	for _, sp := range sps {
-		dc := types.GetDriverConstructor(native.StorageProviderType(*sp.ProviderType))
-		if dc == nil {
-			llog.L().Error("storage provider driver constructor is nil", *sp.ProviderType)
-			continue
-		}
-		ins, err := dc(sp)
-		if err != nil {
-			llog.L().Errorf("create storage provider failed, err: %v", err)
-			continue
-		}
-		storages.Store(*sp.Id, ins)
+		createAndStoreDriver(sp)
 	}
 
 	// 启动时恢复未完成的上传任务
@@ -48,4 +39,62 @@ func GetStorage(id uint32) types.StorageDriver {
 		return v.(types.StorageDriver)
 	}
 	return nil
+}
+
+// createAndStoreDriver 创建并存储驱动实例
+func createAndStoreDriver(sp *native.StorageProviderORM) error {
+	dc := types.GetDriverConstructor(native.StorageProviderType(*sp.ProviderType))
+	if dc == nil {
+		llog.L().Error("storage provider driver constructor is nil", *sp.ProviderType)
+		return nil
+	}
+
+	ins, err := dc(sp)
+	if err != nil {
+		llog.L().Errorf("create storage provider failed, err: %v", err)
+		return err
+	}
+
+	storages.Store(*sp.Id, ins)
+	return nil
+}
+
+// AddStorage 添加存储实例
+func AddStorage(sp *native.StorageProviderORM) error {
+	if !*sp.Enabled {
+		return nil
+	}
+
+	if err := createAndStoreDriver(sp); err != nil {
+		return err
+	}
+
+	llog.L().Infof("storage provider added, id: %d", *sp.Id)
+	return nil
+}
+
+// UpdateStorage 更新存储实例
+func UpdateStorage(sp *native.StorageProviderORM) error {
+	// 先删除旧实例
+	storages.Delete(*sp.Id)
+
+	// 如果启用则重新创建
+	if *sp.Enabled {
+		if err := createAndStoreDriver(sp); err != nil {
+			return err
+		}
+		llog.L().Infof("storage provider updated, id: %d", *sp.Id)
+	} else {
+		llog.L().Infof("storage provider disabled, id: %d", *sp.Id)
+	}
+
+	return nil
+}
+
+// DeleteStorage 删除存储实例
+func DeleteStorage(ids []uint32) {
+	for _, id := range ids {
+		storages.Delete(id)
+		llog.L().Infof("storage provider deleted, id: %d", id)
+	}
 }

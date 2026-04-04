@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/utils.dart';
 
@@ -24,6 +25,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     on<FileRenameEvent>(_onRename);
     on<FileNavigateEvent>(_onNavigate);
     on<FileSearchEvent>(_onSearch);
+    on<FileLoadStorageProvidersEvent>(_onLoadStorageProviders);
   }
 
   final FmRepository fmRepository;
@@ -192,6 +194,17 @@ class FileBloc extends Bloc<FileEvent, FileState> {
   Future<void> _onSearch(FileSearchEvent event, Emitter<FileState> emit) async {
     // TODO: 实现搜索功能
     emit(state.copyWith(searchKeyword: event.keyword));
+  }
+
+  /// 加载存储提供者列表
+  Future<void> _onLoadStorageProviders(
+    FileLoadStorageProvidersEvent event,
+    Emitter<FileState> emit,
+  ) async {
+    final resp = await fmRepository.listStorageProviders();
+    if (resp.success && resp.data != null) {
+      emit(state.copyWith(storageProviders: resp.data!.providers.toList()));
+    }
   }
 
   //有两种情况：1. 从目录进入  2. 从面包屑跳转
