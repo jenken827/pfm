@@ -1,5 +1,6 @@
 import 'package:pfm/proto/native/common.pb.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/services/logger.dart';
 import 'package:protobuf/protobuf.dart';
 
 /// 从响应数据中提取特定类型的数据（Isolate 中使用）
@@ -8,6 +9,7 @@ T extractRespData<T extends GeneratedMessage>(
   T message,
 ) {
   final br = BaseResp();
+  getLogger().debug('extractRespData: $jsonData');
   br.mergeFromProto3Json(jsonData, typeRegistry: TypeRegistry([message]));
 
   if (br.code != RespCode.SUCCESS) {

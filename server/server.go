@@ -1,10 +1,17 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"jenken827.com/jenken827/pfm/internal/config"
+	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/server/middleware"
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
@@ -12,7 +19,6 @@ import (
 
 // Run 启动服务
 func Run() {
-
 	mux := http.NewServeMux()
 	p := new(http.Protocols)
 
@@ -51,10 +57,49 @@ func Run() {
 
 	// 配置 HTTP/2
 	if err := http2.ConfigureServer(s, http2Server); err != nil {
-		panic(err)
+		llog.L().Errorf("Configure HTTP/2 failed: %v", err)
+		os.Exit(1)
 	}
-	fmt.Println("Starting server on localhost:", schema.Port, "...")
-	if err := s.ListenAndServe(); err != nil {
-		panic(err)
+
+	// 服务启动错误通道
+	serverErr := make(chan error, 1)
+
+	// 使用单独协程启动服务
+	go func() {
+		llog.L().Infof("Starting server on %s:%d", schema.Addr, schema.Port)
+		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	// 监听结束信号或启动错误
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	fmt.Printf("Starting server on %s:%d\n", schema.Addr, schema.Port)
+
+	select {
+	case err := <-serverErr:
+		// 服务启动失败
+		llog.L().Errorf("Server failed to start: %v", err)
+		// 关闭所有存储驱动
+		storage.CloseAll()
+		os.Exit(1)
+	case <-quit:
+		// 收到结束信号
+		llog.L().Info("Shutting down server...")
+
+		// 创建超时上下文
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// 优雅关闭 HTTP 服务
+		if err := s.Shutdown(ctx); err != nil {
+			llog.L().Errorf("Server shutdown error: %v", err)
+		}
+
+		// 关闭所有存储驱动
+		storage.CloseAll()
+
+		llog.L().Info("Server exited")
 	}
 }

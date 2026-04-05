@@ -7,33 +7,55 @@ import (
 	"gorm.io/gorm"
 )
 
-// FilterProviderCreate 过滤掉创建时不可以设置的字段
-func FilterProviderCreate(provider *native.StorageProviderORM) {
-	filterProvider(provider, false)
-}
-
-// 过滤掉不可以设置的字段
-func filterProvider(provider *native.StorageProviderORM, update bool) {
-	provider.Id = nil
-	provider.CreatedAt = nil
-	provider.UpdatedAt = nil
-	provider.DeletedAt = nil
-	provider.UsedCapacity = nil
-	if update {
-		provider.ProviderType = nil
-		provider.Config = nil
-		provider.EncryptFilename = nil
-		provider.EncryptionKey = nil
-		provider.EncryptionSuffix = nil
-	}
+// CreateStorageProvider 创建存储提供者
+func CreateStorageProvider(provider *native.StorageProviderORM) error {
+	ctx := context.Background()
+	return gorm.G[native.StorageProviderORM](db).Create(ctx, provider)
 }
 
 // UpdateStorageProvider 更新存储提供者
 func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 	ctx := context.Background()
-	id := provider.Id
-	filterProvider(provider, true)
-	_, err := gorm.G[native.StorageProviderORM](db).Where("id=?", id).Updates(ctx, *provider)
+	id := *provider.Id
+	fields := []string{}
+
+	if provider.DefaultBound != nil {
+		fields = append(fields, "default_bound")
+	}
+	if provider.Description != nil {
+		fields = append(fields, "description")
+	}
+	if provider.Enabled != nil {
+		fields = append(fields, "enabled")
+	}
+	if provider.FileSizeLimit != nil {
+		fields = append(fields, "file_size_limit")
+	}
+	if provider.Name != nil {
+		fields = append(fields, "name")
+	}
+	if provider.Order != nil {
+		fields = append(fields, "order")
+	}
+	if provider.TotalCapacity != nil {
+		fields = append(fields, "total_capacity")
+	}
+	if provider.Proxy != nil {
+		fields = append(fields, "proxy")
+	}
+
+	// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
+	// 需要正确展开字段列表
+	if len(fields) == 0 {
+		_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Updates(ctx, provider)
+		return err
+	}
+	// 将剩余字段转换为 []interface{}
+	args := make([]any, len(fields)-1)
+	for i, f := range fields[1:] {
+		args[i] = f
+	}
+	_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Select(fields[0], args...).Updates(ctx, provider)
 	return err
 }
 
@@ -42,4 +64,35 @@ func DeleteStorageProvider(ids []uint32) error {
 	ctx := context.Background()
 	_, err := gorm.G[native.StorageProviderORM](db).Where("id in ?", ids).Delete(ctx)
 	return err
+}
+
+// GetEnabledProviders 获取启用的存储提供者
+func GetEnabledProviders() ([]*native.StorageProviderORM, error) {
+	ctx := context.Background()
+	return gorm.G[*native.StorageProviderORM](db).Where("enabled = ?", true).Find(ctx)
+}
+
+// GetEnabledProvidersByIds 获取启用的存储提供者
+func GetEnabledProvidersByIds(ids []uint32) ([]*native.StorageProviderORM, error) {
+	ctx := context.Background()
+	return gorm.G[*native.StorageProviderORM](db).Where("id in ? and enabled = ?", ids, true).Find(ctx)
+}
+
+// GetDefaultEnabledProvider 获取默认启用的存储提供者
+func GetDefaultEnabledProvider() ([]*native.StorageProviderORM, error) {
+	ctx := context.Background()
+	return gorm.G[*native.StorageProviderORM](db).Where("default_bound = ? and enabled = ?", true, true).Find(ctx)
+}
+
+// GetProviderByID 获取存储提供者
+func GetProviderByID(id uint32) (*native.StorageProviderORM, error) {
+	ctx := context.Background()
+	provider, err := gorm.G[*native.StorageProviderORM](db).Where("id = ?", id).First(ctx)
+	return provider, err
+}
+
+// GetAllProviders 获取所有存储提供者
+func GetAllProviders() ([]*native.StorageProviderORM, error) {
+	ctx := context.Background()
+	return gorm.G[*native.StorageProviderORM](db).Find(ctx)
 }

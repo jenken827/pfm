@@ -31,6 +31,8 @@ type StorageDriver interface {
 	Link(ctx context.Context, fileLocation *native.FileLocationORM) (string, error)
 	// Delete 删除文件
 	Delete(ctx context.Context, fileLocation *native.FileLocationORM) error
+
+	Close()
 }
 
 // DriverConstructor 驱动构造函数

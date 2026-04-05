@@ -42,7 +42,7 @@ message UploadRecord {
     not_null: true
     default: "false"
   }];
-  optional  GroupUploadStatus status = 12 [(gorm.field).tag = {not_null: true}];
+  optional  UploadProviderStatus status = 12 [(gorm.field).tag = {not_null: true}];
   // 目标存储提供者ID列表（逗号分隔字符串）
   optional string target_provider_ids = 13 [(gorm.field).tag = {
     not_null: true

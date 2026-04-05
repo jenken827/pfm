@@ -134,12 +134,9 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 	// 1. 获取上传记录
 	var uploadRecord *native.UploadRecordORM
 	if dr.UploadRecordId != nil {
-		records, _, err := db.Query[native.UploadRecordORM](context.Background(), &db.DBQuery{
-			Where: "id = ?",
-			Args:  []any{*dr.UploadRecordId},
-		}, false)
-		if err == nil && len(records) > 0 {
-			uploadRecord = records[0]
+		record, _, err := db.GetUploadRecordByID(*dr.UploadRecordId, false)
+		if err == nil {
+			uploadRecord = record
 		}
 	}
 
@@ -152,12 +149,9 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 	// 3. 获取源文件位置记录
 	var sourceLocation *native.FileLocationORM
 	if dr.SourceLocationId != nil {
-		locations, err := db.GetFileLocations(&db.DBQuery{
-			Where: "id = ?",
-			Args:  []any{*dr.SourceLocationId},
-		})
-		if err == nil && len(locations) > 0 {
-			sourceLocation = locations[0]
+		location, err := db.GetFileLocationByID(*dr.SourceLocationId)
+		if err == nil {
+			sourceLocation = location
 		}
 	}
 
@@ -214,7 +208,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 
 	// 5. 更新上传记录的临时文件路径
 	uploadRecord.TempPath = &finalFilePath
-	uploadRecord.Status = utils.EnumPtr(native.GroupUploadStatus_GUPLOADING)
+	uploadRecord.Status = utils.EnumPtr(native.UploadProviderStatus_PUPLOADING)
 	if err := db.GetDB().Save(uploadRecord).Error; err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return

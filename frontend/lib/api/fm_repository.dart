@@ -320,7 +320,8 @@ class FmRepository {
   }
 
   /// 获取支持的存储提供者类型列表
-  Future<ApiResult<GetStorageProviderTypesRespData>> getStorageProviderTypes() async {
+  Future<ApiResult<GetStorageProviderTypesRespData>>
+  getStorageProviderTypes() async {
     try {
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/GetStorageProviderTypes',
@@ -348,31 +349,33 @@ class FmRepository {
     required String name,
     String? description,
     String? config,
-    required bool enabled,
-    required int order,
-    required int totalCapacity,
-    required int fileSizeLimit,
+    bool? enabled,
+    int? order,
+    int? totalCapacity,
+    int? fileSizeLimit,
     String? encryptionKey,
     bool? encryptFilename,
     String? encryptionSuffix,
     bool? defaultBound,
+    String? proxy,
   }) async {
     try {
-      final req = StorageProvider(
+      final req = AddStorageProviderReq(
         providerType: providerType,
         name: name,
-        enabled: enabled,
-        order: order,
-        totalCapacity: Int64(totalCapacity),
-        fileSizeLimit: Int64(fileSizeLimit),
       );
 
       if (description != null) req.description = description;
       if (config != null) req.config = config;
+      if (enabled != null) req.enabled = enabled;
+      if (order != null) req.order = order;
+      if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
+      if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (encryptionKey != null) req.encryptionKey = encryptionKey;
       if (encryptFilename != null) req.encryptFilename = encryptFilename;
       if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
       if (defaultBound != null) req.defaultBound = defaultBound;
+      if (proxy != null) req.proxy = proxy;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
@@ -396,23 +399,23 @@ class FmRepository {
     required int id,
     String? name,
     String? description,
-    String? config,
     bool? enabled,
     int? order,
     int? totalCapacity,
     int? fileSizeLimit,
     bool? defaultBound,
+    String? proxy,
   }) async {
     try {
-      final req = StorageProvider(id: id);
+      final req = UpdateStorageProviderReq(id: id);
       if (name != null) req.name = name;
       if (description != null) req.description = description;
-      if (config != null) req.config = config;
       if (enabled != null) req.enabled = enabled;
       if (order != null) req.order = order;
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (defaultBound != null) req.defaultBound = defaultBound;
+      if (proxy != null) req.proxy = proxy;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',

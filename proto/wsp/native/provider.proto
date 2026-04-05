@@ -90,6 +90,8 @@ message StorageProvider {
     not_null: true
     default: "false"
   }];
+  // 代理地址（如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080）
+  optional string proxy = 19;
 }
 
 // StorageProviderGetReq 获取存储提供者请求
@@ -190,6 +192,62 @@ message StorageProviderDeleteReq {
   repeated uint32 ids = 1;
 }
 
+// AddStorageProviderReq 创建存储提供者请求
+message AddStorageProviderReq {
+  // 类型
+  optional StorageProviderType provider_type = 1 [(buf.validate.field).required = true];
+  // 实例名称
+  optional string name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 100
+  ];
+  // 实例描述
+  optional string description = 3;
+  // 实例配置（JSON格式）
+  optional string config = 4 [(buf.validate.field).required = true];
+  // 是否启用
+  optional bool enabled = 5;
+  // 优先级
+  optional uint32 order = 6;
+  // 总容量（字节）
+  optional uint64 total_capacity = 7;
+  // 文件大小限制（字节）
+  optional uint64 file_size_limit = 8;
+  // 加密密钥
+  optional string encryption_key = 9;
+  // 是否加密文件名
+  optional bool encrypt_filename = 10;
+  // 加密后缀
+  optional string encryption_suffix = 11;
+  // 是否为默认绑定
+  optional bool default_bound = 12;
+  // 代理地址
+  optional string proxy = 13;
+}
+
+// UpdateStorageProviderReq 更新存储提供者请求
+message UpdateStorageProviderReq {
+  // 存储实例 ID
+  optional uint32 id = 1 [(buf.validate.field).required = true];
+  // 实例名称
+  optional string name = 2 [(buf.validate.field).string.min_len = 1];
+  // 实例描述
+  optional string description = 3;
+  // 是否启用
+  optional bool enabled = 4;
+  // 优先级
+  optional uint32 order = 5;
+  // 总容量（字节）
+  optional uint64 total_capacity = 6;
+  // 文件大小限制（字节）
+  optional uint64 file_size_limit = 7;
+  // 是否为默认绑定
+  optional bool default_bound = 8;
+  // 代理地址
+  optional string proxy = 9;
+}
+
 // // StorageProviderStatsReq 获取存储提供者统计信息请求
 // message StorageProviderStatsReq {
 //   optional uint32 id = 1;
@@ -211,7 +269,7 @@ service StorageProviderService {
   rpc GetStorageProviderTypes(GetStorageProviderTypesReq) returns (BaseResp);
 
   // 创建存储提供者
-  rpc AddStorageProvider(StorageProvider) returns (BaseResp);
+  rpc AddStorageProvider(AddStorageProviderReq) returns (BaseResp);
 
   // 获取存储提供者详情
   rpc GetStorageProvider(StorageProviderGetReq) returns (BaseResp);
@@ -220,7 +278,7 @@ service StorageProviderService {
   rpc ListStorageProviders(google.protobuf.Empty) returns (BaseResp);
 
   // 更新存储提供者
-  rpc UpdateStorageProvider(StorageProvider) returns (BaseResp);
+  rpc UpdateStorageProvider(UpdateStorageProviderReq) returns (BaseResp);
 
   // 删除存储提供者
   rpc DeleteStorageProvider(StorageProviderDeleteReq) returns (BaseResp);

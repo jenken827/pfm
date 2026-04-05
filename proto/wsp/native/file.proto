@@ -17,6 +17,7 @@ message File {
   // 文件id
   optional string id = 1 [(gorm.field).tag = {
     primary_key: true
+    not_null: true
     type: "char(36)"
   }];
   // ct,mt,dt 三件套

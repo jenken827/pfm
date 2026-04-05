@@ -22,28 +22,30 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     required this.name,
     this.description,
     this.config,
-    this.enabled = true,
-    this.order = 0,
-    required this.capacity,
-    required this.fileSizeLimit,
+    this.enabled,
+    this.order,
+    this.capacity,
+    this.fileSizeLimit,
     this.encryptionKey,
     this.encryptFilename,
     this.encryptionSuffix,
     this.defaultBound,
+    this.proxy,
   });
 
   final StorageProviderType providerType;
   final String name;
   final String? description;
   final String? config;
-  final bool enabled;
-  final int order;
-  final int capacity;
-  final int fileSizeLimit;
+  final bool? enabled;
+  final int? order;
+  final int? capacity;
+  final int? fileSizeLimit;
   final String? encryptionKey;
   final bool? encryptFilename;
   final String? encryptionSuffix;
   final bool? defaultBound;
+  final String? proxy;
 }
 
 /// 更新存储介质
@@ -52,23 +54,23 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     required this.id,
     this.name,
     this.description,
-    this.config,
     this.enabled,
     this.order,
     this.capacity,
     this.fileSizeLimit,
     this.defaultBound,
+    this.proxy,
   });
 
   final int id;
   final String? name;
   final String? description;
-  final String? config;
   final bool? enabled;
   final int? order;
   final int? capacity;
   final int? fileSizeLimit;
   final bool? defaultBound;
+  final String? proxy;
 }
 
 /// 删除存储介质

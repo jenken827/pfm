@@ -6,20 +6,36 @@ import (
 	"strings"
 
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-// GetFiles 获取文件
-func GetFiles(expression string, args ...any) ([]*native.FileORM, error) {
-	return gorm.G[*native.FileORM](db).Where(expression, args...).Find(context.Background())
+// GetFileByID 获取文件
+func GetFileByID(id string) (*native.FileORM, error) {
+	return gorm.G[*native.FileORM](db).Where("id=?", id).First(context.Background())
 }
 
-// CreateDir 创建文件夹
-func CreateDir(file *native.FileORM) error {
-	return db.Where(map[string]any{"parent_id": *file.ParentId, "name": *file.Name}).Attrs(file).FirstOrCreate(file).Error
+// GetFileByHash 获取文件
+func GetFileByHash(hash string) (*native.FileORM, error) {
+	return gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
 }
 
-// DeleteFiles 批量删除文件（软删除）
+// GetFileByParentAndName 获取文件
+func GetFileByParentAndName(parentID string, name string) (*native.FileORM, error) {
+	return gorm.G[*native.FileORM](db).Where("parent_id=? AND name=?", parentID, name).First(context.Background())
+}
+
+// CreateFile 创建文件
+func CreateFile(file *native.FileORM) error {
+	if file.Id == nil {
+		uuid, _ := uuid.NewV7()
+		file.Id = utils.StringPtr(uuid.String())
+	}
+	return db.FirstOrCreate(file).Error
+}
+
+// DeleteFiles 批量删除文件
 func DeleteFiles(ids []string) error {
 	_, err := gorm.G[native.FileORM](db).Where("id IN ?", ids).Delete(context.Background())
 	return err
@@ -44,9 +60,34 @@ func GetFileList(parentID string) ([]*native.FileORM, int64, error) {
 }
 
 // UpdateDir 更新文件夹配置
-func UpdateDir(orm native.FileORM) error {
+func UpdateDir(orm *native.FileORM) error {
 	ctx := context.Background()
-	_, err := gorm.G[native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
+	fields := []string{}
+	if orm.Name != nil {
+		fields = append(fields, "name")
+	}
+	if orm.EnableEncryption != nil {
+		fields = append(fields, "enable_encryption")
+	}
+	if orm.EncryptFilename != nil {
+		fields = append(fields, "encrypt_filename")
+	}
+	if orm.BoundProviderIds != nil {
+		fields = append(fields, "bound_provider_ids")
+	}
+
+	// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
+	// 需要正确展开字段列表
+	if len(fields) == 0 {
+		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
+		return err
+	}
+	// 将剩余字段转换为 []interface{}
+	args := make([]any, len(fields)-1)
+	for i, f := range fields[1:] {
+		args[i] = f
+	}
+	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Select(fields[0], args...).Updates(ctx, orm)
 	return err
 }
 
@@ -95,20 +136,14 @@ func RenameFiles(renames []*native.RenameObj) error {
 	return nil
 }
 
-// CreateFile 创建文件记录
-func CreateFile(file *native.FileORM) error {
-	ctx := context.Background()
-	return gorm.G[native.FileORM](db).Create(ctx, file)
-}
-
 // UpdateFile 更新文件记录
-func UpdateFile(file *native.FileORM) error {
-	ctx := context.Background()
-	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *file.Id).Updates(ctx, file)
+// func UpdateFile(file *native.FileORM) error {
+// 	ctx := context.Background()
+// 	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *file.Id).Updates(ctx, file)
 
-	return err
+// 	return err
 
-}
+// }
 
 // UpdateFileWithHistory 更新文件记录并记录历史
 func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *native.FileORM) error {

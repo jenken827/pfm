@@ -8,22 +8,22 @@ import (
 )
 
 // GetFileLocations 获取文件位置记录
-func GetFileLocations(query *DBQuery) ([]*native.FileLocationORM, error) {
-	ctx := context.Background()
-	var locations []*native.FileLocationORM
+// func GetFileLocations(query *DBQuery) ([]*native.FileLocationORM, error) {
+// 	ctx := context.Background()
+// 	var locations []*native.FileLocationORM
 
-	dbQuery := GetDB().WithContext(ctx)
-	if query != nil {
-		dbQuery = dbQuery.Where(query.Where, query.Args...)
-	}
+// 	dbQuery := GetDB().WithContext(ctx)
+// 	if query != nil {
+// 		dbQuery = dbQuery.Where(query.Where, query.Args...)
+// 	}
 
-	if err := dbQuery.Find(&locations).Error; err != nil {
-		llog.L().Errorf("get file locations failed: %v", err)
-		return nil, err
-	}
+// 	if err := dbQuery.Find(&locations).Error; err != nil {
+// 		llog.L().Errorf("get file locations failed: %v", err)
+// 		return nil, err
+// 	}
 
-	return locations, nil
-}
+// 	return locations, nil
+// }
 
 // CreateFileLocation 创建文件位置记录
 func CreateFileLocation(fl *native.FileLocationORM) error {
@@ -53,4 +53,45 @@ func GetFileLocationByProviderAndHash(providerId uint32, blake3Hash string) (*na
 		return nil, err
 	}
 	return &fl, nil
+}
+
+// GetFileLocationByID 根据ID获取文件位置
+func GetFileLocationByID(id uint64) (*native.FileLocationORM, error) {
+
+	ctx := context.Background()
+
+	var fl native.FileLocationORM
+
+	if err := GetDB().WithContext(ctx).Where("id = ?", id).First(&fl).Error; err != nil {
+
+		return nil, err
+
+	}
+
+	return &fl, nil
+
+}
+
+// GetFileLocationsByBlake3Hash 根据blake3哈希获取文件位置
+func GetFileLocationsByBlake3Hash(hash string) ([]*native.FileLocationORM, error) {
+	ctx := context.Background()
+	var locations []*native.FileLocationORM
+
+	if err := GetDB().WithContext(ctx).Where("blake3_hash = ?", hash).Find(&locations).Error; err != nil {
+		return nil, err
+	}
+
+	return locations, nil
+}
+
+// GetFileLocationsByProviderAndHash 根据提供者ID和blake3哈希获取文件位置
+func GetFileLocationsByProviderAndHash(providerIDs []uint32, blake3Hash string) ([]*native.FileLocationORM, error) {
+	ctx := context.Background()
+	var locations []*native.FileLocationORM
+
+	if err := GetDB().WithContext(ctx).Where("provider_id IN ? AND blake3_hash = ?", providerIDs, blake3Hash).Find(&locations).Error; err != nil {
+		return nil, err
+	}
+
+	return locations, nil
 }

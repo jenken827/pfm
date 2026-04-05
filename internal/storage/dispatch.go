@@ -50,12 +50,8 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 
 	// 2. 如果是同步任务，检查是否已经触发过异步下载
 	if isSyncTask && ur.Id != nil {
-		downloadRecords, _, err := db.Query[native.DownloadRecordORM](ctx, &db.DBQuery{
-			Where: "upload_record_id = ?",
-			Args:  []any{*ur.Id},
-		}, false)
-
-		if err == nil && len(downloadRecords) > 0 {
+		_, err := db.GetDownloadRecordByUploadID(*ur.Id)
+		if err == nil {
 			return
 		}
 	}
@@ -92,10 +88,7 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 // dispatchToProviders 分发上传任务到各存储提供者
 func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, isSyncTask bool) {
 	// 1. 查询文件已经在哪些存储提供者上
-	existingLocations, err := db.GetFileLocations(&db.DBQuery{
-		Where: "blake3_hash = ?",
-		Args:  []any{*ur.FileHash},
-	})
+	existingLocations, err := db.GetFileLocationsByBlake3Hash(*ur.FileHash)
 	if err != nil {
 		llog.L().Errorf("get existing file locations failed: %v", err)
 	}
@@ -239,7 +232,7 @@ func isLocalPath(path string) bool {
 // triggerAsyncDownload 触发异步下载任务
 func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
 	// 1. 创建文件临时目录
-	if err := utils.CreateFileTempDir(*ur.FileHash); err != nil {
+	if err := utils.CreateFileTempDir(*ur.FileHash, false); err != nil {
 		llog.L().Errorf("create file temp dir failed: %v", err)
 		return err
 	}
@@ -457,12 +450,9 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 // getOrCreateFileLocation 获取或创建文件位置记录
 func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileLocationORM {
 	// 先查询是否已存在
-	locations, err := db.GetFileLocations(&db.DBQuery{
-		Where: "provider_id = ? AND blake3_hash = ?",
-		Args:  []any{providerID, blake3Hash},
-	})
-	if err == nil && len(locations) > 0 {
-		return locations[0]
+	location, err := db.GetFileLocationByProviderAndHash(providerID, blake3Hash)
+	if err == nil {
+		return location
 	}
 
 	// 不存在则创建
@@ -579,10 +569,7 @@ func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {
 	}
 
 	// 查询文件位置记录
-	locations, err := db.GetFileLocations(&db.DBQuery{
-		Where: "blake3_hash = ? AND provider_id IN ?",
-		Args:  []any{*ur.FileHash, targetProviderIds},
-	})
+	locations, err := db.GetFileLocationsByProviderAndHash(targetProviderIds, *ur.FileHash)
 	if err != nil {
 		llog.L().Errorf("get file locations failed: %v", err)
 		return
@@ -600,7 +587,7 @@ func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {
 	if completedCount == len(targetProviderIds) {
 		// 所有上传都完成
 		if ur.Id != nil {
-			db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GCOMPLETED)}, "id=?", *ur.Id)
+			db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.UploadProviderStatus_PCOMPLETED)}, []string{"status"})
 		}
 
 		// 清理整个文件临时目录
@@ -611,7 +598,7 @@ func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {
 
 		// 删除上传记录（仅当有ID时）
 		if ur.Id != nil {
-			if err := db.ClearUploadRecords(ctx, *ur.Id); err != nil {
+			if err := db.ClearUploadRecords(*ur.Id); err != nil {
 				llog.L().Errorf("clear upload records failed: %v", err)
 			}
 		}
@@ -629,7 +616,7 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 		return
 	}
 
-	db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GFAILED)}, "id=?", *ur.Id)
+	db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.UploadProviderStatus_PFAILED)}, []string{"status"})
 	llog.L().Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
 }
 
@@ -639,7 +626,7 @@ func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
 		return
 	}
 
-	db.Update(ctx, &native.UploadRecordORM{Status: utils.EnumPtr(native.GroupUploadStatus_GUPLOADING)}, "id=?", *ur.Id)
+	db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.UploadProviderStatus_PUPLOADING)}, []string{"status"})
 }
 
 // acquireLock 获取并发控制锁（非阻塞）
@@ -664,10 +651,7 @@ func releaseLock(key uploadKey) {
 // resumeDispatch 恢复分发（系统启动时调用）
 func resumeDispatch() {
 	// 从数据库恢复未完成的上传任务
-	records, _, err := db.Query[native.UploadRecordORM](context.Background(), &db.DBQuery{
-		Where: "status IN ?",
-		Args:  []any{[]int32{int32(native.GroupUploadStatus_GPENDING), int32(native.GroupUploadStatus_GUPLOADING)}},
-	}, false)
+	records, err := db.GetUploadRecordsByStatus([]native.UploadProviderStatus{native.UploadProviderStatus_PPENDING, native.UploadProviderStatus_PUPLOADING})
 	if err != nil {
 		llog.L().Errorf("get upload record failed: %v", err)
 		return

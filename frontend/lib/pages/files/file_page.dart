@@ -16,10 +16,9 @@ class FilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          FileBloc(context.read<FmRepository>())
-            ..add(FileListEvent(dirId: dirId))
-            ..add(const FileLoadStorageProvidersEvent()),
+      create: (context) => FileBloc(context.read<FmRepository>())
+        ..add(FileListEvent(dirId: dirId))
+        ..add(const FileLoadStorageProvidersEvent()),
       child: const _FileView(),
     );
   }
@@ -591,9 +590,9 @@ class _FileView extends StatelessWidget {
     // 从 Bloc 获取存储提供者列表
     final fileState = context.read<FileBloc>().state;
     final providers = fileState.storageProviders;
-    // 默认选中所有启用的存储提供者
+    // 默认选中 defaultBound 为 true 的存储提供者
     selectedProviderIds = providers
-        .where((p) => p.enabled)
+        .where((p) => p.defaultBound)
         .map((p) => p.id)
         .toList();
 
@@ -623,24 +622,26 @@ class _FileView extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  ...providers.map((provider) => CheckboxListTile(
-                    title: Text(provider.name),
-                    subtitle: Text(provider.enabled ? '已启用' : '已禁用'),
-                    value: selectedProviderIds.contains(provider.id),
-                    enabled: provider.enabled,
-                    onChanged: (checked) {
-                      setState(() {
-                        if (checked == true) {
-                          selectedProviderIds.add(provider.id);
-                        } else {
-                          selectedProviderIds.remove(provider.id);
-                        }
-                      });
-                    },
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                  )),
+                  ...providers.map(
+                    (provider) => CheckboxListTile(
+                      title: Text(provider.name),
+                      subtitle: Text(provider.enabled ? '已启用' : '已禁用'),
+                      value: selectedProviderIds.contains(provider.id),
+                      enabled: provider.enabled,
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked == true) {
+                            selectedProviderIds.add(provider.id);
+                          } else {
+                            selectedProviderIds.remove(provider.id);
+                          }
+                        });
+                      },
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                 ],
                 // 加密选项
@@ -679,8 +680,8 @@ class _FileView extends StatelessWidget {
                       name: nameController.text,
                       enableEncryption: enableEncryption,
                       encryptFilename: encryptFilename,
-                      providerIds: selectedProviderIds.isEmpty 
-                          ? null 
+                      providerIds: selectedProviderIds.isEmpty
+                          ? null
                           : selectedProviderIds,
                     ),
                   );

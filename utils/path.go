@@ -20,8 +20,13 @@ import (
 
 // CreateFileTempDir 创建文件临时目录
 // 每个文件都有独立的临时目录：globals.TempDir/filehash/
-func CreateFileTempDir(fileHash string) error {
-	tempDir := filepath.Join(globals.TempDir, fileHash)
+func CreateFileTempDir(fileHash string, withChunks bool) error {
+	tempDir := ""
+	if withChunks {
+		tempDir = filepath.Join(globals.TempDir, fileHash, globals.ChunksDirName)
+	} else {
+		tempDir = filepath.Join(globals.TempDir, fileHash)
+	}
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		llog.L().Errorf("create file temp dir failed: %v", err)
 		return err

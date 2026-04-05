@@ -18,10 +18,10 @@ enum StorageProviderType {
 // 配置字段类型
 enum ConfigFieldType {
   CONFIG_FIELD_TYPE_UNSPECIFIED = 0;
-  STRING = 1;   // 字符串
-  NUMBER = 2;   // 数字
-  BOOLEAN = 3;  // 布尔值
-  SELECT = 4;   // 下拉选择
+  STRING = 1; // 字符串
+  NUMBER = 2; // 数字
+  BOOLEAN = 3; // 布尔值
+  SELECT = 4; // 下拉选择
 }
 
 // FileType
@@ -84,14 +84,6 @@ enum UploadMethod {
   CHUNK = 3;
 }
 
-//上传到组的状态
-enum GroupUploadStatus {
-  GROUP_UPLOAD_STATUS_UNSPECIFIED = 0;
-  GPENDING = 1;
-  GUPLOADING = 2;
-  GCOMPLETED = 3;
-  GFAILED = 4;
-}
 
 // DownloadRecordState
 // 下载记录状态

@@ -88,6 +88,7 @@ class StorageProviderBloc
       encryptFilename: event.encryptFilename,
       encryptionSuffix: event.encryptionSuffix,
       defaultBound: event.defaultBound,
+      proxy: event.proxy,
     );
 
     if (result.success) {
@@ -110,12 +111,12 @@ class StorageProviderBloc
       id: event.id,
       name: event.name,
       description: event.description,
-      config: event.config,
       enabled: event.enabled,
       order: event.order,
       totalCapacity: event.capacity,
       fileSizeLimit: event.fileSizeLimit,
       defaultBound: event.defaultBound,
+      proxy: event.proxy,
     );
 
     if (result.success) {

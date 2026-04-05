@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // GetStorageProviderTypes 获取支持的存储提供者类型列表
@@ -18,12 +19,12 @@ func GetStorageProviderTypes(ctx context.Context, req *native.GetStorageProvider
 	typeInfos := make([]*native.StorageProviderTypeInfo, 0, len(metadatas))
 	for _, metadata := range metadatas {
 		typeInfo := &native.StorageProviderTypeInfo{
-			Type:          metadata.Type,
-			Name:          metadata.Name,
-			DisplayName:   metadata.DisplayName,
-			Description:   metadata.Description,
-			IconName:      metadata.IconName,
-			ConfigFields:  metadata.ConfigFields,
+			Type:         metadata.Type,
+			Name:         metadata.Name,
+			DisplayName:  metadata.DisplayName,
+			Description:  metadata.Description,
+			IconName:     metadata.IconName,
+			ConfigFields: metadata.ConfigFields,
 		}
 		typeInfos = append(typeInfos, typeInfo)
 	}
@@ -34,21 +35,41 @@ func GetStorageProviderTypes(ctx context.Context, req *native.GetStorageProvider
 }
 
 // AddStorageProvider 添加存储提供者
-func AddStorageProvider(ctx context.Context, req *native.StorageProvider) *models.Err {
-	orm, err := req.ToORM(ctx)
-	if err != nil {
-		llog.L().Errorf("AddStorageProvider ToORM err: %v", err)
-		return &models.Err{E: err, C: native.RespCode_PARAMS_ERROR}
+func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) *models.Err {
+	orm := &native.StorageProviderORM{
+		ProviderType:    utils.EnumPtr(*req.ProviderType),
+		Name:            req.Name,
+		Config:          req.Config,
+		TotalCapacity:   req.TotalCapacity,
+		UsedCapacity:    new(uint64),
+		Enabled:         req.Enabled,
+		Order:           req.Order,
+		FileSizeLimit:   req.FileSizeLimit,
+		EncryptFilename: req.EncryptFilename,
+		DefaultBound:    req.DefaultBound,
 	}
 
-	err = db.Create(ctx, &orm, db.FilterProviderCreate)
+	if req.Description != nil {
+		orm.Description = req.Description
+	}
+	if req.EncryptionKey != nil {
+		orm.EncryptionKey = req.EncryptionKey
+	}
+	if req.EncryptionSuffix != nil {
+		orm.EncryptionSuffix = req.EncryptionSuffix
+	}
+	if req.Proxy != nil {
+		orm.Proxy = req.Proxy
+	}
+
+	err := db.CreateStorageProvider(orm)
 	if err != nil {
 		llog.L().Errorf("CreateStorageProvider err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	// 同步添加存储实例
-	if err := storage.AddStorage(&orm); err != nil {
+	if err := storage.AddStorage(orm); err != nil {
 		llog.L().Errorf("AddStorage err: %v", err)
 	}
 
@@ -57,20 +78,18 @@ func AddStorageProvider(ctx context.Context, req *native.StorageProvider) *model
 
 // GetStorageProvider 获取存储提供者详情
 func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) (*native.StorageProviderORM, *models.Err) {
-	provider, _, err := db.Query[native.StorageProviderORM](ctx, &db.DBQuery{Where: "id = ?", Args: []any{req.GetId()}}, false)
+	provider, err := db.GetProviderByID(req.GetId())
 	if err != nil {
 		llog.L().Errorf("GetStorageProviders, id: %d, err: %v", req.GetId(), err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
-	if len(provider) == 0 {
-		return nil, &models.Err{E: err, C: native.RespCode_NOT_FOUND}
-	}
-	return provider[0], nil
+
+	return provider, nil
 }
 
 // ListStorageProviders 获取存储提供者列表
 func ListStorageProviders(ctx context.Context) ([]*native.StorageProviderORM, *models.Err) {
-	providers, _, err := db.Query[native.StorageProviderORM](ctx, nil, false)
+	providers, err := db.GetAllProviders()
 	if err != nil {
 		llog.L().Errorf("GetStorageProviders, err: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -79,25 +98,49 @@ func ListStorageProviders(ctx context.Context) ([]*native.StorageProviderORM, *m
 }
 
 // UpdateStorageProvider update
-func UpdateStorageProvider(ctx context.Context, req *native.StorageProvider) *models.Err {
+func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProviderReq) *models.Err {
 	orm := &native.StorageProviderORM{
-		Name:          req.Name,
-		Description:   req.Description,
-		Enabled:       req.Enabled,
-		Order:         req.Order,
-		FileSizeLimit: req.FileSizeLimit,
+		Id: req.Id,
 	}
-	err := db.Update(ctx, orm, "id = ?", req.Id)
+
+	if req.Name != nil {
+		orm.Name = req.Name
+	}
+	if req.Description != nil {
+		orm.Description = req.Description
+	}
+	if req.Enabled != nil {
+		orm.Enabled = req.Enabled
+	}
+	if req.Order != nil {
+		orm.Order = req.Order
+	}
+	if req.TotalCapacity != nil {
+		orm.TotalCapacity = req.TotalCapacity
+	}
+	if req.FileSizeLimit != nil {
+		orm.FileSizeLimit = req.FileSizeLimit
+	}
+	if req.DefaultBound != nil {
+		orm.DefaultBound = req.DefaultBound
+	}
+	if req.Proxy != nil {
+		orm.Proxy = req.Proxy
+	}
+
+	err := db.UpdateStorageProvider(orm)
 	if err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	// 查询完整数据后同步更新存储实例
-	fullOrm, _, err := db.Query[native.StorageProviderORM](ctx, &db.DBQuery{Where: "id = ?", Args: []any{req.Id}}, false)
-	if err == nil && len(fullOrm) > 0 {
-		if err := storage.UpdateStorage(fullOrm[0]); err != nil {
-			llog.L().Errorf("UpdateStorage err: %v", err)
-		}
+	fullOrm, err := db.GetProviderByID(req.GetId())
+	if err != nil {
+		llog.L().Errorf("GetProviderByID err: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	if err := storage.UpdateStorage(fullOrm); err != nil {
+		llog.L().Errorf("UpdateStorage err: %v", err)
 	}
 
 	return nil

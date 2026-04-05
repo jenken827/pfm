@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"context"
-
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -15,7 +13,7 @@ var storages syncmap.Map
 
 // Init 初始化存储
 func Init() {
-	sps, _, err := db.Query[native.StorageProviderORM](context.Background(), &db.DBQuery{Where: "enabled = ?", Args: []any{true}}, false)
+	sps, err := db.GetEnabledProviders()
 	if err != nil {
 		llog.L().Errorf("get enabled storage provider failed, err: %v", err)
 		panic(err)
@@ -59,6 +57,15 @@ func createAndStoreDriver(sp *native.StorageProviderORM) error {
 	return nil
 }
 
+// closeAndDeleteStorage 关闭并删除存储实例
+func closeAndDeleteStorage(id uint32) {
+	if v, ok := storages.Load(id); ok {
+		driver := v.(types.StorageDriver)
+		driver.Close()
+		storages.Delete(id)
+	}
+}
+
 // AddStorage 添加存储实例
 func AddStorage(sp *native.StorageProviderORM) error {
 	if !*sp.Enabled {
@@ -75,8 +82,8 @@ func AddStorage(sp *native.StorageProviderORM) error {
 
 // UpdateStorage 更新存储实例
 func UpdateStorage(sp *native.StorageProviderORM) error {
-	// 先删除旧实例
-	storages.Delete(*sp.Id)
+	// 先关闭并删除旧实例
+	closeAndDeleteStorage(*sp.Id)
 
 	// 如果启用则重新创建
 	if *sp.Enabled {
@@ -94,7 +101,19 @@ func UpdateStorage(sp *native.StorageProviderORM) error {
 // DeleteStorage 删除存储实例
 func DeleteStorage(ids []uint32) {
 	for _, id := range ids {
-		storages.Delete(id)
+		closeAndDeleteStorage(id)
 		llog.L().Infof("storage provider deleted, id: %d", id)
 	}
+}
+
+// CloseAll 关闭所有存储实例
+func CloseAll() {
+	storages.Range(func(key, value any) bool {
+		if driver, ok := value.(types.StorageDriver); ok {
+			driver.Close()
+			llog.L().Infof("storage provider closed, id: %v", key)
+		}
+		return true
+	})
+	storages = syncmap.Map{}
 }

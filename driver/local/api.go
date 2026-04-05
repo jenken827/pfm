@@ -14,8 +14,8 @@ import (
 )
 
 // Upload 上传文件（本地存储始终不加密）
-func (t *LocalDriver) Upload(ctx context.Context, filePath string, fileName string, encryptor types.Encryptor) (*types.StorageProviderFileInfo, error) {
-	rootDir := *t.Config.RootPath
+func (l *LocalDriver) Upload(ctx context.Context, filePath string, fileName string, encryptor types.Encryptor) (*types.StorageProviderFileInfo, error) {
+	rootDir := *l.Config.RootPath
 
 	// 本地存储始终不加密，忽略encryptor参数
 	_ = encryptor
@@ -71,11 +71,16 @@ func (t *LocalDriver) Upload(ctx context.Context, filePath string, fileName stri
 }
 
 // Link 获取文件链接
-func (t *LocalDriver) Link(ctx context.Context, fileLocation *native.FileLocationORM) (string, error) {
+func (l *LocalDriver) Link(ctx context.Context, fileLocation *native.FileLocationORM) (string, error) {
 	return *fileLocation.Path, nil
 }
 
 // Delete 删除文件
-func (t *LocalDriver) Delete(ctx context.Context, fileLocation *native.FileLocationORM) error {
+func (l *LocalDriver) Delete(ctx context.Context, fileLocation *native.FileLocationORM) error {
 	return os.Remove(*fileLocation.Path)
+}
+
+// Close 关闭存储驱动
+func (l *LocalDriver) Close() {
+
 }

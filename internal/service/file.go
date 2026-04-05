@@ -10,11 +10,12 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
+	"github.com/google/uuid"
 )
 
 // GetFileList 获取文件列表
 func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, *models.Err) {
-	files, total, err := db.Query[native.FileORM](ctx, &db.DBQuery{Where: "parent_id = ?", Args: []any{req.ParentId}}, true)
+	files, total, err := db.GetFileList(*req.ParentId)
 	if err != nil {
 		llog.L().Errorf("GetFileList failed, err: %v", err)
 		return nil, 0, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -48,10 +49,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		}
 	} else {
 		// 验证提供者是否存在且启用（批量查询）
-		providers, _, err := db.Query[native.StorageProviderORM](ctx, &db.DBQuery{
-			Where: "id IN ? AND enabled = ?",
-			Args:  []any{providerIds, true},
-		}, false)
+		providers, err := db.GetEnabledProvidersByIds(providerIds)
 		if err != nil {
 			llog.L().Errorf("query providers failed: %v", err)
 			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -73,6 +71,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	}
 	boundProviderIds := string(providerIdsJSON)
 
+	uuid, _ := uuid.NewV7()
 	f := &native.FileORM{
 		Name:             req.Name,
 		ParentId:         req.ParentId,
@@ -80,8 +79,9 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		EnableEncryption: req.EnableEncryption,
 		EncryptFilename:  req.EncryptFilename,
 		BoundProviderIds: &boundProviderIds,
+		Id:               utils.StringPtr(uuid.String()),
 	}
-	e := db.Create(ctx, f, nil)
+	e := db.CreateFile(f)
 	if e != nil {
 		return &models.Err{E: e, C: native.RespCode_DB_ERROR}
 	}
@@ -89,9 +89,9 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 }
 
 // UpdateDir 更新文件夹
-// 文件夹加密信息不可以更改
 func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 	orm := native.FileORM{
+		Id:               req.Id,
 		Name:             req.Name,
 		EnableEncryption: req.EnableEncryption,
 		EncryptFilename:  req.EncryptFilename,
@@ -102,10 +102,7 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		providerIds := req.ProviderIds
 
 		// 批量查询验证提供者是否存在且启用
-		providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
-			Where: "id IN ? AND enabled = ?",
-			Args:  []any{providerIds, true},
-		}, false)
+		providers, err := db.GetEnabledProvidersByIds(providerIds)
 		if err != nil {
 			llog.L().Errorf("query providers failed: %v", err)
 			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -129,29 +126,22 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		orm.BoundProviderIds = &boundProviderIds
 	}
 
-	if err := db.Update(ctx, &orm, "id=?", *req.Id); err != nil {
+	if err := db.UpdateDir(&orm); err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil
 }
 
 // getDefaultBoundProviders 获取默认绑定的存储提供者
-func getDefaultBoundProviders(ctx context.Context) ([]*native.StorageProvider, error) {
-	providers, _, err := db.Query[native.StorageProvider](ctx, &db.DBQuery{
-		Where: "default_bound = ? AND enabled = ?",
-		Args:  []any{true, true},
-	}, false)
+func getDefaultBoundProviders(ctx context.Context) ([]*native.StorageProviderORM, error) {
+	providers, err := db.GetDefaultEnabledProvider()
 	return providers, err
 }
 
 // DeleteFile 删除文件
 func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
-	// Convert []string to []any for db.Delete
-	ids := make([]any, len(req.Ids))
-	for i, id := range req.Ids {
-		ids[i] = id
-	}
-	if err := db.Delete[native.FileORM](ctx, ids); err != nil {
+	ids := req.Ids
+	if err := db.DeleteFiles(ids); err != nil {
 		llog.L().Errorf("DeleteFiles failed, err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
