@@ -66,36 +66,39 @@ func closeAndDeleteStorage(id uint32) {
 	}
 }
 
-// AddStorage 添加存储实例
-func AddStorage(sp *native.StorageProviderORM) error {
+// AddStorage 添加存储实例（异步执行，不阻塞请求）
+func AddStorage(sp *native.StorageProviderORM) {
 	if !*sp.Enabled {
-		return nil
+		return
 	}
 
-	if err := createAndStoreDriver(sp); err != nil {
-		return err
-	}
-
-	llog.L().Infof("storage provider added, id: %d", *sp.Id)
-	return nil
+	// 异步创建驱动实例
+	go func() {
+		if err := createAndStoreDriver(sp); err != nil {
+			llog.L().Errorf("create storage driver failed, id: %d, err: %v", *sp.Id, err)
+			return
+		}
+		llog.L().Infof("storage provider added, id: %d", *sp.Id)
+	}()
 }
 
-// UpdateStorage 更新存储实例
-func UpdateStorage(sp *native.StorageProviderORM) error {
-	// 先关闭并删除旧实例
+// UpdateStorage 更新存储实例（异步执行，不阻塞请求）
+func UpdateStorage(sp *native.StorageProviderORM) {
+	// 先关闭并删除旧实例（这个操作很快，可以同步执行）
 	closeAndDeleteStorage(*sp.Id)
 
-	// 如果启用则重新创建
+	// 如果启用则异步重新创建
 	if *sp.Enabled {
-		if err := createAndStoreDriver(sp); err != nil {
-			return err
-		}
-		llog.L().Infof("storage provider updated, id: %d", *sp.Id)
+		go func() {
+			if err := createAndStoreDriver(sp); err != nil {
+				llog.L().Errorf("create storage driver failed, id: %d, err: %v", *sp.Id, err)
+				return
+			}
+			llog.L().Infof("storage provider updated, id: %d", *sp.Id)
+		}()
 	} else {
 		llog.L().Infof("storage provider disabled, id: %d", *sp.Id)
 	}
-
-	return nil
 }
 
 // DeleteStorage 删除存储实例

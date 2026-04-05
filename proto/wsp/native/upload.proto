@@ -48,6 +48,11 @@ message UploadRecord {
     not_null: true
     default: "''"
   }];
+  // 任务类型：普通上传(UPLOAD)或同步任务(SYNC)
+  optional UploadTaskType task_type = 14 [(gorm.field).tag = {
+    not_null: true
+    default: "1"
+  }];
 }
 
 

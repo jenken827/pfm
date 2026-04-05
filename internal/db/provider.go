@@ -78,8 +78,8 @@ func GetEnabledProvidersByIds(ids []uint32) ([]*native.StorageProviderORM, error
 	return gorm.G[*native.StorageProviderORM](db).Where("id in ? and enabled = ?", ids, true).Find(ctx)
 }
 
-// GetDefaultEnabledProvider 获取默认启用的存储提供者
-func GetDefaultEnabledProvider() ([]*native.StorageProviderORM, error) {
+// GetDefaultBoundEnabledProviders 获取默认绑定启用的存储提供者
+func GetDefaultBoundEnabledProviders() ([]*native.StorageProviderORM, error) {
 	ctx := context.Background()
 	return gorm.G[*native.StorageProviderORM](db).Where("default_bound = ? and enabled = ?", true, true).Find(ctx)
 }
@@ -88,7 +88,10 @@ func GetDefaultEnabledProvider() ([]*native.StorageProviderORM, error) {
 func GetProviderByID(id uint32) (*native.StorageProviderORM, error) {
 	ctx := context.Background()
 	provider, err := gorm.G[*native.StorageProviderORM](db).Where("id = ?", id).First(ctx)
-	return provider, err
+	if err != nil {
+		return nil, err
+	}
+	return provider, nil
 }
 
 // GetAllProviders 获取所有存储提供者

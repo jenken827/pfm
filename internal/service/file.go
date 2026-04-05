@@ -10,7 +10,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
-	"github.com/google/uuid"
 )
 
 // GetFileList 获取文件列表
@@ -27,10 +26,9 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 // CreateDir 创建文件夹
 func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	providerIds := req.ProviderIds
-
 	// 如果客户端未传 provider_ids，使用默认绑定的存储提供者
 	if len(providerIds) == 0 {
-		defaultProviders, err := getDefaultBoundProviders(ctx)
+		defaultProviders, err := db.GetDefaultBoundEnabledProviders()
 		if err != nil {
 			llog.L().Errorf("get default bound providers failed: %v", err)
 			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -71,7 +69,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	}
 	boundProviderIds := string(providerIdsJSON)
 
-	uuid, _ := uuid.NewV7()
 	f := &native.FileORM{
 		Name:             req.Name,
 		ParentId:         req.ParentId,
@@ -79,7 +76,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		EnableEncryption: req.EnableEncryption,
 		EncryptFilename:  req.EncryptFilename,
 		BoundProviderIds: &boundProviderIds,
-		Id:               utils.StringPtr(uuid.String()),
 	}
 	e := db.CreateFile(f)
 	if e != nil {
@@ -130,12 +126,6 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil
-}
-
-// getDefaultBoundProviders 获取默认绑定的存储提供者
-func getDefaultBoundProviders(ctx context.Context) ([]*native.StorageProviderORM, error) {
-	providers, err := db.GetDefaultEnabledProvider()
-	return providers, err
 }
 
 // DeleteFile 删除文件

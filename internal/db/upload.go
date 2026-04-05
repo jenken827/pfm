@@ -8,25 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetUploadRecords 获取上传记录
-// func GetUploadRecords(expression string, withChunks bool, args ...any) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
-// 	record, err := gorm.G[*native.UploadRecordORM](db).Where(expression, args...).Order("created_at asc").
-// 		First(context.Background())
-// 	if err != nil {
-// 		llog.L().Errorf("query existing upload records failed: %v", err)
-// 		return nil, nil, err
-// 	}
-// 	if withChunks {
-// 		chunks, err := gorm.G[*native.UploadChunkRecordORM](db).Where("upload_id = ?", *record.Id).Find(context.Background())
-// 		if err != nil {
-// 			llog.L().Warnf("get uploading chunks failed, uploadID: %d, err: %v", *record.Id, err)
-// 			return record, nil, err
-// 		}
-// 		return record, chunks, nil
-// 	}
-// 	return record, nil, nil
-// }
-
 // GetUploadRecordByID 获取上传记录ByID
 func GetUploadRecordByID(id uint32, withChunk bool) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
 	return getUploadRecord("id = ?", withChunk, id)
@@ -34,7 +15,7 @@ func GetUploadRecordByID(id uint32, withChunk bool) (*native.UploadRecordORM, []
 
 // GetUploadRecordByHash 获取上传记录
 func GetUploadRecordByHash(hash string, withChunk bool) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
-	return getUploadRecord("hash = ?", withChunk, hash)
+	return getUploadRecord("file_hash = ?", withChunk, hash)
 }
 
 // GetUploadRecordsByStatus 获取上传记录

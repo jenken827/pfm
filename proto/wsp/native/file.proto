@@ -62,10 +62,10 @@ message File {
     not_null: true
     default: "false"
   }];
-  // 绑定的存储提供者ID列表（逗号分隔字符串）
+  // 绑定的存储提供者ID列表
   optional string bound_provider_ids = 13 [(gorm.field).tag = {
     not_null: true
-    type: "text"
+    default: "[]"
   }];
 }
 

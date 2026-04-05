@@ -45,3 +45,10 @@ func GenerateObfuscatedFilename(originalName, suffix string) (string, error) {
 
 	return obfuscatedName, nil
 }
+
+// GetUniqueFileName 获取唯一文件名
+func GetUniqueFileName(fileName string) string {
+	timestamp := time.Now().Format("20060102150405")
+	finalFileName := fmt.Sprintf("%s_%s", fileName, timestamp)
+	return finalFileName
+}

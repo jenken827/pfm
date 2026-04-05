@@ -13,17 +13,29 @@ import (
 
 // GetFileByID 获取文件
 func GetFileByID(id string) (*native.FileORM, error) {
-	return gorm.G[*native.FileORM](db).Where("id=?", id).First(context.Background())
+	file, err := gorm.G[*native.FileORM](db).Where("id=?", id).First(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // GetFileByHash 获取文件
 func GetFileByHash(hash string) (*native.FileORM, error) {
-	return gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
+	file, err := gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // GetFileByParentAndName 获取文件
 func GetFileByParentAndName(parentID string, name string) (*native.FileORM, error) {
-	return gorm.G[*native.FileORM](db).Where("parent_id=? AND name=?", parentID, name).First(context.Background())
+	file, err := gorm.G[*native.FileORM](db).Where("parent_id=? AND name=?", parentID, name).First(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // CreateFile 创建文件
@@ -32,7 +44,7 @@ func CreateFile(file *native.FileORM) error {
 		uuid, _ := uuid.NewV7()
 		file.Id = utils.StringPtr(uuid.String())
 	}
-	return db.FirstOrCreate(file).Error
+	return db.Create(file).Error
 }
 
 // DeleteFiles 批量删除文件

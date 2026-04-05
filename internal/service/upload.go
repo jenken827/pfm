@@ -33,6 +33,54 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
+	blake3 := *req.Hash
+	// 检查是否有未完成的上传任务（断点续传）
+	record, chunks, err := db.GetUploadRecordByHash(blake3, true)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.L().Errorf("get uncomplete uploads failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+	// 如果存在未完成的上传任务
+	if record != nil {
+		// 判断是否是同一个上传记录
+		if *record.ParentId != *req.ParentId || *record.FileName != *req.Name {
+			llog.L().Errorf("A same hash file is uploading, but file name or parent id not match,uploading file path: %d", *record.Id)
+
+			return nil, &models.Err{E: errors.New("A same hash file is uploading, but file name or parent id not match"), C: native.RespCode_INTERNAL_ERROR}
+		}
+
+		// 根据 task_type 区分任务类型
+		if record.TaskType != nil && *record.TaskType == int32(native.UploadTaskType_SYNC) {
+			// 同步任务：文件已存在，直接返回 exists=true
+			llog.L().Infof("found sync task for hash: %s, file already exists", blake3)
+			exists := true
+			return &native.InitUploadRespData{
+				Exists: &exists,
+			}, nil
+		}
+
+		// 普通上传任务：返回 upload_id 和已上传分片（位图）
+		llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
+			*record.Id, *record.ChunkTotal, *record.ChunkSize)
+		uploadID := *record.Id
+		chunkTotal := *record.ChunkTotal
+		chunkSize := *record.ChunkSize
+
+		// 构建已上传分片位图
+		uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
+		if chunks != nil {
+			uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
+		}
+		llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
+			uploadID, chunkTotal, chunkSize)
+
+		return &native.InitUploadRespData{
+			UploadId:       &uploadID,
+			UploadedChunks: uploadedChunksBitmap,
+			ChunkTotal:     &chunkTotal,
+			ChunkSize:      &chunkSize,
+		}, nil
+	}
 
 	// 获取父文件夹，检查是否绑定了存储提供者
 	parentFile, err := db.GetFileByID(req.GetParentId())
@@ -67,40 +115,6 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 			E: errors.New("parent folder has no bound storage providers"),
 			C: native.RespCode_PARAMS_ERROR,
 		}
-	}
-
-	blake3 := *req.Hash
-
-	// 检查是否有未完成的上传任务（断点续传）
-	record, chunks, err := db.GetUploadRecordByHash(blake3, true)
-	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("get uncomplete uploads failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-	}
-	// 如果存在未完成的上传任务，返回 upload_id 和已上传分片（位图）
-	if record != nil {
-		uploadID := *record.Id
-		chunkTotal := *record.ChunkTotal
-		chunkSize := *record.ChunkSize
-
-		// 构建已上传分片位图
-		uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
-		if chunks != nil {
-			uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
-		}
-		llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
-			uploadID, chunkTotal, chunkSize)
-		if *record.ParentId != *req.ParentId || *record.FileName != *req.Name {
-			llog.L().Errorf("A same hash file is uploading, but file name or parent id not match,uploading file path: %d", *record.Id)
-
-			return nil, &models.Err{E: errors.New("A same hash file is uploading, but file name or parent id not match"), C: native.RespCode_INTERNAL_ERROR}
-		}
-		return &native.InitUploadRespData{
-			UploadId:       &uploadID,
-			UploadedChunks: uploadedChunksBitmap,
-			ChunkTotal:     &chunkTotal,
-			ChunkSize:      &chunkSize,
-		}, nil
 	}
 
 	// 检查是否已上传过
@@ -155,13 +169,17 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 			providerIdsJSON, _ := json.Marshal(providerIds)
 			targetProviderIds := string(providerIdsJSON)
 
-			// 创建真实的同步任务记录（TempPath 为空表示同步任务）
+			// 创建真实的同步任务记录
 			emptyStr := ""
 			syncRecord := &native.UploadRecordORM{
+				FileName:          req.Name,
+				FileSize:          req.Size,
+				ParentId:          req.ParentId,
 				FileHash:          &blake3,
 				TargetProviderIds: &targetProviderIds,
-				TempPath:          &emptyStr, // 空路径表示这是同步任务
+				TempPath:          &emptyStr,
 				Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+				TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
 			}
 
 			// 保存到数据库，确保可以恢复
@@ -256,6 +274,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		OverwriteId:       &overwriteID,
 		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
 		TargetProviderIds: parentFile.BoundProviderIds,
+		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 	}
 
 	if err := db.GetDB().Create(ur).Error; err != nil {
@@ -453,8 +472,8 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 	if err := os.RemoveAll(utils.GetChunkTempDir(*uploadRecord.FileHash)); err != nil {
 		llog.L().Warnf("remove temp path failed: %v", err)
 	}
-	// 上传到存储
-	go storage.Dispatch(ctx, uploadRecord)
+	// 上传到存储（使用独立的 context，不受 HTTP 请求生命周期影响）
+	go storage.Dispatch(context.Background(), uploadRecord)
 	return nil
 }
 

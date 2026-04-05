@@ -45,8 +45,8 @@ var globalDispatcher = &dispatcher{
 // 1. 普通上传：有临时文件，从临时文件上传
 // 2. 同步任务：无临时文件，从现有提供者同步
 func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
-	// 1. 检查是否是同步任务（没有临时文件路径或为空）
-	isSyncTask := ur.TempPath == nil || *ur.TempPath == ""
+	// 1. 根据 task_type 判断任务类型
+	isSyncTask := ur.TaskType != nil && *ur.TaskType == int32(native.UploadTaskType_SYNC)
 
 	// 2. 如果是同步任务，检查是否已经触发过异步下载
 	if isSyncTask && ur.Id != nil {
@@ -58,6 +58,10 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 
 	// 3. 如果是普通上传任务，检查临时文件是否存在
 	if !isSyncTask {
+		if ur.TempPath == nil || *ur.TempPath == "" {
+			markUploadFailed(ctx, ur, "temp file path is empty for upload task")
+			return
+		}
 		if _, err := os.Stat(*ur.TempPath); err != nil {
 			markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
 			return

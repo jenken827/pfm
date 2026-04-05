@@ -95,6 +95,16 @@ enum DownloadRecordState {
   DOWNLOAD_FAILED = 4;
 }
 
+// UploadTaskType
+// 上传任务类型
+enum UploadTaskType {
+  UPLOAD_TASK_TYPE_UNSPECIFIED = 0;
+  // 普通上传任务：从客户端上传文件
+  UPLOAD = 1;
+  // 同步任务：文件已存在，同步到新的存储提供者
+  SYNC = 2;
+}
+
 // SourceType
 // 上传到存储提供者服务器时，源文件的来源
 // 一般情况是从客户端上传到服务器，然后再上传到存储提供者服务器

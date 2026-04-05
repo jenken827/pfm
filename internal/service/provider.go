@@ -68,10 +68,8 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 同步添加存储实例
-	if err := storage.AddStorage(orm); err != nil {
-		llog.L().Errorf("AddStorage err: %v", err)
-	}
+	// 异步添加存储实例（不阻塞请求）
+	storage.AddStorage(orm)
 
 	return nil
 }
@@ -133,15 +131,13 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 查询完整数据后同步更新存储实例
+	// 查询完整数据后异步更新存储实例（不阻塞请求）
 	fullOrm, err := db.GetProviderByID(req.GetId())
 	if err != nil {
 		llog.L().Errorf("GetProviderByID err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
-	if err := storage.UpdateStorage(fullOrm); err != nil {
-		llog.L().Errorf("UpdateStorage err: %v", err)
-	}
+	storage.UpdateStorage(fullOrm)
 
 	return nil
 }
