@@ -40,7 +40,7 @@ func fileRoute(mux *http.ServeMux) {
 	path, handler := nativeconnect.NewFileServiceHandler(
 		file,
 		// Validation via Protovalidate is almost always recommended
-		connect.WithInterceptors(middleware.GInterceptor(), validate.NewInterceptor()),
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 
 	// 1. 注册 Connect RPC handler
@@ -56,7 +56,7 @@ func storageProviderRoute(mux *http.ServeMux) {
 	provider := &api.StorageProviderServer{}
 	path, handler := nativeconnect.NewStorageProviderServiceHandler(
 		provider,
-		connect.WithInterceptors(middleware.GInterceptor(), validate.NewInterceptor()),
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 
 	mux.Handle(path, handler)
@@ -71,7 +71,7 @@ func uploadRoute(mux *http.ServeMux) {
 	upload := &api.UploadServer{}
 	path, handler := nativeconnect.NewUploadServiceHandler(
 		upload,
-		connect.WithInterceptors(middleware.GInterceptor(), validate.NewInterceptor()),
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 
 	mux.Handle(path, handler)

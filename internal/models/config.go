@@ -2,7 +2,7 @@ package models
 
 // Config system config
 type Config struct {
-	Schema Schema `json:"scheme" yaml:"scheme"`
+	Schema Schema `json:"schema" yaml:"schema"`
 	// Redis   Redis   `json:"redis" yaml:"redis"`
 	Cors    Cors    `json:"cors" yaml:"cors"`
 	Log     Log     `json:"log" yaml:"log"`

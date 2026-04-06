@@ -26,6 +26,10 @@ class UploadTaskRecord {
   int retryCount;
   int uploadedBytes; // 已上传字节数
   int speed; // 上传速度 (字节）
+  // 文件标签（可选）
+  String? tags;
+  // 是否覆盖同名文件
+  bool overwrite;
 
   UploadTaskRecord({
     required this.id,
@@ -44,11 +48,25 @@ class UploadTaskRecord {
     this.uploadedBytes = 0,
     this.speed = 0,
     this.retryCount = 0,
+    this.tags,
+    this.overwrite = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   /// 上传进度（0-100）
   double get progress {
-    if (chunkTotal == 0) return 0;
+    if (fileSize == 0) return 0;
+    
+    // 失败或取消时，返回上传过程中的实际进度（可能不是100%）
+    if (status == UploadStatus.FAILED || status == UploadStatus.CANCELED) {
+      return (uploadedBytes / fileSize) * 100;
+    }
+    
+    // 完成时返回100%
+    if (status == UploadStatus.COMPLETED) {
+      return 100;
+    }
+    
+    // 其他状态返回当前进度
     final currentProgress =
         (uploadedBytes >= fileSize ? 1.0 : uploadedBytes / fileSize) * 100;
     return currentProgress;
@@ -81,6 +99,8 @@ class UploadTaskRecord {
       'retry_count': retryCount,
       'uploaded_bytes': uploadedBytes,
       'speed': speed,
+      'tags': tags,
+      'overwrite': overwrite ? 1 : 0,
     };
   }
 
@@ -108,6 +128,8 @@ class UploadTaskRecord {
       retryCount: json['retry_count'] ?? 0,
       uploadedBytes: json['uploaded_bytes'] ?? 0,
       speed: json['speed'] ?? 0,
+      tags: json['tags'],
+      overwrite: json['overwrite'] == 1,
     );
   }
 
@@ -129,7 +151,9 @@ class UploadTaskRecord {
         completed_at TEXT,
         retry_count INTEGER,
         uploaded_bytes INTEGER,
-        speed INTEGER
+        speed INTEGER,
+        tags TEXT,
+        overwrite INTEGER
       );
       CREATE INDEX idx_ut_status ON ${Sqlite3Storage.uploadTaskTableName} (status);
       CREATE INDEX idx_ut_created_at ON ${Sqlite3Storage.uploadTaskTableName} (created_at);

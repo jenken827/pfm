@@ -69,14 +69,14 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     );
   }
 
-  /// 刷新文件列表
+  /// 刷新文件列表和存储提供者列表
   Future<void> _onFileRefresh(
     FileRefreshEvent event,
     Emitter<FileState> emit,
   ) async {
-    add(
-      FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName),
-    );
+    // 同时刷新文件列表和存储提供者列表
+    add(FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName));
+    add(const FileLoadStorageProvidersEvent());
   }
 
   /// 加载更多文件

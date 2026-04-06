@@ -54,7 +54,8 @@ Future<void> uploadFile({
         size: fileSize,
         hash: task.fileHash!,
         content: content,
-        overwrite: false,
+        overwrite: task.overwrite,
+        tags: task.tags,
         onSendProgress: (sent, total) {
           storage.updateUploadTask(task.id, uploadedBytes: sent);
         },
@@ -75,7 +76,12 @@ Future<void> uploadFile({
         l.info('File uploaded instantly (instant upload)');
       }
 
-      await storage.updateUploadTask(task.id, status: UploadStatus.COMPLETED);
+      // 更新完成状态，同时确保进度为100%
+      await storage.updateUploadTask(
+        task.id,
+        status: UploadStatus.COMPLETED,
+        uploadedBytes: fileSize,
+      );
       l.info('Small file upload completed successfully');
       return;
     }
@@ -89,6 +95,8 @@ Future<void> uploadFile({
         size: task.fileSize,
         hash: task.fileHash!,
         parentId: task.parentId,
+        overwrite: task.overwrite,
+        tags: task.tags,
       );
       if (!result.success) {
         await storage.updateUploadTask(
@@ -110,7 +118,11 @@ Future<void> uploadFile({
 
       // 检查是否秒传（exists 表示文件已存在）
       if (data.exists) {
-        await storage.updateUploadTask(task.id, status: UploadStatus.COMPLETED);
+        await storage.updateUploadTask(
+          task.id,
+          status: UploadStatus.COMPLETED,
+          uploadedBytes: task.fileSize,
+        );
         return;
       }
       task.uploadId = uploadId;
@@ -252,7 +264,12 @@ Future<void> uploadFile({
       return;
     }
 
-    await storage.updateUploadTask(task.id, status: UploadStatus.COMPLETED);
+    // 更新完成状态，同时确保进度为100%
+    await storage.updateUploadTask(
+      task.id,
+      status: UploadStatus.COMPLETED,
+      uploadedBytes: task.fileSize,
+    );
 
     getLogger().info('Upload completed successfully');
   } catch (e) {

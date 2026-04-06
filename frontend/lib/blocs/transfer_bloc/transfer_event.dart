@@ -21,10 +21,17 @@ class TransferClearFailedEvent extends TransferEvent {}
 
 // 新增上传任务
 class TransferAddUploadEvent extends TransferEvent {
-  TransferAddUploadEvent(this.filePath, this.parentId);
+  TransferAddUploadEvent(
+    this.filePath,
+    this.parentId, {
+    this.tags,
+    this.overwrite = false,
+  });
 
   final String filePath;
   final String parentId;
+  final String? tags;
+  final bool overwrite;
 }
 
 /// 暂停上传，如果不传taskId，则暂停所有

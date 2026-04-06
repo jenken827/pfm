@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strings"
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -26,6 +27,31 @@ const (
 	// SmallFileThreshold 小文件阈值 10MB
 	SmallFileThreshold = 10 * 1024 * 1024
 )
+
+// parseAndCreateTags 解析标签字符串并创建文件标签
+func parseAndCreateTags(fileID string, tagsStr *string) {
+	if tagsStr == nil || *tagsStr == "" {
+		return
+	}
+	// 按逗号分隔标签
+	tags := strings.Split(*tagsStr, ",")
+	// 去除空白
+	var cleanTags []string
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			cleanTags = append(cleanTags, tag)
+		}
+	}
+	if len(cleanTags) == 0 {
+		return
+	}
+	if err := db.CreateFileTags(fileID, cleanTags); err != nil {
+		llog.L().Errorf("create file tags failed: %v", err)
+	} else {
+		llog.L().Infof("created %d tags for file: %s", len(cleanTags), fileID)
+	}
+}
 
 // validateAndGetParent 验证父文件夹并获取存储提供者列表
 func validateAndGetParent(parentID string) (*native.FileORM, []uint32, *models.Err) {
@@ -117,6 +143,7 @@ func handleInstantUpload(
 	existingFile *native.FileORM,
 	sameNameFile *native.FileORM,
 	overwrite bool,
+	tags *string,
 ) (handled bool, fileToUse *native.FileORM, err *models.Err) {
 	if existingFile == nil {
 		return false, nil, nil
@@ -193,6 +220,10 @@ func handleInstantUpload(
 	if createErr := db.CreateFile(newFileRecord); createErr != nil {
 		llog.L().Errorf("create file record failed: %v", createErr)
 		return true, nil, &models.Err{E: createErr, C: native.RespCode_DB_ERROR}
+	}
+	// 创建文件标签
+	if newFileRecord.Id != nil {
+		parseAndCreateTags(*newFileRecord.Id, tags)
 	}
 	return true, newFileRecord, nil
 }
@@ -338,6 +369,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	handled, _, mErr := handleInstantUpload(
 		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
 		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+		req.Tags,
 	)
 	if mErr != nil {
 		return nil, mErr
@@ -379,6 +411,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
 		TargetProviderIds: parentFile.BoundProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
+		Tags:              req.Tags,
 	}
 
 	if err := db.GetDB().Create(ur).Error; err != nil {
@@ -546,8 +579,14 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 	if uploadRecord.OverwriteId != nil {
 		overwriteID = *uploadRecord.OverwriteId
 	}
-	if _, err := handleOverwriteFile(ctx, fileRecord, overwriteID, ""); err != nil {
-		return err
+	createdFile, mErr := handleOverwriteFile(ctx, fileRecord, overwriteID, "")
+	if mErr != nil {
+		return mErr
+	}
+
+	// 创建文件标签
+	if createdFile.Id != nil {
+		parseAndCreateTags(*createdFile.Id, uploadRecord.Tags)
 	}
 
 	// 移除分片
@@ -616,6 +655,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	handled, fileRecord, mErr := handleInstantUpload(
 		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
 		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+		req.Tags,
 	)
 	if mErr != nil {
 		return nil, mErr
@@ -689,6 +729,11 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	newFileRecord, mErr = handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
 	if mErr != nil {
 		return nil, mErr
+	}
+
+	// 创建文件标签
+	if newFileRecord.Id != nil {
+		parseAndCreateTags(*newFileRecord.Id, req.Tags)
 	}
 
 	// 创建上传记录并触发后台存储上传

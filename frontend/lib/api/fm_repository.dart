@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
@@ -36,11 +37,11 @@ class FmRepository {
   factory FmRepository() {
     final inst = FmRepository._();
     final ls = GetIt.I.get<LocalStorage>();
-    inst._init(ls.fileServer, ls.token);
+    inst._init(ls.fileServer);
     return inst;
   }
 
-  void _init(String? baseUrl, CasdoorToken? token) {
+  void _init(String? baseUrl) {
     _baseUrl = baseUrl;
     _dio = Dio(
       BaseOptions(
@@ -56,7 +57,46 @@ class FmRepository {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          // 添加认证 Token
+          // 动态获取认证 Token，确保登录后能使用最新 token
+          final ls = GetIt.I.get<LocalStorage>();
+          final token = ls.token;
+          if (token?.accessToken != null) {
+            options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
+          }
+          _logger.info('API Request: ${options.method} ${options.path}');
+          return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          _logger.info(
+            'API Response: ${response.statusCode} ${response.requestOptions.path}',
+          );
+          return handler.next(response);
+        },
+        onError: (error, handler) {
+          _logger.error(
+            'API Error: ${error.message} ${error.requestOptions.path}',
+          );
+          return handler.next(error);
+        },
+      ),
+    );
+  }
+
+  /// 用于 isolate 中初始化，需要手动传入 token
+  void _initWithToken(String? baseUrl, CasdoorToken? token) {
+    _baseUrl = baseUrl;
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
+        contentType: 'application/json',
+      ),
+    );
+
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
           if (token?.accessToken != null) {
             options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
           }
@@ -81,7 +121,7 @@ class FmRepository {
 
   static FmRepository isolateInit(String baseUrl, CasdoorToken token) {
     final inst = FmRepository._();
-    inst._init(baseUrl, token);
+    inst._initWithToken(baseUrl, token);
     return inst;
   }
 
@@ -368,10 +408,7 @@ class FmRepository {
     String? proxy,
   }) async {
     try {
-      final req = AddStorageProviderReq(
-        providerType: providerType,
-        name: name,
-      );
+      final req = AddStorageProviderReq(providerType: providerType, name: name);
 
       if (description != null) req.description = description;
       if (config != null) req.config = config;
@@ -477,6 +514,7 @@ class FmRepository {
     required String hash,
     required List<int> content,
     bool overwrite = false,
+    String? tags,
     void Function(int, int)? onSendProgress,
   }) async {
     try {
@@ -487,6 +525,9 @@ class FmRepository {
         ..hash = hash
         ..content = content
         ..overwrite = overwrite;
+      if (tags != null && tags.isNotEmpty) {
+        req.tags = tags;
+      }
 
       final response = await _dio.post(
         '$_baseUrl/native.UploadService/UploadSmall',
@@ -519,6 +560,7 @@ class FmRepository {
     String? hash,
     int? chunkSize,
     bool overwrite = false,
+    String? tags,
   }) async {
     try {
       final req = InitUploadReq()
@@ -527,6 +569,7 @@ class FmRepository {
         ..size = Int64(size);
       if (parentId != null) req.parentId = parentId;
       if (hash != null) req.hash = hash;
+      if (tags != null && tags.isNotEmpty) req.tags = tags;
 
       final response = await _dio.post(
         '$_baseUrl/native.UploadService/InitUpload',

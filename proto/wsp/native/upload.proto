@@ -53,6 +53,8 @@ message UploadRecord {
     not_null: true
     default: "1"
   }];
+  // 文件标签（逗号分隔）
+  optional string tags = 15 [(gorm.field).tag = {default: "''"}];
 }
 
 
@@ -82,6 +84,8 @@ message InitUploadReq {
   // 文件完整哈希信息， BLAKE3
   optional string hash = 4 [(buf.validate.field).required = true];
   optional bool overwrite = 5;
+  // 文件标签（逗号分隔）
+  optional string tags = 6;
 }
 
 // 初始化上传响应
@@ -103,6 +107,8 @@ message UploadSmallReq {
   optional string hash = 4 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 1];
   optional bool overwrite = 5;
   optional bytes content = 6 [(buf.validate.field).required = true];
+  // 文件标签（逗号分隔）
+  optional string tags = 7;
 }
 
 // 小文件上传响应

@@ -182,6 +182,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         fileSize: fileSize,
         parentId: event.parentId,
         status: UploadStatus.PENDING,
+        tags: event.tags,
+        overwrite: event.overwrite,
       );
 
       // 调度后台任务（包含 Hash 计算）

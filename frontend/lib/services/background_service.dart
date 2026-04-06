@@ -91,6 +91,12 @@ class BackgroundService {
     }
   }
 
+  /// 手动触发UI更新（用于任务完成时确保UI刷新）
+  Future<void> notifyUploadTasksChanged() async {
+    final uploadTasks = await storage.getAllUploadTasksAsync();
+    _uploadTaskController.add(uploadTasks);
+  }
+
   /// 初始化后台服务
   ///
   /// 移动平台：初始化 WorkManager
@@ -266,6 +272,10 @@ class BackgroundService {
           : _downloadIsolates[msg.isolateId];
 
       isolateInfo?.status = IsolateStatus.completed;
+      
+      // 任务完成后通知UI更新
+      await notifyUploadTasksChanged();
+      
       final task = await _storage.getNextPendingUploadTaskAsync();
       //TODO: 处理下载任务
       if (task != null) {

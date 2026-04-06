@@ -7,6 +7,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/models"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -16,7 +17,10 @@ var cfg *models.Config
 func Init() {
 	initViper()
 	cfg = defaultConfig()
-	if err := viper.Unmarshal(cfg); err != nil {
+	// 使用 yaml 标签进行解析
+	if err := viper.Unmarshal(cfg, func(dc *mapstructure.DecoderConfig) {
+		dc.TagName = "yaml"
+	}); err != nil {
 		panic(fmt.Errorf("fatal error config file: %v", err))
 	}
 
@@ -31,6 +35,7 @@ func initViper() {
 	checkConfigFile()
 
 	viper.SetConfigFile(globals.ConfigPath)
+	viper.SetConfigType("yaml")
 
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("read config file: %v, err: %v ", globals.ConfigPath, err))
@@ -39,7 +44,7 @@ func initViper() {
 }
 
 func checkConfigFile() {
-	fmt.Printf("config path: %s", globals.ConfigPath)
+	fmt.Printf("config path: %s\n", globals.ConfigPath)
 	stat, err := os.Stat(globals.ConfigPath)
 	if err != nil {
 		panic(fmt.Errorf("parse config file: %v err: %v", globals.ConfigPath, err))

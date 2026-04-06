@@ -78,6 +78,27 @@ func GetDB() *gorm.DB {
 	return db
 }
 
+// CreateFileTags 创建文件标签
+func CreateFileTags(fileID string, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+	var tagRecords []native.FileTagORM
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		tagRecords = append(tagRecords, native.FileTagORM{
+			FileId:  &fileID,
+			TagName: &tag,
+		})
+	}
+	if len(tagRecords) == 0 {
+		return nil
+	}
+	return db.Create(&tagRecords).Error
+}
+
 // 迁移数据库
 func autoMigrate() error {
 	return db.AutoMigrate(

@@ -3,14 +3,18 @@ package middleware
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
 
-const tokenHeader = "Authentication"
+const tokenHeader = "Authorization"
 
 // AuthInterceptor auth middleware
 func AuthInterceptor() connect.UnaryInterceptorFunc {
@@ -19,14 +23,30 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (connect.AnyResponse, error) {
-			if req.Header().Get(tokenHeader) == "" {
-				// Check token in handlers.
+
+			accessToken := req.Header().Get(tokenHeader)
+			if accessToken == "" {
+				llog.L().Errorf("no token provided")
 				return response.ErrResp(&models.Err{
 					E: errors.New("no token provided"), C: native.RespCode_TOKEN_INVALID})
 
-			} else {
-				//TODO: 解析token，验证权限等
 			}
+			at, _ := strings.CutPrefix(accessToken, "Bearer ")
+			claims, err := casdoorsdk.ParseJwtToken(at)
+			if err != nil {
+				llog.L().Errorf("token parse failed, token: %s, err: %v", accessToken, err)
+				return response.ErrResp(&models.Err{
+					E: errors.New("token parse failed"), C: native.RespCode_TOKEN_INVALID})
+			}
+			llog.L().Infof("user info claims: user id: %s, user name: %s, user email: %s", claims.User.Id, claims.User.Name, claims.User.Email)
+
+			if claims.User.Name == "" {
+				return response.ErrResp(&models.Err{
+					E: errors.New("no token provided"), C: native.RespCode_TOKEN_INVALID})
+			}
+
+			// Set user info to context
+			ctx = context.WithValue(ctx, globals.ContextUserKey, claims)
 			return next(ctx, req)
 		}
 	}

@@ -84,6 +84,12 @@ class _FileView extends StatelessWidget {
       title: Text(state.currentDirName.isEmpty ? '文件' : state.currentDirName),
       centerTitle: true,
       actions: [
+        // 刷新按钮
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: () =>
+              context.read<FileBloc>().add(const FileRefreshEvent()),
+        ),
         // 搜索按钮
         IconButton(
           icon: const Icon(Icons.search),
@@ -475,14 +481,6 @@ class _FileView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text('刷新'),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.read<FileBloc>().add(const FileRefreshEvent());
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.create_new_folder),
               title: const Text('新建文件夹'),
               onTap: () {
@@ -514,6 +512,54 @@ class _FileView extends StatelessWidget {
 
   /// 选择并上传文件
   Future<void> _pickAndUploadFiles(BuildContext context) async {
+    final tagsController = TextEditingController();
+    bool overwrite = false;
+
+    // 先弹出对话框让用户输入标签和选择是否覆盖
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('上传文件'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: tagsController,
+                decoration: const InputDecoration(
+                  labelText: '文件标签',
+                  hintText: '可选，多个标签用逗号分隔',
+                  prefixIcon: Icon(Icons.label_outline),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('覆盖同名文件'),
+                subtitle: const Text('如果存在同名文件则覆盖'),
+                value: overwrite,
+                onChanged: (value) {
+                  setState(() => overwrite = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('选择文件'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // 用户确认后再选择文件
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -523,11 +569,20 @@ class _FileView extends StatelessWidget {
       if (result != null && result.files.isNotEmpty && context.mounted) {
         final state = context.read<FileBloc>().state;
         final parentId = state.currentDirId;
+        final tags = tagsController.text.trim().isEmpty
+            ? null
+            : tagsController.text.trim();
+        print('tags: $tags');
 
         for (final file in result.files) {
           if (file.path != null) {
             GetIt.I.get<TransferBloc>().add(
-              TransferAddUploadEvent(file.path!, parentId),
+              TransferAddUploadEvent(
+                file.path!,
+                parentId,
+                tags: tags,
+                overwrite: overwrite,
+              ),
             );
           }
         }
