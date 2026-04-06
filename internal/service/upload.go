@@ -23,7 +23,250 @@ import (
 const (
 	// DefaultChunkSize default 10MB
 	DefaultChunkSize = 10 * 1024 * 1024
+	// SmallFileThreshold 小文件阈值 10MB
+	SmallFileThreshold = 10 * 1024 * 1024
 )
+
+// validateAndGetParent 验证父文件夹并获取存储提供者列表
+func validateAndGetParent(parentID string) (*native.FileORM, []uint32, *models.Err) {
+	parentFile, err := db.GetFileByID(parentID)
+	if err != nil {
+		llog.L().Errorf("get parent folder failed: %v", err)
+		return nil, nil, &models.Err{
+			E: errors.New("parent folder not found"),
+			C: native.RespCode_DB_ERROR,
+		}
+	}
+
+	if parentFile.BoundProviderIds == nil || *parentFile.BoundProviderIds == "" {
+		return nil, nil, &models.Err{
+			E: errors.New("parent folder has no bound storage providers"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	var providerIds []uint32
+	if err := json.Unmarshal([]byte(*parentFile.BoundProviderIds), &providerIds); err != nil {
+		llog.L().Errorf("invalid bound_provider_ids format: %v", err)
+		return nil, nil, &models.Err{
+			E: errors.New("invalid bound_provider_ids format"),
+			C: native.RespCode_INTERNAL_ERROR,
+		}
+	}
+
+	if len(providerIds) == 0 {
+		return nil, nil, &models.Err{
+			E: errors.New("parent folder has no bound storage providers"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	return parentFile, providerIds, nil
+}
+
+// checkFileExists 检查文件是否已存在（通过hash和同名）
+func checkFileExists(parentID, fileName, fileHash string) (*native.FileORM, *native.FileORM, *models.Err) {
+	existingFile, err := db.GetFileByHash(fileHash)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.L().Errorf("check file exists by hash failed: %v", err)
+		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	sameNameFile, err := db.GetFileByParentAndName(parentID, fileName)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		llog.L().Errorf("check same name file failed: %v", err)
+		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return existingFile, sameNameFile, nil
+}
+
+// createSyncTask 创建同步任务
+func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHash string, providerIds []uint32) {
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
+	emptyStr := ""
+
+	syncRecord := &native.UploadRecordORM{
+		FileName:          fileName,
+		FileSize:          fileSize,
+		ParentId:          parentID,
+		FileHash:          &fileHash,
+		TargetProviderIds: &targetProviderIds,
+		TempPath:          &emptyStr,
+		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+		TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
+	}
+
+	if err := db.GetDB().Create(syncRecord).Error; err != nil {
+		llog.L().Errorf("create sync record failed: %v", err)
+	} else {
+		go storage.Dispatch(context.Background(), syncRecord)
+	}
+}
+
+// handleInstantUpload 处理秒传逻辑
+// 返回值：handled 表示是否已处理，需要直接返回；fileToUse 表示应该使用的文件记录
+func handleInstantUpload(
+	ctx context.Context,
+	fileHash string,
+	fileName *string,
+	fileSize *uint64,
+	parentID *string,
+	providerIds []uint32,
+	existingFile *native.FileORM,
+	sameNameFile *native.FileORM,
+	overwrite bool,
+) (handled bool, fileToUse *native.FileORM, err *models.Err) {
+	if existingFile == nil {
+		return false, nil, nil
+	}
+
+	llog.L().Infof("file already exists by hash: %s", fileHash)
+
+	// 检查文件已经在哪些存储提供者上
+	existingLocations, dbErr := db.GetFileLocationsByBlake3Hash(fileHash)
+	if dbErr != nil {
+		llog.L().Errorf("get existing file locations failed: %v", dbErr)
+		return true, nil, &models.Err{E: dbErr, C: native.RespCode_DB_ERROR}
+	}
+
+	// 构建已存在的提供者映射
+	existingProviderMap := make(map[uint32]bool)
+	for _, loc := range existingLocations {
+		if *loc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
+			existingProviderMap[*loc.ProviderId] = true
+		}
+	}
+
+	// 计算需要同步到哪些新的存储提供者
+	var needSyncProviders []uint32
+	for _, pid := range providerIds {
+		if !existingProviderMap[pid] {
+			needSyncProviders = append(needSyncProviders, pid)
+		}
+	}
+
+	// 如果需要同步，创建同步任务
+	if len(needSyncProviders) > 0 {
+		llog.L().Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), fileHash)
+		createSyncTask(fileName, fileSize, parentID, fileHash, providerIds)
+	}
+
+	// 处理同名文件
+	if sameNameFile != nil {
+		if *sameNameFile.Hash == fileHash {
+			// 同名且同 hash，直接返回秒传成功
+			return true, existingFile, nil
+		}
+		// 同名但 hash 不同，检查覆盖标志
+		if !overwrite {
+			llog.L().Infof("same name file exists, overwrite=false: %s", *fileName)
+			return true, nil, &models.Err{
+				E: fmt.Errorf("file with same name already exists: %s", *fileName),
+				C: native.RespCode_ALREADY_EXISTS,
+			}
+		}
+		// 需要覆盖，更新文件记录
+		f := &native.FileORM{
+			Hash: &fileHash,
+			Size: fileSize,
+		}
+		if updateErr := db.UpdateFileWithHistory(ctx, f, sameNameFile); updateErr != nil {
+			llog.L().Errorf("update file with history failed: %v", updateErr)
+			return true, nil, &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
+		}
+		sameNameFile.Hash = &fileHash
+		sameNameFile.Size = fileSize
+		return true, sameNameFile, nil
+	}
+
+	// 没有同名文件，创建新的文件记录
+	newFileRecord := &native.FileORM{
+		Name:     fileName,
+		ParentId: parentID,
+		Size:     existingFile.Size,
+		Hash:     existingFile.Hash,
+		Type:     existingFile.Type,
+		Mime:     existingFile.Mime,
+	}
+	if createErr := db.CreateFile(newFileRecord); createErr != nil {
+		llog.L().Errorf("create file record failed: %v", createErr)
+		return true, nil, &models.Err{E: createErr, C: native.RespCode_DB_ERROR}
+	}
+	return true, newFileRecord, nil
+}
+
+// handleOverwriteFile 处理覆盖上传或新建文件记录
+// 返回创建的文件记录和错误
+func handleOverwriteFile(
+	ctx context.Context,
+	fileRecord *native.FileORM,
+	overwriteID string,
+	cleanupPath string,
+) (*native.FileORM, *models.Err) {
+	if overwriteID == "" {
+		// 新上传：创建新的文件记录
+		if err := db.CreateFile(fileRecord); err != nil {
+			if cleanupPath != "" {
+				os.Remove(cleanupPath)
+			}
+			llog.L().Errorf("create file record failed: %v", err)
+			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		}
+		llog.L().Infof("new file created, id: %s, hash: %s", *fileRecord.Id, *fileRecord.Hash)
+		return fileRecord, nil
+	}
+
+	// 覆盖上传
+	fileRecord.Id = &overwriteID
+	oldFile, err := db.GetFileByID(overwriteID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		if cleanupPath != "" {
+			os.Remove(cleanupPath)
+		}
+		llog.L().Errorf("get old file record failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	if oldFile != nil {
+		if err := db.UpdateFileWithHistory(ctx, fileRecord, oldFile); err != nil {
+			if cleanupPath != "" {
+				os.Remove(cleanupPath)
+			}
+			llog.L().Errorf("update file with history failed: %v", err)
+			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s", *fileRecord.Id, *oldFile.Hash, *fileRecord.Hash)
+		return fileRecord, nil
+	}
+
+	// 旧文件不存在（可能被删除了），创建新记录
+	if err := db.CreateFile(fileRecord); err != nil {
+		if cleanupPath != "" {
+			os.Remove(cleanupPath)
+		}
+		llog.L().Errorf("create file record failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+	llog.L().Warnf("overwrite file not found, created new record, id: %s", *fileRecord.Id)
+	return fileRecord, nil
+}
+
+// checkSameNameFile 检查同名文件并返回 overwriteID
+func checkSameNameFile(sameNameFile *native.FileORM, fileName string, overwrite bool) (string, *models.Err) {
+	if sameNameFile == nil {
+		return "", nil
+	}
+	if !overwrite {
+		llog.L().Infof("same name file exists, overwrite=false: %s", fileName)
+		return "", &models.Err{
+			E: fmt.Errorf("file with same name already exists: %s", fileName),
+			C: native.RespCode_ALREADY_EXISTS,
+		}
+	}
+	return *sameNameFile.Id, nil
+}
 
 // InitUpload init upload flow
 func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUploadRespData, *models.Err) {
@@ -33,30 +276,30 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
-	blake3 := *req.Hash
+
+	blake3Hash := *req.Hash
+
 	// 检查是否有未完成的上传任务（断点续传）
-	record, chunks, err := db.GetUploadRecordByHash(blake3, true)
+	record, chunks, err := db.GetUploadRecordByHash(blake3Hash, true)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		llog.L().Errorf("get uncomplete uploads failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
+
 	// 如果存在未完成的上传任务
 	if record != nil {
 		// 判断是否是同一个上传记录
 		if *record.ParentId != *req.ParentId || *record.FileName != *req.Name {
 			llog.L().Errorf("A same hash file is uploading, but file name or parent id not match,uploading file path: %d", *record.Id)
-
 			return nil, &models.Err{E: errors.New("A same hash file is uploading, but file name or parent id not match"), C: native.RespCode_INTERNAL_ERROR}
 		}
 
 		// 根据 task_type 区分任务类型
 		if record.TaskType != nil && *record.TaskType == int32(native.UploadTaskType_SYNC) {
 			// 同步任务：文件已存在，直接返回 exists=true
-			llog.L().Infof("found sync task for hash: %s, file already exists", blake3)
+			llog.L().Infof("found sync task for hash: %s, file already exists", blake3Hash)
 			exists := true
-			return &native.InitUploadRespData{
-				Exists: &exists,
-			}, nil
+			return &native.InitUploadRespData{Exists: &exists}, nil
 		}
 
 		// 普通上传任务：返回 upload_id 和已上传分片（位图）
@@ -66,13 +309,10 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		chunkTotal := *record.ChunkTotal
 		chunkSize := *record.ChunkSize
 
-		// 构建已上传分片位图
 		uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
 		if chunks != nil {
 			uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
 		}
-		llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
-			uploadID, chunkTotal, chunkSize)
 
 		return &native.InitUploadRespData{
 			UploadId:       &uploadID,
@@ -82,169 +322,35 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		}, nil
 	}
 
-	// 获取父文件夹，检查是否绑定了存储提供者
-	parentFile, err := db.GetFileByID(req.GetParentId())
-	if err != nil {
-		llog.L().Errorf("get parent folder failed: %v", err)
-		return nil, &models.Err{
-			E: errors.New("parent folder not found"),
-			C: native.RespCode_DB_ERROR,
-		}
+	// 验证父文件夹并获取存储提供者列表
+	parentFile, providerIds, mErr := validateAndGetParent(*req.ParentId)
+	if mErr != nil {
+		return nil, mErr
 	}
 
-	// 检查父文件夹是否绑定了存储提供者
-	if parentFile.BoundProviderIds == nil || *parentFile.BoundProviderIds == "" {
-		return nil, &models.Err{
-			E: errors.New("parent folder has no bound storage providers, please update folder settings"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
+	// 检查文件是否已存在
+	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash)
+	if mErr != nil {
+		return nil, mErr
 	}
 
-	// 验证bound_provider_ids是否为有效的JSON数组
-	var providerIds []uint32
-	if err := json.Unmarshal([]byte(*parentFile.BoundProviderIds), &providerIds); err != nil {
-		llog.L().Errorf("invalid bound_provider_ids format in parent folder: %v", err)
-		return nil, &models.Err{
-			E: errors.New("invalid bound_provider_ids format in parent folder"),
-			C: native.RespCode_INTERNAL_ERROR,
-		}
+	// 处理秒传逻辑
+	handled, _, mErr := handleInstantUpload(
+		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
+		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+	)
+	if mErr != nil {
+		return nil, mErr
 	}
-
-	if len(providerIds) == 0 {
-		return nil, &models.Err{
-			E: errors.New("parent folder has no bound storage providers"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	// 检查是否已上传过
-	existingFile, err := db.GetFileByHash(blake3)
-	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("check file exists by hash failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-	// 检查是否有同名文件
-	sameNameFile, err := db.GetFileByParentAndName(req.GetParentId(), req.GetName())
-	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("check same name file failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	// 相同文件hash的文件已存在
-	if existingFile != nil {
-		llog.L().Infof("file already exists by hash: %s", blake3)
+	if handled {
 		exists := true
-		rd := &native.InitUploadRespData{
-			Exists: &exists,
-		}
-
-		// 检查文件已经在哪些存储提供者上
-		existingLocations, err := db.GetFileLocationsByBlake3Hash(blake3)
-		if err != nil {
-			llog.L().Errorf("get existing file locations failed: %v", err)
-			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-
-		// 构建已存在的提供者映射
-		existingProviderMap := make(map[uint32]bool)
-		for _, loc := range existingLocations {
-			if *loc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
-				existingProviderMap[*loc.ProviderId] = true
-			}
-		}
-
-		// 计算需要同步到哪些新的存储提供者
-		var needSyncProviders []uint32
-		for _, pid := range providerIds {
-			if !existingProviderMap[pid] {
-				needSyncProviders = append(needSyncProviders, pid)
-			}
-		}
-
-		// 如果需要同步，创建真实的同步任务记录
-		if len(needSyncProviders) > 0 {
-			llog.L().Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), blake3)
-
-			// 转换为JSON字符串
-			providerIdsJSON, _ := json.Marshal(providerIds)
-			targetProviderIds := string(providerIdsJSON)
-
-			// 创建真实的同步任务记录
-			emptyStr := ""
-			syncRecord := &native.UploadRecordORM{
-				FileName:          req.Name,
-				FileSize:          req.Size,
-				ParentId:          req.ParentId,
-				FileHash:          &blake3,
-				TargetProviderIds: &targetProviderIds,
-				TempPath:          &emptyStr,
-				Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
-				TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
-			}
-
-			// 保存到数据库，确保可以恢复
-			if err := db.GetDB().Create(syncRecord).Error; err != nil {
-				llog.L().Errorf("create sync record failed: %v", err)
-				// 创建失败不影响秒传响应，只是后台同步可能无法执行
-			} else {
-				// 后台异步同步
-				go storage.Dispatch(context.Background(), syncRecord)
-			}
-		}
-
-		if sameNameFile != nil {
-			//存在同名文件
-			snf := sameNameFile
-			if *snf.Hash == blake3 {
-				return rd, nil
-			}
-			// hash not same, check overwrite flag
-			if !*req.Overwrite {
-				llog.L().Infof("same name file exists, overwrite=false: %s", *req.Name)
-				return nil, &models.Err{
-					E: fmt.Errorf("file with same name already exists: %s", *req.Name),
-					C: native.RespCode_ALREADY_EXISTS,
-				}
-			}
-			// 需要覆盖上传，但是已经上传过了，所以直接更新数据表就可以
-			f := &native.FileORM{
-				Hash: &blake3,
-				Size: req.Size,
-			}
-			err := db.UpdateFileWithHistory(ctx, f, snf)
-			if err != nil {
-				llog.L().Errorf("update file with history failed: %v", err)
-				return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-			}
-			return rd, nil
-		}
-		// 如果没有同名文件，直接新增一条新的记录
-		newFileRecord := &native.FileORM{
-			Name:     req.Name,
-			ParentId: req.ParentId,
-			Size:     existingFile.Size,
-			Hash:     existingFile.Hash,
-			Type:     existingFile.Type,
-			Mime:     existingFile.Mime,
-		}
-		if err := db.CreateFile(newFileRecord); err != nil {
-			llog.L().Errorf("create file record failed: %v", err)
-			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		return rd, nil
+		return &native.InitUploadRespData{Exists: &exists}, nil
 	}
 
-	// 文件未上传过，存在同名文件，如果覆盖标志为false，返回存在同名文件错误
-	overwriteID := ""
-	if sameNameFile != nil {
-		if !*req.Overwrite {
-			llog.L().Infof("same name file exists, overwrite=false: %s", *req.Name)
-			return nil, &models.Err{
-				E: fmt.Errorf("file with same name already exists: %s", *req.Name),
-				C: native.RespCode_ALREADY_EXISTS,
-			}
-		}
-		overwriteID = *sameNameFile.Id
+	// 文件不存在，创建新的上传任务
+	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
+	if mErr != nil {
+		return nil, mErr
 	}
 
 	// 计算分片大小和总数
@@ -255,16 +361,14 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 创建临时目录
-	err = utils.CreateFileTempDir(blake3, true)
-
-	if err != nil {
+	if err := utils.CreateFileTempDir(blake3Hash, true); err != nil {
 		llog.L().Errorf("create temp dir failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	tp := utils.GetFileTempPath(blake3, *req.Name)
+	tp := utils.GetFileTempPath(blake3Hash, *req.Name)
 	ur := &native.UploadRecordORM{
-		FileHash:          &blake3,
+		FileHash:          &blake3Hash,
 		FileName:          req.Name,
 		FileSize:          req.Size,
 		ParentId:          req.ParentId,
@@ -286,7 +390,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 
 	return &native.InitUploadRespData{
 		UploadId:       ur.Id,
-		UploadedChunks: make([]byte, (chunkTotal+7)/8), // 空位图
+		UploadedChunks: make([]byte, (chunkTotal+7)/8),
 		ChunkTotal:     &chunkTotal,
 		ChunkSize:      &chunkSize,
 	}, nil
@@ -437,37 +541,15 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		Mime:     &mime,
 	}
 
-	// 检查是否是覆盖上传
-	if uploadRecord.OverwriteId != nil && *uploadRecord.OverwriteId != "" {
-		// 覆盖上传：更新现有文件记录并创建历史
-		fileRecord.Id = uploadRecord.OverwriteId
-		oldFile, err := db.GetFileByID(*uploadRecord.OverwriteId)
-		if err != nil && err != gorm.ErrRecordNotFound {
-			llog.L().Errorf("get old file record failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		if oldFile != nil {
-			if err := db.UpdateFileWithHistory(ctx, fileRecord, oldFile); err != nil {
-				llog.L().Errorf("update file with history failed: %v", err)
-				return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-			}
-			llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s", *fileRecord.Id, *oldFile.Hash, finalHash)
-		} else {
-			// 旧文件不存在（可能被删除了），创建新记录
-			if err := db.CreateFile(fileRecord); err != nil {
-				llog.L().Errorf("create file record failed: %v", err)
-				return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-			}
-			llog.L().Warnf("overwrite file not found, created new record, id: %s", *fileRecord.Id)
-		}
-	} else {
-		// 新上传：创建新的文件记录
-		if err := db.CreateFile(fileRecord); err != nil {
-			llog.L().Errorf("create file record failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-		}
-		llog.L().Infof("new file created, id: %s, hash: %s", *fileRecord.Id, finalHash)
+	// 处理文件记录（新建或覆盖）
+	overwriteID := ""
+	if uploadRecord.OverwriteId != nil {
+		overwriteID = *uploadRecord.OverwriteId
 	}
+	if _, err := handleOverwriteFile(ctx, fileRecord, overwriteID, ""); err != nil {
+		return err
+	}
+
 	// 移除分片
 	if err := os.RemoveAll(utils.GetChunkTempDir(*uploadRecord.FileHash)); err != nil {
 		llog.L().Warnf("remove temp path failed: %v", err)
@@ -502,4 +584,138 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 	}
 
 	return nil
+}
+
+// UploadSmall 小文件上传（< 10MB）
+func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.UploadSmallRespData, *models.Err) {
+	// 验证文件大小（必须小于 10MB）
+	if *req.Size > SmallFileThreshold {
+		llog.L().Errorf("file too large for small file upload: %d > %d", *req.Size, SmallFileThreshold)
+		return nil, &models.Err{
+			E: fmt.Errorf("file too large for small file upload (max %dMB), use chunk upload instead", SmallFileThreshold/1024/1024),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	blake3Hash := *req.Hash
+	llog.L().Infof("small file upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+
+	// 验证父文件夹并获取存储提供者列表
+	parentFile, providerIds, mErr := validateAndGetParent(*req.ParentId)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 检查文件是否已存在
+	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 处理秒传逻辑
+	handled, fileRecord, mErr := handleInstantUpload(
+		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
+		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+	)
+	if mErr != nil {
+		return nil, mErr
+	}
+	if handled {
+		exists := true
+		return &native.UploadSmallRespData{
+			FileId: fileRecord.Id,
+			Name:   fileRecord.Name,
+			Size:   fileRecord.Size,
+			Hash:   fileRecord.Hash,
+			Exists: &exists,
+		}, nil
+	}
+
+	// 文件不存在，需要实际上传
+	// 验证文件内容 hash
+	hasher := blake3.New(32, nil)
+	hasher.Write(req.Content)
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	if actualHash != blake3Hash {
+		llog.L().Errorf("file hash mismatch: expected %s, got %s", blake3Hash, actualHash)
+		return nil, &models.Err{
+			E: errors.New("file hash mismatch"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 验证文件大小
+	if uint64(len(req.Content)) != *req.Size {
+		llog.L().Errorf("file size mismatch: expected %d, got %d", *req.Size, len(req.Content))
+		return nil, &models.Err{
+			E: fmt.Errorf("file size mismatch: expected %d, got %d", *req.Size, len(req.Content)),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 处理同名文件
+	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 创建临时目录和文件
+	if err := utils.CreateFileTempDir(blake3Hash, true); err != nil {
+		llog.L().Errorf("create temp dir failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+
+	tempPath := utils.GetFileTempPath(blake3Hash, *req.Name)
+	if err := os.WriteFile(tempPath, req.Content, 0644); err != nil {
+		llog.L().Errorf("write temp file failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+
+	// 获取文件类型
+	filetype, mime := getFileType(tempPath, *req.Name)
+
+	// 创建文件记录
+	newFileRecord := &native.FileORM{
+		Name:     req.Name,
+		ParentId: req.ParentId,
+		Size:     req.Size,
+		Hash:     &blake3Hash,
+		Type:     &filetype,
+		Mime:     &mime,
+	}
+
+	// 处理文件记录（新建或覆盖）
+	newFileRecord, mErr = handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 创建上传记录并触发后台存储上传
+	uploadRecord := &native.UploadRecordORM{
+		FileHash:          &blake3Hash,
+		FileName:          req.Name,
+		FileSize:          req.Size,
+		ParentId:          req.ParentId,
+		TempPath:          &tempPath,
+		OverwriteId:       &overwriteID,
+		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+		TargetProviderIds: parentFile.BoundProviderIds,
+		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
+	}
+
+	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
+		llog.L().Errorf("create upload record failed: %v", err)
+	} else {
+		go storage.Dispatch(context.Background(), uploadRecord)
+	}
+
+	exists := false
+	return &native.UploadSmallRespData{
+		FileId: newFileRecord.Id,
+		Name:   newFileRecord.Name,
+		Size:   newFileRecord.Size,
+		Hash:   newFileRecord.Hash,
+		Exists: &exists,
+	}, nil
 }

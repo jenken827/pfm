@@ -27,7 +27,7 @@ func (s *FileServer) CreateDir(ctx context.Context, req *connect.Request[native.
 
 // GetFileList 获取文件列表
 func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[native.FileListReq]) (*connect.Response[native.BaseResp], error) {
-	files, total, err := service.GetFileList(ctx, req.Msg)
+	files, total, hasMore, err := service.GetFileList(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -43,8 +43,9 @@ func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[nativ
 	}
 	tc := uint32(total)
 	return response.SuccessResp(&native.FileListRespData{
-		Files: result,
-		Total: &tc,
+		Files:   result,
+		Total:   &tc,
+		HasMore: &hasMore,
 	})
 }
 

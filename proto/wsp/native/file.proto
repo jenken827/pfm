@@ -188,12 +188,19 @@ message FileLocation {
 // 获取文件列表
 message FileListReq {
   optional string parent_id = 1 [(buf.validate.field).required = true];
+  // 每页数量，默认500
+  optional uint32 page_size = 2;
+  // 偏移量，从0开始
+  optional uint32 offset = 3;
 }
 
 // 文件列表响应数据
 message FileListRespData {
   repeated File files = 1;
+  // 总数
   optional uint32 total = 2;
+  // 是否有更多数据
+  optional bool has_more = 3;
 }
 
 // 创建目录请求

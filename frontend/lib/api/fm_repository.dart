@@ -93,13 +93,21 @@ class FmRepository {
 
   /// 获取文件列表
   /// [parentId] 父目录 ID，为空时获取根目录
+  /// [offset] 偏移量，从0开始
+  /// [pageSize] 每页数量，默认500
   Future<ApiResult<FileListRespData>> getFileList({
     String parentId = '',
+    int offset = 0,
+    int? pageSize,
   }) async {
     try {
+      final req = FileListReq(parentId: parentId);
+      if (offset > 0) req.offset = offset;
+      if (pageSize != null) req.pageSize = pageSize;
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/GetFileList',
-        data: FileListReq(parentId: parentId).toProto3Json(),
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
@@ -399,6 +407,7 @@ class FmRepository {
     required int id,
     String? name,
     String? description,
+    String? config,
     bool? enabled,
     int? order,
     int? totalCapacity,
@@ -410,6 +419,7 @@ class FmRepository {
       final req = UpdateStorageProviderReq(id: id);
       if (name != null) req.name = name;
       if (description != null) req.description = description;
+      if (config != null) req.config = config;
       if (enabled != null) req.enabled = enabled;
       if (order != null) req.order = order;
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
@@ -457,6 +467,48 @@ class FmRepository {
   }
 
   // ==================== Chunk Upload Service ====================
+
+  /// 小文件上传（< 10MB）
+  /// 单次请求完成上传，支持秒传检测
+  Future<ApiResult<UploadSmallRespData>> uploadSmall({
+    required String name,
+    required String parentId,
+    required int size,
+    required String hash,
+    required List<int> content,
+    bool overwrite = false,
+    void Function(int, int)? onSendProgress,
+  }) async {
+    try {
+      final req = UploadSmallReq()
+        ..name = name
+        ..parentId = parentId
+        ..size = Int64(size)
+        ..hash = hash
+        ..content = content
+        ..overwrite = overwrite;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/UploadSmall',
+        data: req.toProto3Json(),
+        onSendProgress: onSendProgress,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UploadSmallRespData>(
+        data,
+        UploadSmallRespData(),
+      );
+      _logger.info('小文件上传成功: ${respData.fileId}, exists=${respData.exists}');
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('小文件上传失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('小文件上传失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
 
   /// 初始化上传任务
   /// 返回 upload_id 和已上传分片信息（支持断点续传）

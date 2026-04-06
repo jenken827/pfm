@@ -234,18 +234,20 @@ message UpdateStorageProviderReq {
   optional string name = 2 [(buf.validate.field).string.min_len = 1];
   // 实例描述
   optional string description = 3;
+  // 实例配置（JSON格式）
+  optional string config = 4;
   // 是否启用
-  optional bool enabled = 4;
+  optional bool enabled = 5;
   // 优先级
-  optional uint32 order = 5;
+  optional uint32 order = 6;
   // 总容量（字节）
-  optional uint64 total_capacity = 6;
+  optional uint64 total_capacity = 7;
   // 文件大小限制（字节）
-  optional uint64 file_size_limit = 7;
+  optional uint64 file_size_limit = 8;
   // 是否为默认绑定
-  optional bool default_bound = 8;
+  optional bool default_bound = 9;
   // 代理地址
-  optional string proxy = 9;
+  optional string proxy = 10;
 }
 
 // // StorageProviderStatsReq 获取存储提供者统计信息请求

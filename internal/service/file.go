@@ -13,14 +13,18 @@ import (
 )
 
 // GetFileList 获取文件列表
-func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, *models.Err) {
-	files, total, err := db.GetFileList(*req.ParentId)
+func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, bool, *models.Err) {
+	// 获取分页参数
+	offset := req.GetOffset()
+	pageSize := req.GetPageSize()
+
+	files, total, hasMore, err := db.GetFileList(req.GetParentId(), offset, pageSize)
 	if err != nil {
 		llog.L().Errorf("GetFileList failed, err: %v", err)
-		return nil, 0, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	return files, total, nil
+	return files, total, hasMore, nil
 }
 
 // CreateDir 创建文件夹

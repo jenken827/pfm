@@ -1,7 +1,7 @@
 part of 'file_bloc.dart';
 
 /// 文件列表状态
-enum FileStateStatus { initial, loading, success, failure }
+enum FileStateStatus { initial, loading, loadingMore, success, failure }
 
 /// 文件视图模式
 enum FileViewMode { list, grid }
@@ -21,6 +21,9 @@ class FileState extends Equatable {
     this.breadcrumbs = const [],
     this.searchKeyword = '',
     this.storageProviders = const [],
+    this.hasMore = false,
+    this.offset = 0,
+    this.total = 0,
   });
 
   final FileStateStatus status;
@@ -35,6 +38,9 @@ class FileState extends Equatable {
   final List<Breadcrumb> breadcrumbs;
   final String searchKeyword;
   final List<StorageProvider> storageProviders;
+  final bool hasMore;
+  final int offset;
+  final int total;
 
   @override
   List<Object?> get props => [
@@ -50,6 +56,9 @@ class FileState extends Equatable {
     breadcrumbs,
     searchKeyword,
     storageProviders,
+    hasMore,
+    offset,
+    total,
   ];
 
   FileState copyWith({
@@ -65,6 +74,9 @@ class FileState extends Equatable {
     List<Breadcrumb>? breadcrumbs,
     String? searchKeyword,
     List<StorageProvider>? storageProviders,
+    bool? hasMore,
+    int? offset,
+    int? total,
   }) {
     return FileState(
       status: status ?? this.status,
@@ -79,6 +91,9 @@ class FileState extends Equatable {
       breadcrumbs: breadcrumbs ?? this.breadcrumbs,
       searchKeyword: searchKeyword ?? this.searchKeyword,
       storageProviders: storageProviders ?? this.storageProviders,
+      hasMore: hasMore ?? this.hasMore,
+      offset: offset ?? this.offset,
+      total: total ?? this.total,
     );
   }
 }

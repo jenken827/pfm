@@ -352,9 +352,8 @@ class _StorageProviderView extends StatelessWidget {
                       ],
                     ),
 
-                    // 动态配置字段（仅添加时显示，编辑时不显示）
-                    if (provider == null &&
-                        selectedTypeInfo != null &&
+                    // 动态配置字段（添加和编辑时都显示，但编辑时需要重新初始化）
+                    if (selectedTypeInfo != null &&
                         selectedTypeInfo!.configFields.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
@@ -367,42 +366,6 @@ class _StorageProviderView extends StatelessWidget {
                       ...selectedTypeInfo!.configFields.map(
                         (field) => buildConfigField(field, existingConfig),
                       ),
-                    ],
-
-                    // 编辑时显示配置信息（只读）
-                    if (provider != null &&
-                        selectedTypeInfo != null &&
-                        selectedTypeInfo!.configFields.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        '配置信息',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      // 只读展示配置字段
-                      ...selectedTypeInfo!.configFields.map((field) {
-                        final value = existingConfig[field.name];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: field.label,
-                              prefixIcon: field.iconName.isNotEmpty
-                                  ? Icon(_getIconData(field.iconName))
-                                  : null,
-                            ),
-                            child: Text(
-                              value?.toString() ?? '未设置',
-                              style: TextStyle(
-                                color: value != null
-                                    ? Theme.of(context).textTheme.bodyLarge?.color
-                                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
                     ],
 
                     // 代理设置
@@ -424,7 +387,7 @@ class _StorageProviderView extends StatelessWidget {
                       initialValue: provider?.proxy,
                     ),
 
-                    // 加密设置（仅添加时显示，编辑时不显示）
+                    // 加密设置（仅添加时可编辑）
                     if (provider == null) ...[
                       const SizedBox(height: 24),
                       Text(
@@ -464,6 +427,60 @@ class _StorageProviderView extends StatelessWidget {
                           prefixIcon: Icon(Icons.extension),
                         ),
                         initialValue: provider?.encryptionSuffix ?? 'bin',
+                      ),
+                    ],
+
+                    // 编辑时显示加密信息（只读）
+                    if (provider != null) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        '加密设置（只读）',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '加密密钥',
+                          prefixIcon: Icon(Icons.vpn_key),
+                        ),
+                        child: Text(
+                          provider.encryptionKey.isNotEmpty
+                              ? '${provider.encryptionKey.substring(0, provider.encryptionKey.length > 8 ? 8 : provider.encryptionKey.length)}...'
+                              : '未设置',
+                          style: TextStyle(
+                            color: provider.encryptionKey.isNotEmpty
+                                ? Theme.of(context).textTheme.bodyLarge?.color
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '加密文件名',
+                          prefixIcon: Icon(Icons.lock),
+                        ),
+                        child: Text(
+                          provider.encryptFilename ? '是' : '否',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '加密文件后缀',
+                          prefixIcon: Icon(Icons.extension),
+                        ),
+                        child: Text(
+                          provider.encryptionSuffix.isNotEmpty
+                              ? provider.encryptionSuffix
+                              : '未设置',
+                          style: TextStyle(
+                            color: provider.encryptionSuffix.isNotEmpty
+                                ? Theme.of(context).textTheme.bodyLarge?.color
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -561,6 +578,7 @@ class _StorageProviderView extends StatelessWidget {
                                 formData['description']?.isNotEmpty == true
                                 ? formData['description']
                                 : null,
+                            config: configJson,
                             enabled: formData['enabled'] as bool?,
                             order: orderValue,
                             capacity: capacity,
@@ -610,25 +628,4 @@ class _StorageProviderView extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 获取图标数据
-IconData _getIconData(String iconName) {
-  final iconMap = {
-    'folder_open': Icons.folder_open,
-    'security': Icons.security,
-    'send': Icons.send,
-    'vpn_key': Icons.vpn_key,
-    'extension': Icons.extension,
-    'storage': Icons.storage,
-    'label': Icons.label,
-    'description': Icons.description,
-    'sort': Icons.sort,
-    'category': Icons.category,
-    'cloud': Icons.cloud,
-    'lock': Icons.lock,
-    'chat': Icons.chat,
-    'settings_ethernet': Icons.settings_ethernet,
-  };
-  return iconMap[iconName] ?? Icons.info;
 }

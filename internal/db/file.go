@@ -55,20 +55,40 @@ func DeleteFiles(ids []string) error {
 }
 
 // GetFileList 获取文件列表
-func GetFileList(parentID string) ([]*native.FileORM, int64, error) {
+// GetFileList 获取文件列表（支持分页）
+// parentID: 父目录ID
+// offset: 偏移量
+// pageSize: 每页数量，如果为0则使用默认值500
+func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
 	var total int64
 	var err error
 	ctx := context.Background()
-	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID)
-	if total, err = gdb.Count(ctx, "*"); err != nil {
-		return nil, 0, err
+
+	// 默认每页500条
+	if pageSize == 0 {
+		pageSize = 500
 	}
 
-	if files, err = gdb.Find(ctx); err != nil {
-		return nil, 0, err
+	// 获取总数
+	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID)
+	if total, err = gdb.Count(ctx, "*"); err != nil {
+		return nil, 0, false, err
 	}
-	return files, total, nil
+
+	// 分页查询
+	if files, err = gorm.G[*native.FileORM](db).
+		Where("parent_id = ?", parentID).
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Find(ctx); err != nil {
+		return nil, 0, false, err
+	}
+
+	// 判断是否有更多数据
+	hasMore := int64(offset)+int64(len(files)) < total
+
+	return files, total, hasMore, nil
 }
 
 // UpdateDir 更新文件夹配置

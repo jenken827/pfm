@@ -111,6 +111,7 @@ class StorageProviderBloc
       id: event.id,
       name: event.name,
       description: event.description,
+      config: event.config,
       enabled: event.enabled,
       order: event.order,
       totalCapacity: event.capacity,

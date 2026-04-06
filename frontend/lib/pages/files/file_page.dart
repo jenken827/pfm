@@ -119,7 +119,7 @@ class _FileView extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, FileState state) {
-    // 处理加载状态
+    // 处理加载状态（首次加载）
     if (state.status == FileStateStatus.loading) {
       return const Center(
         child: Column(
@@ -241,7 +241,7 @@ class _FileView extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: Text(
-              '${state.files.length}',
+              state.total > 0 ? '${state.total}' : '${state.files.length}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -253,46 +253,81 @@ class _FileView extends StatelessWidget {
   }
 
   Widget _buildListView(BuildContext context, FileState state) {
-    return ListView.builder(
-      itemCount: state.files.length,
-      itemBuilder: (context, index) {
-        final file = state.files[index];
-        final isSelected = state.selectedFiles.contains(file);
-
-        return _FileListTile(
-          file: file,
-          isSelected: isSelected,
-          isSelectMode: state.isSelectMode,
-          onTap: () => _handleFileTap(context, file, state),
-          onLongPress: () => _handleFileLongPress(context, file),
-          onMenuPressed: () => _showFileMenu(context, file),
-        );
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollEndNotification &&
+            notification.metrics.pixels >=
+                notification.metrics.maxScrollExtent - 100) {
+          // 距离底部100像素时触发加载更多
+          context.read<FileBloc>().add(const FileLoadMoreEvent());
+        }
+        return false;
       },
+      child: ListView.builder(
+        itemCount: state.files.length + (state.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          // 显示加载更多指示器
+          if (index == state.files.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final file = state.files[index];
+          final isSelected = state.selectedFiles.contains(file);
+
+          return _FileListTile(
+            file: file,
+            isSelected: isSelected,
+            isSelectMode: state.isSelectMode,
+            onTap: () => _handleFileTap(context, file, state),
+            onLongPress: () => _handleFileLongPress(context, file),
+            onMenuPressed: () => _showFileMenu(context, file),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildGridView(BuildContext context, FileState state) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 0.8,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: state.files.length,
-      itemBuilder: (context, index) {
-        final file = state.files[index];
-        final isSelected = state.selectedFiles.contains(file);
-
-        return _FileGridTile(
-          file: file,
-          isSelected: isSelected,
-          isSelectMode: state.isSelectMode,
-          onTap: () => _handleFileTap(context, file, state),
-          onLongPress: () => _handleFileLongPress(context, file),
-        );
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollEndNotification &&
+            notification.metrics.pixels >=
+                notification.metrics.maxScrollExtent - 100) {
+          // 距离底部100像素时触发加载更多
+          context.read<FileBloc>().add(const FileLoadMoreEvent());
+        }
+        return false;
       },
+      child: GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          childAspectRatio: 0.8,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: state.files.length + (state.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          // 显示加载更多指示器
+          if (index == state.files.length) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final file = state.files[index];
+          final isSelected = state.selectedFiles.contains(file);
+
+          return _FileGridTile(
+            file: file,
+            isSelected: isSelected,
+            isSelectMode: state.isSelectMode,
+            onTap: () => _handleFileTap(context, file, state),
+            onLongPress: () => _handleFileLongPress(context, file),
+          );
+        },
+      ),
     );
   }
 

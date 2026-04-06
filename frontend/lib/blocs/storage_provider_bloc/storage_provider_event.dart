@@ -54,6 +54,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     required this.id,
     this.name,
     this.description,
+    this.config,
     this.enabled,
     this.order,
     this.capacity,
@@ -65,6 +66,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
   final int id;
   final String? name;
   final String? description;
+  final String? config;
   final bool? enabled;
   final int? order;
   final int? capacity;

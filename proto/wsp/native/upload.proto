@@ -93,6 +93,27 @@ message InitUploadRespData {
   optional uint64 chunk_size = 5; // 分片大小
 }
 
+// ============ 小文件上传（< 10MB）============
+
+// 小文件上传请求
+message UploadSmallReq {
+  optional string name = 1 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 1];
+  optional string parent_id = 2 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 1];
+  optional uint64 size = 3 [(buf.validate.field).required = true, (buf.validate.field).uint64.gt = 0];
+  optional string hash = 4 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 1];
+  optional bool overwrite = 5;
+  optional bytes content = 6 [(buf.validate.field).required = true];
+}
+
+// 小文件上传响应
+message UploadSmallRespData {
+  optional string file_id = 1;    // 文件ID
+  optional string name = 2;       // 文件名
+  optional uint64 size = 3;       // 文件大小
+  optional string hash = 4;       // 文件哈希
+  optional bool exists = 5;       // 秒传时为 true
+}
+
 // 上传分片请求（非流式，每次上传一个分片）
 message UploadChunkReq {
   optional uint32 upload_id = 1 [(buf.validate.field).required = true];
@@ -128,7 +149,11 @@ message CancelUploadReq {
 
 // 上传服务
 service UploadService {
-  // 初始化上传任务
+  // 小文件上传（< 10MB）
+  // 单次请求完成上传，支持秒传检测
+  rpc UploadSmall(UploadSmallReq) returns (BaseResp);
+
+  // 初始化上传任务（适合大文件，>= 10MB）
   // 返回上传ID和已上传分片信息（支持断点续传）
   rpc InitUpload(InitUploadReq) returns (BaseResp);
   // 上传分片（非流式，每次上传一个分片）

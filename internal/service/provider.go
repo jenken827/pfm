@@ -107,6 +107,9 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 	if req.Description != nil {
 		orm.Description = req.Description
 	}
+	if req.Config != nil {
+		orm.Config = req.Config
+	}
 	if req.Enabled != nil {
 		orm.Enabled = req.Enabled
 	}

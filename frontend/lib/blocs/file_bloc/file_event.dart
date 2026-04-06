@@ -22,6 +22,11 @@ class FileRefreshEvent extends FileEvent {
   const FileRefreshEvent();
 }
 
+/// 加载更多文件事件
+class FileLoadMoreEvent extends FileEvent {
+  const FileLoadMoreEvent();
+}
+
 /// 切换视图模式事件（列表/网格）
 class FileViewModeEvent extends FileEvent {
   const FileViewModeEvent(this.isGridView);

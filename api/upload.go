@@ -15,6 +15,15 @@ type UploadServer struct{}
 
 var _ = (nativeconnect.UploadServiceHandler)((*UploadServer)(nil))
 
+// UploadSmall 小文件上传（< 10MB）
+func (s *UploadServer) UploadSmall(ctx context.Context, req *connect.Request[native.UploadSmallReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.UploadSmall(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(result)
+}
+
 // InitUpload 初始化上传任务
 func (s *UploadServer) InitUpload(ctx context.Context, req *connect.Request[native.InitUploadReq]) (*connect.Response[native.BaseResp], error) {
 

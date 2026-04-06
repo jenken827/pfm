@@ -15,6 +15,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     // on<FileServerSubScriptionEvent>(_onFileServerSubscription);
     on<FileListEvent>(_onFileList);
     on<FileRefreshEvent>(_onFileRefresh);
+    on<FileLoadMoreEvent>(_onLoadMore);
     on<FileViewModeEvent>(_onViewMode);
     on<FileSortEvent>(_onSort);
     on<FileSelectModeEvent>(_onSelectMode);
@@ -46,6 +47,8 @@ class FileBloc extends Bloc<FileEvent, FileState> {
       return;
     }
     final files = resp.data?.files.toList() ?? [];
+    final total = resp.data?.total ?? 0;
+    final hasMore = resp.data?.hasMore ?? false;
     // 应用排序
     state.sort.sort(files);
 
@@ -59,6 +62,9 @@ class FileBloc extends Bloc<FileEvent, FileState> {
         breadcrumbs: breadcrumb,
         selectedFiles: [],
         isSelectMode: false,
+        hasMore: hasMore,
+        offset: files.length,
+        total: total,
       ),
     );
   }
@@ -70,6 +76,50 @@ class FileBloc extends Bloc<FileEvent, FileState> {
   ) async {
     add(
       FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName),
+    );
+  }
+
+  /// 加载更多文件
+  Future<void> _onLoadMore(
+    FileLoadMoreEvent event,
+    Emitter<FileState> emit,
+  ) async {
+    // 如果没有更多数据或正在加载，直接返回
+    if (!state.hasMore || state.status == FileStateStatus.loadingMore) {
+      return;
+    }
+
+    emit(state.copyWith(status: FileStateStatus.loadingMore));
+    getLogger().info('load more files, offset: ${state.offset}');
+
+    final resp = await fmRepository.getFileList(
+      parentId: state.currentDirId,
+      offset: state.offset,
+    );
+
+    if (!resp.success) {
+      emit(
+        state.copyWith(
+          status: FileStateStatus.failure,
+          msg: resp.message ?? '加载更多失败',
+        ),
+      );
+      return;
+    }
+
+    final newFiles = resp.data?.files.toList() ?? [];
+    final hasMore = resp.data?.hasMore ?? false;
+    final allFiles = [...state.files, ...newFiles];
+    // 应用排序
+    state.sort.sort(allFiles);
+
+    emit(
+      state.copyWith(
+        status: FileStateStatus.success,
+        files: allFiles,
+        hasMore: hasMore,
+        offset: allFiles.length,
+      ),
     );
   }
 

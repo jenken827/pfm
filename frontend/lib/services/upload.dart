@@ -37,6 +37,50 @@ Future<void> uploadFile({
     // 更新状态为上传中
     await storage.updateUploadTask(task.id, status: UploadStatus.UPLOADING);
 
+    // 检查文件大小，决定使用小文件上传还是分片上传
+    const smallFileThreshold = 10 * 1024 * 1024; // 10MB
+    final fileSize = task.fileSize;
+
+    if (fileSize <= smallFileThreshold) {
+      // 小文件上传：直接读取整个文件并发送
+      l.info('Using small file upload for file size: $fileSize bytes');
+      
+      final file = io.File(task.filepath);
+      final content = await file.readAsBytes();
+      
+      final result = await fmRepo.uploadSmall(
+        name: task.filename,
+        parentId: task.parentId,
+        size: fileSize,
+        hash: task.fileHash!,
+        content: content,
+        overwrite: false,
+        onSendProgress: (sent, total) {
+          storage.updateUploadTask(task.id, uploadedBytes: sent);
+        },
+      );
+
+      if (!result.success) {
+        await storage.updateUploadTask(
+          task.id,
+          status: UploadStatus.FAILED,
+          errorMessage: result.message,
+        );
+        l.error('Small file upload failed: ${result.message}');
+        return;
+      }
+
+      // 检查是否秒传
+      if (result.data?.exists == true) {
+        l.info('File uploaded instantly (instant upload)');
+      }
+
+      await storage.updateUploadTask(task.id, status: UploadStatus.COMPLETED);
+      l.info('Small file upload completed successfully');
+      return;
+    }
+
+    // 分片上传逻辑（大文件）
     List<int> uploadedChunks = [];
     // 初始化上传
     if (task.uploadId == null || task.uploadId!.isEmpty) {
