@@ -97,13 +97,44 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 		llog.L().Errorf("get existing file locations failed: %v", err)
 	}
 
-	// 2. 构建已存在的提供者映射
-	existingProviderMap := make(map[uint32]*native.FileLocationORM)
-	completedProviderMap := make(map[uint32]bool)
+	// 2. 构建已存在的提供者映射（按提供者分组）
+	providerChunksMap := make(map[uint32][]*native.FileLocationORM)
 	for _, loc := range existingLocations {
-		existingProviderMap[*loc.ProviderId] = loc
-		if *loc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
-			completedProviderMap[*loc.ProviderId] = true
+		providerChunksMap[*loc.ProviderId] = append(providerChunksMap[*loc.ProviderId], loc)
+	}
+
+	// 3. 检查每个提供者的所有分片是否都完成
+	completedProviderMap := make(map[uint32]bool)
+	for providerID, chunks := range providerChunksMap {
+		if len(chunks) == 0 {
+			continue
+		}
+
+		// 获取预期的分片总数（从第一个分片获取）
+		expectedChunkTotal := *chunks[0].ChunkTotal
+
+		// 检查分片数量是否正确
+		if len(chunks) != int(expectedChunkTotal) {
+			llog.L().Warnf("provider %d has incomplete chunks: expected %d, got %d",
+				providerID, expectedChunkTotal, len(chunks))
+			continue
+		}
+
+		// 检查所有分片是否都完成
+		allCompleted := true
+		for _, chunk := range chunks {
+			if *chunk.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+				allCompleted = false
+				llog.L().Debugf("provider %d chunk %d not completed, status: %d",
+					providerID, *chunk.ChunkNumber, *chunk.Status)
+				break
+			}
+		}
+
+		if allCompleted {
+			completedProviderMap[providerID] = true
+			llog.L().Infof("provider %d is available with all %d chunks completed",
+				providerID, expectedChunkTotal)
 		}
 	}
 
@@ -146,50 +177,55 @@ func uploadFromTempFile(ctx context.Context, ur *native.UploadRecordORM, needUpl
 
 // syncFromExistingProviders 从现有副本同步到新提供者
 func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, needUploadProviders []uint32, existingLocations []*native.FileLocationORM) {
-	// 1. 选择最优源提供者（只选择一次）
-	sourceProvider, sourceLocation := selectBestSourceStorage(existingLocations)
-	if sourceProvider == nil || sourceLocation == nil {
-		llog.L().Errorf("no available source provider found")
+	// 1. 选择最优源提供者（支持分片完整性检查）
+	sourceProviderID, sourceLocations, err := SelectBestSourceProvider(existingLocations)
+	if err != nil {
+		llog.L().Errorf("select best source provider failed: %v", err)
 		markUploadFailed(ctx, ur, "no available source provider")
 		return
 	}
 
+	llog.L().Infof("selected source provider: %d with %d chunks", sourceProviderID, len(sourceLocations))
+
 	// 2. 获取源存储实例
-	sourceStorage := GetStorage(*sourceLocation.ProviderId)
+	sourceStorage := GetStorage(sourceProviderID)
 	if sourceStorage == nil {
-		markUploadFailed(ctx, ur, fmt.Sprintf("source storage not found: %d", *sourceLocation.ProviderId))
+		markUploadFailed(ctx, ur, fmt.Sprintf("source storage not found: %d", sourceProviderID))
 		return
 	}
 
-	// 3. 获取下载链接
-	downloadLink, err := sourceStorage.Link(ctx, sourceLocation)
-	if err != nil {
-		markUploadFailed(ctx, ur, fmt.Sprintf("get download link failed: %v", err))
-		return
-	}
-
-	// 4. 判断链接是否为本地路径
-	isLocalPath := isLocalPath(downloadLink)
-
-	var sourcePath string
-	if isLocalPath {
-		// 本地路径：直接使用
-		sourcePath = downloadLink
-		llog.L().Infof("using local path for sync, hash: %s, path: %s", *ur.FileHash, sourcePath)
-
-		// 批量上传到所有目标提供者
-		batchUploadFromSource(ctx, ur, needUploadProviders, sourcePath)
-	} else {
-		// 远程链接：触发异步下载，结束当前流程
-		llog.L().Infof("triggering async download from remote, hash: %s, link: %s", *ur.FileHash, downloadLink)
-		if err := triggerAsyncDownload(ur, downloadLink, sourceLocation); err != nil {
-			markUploadFailed(ctx, ur, fmt.Sprintf("trigger async download failed: %v", err))
-			return
+	// 3. 创建加密器（用于解密，如果需要）
+	var encryptor types.Encryptor
+	if sourceLocations[0].Encrypted != nil && *sourceLocations[0].Encrypted {
+		// 从存储提供者配置中获取加密密钥
+		providerOrm := sourceStorage.GetOrm()
+		if providerOrm != nil && providerOrm.EncryptionKey != nil {
+			salt := ""
+			if sourceLocations[0].EncryptionSalt != nil {
+				salt = *sourceLocations[0].EncryptionSalt
+			}
+			// 创建加密器用于解密
+			encryptor, err = NewCryptEncryptor(*providerOrm.EncryptionKey, salt)
+			if err != nil {
+				markUploadFailed(ctx, ur, fmt.Sprintf("create encryptor failed: %v", err))
+				return
+			}
 		}
-		// 下载任务是异步的，这里直接返回，等待aria2完成通知
-		// 下载完成后，notifier 会调用 resumeSyncFromDownload 恢复上传流程
+	}
+
+	// 4. 下载并合并所有分片到临时文件
+	tempFilePath, err := DownloadAndMergeFile(ctx, sourceStorage, sourceLocations, encryptor, *ur.FileHash)
+	if err != nil {
+		llog.L().Errorf("download and merge file failed: %v", err)
+		markUploadFailed(ctx, ur, fmt.Sprintf("download file failed: %v", err))
 		return
 	}
+	defer os.Remove(tempFilePath) // 确保临时文件最终被删除
+
+	llog.L().Infof("file downloaded and merged to: %s", tempFilePath)
+
+	// 5. 批量上传到所有目标提供者（并发）
+	batchUploadFromSource(ctx, ur, needUploadProviders, tempFilePath)
 }
 
 // isLocalPath 判断路径是否为本地路径
@@ -290,10 +326,14 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	var wg sync.WaitGroup
 	var failedCount int32
 
-	// 获取文件名
+	// 获取文件名和父目录ID
 	fileName := "unknown"
+	parentID := ""
 	if ur.FileName != nil {
 		fileName = *ur.FileName
+	}
+	if ur.ParentId != nil {
+		parentID = *ur.ParentId
 	}
 
 	for _, targetID := range targetProviderIds {
@@ -331,9 +371,19 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			}
 
 			// 上传到目标提供者（加密器在uploadToProvider内部生成）
-			if err := uploadToProvider(ctx, sourcePath, fileName, tid, fl); err != nil {
+			err := uploadToProvider(ctx, sourcePath, fileName, tid, fl)
+			if err != nil {
 				llog.L().Errorf("upload to provider %d failed: %v", tid, err)
 				failedCount++
+			} else {
+				// 上传成功，立即更新文件状态为就绪
+				if parentID != "" && fileName != "" {
+					if updateErr := db.UpdateFileIsReady(parentID, fileName); updateErr != nil {
+						llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
+					} else {
+						llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d", parentID, fileName, tid)
+					}
+				}
 			}
 		}(targetID)
 	}
@@ -431,23 +481,79 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 		return err
 	}
 
-	// 更新文件位置信息
-	fl.ProviderFileId = &pinfo.ID
-	fl.Path = &pinfo.Path
-	if pinfo.Hash != "" {
-		fl.Hash = &pinfo.Hash
-	}
-	fl.Status = (*int32)(native.UploadProviderStatus_PCOMPLETED.Enum())
-
-	// 更新字段列表
-	updateFields := []string{"provider_file_id", "path", "hash", "status"}
-	if fl.Encrypted != nil {
-		updateFields = append(updateFields, "encrypted", "encryption_salt")
+	// 检查返回的分片信息
+	if len(pinfo) == 0 {
+		msg := "no file info returned from upload"
+		fl.Message = &msg
+		fl.Status = (*int32)(native.UploadProviderStatus_PFAILED.Enum())
+		db.UpdateFileLocation(fl, []string{"status", "message"})
+		return errors.New(msg)
 	}
 
-	db.UpdateFileLocation(fl, updateFields)
+	// 处理分片上传结果
+	chunkTotal := uint32(len(pinfo))
+	for i, chunkInfo := range pinfo {
+		chunkNumber := uint32(i)
 
-	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v", *fl.Blake3Hash, providerID, fl.Encrypted != nil)
+		if i == 0 {
+			// 第一个分片：更新已有的 FileLocation 记录
+			fl.ProviderFileId = &chunkInfo.ID
+			if chunkInfo.Path != "" {
+				fl.Path = &chunkInfo.Path
+			}
+			if chunkInfo.Hash != "" {
+				fl.Hash = &chunkInfo.Hash
+			}
+			fl.Status = (*int32)(native.UploadProviderStatus_PCOMPLETED.Enum())
+			chunkTotalValue := chunkTotal
+			fl.ChunkTotal = &chunkTotalValue
+			fl.ChunkNumber = &chunkNumber
+
+			// 更新字段列表
+			updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total"}
+			if fl.Encrypted != nil {
+				updateFields = append(updateFields, "encrypted", "encryption_salt")
+			}
+
+			db.UpdateFileLocation(fl, updateFields)
+			llog.L().Infof("chunk 1/%d uploaded, hash: %s, provider: %d, file_id: %s",
+				chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
+		} else {
+			// 后续分片：创建新的 FileLocation 记录
+			newFl := &native.FileLocationORM{
+				Blake3Hash:     fl.Blake3Hash,
+				ProviderId:     fl.ProviderId,
+				ProviderFileId: &chunkInfo.ID,
+				Status:         (*int32)(native.UploadProviderStatus_PCOMPLETED.Enum()),
+				ChunkNumber:    &chunkNumber,
+				ChunkTotal:     &chunkTotal,
+			}
+
+			if chunkInfo.Path != "" {
+				newFl.Path = &chunkInfo.Path
+			}
+			if chunkInfo.Hash != "" {
+				newFl.Hash = &chunkInfo.Hash
+			}
+			// // 复制加密信息
+			// if fl.Encrypted != nil {
+			// 	encrypted := *fl.Encrypted
+			// 	newFl.Encrypted = &encrypted
+			// 	newFl.EncryptionSalt = fl.EncryptionSalt
+			// }
+
+			if err := db.CreateFileLocation(newFl); err != nil {
+				llog.L().Errorf("create file location for chunk %d failed: %v", chunkNumber, err)
+				return err
+			}
+
+			llog.L().Infof("chunk %d/%d uploaded, hash: %s, provider: %d, file_id: %s",
+				chunkNumber, chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
+		}
+	}
+
+	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v, total chunks: %d",
+		*fl.Blake3Hash, providerID, fl.Encrypted != nil, chunkTotal)
 	return nil
 }
 
@@ -474,6 +580,7 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileL
 }
 
 // selectBestSourceStorage 选择最优源存储提供者
+// 只选择所有分片都完成的提供者
 func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native.StorageProviderORM, *native.FileLocationORM) {
 	type candidate struct {
 		provider    *native.StorageProviderORM
@@ -490,13 +597,45 @@ func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native
 		ordered            *candidate
 	)
 
-	// 遍历所有源位置，按优先级分类
+	// 按提供者分组
+	providerChunksMap := make(map[uint32][]*native.FileLocationORM)
 	for _, loc := range sourceLocations {
-		if *loc.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+		providerChunksMap[*loc.ProviderId] = append(providerChunksMap[*loc.ProviderId], loc)
+	}
+
+	// 遍历每个提供者，检查是否所有分片都完成
+	for providerID, chunks := range providerChunksMap {
+		if len(chunks) == 0 {
 			continue
 		}
 
-		st := GetStorage(*loc.ProviderId)
+		// 检查所有分片是否都完成
+		allCompleted := true
+		var firstChunk *native.FileLocationORM
+		for i, chunk := range chunks {
+			if i == 0 {
+				firstChunk = chunk
+			}
+			if *chunk.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+				allCompleted = false
+				break
+			}
+		}
+
+		if !allCompleted {
+			continue
+		}
+
+		// 检查分片数量是否正确
+		expectedChunkTotal := *firstChunk.ChunkTotal
+		if len(chunks) != int(expectedChunkTotal) {
+			llog.L().Warnf("provider %d has incomplete chunks: expected %d, got %d",
+				providerID, expectedChunkTotal, len(chunks))
+			continue
+		}
+
+		// 所有分片都完成，作为候选
+		st := GetStorage(providerID)
 		if st == nil {
 			continue
 		}
@@ -516,7 +655,7 @@ func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native
 
 		c := &candidate{
 			provider:    orm,
-			location:    loc,
+			location:    firstChunk, // 使用第一个分片的位置信息
 			order:       order,
 			isLocal:     isLocal,
 			isEncrypted: isEncrypted,

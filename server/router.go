@@ -24,6 +24,7 @@ func route(mux *http.ServeMux) {
 	fileRoute(mux)
 	uploadRoute(mux)
 	storageProviderRoute(mux)
+	fileStreamRoute(mux) // 文件流式传输路由
 
 	// Then create transcoder with all registered services
 	transcoder, err := vanguard.NewTranscoder(vanguardServices)
@@ -32,6 +33,15 @@ func route(mux *http.ServeMux) {
 	}
 	// Register transcoder to handle both Connect and RESTful requests
 	mux.Handle("/", transcoder)
+}
+
+// fileStreamRoute 文件流式传输路由（预览/下载）
+func fileStreamRoute(mux *http.ServeMux) {
+	// 文件预览（直接在浏览器中打开）
+	mux.HandleFunc("/api/file/preview", api.PreviewFileHandler)
+
+	// 文件下载（强制下载）
+	mux.HandleFunc("/api/file/download", api.DownloadFileHandler)
 }
 
 // FileRoute 文件服务

@@ -5,6 +5,7 @@ package native;
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
@@ -66,6 +67,11 @@ message File {
   optional string bound_provider_ids = 13 [(gorm.field).tag = {
     not_null: true
     default: "[]"
+  }];
+  // 文件是否就绪（至少一个存储提供者上传成功）
+  optional bool is_ready = 14 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
   }];
 }
 

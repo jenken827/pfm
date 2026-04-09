@@ -158,18 +158,13 @@ func handleInstantUpload(
 		return true, nil, &models.Err{E: dbErr, C: native.RespCode_DB_ERROR}
 	}
 
-	// 构建已存在的提供者映射
-	existingProviderMap := make(map[uint32]bool)
-	for _, loc := range existingLocations {
-		if *loc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
-			existingProviderMap[*loc.ProviderId] = true
-		}
-	}
+	// ✅ 使用公共方法构建已存在的完整提供者映射（支持分片）
+	completeProviderMap := storage.BuildCompleteProviderMap(existingLocations)
 
 	// 计算需要同步到哪些新的存储提供者
 	var needSyncProviders []uint32
 	for _, pid := range providerIds {
-		if !existingProviderMap[pid] {
+		if !completeProviderMap[pid] {
 			needSyncProviders = append(needSyncProviders, pid)
 		}
 	}
@@ -527,11 +522,21 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		}
 	}
 
-	// 合并所有分片
+	// ✅ 异步处理：立即返回，后台合并文件
+	go processCompleteUpload(context.Background(), uploadRecord, chunks)
+
+	return nil
+}
+
+// processCompleteUpload 后台处理文件合并和上传
+func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM) {
+	llog.L().Infof("start processing complete upload: %d", *uploadRecord.Id)
+
+	// 1. 合并所有分片
 	outputFile, err := os.Create(*uploadRecord.TempPath)
 	if err != nil {
 		llog.L().Errorf("create output file failed: %v", err)
-		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		return
 	}
 	defer outputFile.Close()
 
@@ -544,14 +549,14 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		chunkFile, err := os.Open(f)
 		if err != nil {
 			llog.L().Errorf("open chunk file failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+			return
 		}
 
 		n, err := io.Copy(io.MultiWriter(outputFile, hasher), chunkFile)
 		chunkFile.Close()
 		if err != nil {
 			llog.L().Errorf("copy chunk to output failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+			return
 		}
 		totalSize += n
 	}
@@ -560,11 +565,15 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 
 	if finalHash != *uploadRecord.FileHash {
 		llog.L().Errorf("file hash mismatch: expected %s, got %s", *uploadRecord.FileHash, finalHash)
-		return &models.Err{E: errors.New("file hash mismatch"), C: native.RespCode_INTERNAL_ERROR}
+		return
 	}
 
+	llog.L().Infof("file merged successfully: %d bytes", totalSize)
+
+	// 2. 获取文件类型
 	filetype, mime := getFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, 0), *uploadRecord.FileName)
 
+	// 3. 创建文件记录
 	fileRecord := &native.FileORM{
 		Name:     uploadRecord.FileName,
 		ParentId: uploadRecord.ParentId,
@@ -572,6 +581,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		Hash:     &finalHash,
 		Type:     &filetype,
 		Mime:     &mime,
+		IsReady:  utils.BoolPtr(false), // 文件创建时标记为未就绪
 	}
 
 	// 处理文件记录（新建或覆盖）
@@ -581,7 +591,8 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 	}
 	createdFile, mErr := handleOverwriteFile(ctx, fileRecord, overwriteID, "")
 	if mErr != nil {
-		return mErr
+		llog.L().Errorf("handle file record failed: %v", mErr)
+		return
 	}
 
 	// 创建文件标签
@@ -589,13 +600,15 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 		parseAndCreateTags(*createdFile.Id, uploadRecord.Tags)
 	}
 
-	// 移除分片
+	llog.L().Infof("file record created: %s", *createdFile.Id)
+
+	// 4. 移除分片临时文件
 	if err := os.RemoveAll(utils.GetChunkTempDir(*uploadRecord.FileHash)); err != nil {
 		llog.L().Warnf("remove temp path failed: %v", err)
 	}
-	// 上传到存储（使用独立的 context，不受 HTTP 请求生命周期影响）
-	go storage.Dispatch(context.Background(), uploadRecord)
-	return nil
+
+	// 5. 上传到存储（异步）
+	storage.Dispatch(context.Background(), uploadRecord)
 }
 
 // CancelUpload 取消上传
@@ -723,6 +736,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		Hash:     &blake3Hash,
 		Type:     &filetype,
 		Mime:     &mime,
+		IsReady:  utils.BoolPtr(false), // 文件创建时标记为未就绪
 	}
 
 	// 处理文件记录（新建或覆盖）

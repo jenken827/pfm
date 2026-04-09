@@ -75,7 +75,7 @@ func Run() {
 	// 监听结束信号或启动错误
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	fmt.Printf("Starting server on %s:%d\n", schema.Addr, schema.Port)
+	fmt.Printf("Started server on %s:%d\n", schema.Addr, schema.Port)
 
 	select {
 	case err := <-serverErr:

@@ -200,3 +200,14 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 	})
 	return err
 }
+
+// UpdateFileIsReady 更新文件is_ready状态
+// 通过parent_id和file_name定位文件，设置is_ready为true
+func UpdateFileIsReady(parentID, fileName string) error {
+	ctx := context.Background()
+	isReady := true
+	_, err := gorm.G[*native.FileORM](db).
+		Where("parent_id = ? AND name = ?", parentID, fileName).
+		Update(ctx, "is_ready", isReady)
+	return err
+}

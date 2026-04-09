@@ -12,6 +12,7 @@ enum StorageProviderType {
   TELEGRAM = 2;
   DISCORD = 3;
   HUGGINGFACE = 4;
+  PAN123 = 5;
 }
 
 // ConfigFieldType
