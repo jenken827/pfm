@@ -28,7 +28,7 @@ class WmTaskParam {
   static WmTaskParam fromJson(Map<String, dynamic> json) {
     return WmTaskParam(
       taskId: json['taskId'] as String,
-      taskType: json['taskType'] as TaskType,
+      taskType: json['taskType'] == 0 ? TaskType.upload : TaskType.download,
       baseUrl: json['baseUrl'] as String,
       token: jsonDecode(json['token']) as CasdoorToken,
       dbPath: json['dbPath'] as String,
@@ -38,7 +38,7 @@ class WmTaskParam {
   Map<String, dynamic> toJson() {
     return {
       'taskId': taskId,
-      'taskType': taskType,
+      'taskType': taskType.index,
       'baseUrl': baseUrl,
       'token': jsonEncode(token),
       'dbPath': dbPath,
@@ -69,9 +69,19 @@ void callbackDispatcher() {
     // 初始化存储
     final storage = await Sqlite3Storage.initForIsolate(params.dbPath);
 
-    final fmRepo = FmRepository.isolateInit(params.baseUrl, params.token);
     if (params.taskType == TaskType.upload) {
+      final fmRepo = FmRepository.isolateInit(params.baseUrl, params.token);
       await uploadFile(taskId: params.taskId, storage: storage, fmRepo: fmRepo);
+    } else if (params.taskType == TaskType.download) {
+      final task = await storage.getDownloadTaskAsync(params.taskId);
+      if (task != null) {
+        await downloadFile(
+          taskId: params.taskId,
+          storage: storage,
+          baseUrl: params.baseUrl,
+          token: params.token,
+        );
+      }
     }
     return Future.value(true);
   });

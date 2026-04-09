@@ -35,6 +35,7 @@ class IsolateConfig {
   final CasdoorToken token;
   final String dbPath;
   final String id;
+  final TaskType taskType;
 
   IsolateConfig({
     required this.id,
@@ -42,6 +43,7 @@ class IsolateConfig {
     required this.baseUrl,
     required this.token,
     required this.dbPath,
+    required this.taskType,
   });
 }
 
@@ -86,18 +88,16 @@ void isolateEntryPoint(IsolateConfig config) async {
 
   // 接收端口，监听消息
   final receivePort = ReceivePort();
-  // 通知主线程Isolate已准备就绪
-  sendPort.send(
-    IsolateMessage(
-      isolateId: config.id,
-      taskType: TaskType.upload,
-      sendPort: receivePort.sendPort,
-      status: IsolateStatus.ready,
-    ),
-  );
+
+  final logger = getLogger();
+
+  logger.debug('isolate start listen to main isolate command ---');
 
   receivePort.listen((message) async {
     final msg = message as IsolateCommand;
+    logger.debug(
+      'isolate receive command: tasktype: ${msg.taskType}, taskid: ${msg.taskId}',
+    );
     try {
       // 修改状态为执行中
       sendPort.send(
@@ -110,8 +110,13 @@ void isolateEntryPoint(IsolateConfig config) async {
       // 判断任务类型，执行对应的方法
       if (msg.taskType == TaskType.upload) {
         await uploadFile(taskId: msg.taskId, storage: storage, fmRepo: fmRepo);
-      } else {
-        // TODO：下载文件
+      } else if (msg.taskType == TaskType.download) {
+        await downloadFile(
+          taskId: msg.taskId,
+          storage: storage,
+          baseUrl: config.baseUrl,
+          token: config.token,
+        );
       }
     } catch (e, s) {
       getLogger().error('任务执行失败，taskId:${msg.taskId},error:$e,$s');
@@ -125,4 +130,15 @@ void isolateEntryPoint(IsolateConfig config) async {
       );
     }
   });
+
+  logger.debug('send message to main isolate, ready to receive command---');
+  // 通知主线程Isolate已准备就绪
+  sendPort.send(
+    IsolateMessage(
+      isolateId: config.id,
+      taskType: config.taskType,
+      sendPort: receivePort.sendPort,
+      status: IsolateStatus.ready,
+    ),
+  );
 }

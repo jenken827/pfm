@@ -9,3 +9,4 @@ export 'sqlite3_storage.dart';
 export 'workmanager_task.dart';
 export 'isolate.dart';
 export 'upload.dart';
+export 'download.dart';

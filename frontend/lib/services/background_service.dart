@@ -3,7 +3,7 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
-import 'package:pfm/models/upload_task_record.dart';
+import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
@@ -34,8 +34,10 @@ class BackgroundService {
   Stream<List<UploadTaskRecord>> get uploadTaskStream =>
       _uploadTaskController.stream;
 
-  //  final  _downloadTaskController = StreamController<List<UploadTaskRecord>>.broadcast();
-  //  Stream<List<UploadTaskRecord>> get uploadTaskStream => _uploadTaskController.stream;
+  final _downloadTaskController =
+      StreamController<List<DownloadTaskRecord>>.broadcast();
+  Stream<List<DownloadTaskRecord>> get downloadTaskStream =>
+      _downloadTaskController.stream;
 
   /// 桌面平台的 Isolate 管理
   /// 最多5个进程
@@ -77,14 +79,22 @@ class BackgroundService {
   Future<void> _timerHandler(Timer timer) async {
     final uploadTasks = await storage.getAllUploadTasksAsync();
     final activeUploads = uploadTasks.where((task) => task.isActive).toList();
+    final downloadTasks = await storage.getAllDownloadTasksAsync();
+    final activeDownloads = downloadTasks
+        .where((task) => task.isActive)
+        .toList();
+
     getLogger().debug(
-      'background_service timer ----------, active uploads ${activeUploads.length},total ${uploadTasks.length}',
+      'background_service timer: active uploads ${activeUploads.length}, '
+      'active downloads ${activeDownloads.length}',
     );
 
     _uploadTaskController.add(uploadTasks);
-    if (activeUploads.isEmpty) {
+    _downloadTaskController.add(downloadTasks);
+
+    if (activeUploads.isEmpty && activeDownloads.isEmpty) {
       getLogger().debug(
-        'background_service timer, no active uploads,stop timer',
+        'background_service timer: no active tasks, stop timer',
       );
       timer.cancel();
       _syncTimer = null;
@@ -95,6 +105,12 @@ class BackgroundService {
   Future<void> notifyUploadTasksChanged() async {
     final uploadTasks = await storage.getAllUploadTasksAsync();
     _uploadTaskController.add(uploadTasks);
+  }
+
+  /// 手动触发下载UI更新
+  Future<void> notifyDownloadTasksChanged() async {
+    final downloadTasks = await storage.getAllDownloadTasksAsync();
+    _downloadTaskController.add(downloadTasks);
   }
 
   /// 初始化后台服务
@@ -151,64 +167,94 @@ class BackgroundService {
     });
 
     if (isWorkManagerSupported && isNew) {
-      await _scheduleWithWorkManager(taskId);
+      await _scheduleWithWorkManager(taskId, TaskType.upload);
     } else if (isDesktopPlatform) {
-      await _scheduleWithIsolate(taskId);
+      await _scheduleWithIsolate(taskId, TaskType.upload);
     }
   }
 
-  /// 使用 WorkManager 调度任务（移动平台）
-  /// workmanager任务只需要注册一次，后续由系统管理，即使后面应用关闭，系统也会自动调度，不需要重复注册
-  Future<void> _scheduleWithWorkManager(String taskId) async {
-    await Workmanager().registerOneOffTask(
-      taskId,
-      taskId,
-      inputData: {'taskId': taskId, 'taskType': TaskType.upload},
-      constraints: Constraints(networkType: NetworkType.connected),
-    );
+  /// 新增下载任务
+  Future<void> scheduleNewDownloadTask(DownloadTaskRecord task) async {
+    _logger.info('Adding new download task: ${task.id}');
+    task.status = DownloadStatus.PENDING;
+    await _storage.addDownloadTask(task);
+    await scheduleDownload(task.id, true);
+  }
 
-    _logger.info('Scheduled upload task with WorkManager: $taskId');
+  /// 恢复下载任务
+  Future<void> resumeDownloadTasks(String? taskId) async {
+    _logger.info('Resuming download tasks');
+    final taskIds = await _storage.resumeDownloadTasks(taskId);
+    for (final tid in taskIds) {
+      await scheduleDownload(tid, true);
+    }
+  }
+
+  /// 调度下载任务
+  Future<void> scheduleDownload(String taskId, bool isNew) async {
+    _logger.info('Scheduling download task: $taskId');
+    _syncTimer ??= Timer.periodic(Duration(seconds: 1), (timer) async {
+      await _timerHandler(timer);
+    });
+
+    if (isWorkManagerSupported && isNew) {
+      await _scheduleWithWorkManager(taskId, TaskType.download);
+    } else if (isDesktopPlatform) {
+      await _scheduleWithIsolate(taskId, TaskType.download);
+    }
   }
 
   /// 使用 Isolate 调度任务（桌面平台）
-  Future<void> _scheduleWithIsolate(String taskId) async {
-    _logger.info('Starting upload task in background isolate: $taskId');
+  Future<void> _scheduleWithIsolate(String taskId, TaskType taskType) async {
+    _logger.info('Starting $taskType task in background isolate: $taskId');
 
-    final ii = await _getAvailableUploadIsolate();
+    final ii = await _getAvailableIsolate(taskType);
     if (ii == null) {
-      _logger.error('No available upload isolate');
+      _logger.error('No available isolate for $taskType');
       return;
     }
-    ii.sendPort!.send(
-      IsolateCommand(taskType: TaskType.upload, taskId: taskId),
-    );
+
+    _logger.info('Sending command to isolate, sendPort=${ii.sendPort}');
+    ii.sendPort!.send(IsolateCommand(taskType: taskType, taskId: taskId));
   }
 
-  // 获取可用的Isolate
-  Future<IsolateInfo?> _getAvailableUploadIsolate() async {
-    for (final isolateInfo in _uploadIsolates.entries) {
+  // 获取可用的Isolate（upload和download各有一组，隔离不可共用）
+  Future<IsolateInfo?> _getAvailableIsolate(TaskType taskType) async {
+    final isolates = taskType == TaskType.upload
+        ? _uploadIsolates
+        : _downloadIsolates;
+
+    // 1. 先从自己的池里找空闲的
+    for (final isolateInfo in isolates.entries) {
       if (isolateInfo.value.status == IsolateStatus.ready ||
           isolateInfo.value.status == IsolateStatus.completed) {
         return isolateInfo.value;
       }
     }
-    if (_uploadIsolates.length >= _maxIsolateCount) {
-      return null;
-    }
-    // 创建新的Isolate
 
-    final ci = await _createIsolate();
-    return ci;
+    // 2. 如果自己的池未满，直接创建
+    if (isolates.length < _maxIsolateCount) {
+      return await _createIsolate(taskType);
+    }
+
+    // 3. 自己的池已达上限，无法创建
+    _logger.error('No available isolate for $taskType, pool exhausted');
+    return null;
   }
 
-  Future<IsolateInfo> _createIsolate() async {
+  Future<IsolateInfo> _createIsolate(TaskType taskType) async {
     // 创建接收端口
     final receivePort = ReceivePort();
+    final waitReady = Completer<void>.sync();
+    receivePort.listen(
+      (message) async =>
+          await _handleIsolateMessage(message, waitReady, taskType),
+    );
 
-    // 获取数据库路径（确保使用与主线程相同的路径)
+    // 获取数据库路径
     final dbPath = await _storage.getDatabasePath();
 
-    // 获取服务器配置（在主线程中获取，传递给 Isolate）
+    // 获取服务器配置
     final ls = GetIt.I.get<LocalStorage>();
 
     final id = Uuid().v8();
@@ -222,27 +268,46 @@ class BackgroundService {
         baseUrl: ls.fileServer!,
         token: ls.token!,
         dbPath: dbPath,
+        taskType: taskType,
       ),
     );
+
+    final isolates = taskType == TaskType.upload
+        ? _uploadIsolates
+        : _downloadIsolates;
     final ii = IsolateInfo(i: isolate, receivePort: receivePort);
-    _uploadIsolates[id] = ii;
-
-    final waitReady = Completer<void>.sync();
-    receivePort.listen(
-      (message) async => await _handleIsolateMessage(message, waitReady),
-    );
-    // 等待Isolate准备就绪
+    isolates[id] = ii;
     await waitReady.future;
-
+    _logger.debug('isolate create success and ready---');
     return ii;
+  }
+
+  /// 使用 WorkManager 调度任务（移动平台）
+  /// workmanager任务只需要注册一次，后续由系统管理，即使后面应用关闭，系统也会自动调度，不需要重复注册
+  Future<void> _scheduleWithWorkManager(
+    String taskId,
+    TaskType taskType,
+  ) async {
+    await Workmanager().registerOneOffTask(
+      taskId,
+      taskId,
+      inputData: {'taskId': taskId, 'taskType': taskType.index},
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
+
+    _logger.info('Scheduled $taskType task with WorkManager: $taskId');
   }
 
   Future<void> _handleIsolateMessage(
     dynamic message,
     Completer<void> waitReady,
+    TaskType taskType,
   ) async {
     final msg = message as IsolateMessage;
     final isUpload = msg.taskType == TaskType.upload;
+    _logger.debug(
+      'main isolate receive message from isolate, tasktype: ${msg.taskType},status: ${msg.status}, sendport: ${msg.sendPort},isolateId:${msg.isolateId}',
+    );
 
     if (msg.sendPort != null) {
       // 将内部发送端口保存到隔离信息中
@@ -272,14 +337,20 @@ class BackgroundService {
           : _downloadIsolates[msg.isolateId];
 
       isolateInfo?.status = IsolateStatus.completed;
-      
+
       // 任务完成后通知UI更新
-      await notifyUploadTasksChanged();
-      
-      final task = await _storage.getNextPendingUploadTaskAsync();
-      //TODO: 处理下载任务
-      if (task != null) {
-        await _scheduleWithIsolate(task.id);
+      if (isUpload) {
+        await notifyUploadTasksChanged();
+        final task = await _storage.getNextPendingUploadTaskAsync();
+        if (task != null) {
+          await _scheduleWithIsolate(task.id, TaskType.upload);
+        }
+      } else {
+        await notifyDownloadTasksChanged();
+        final task = await _storage.getNextPendingDownloadTaskAsync();
+        if (task != null) {
+          await _scheduleWithIsolate(task.id, TaskType.download);
+        }
       }
     }
   }
@@ -310,11 +381,45 @@ class BackgroundService {
   /// 清理已完成的任务
   Future<void> cleanup() async {
     await _storage.clearUploadCompleted();
+    await _storage.clearDownloadCompleted();
+  }
+
+  /// 取消下载任务
+  Future<void> cancelDownload(String taskId) async {
+    _logger.info('Cancelling download task: $taskId');
+    await _storage.updateDownloadTask(taskId, status: DownloadStatus.CANCELED);
+  }
+
+  /// 暂停下载任务
+  Future<void> pauseDownload(String taskId) async {
+    _logger.info('Pausing download task: $taskId');
+    await _storage.updateDownloadTask(taskId, status: DownloadStatus.PAUSED);
+  }
+
+  /// 恢复下载任务
+  Future<void> resumeDownload(String taskId) async {
+    _logger.info('Resuming download task: $taskId');
+    final task = await _storage.getDownloadTaskAsync(taskId);
+    if (task == null) return;
+    await scheduleDownload(taskId, true);
+  }
+
+  /// 重试下载任务（将失败任务重置为待调度状态）
+  Future<void> retryDownload(String taskId) async {
+    _logger.info('Retrying download task: $taskId');
+    await _storage.updateDownloadTask(
+      taskId,
+      status: DownloadStatus.PENDING,
+      errorMessage: null,
+      downloadedBytes: 0,
+    );
+    await scheduleDownload(taskId, true);
   }
 
   void close() {
     _syncTimer?.cancel();
     _syncTimer = null;
     _uploadTaskController.close();
+    _downloadTaskController.close();
   }
 }

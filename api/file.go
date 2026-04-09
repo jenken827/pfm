@@ -78,3 +78,12 @@ func (s *FileServer) RenameFile(ctx context.Context, req *connect.Request[native
 
 	return response.SuccessResp(nil)
 }
+
+// GetFileDetail 获取文件详情
+func (s *FileServer) GetFileDetail(ctx context.Context, req *connect.Request[native.FileDetailReq]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.GetFileDetail(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}

@@ -168,7 +168,7 @@ func DownloadAndMergeFile(
 // 提供者选择相关方法
 // ========================================
 
-// SelectBestSourceProvider 选择最优的源提供者
+// SelectBestSourceProvider 选择最优的源提供者（按存储提供者Order排序）
 // 返回提供者ID和对应的分片Location列表
 func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*native.FileLocationORM, error) {
 	completeProviders, err := GetCompleteProviders(locations)
@@ -180,9 +180,34 @@ func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*n
 		return 0, nil, fmt.Errorf("no complete provider found")
 	}
 
-	// 简单策略：选择第一个完整的提供者（TODO: 可以添加优先级策略）
-	bestProviderID := completeProviders[0]
+	// 按 Order 升序排序（Order 值越小优先级越高）
+	type providerOrder struct {
+		providerID uint32
+		order      uint32
+	}
+	var sorted []providerOrder
+	for _, pid := range completeProviders {
+		st := GetStorage(pid)
+		if st == nil {
+			continue
+		}
+		orm := st.GetOrm()
+		order := uint32(0)
+		if orm != nil && orm.Order != nil {
+			order = *orm.Order
+		}
+		sorted = append(sorted, providerOrder{providerID: pid, order: order})
+	}
 
+	if len(sorted) == 0 {
+		return 0, nil, fmt.Errorf("no available provider")
+	}
+
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].order < sorted[j].order
+	})
+
+	bestProviderID := sorted[0].providerID
 	providerLocations, err := GetCompleteProviderLocations(locations, bestProviderID)
 	if err != nil {
 		return 0, nil, err

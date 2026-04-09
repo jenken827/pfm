@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pfm/blocs/blocs.dart';
-import 'package:pfm/services/services.dart';
 import 'home_route.dart' as home;
 import 'files_route.dart' as files;
 import 'transfer_route.dart' as transfer;
@@ -58,46 +57,46 @@ class MainScaffold extends StatelessWidget {
   Widget _buildBottomBarScaffold(BuildContext context) {
     final al = AppLocalizations.of(context)!;
     return Scaffold(
-      body: navigationShell,
-      bottomNavigationBar: BlocProvider.value(
+      body: BlocProvider.value(
         value: GetIt.I.get<TransferBloc>(),
-        child: Builder(
-          builder: (context) {
-            final activeCount = context.select(
-              (TransferBloc bloc) => bloc.state.activeTransferCount,
-            );
-            return BottomNavigationBar(
-              selectedFontSize: 16,
-              unselectedFontSize: 14,
-              showUnselectedLabels: false,
-              type: BottomNavigationBarType.fixed,
-              items: <BottomNavigationBarItem>[
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: '主页',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.folder_outlined),
-                  activeIcon: Icon(Icons.folder),
-                  label: '文件',
-                ),
-                BottomNavigationBarItem(
-                  icon: _buildTransferIcon(activeCount, false),
-                  activeIcon: _buildTransferIcon(activeCount, true),
-                  label: al.transfer,
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.settings_outlined),
-                  activeIcon: Icon(Icons.settings),
-                  label: '设置',
-                ),
-              ],
-              currentIndex: navigationShell.currentIndex,
-              onTap: (index) => _onTap(context, index),
-            );
-          },
-        ),
+        child: navigationShell,
+      ),
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final activeCount = context.select(
+            (TransferBloc bloc) => bloc.state.activeTransferCount,
+          );
+          return BottomNavigationBar(
+            selectedFontSize: 16,
+            unselectedFontSize: 14,
+            showUnselectedLabels: false,
+            type: BottomNavigationBarType.fixed,
+            items: <BottomNavigationBarItem>[
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.home_outlined),
+                activeIcon: Icon(Icons.home),
+                label: '主页',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.folder_outlined),
+                activeIcon: Icon(Icons.folder),
+                label: '文件',
+              ),
+              BottomNavigationBarItem(
+                icon: _buildTransferIcon(activeCount, false),
+                activeIcon: _buildTransferIcon(activeCount, true),
+                label: al.transfer,
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.settings_outlined),
+                activeIcon: Icon(Icons.settings),
+                label: '设置',
+              ),
+            ],
+            currentIndex: navigationShell.currentIndex,
+            onTap: (index) => _onTap(context, index),
+          );
+        },
       ),
     );
   }
@@ -139,19 +138,16 @@ class MainScaffold extends StatelessWidget {
   /// 构建导航轨道布局（平板/桌面端）
   Widget _buildRailScaffold(BuildContext context) {
     final al = AppLocalizations.of(context)!;
-    return Scaffold(
-      body: Row(
-        children: <Widget>[
-          MediaQuery.removePadding(
-            context: context,
-            removeBottom: true,
-            removeTop: true,
-            removeRight: true,
-            child: BlocProvider(
-              create: (context) =>
-                  TransferBloc(GetIt.I.get<BackgroundService>())
-                    ..add(TransferUploadSubscribeEvent())
-                    ..add(TransferDownloadSubscribeEvent()),
+    return BlocProvider.value(
+      value: GetIt.I.get<TransferBloc>(),
+      child: Scaffold(
+        body: Row(
+          children: <Widget>[
+            MediaQuery.removePadding(
+              context: context,
+              removeBottom: true,
+              removeTop: true,
+              removeRight: true,
               child: Builder(
                 builder: (context) {
                   final activeCount = context.select(
@@ -188,10 +184,10 @@ class MainScaffold extends StatelessWidget {
                 },
               ),
             ),
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: navigationShell),
-        ],
+            const VerticalDivider(thickness: 1, width: 1),
+            Expanded(child: navigationShell),
+          ],
+        ),
       ),
     );
   }

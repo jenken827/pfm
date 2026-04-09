@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
+import 'package:pfm/router/files_route.dart';
+import 'package:pfm/pages/files/file_preview_page.dart';
+import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/utils/utils.dart';
 
 /// 文件列表页面
@@ -356,14 +361,44 @@ class _FileView extends StatelessWidget {
     if (state.isSelectMode) {
       context.read<FileBloc>().add(FileSelectEvent(file));
     } else {
-      // 目录则进入，文件则显示操作菜单
-      if (file.type.value == 1) {
-        // Folder
+      // 目录则进入
+      if (file.type == pbenum.FileType.FOLDER) {
         context.read<FileBloc>().add(FileNavigateEvent(file.id, file.name));
       } else {
-        _showFileMenu(context, file);
+        // 文件则根据类型跳转：预览页或详情页
+        if (_isPreviewable(file)) {
+          // 图片类型传递图片列表和当前索引，支持左右滑动
+          if (file.type == pbenum.FileType.IMAGE) {
+            final images = state.files
+                .where((f) => f.type == pbenum.FileType.IMAGE)
+                .toList();
+            final index = images.indexWhere((f) => f.id == file.id);
+            const FilePreviewRoute().push(
+              context,
+              extra: PreviewArgs(
+                file: file,
+                images: images,
+                initialIndex: index >= 0 ? index : 0,
+              ),
+            );
+          } else {
+            const FilePreviewRoute().push(context, extra: file);
+          }
+        } else {
+          // 跳转到详情页
+          const FileDetailRoute().push(context, extra: file);
+        }
       }
     }
+  }
+
+  /// 判断文件是否支持预览
+  bool _isPreviewable(File file) {
+    // 支持预览的文件类型：图片、视频、音频、文档
+    return file.type == pbenum.FileType.IMAGE ||
+        file.type == pbenum.FileType.VIDEO ||
+        file.type == pbenum.FileType.AUDIO ||
+        file.type == pbenum.FileType.DOCUMENT;
   }
 
   void _handleFileLongPress(BuildContext context, File file) {
@@ -884,28 +919,28 @@ class _FileListTile extends StatelessWidget {
     IconData icon;
     Color color;
 
-    switch (file.type.value) {
-      case 1: // Folder
+    switch (file.type) {
+      case pbenum.FileType.FOLDER:
         icon = Icons.folder;
         color = Colors.amber;
         break;
-      case 2: // Image
+      case pbenum.FileType.IMAGE:
         icon = Icons.image;
         color = Colors.green;
         break;
-      case 3: // Video
+      case pbenum.FileType.VIDEO:
         icon = Icons.video_file;
         color = Colors.red;
         break;
-      case 4: // Audio
+      case pbenum.FileType.AUDIO:
         icon = Icons.audio_file;
         color = Colors.purple;
         break;
-      case 5: // Document
+      case pbenum.FileType.DOCUMENT:
         icon = Icons.description;
         color = Colors.blue;
         break;
-      case 6: // Archive
+      case pbenum.FileType.ARCHIVE:
         icon = Icons.archive;
         color = Colors.orange;
         break;
@@ -1007,31 +1042,32 @@ class _FileGridTile extends StatelessWidget {
   }
 
   Widget _buildIcon() {
+    // 图片类型使用缩略图
+    if (file.type == pbenum.FileType.IMAGE) {
+      return _buildThumbnail();
+    }
+
     IconData icon;
     Color color;
 
-    switch (file.type.value) {
-      case 1: // Folder
+    switch (file.type) {
+      case pbenum.FileType.FOLDER:
         icon = Icons.folder;
         color = Colors.amber;
         break;
-      case 2: // Image
-        icon = Icons.image;
-        color = Colors.green;
-        break;
-      case 3: // Video
+      case pbenum.FileType.VIDEO:
         icon = Icons.video_file;
         color = Colors.red;
         break;
-      case 4: // Audio
+      case pbenum.FileType.AUDIO:
         icon = Icons.audio_file;
         color = Colors.purple;
         break;
-      case 5: // Document
+      case pbenum.FileType.DOCUMENT:
         icon = Icons.description;
         color = Colors.blue;
         break;
-      case 6: // Archive
+      case pbenum.FileType.ARCHIVE:
         icon = Icons.archive;
         color = Colors.orange;
         break;
@@ -1041,6 +1077,34 @@ class _FileGridTile extends StatelessWidget {
     }
 
     return Icon(icon, color: color, size: 40);
+  }
+
+  Widget _buildThumbnail() {
+    final ls = GetIt.I.get<LocalStorage>();
+    final baseUrl = ls.fileServer ?? '';
+    final previewUrl = '$baseUrl/api/file/stream/preview?file_id=${file.id}';
+    final token = ls.token?.accessToken;
+    final headers = <String, String>{};
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.network(
+        previewUrl,
+        headers: headers,
+        fit: BoxFit.cover,
+        width: 40,
+        height: 40,
+        errorBuilder: (_, __, ___) =>
+            const Icon(Icons.image, color: Colors.green, size: 40),
+        loadingBuilder: (_, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Icon(Icons.image, color: Colors.green, size: 40);
+        },
+      ),
+    );
   }
 }
 

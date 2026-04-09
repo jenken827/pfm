@@ -111,7 +111,24 @@ class _DownloadTaskItem extends StatelessWidget {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 20),
                   onSelected: (value) {
-                    // TODO: 实现下载操作
+                    final bloc = context.read<TransferBloc>();
+                    switch (value) {
+                      case 'pause':
+                        bloc.add(TransferPauseEvent(task.taskId));
+                        break;
+                      case 'resume':
+                        bloc.add(TransferResumeEvent(task.taskId));
+                        break;
+                      case 'retry':
+                        bloc.add(TransferRetryEvent(task.taskId));
+                        break;
+                      case 'cancel':
+                        bloc.add(TransferCancelEvent(task.taskId));
+                        break;
+                      case 'remove':
+                        bloc.add(TransferRemoveEvent(task.taskId));
+                        break;
+                    }
                   },
                   itemBuilder: (context) => [
                     if (task.isDownloading)

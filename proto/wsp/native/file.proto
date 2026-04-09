@@ -248,11 +248,48 @@ message RenameObj {
   optional string new_name = 2;
 }
 
+// 文件详情请求
+message FileDetailReq {
+  optional string file_id = 1 [(buf.validate.field).required = true];
+}
+
+// 存储提供者位置信息（按提供者分组后）
+message ProviderLocationInfo {
+  // 存储提供者ID
+  optional uint32 provider_id = 1;
+  // 存储提供者名称
+  optional string provider_name = 2;
+  // 存储提供者类型
+  optional StorageProviderType provider_type = 3;
+  // 是否已加密
+  optional bool encrypted = 4;
+  // 是否分片存储
+  optional bool is_chunked = 5;
+  // 分片总数
+  optional uint32 chunk_total = 6;
+  // 上传状态
+  optional UploadProviderStatus status = 7;
+}
+
+// 文件详情响应数据
+message FileDetailRespData {
+  // 文件信息
+  optional File file = 1;
+  // 存储位置分布
+  repeated ProviderLocationInfo locations = 2;
+  // 文件历史版本
+  repeated FileHistory histories = 3;
+}
+
 // FileService文件服务
 service FileService {
   // 获取文件列表
   rpc GetFileList(FileListReq) returns (BaseResp) {
     option (google.api.http) = {get: "/api/file/list"};
+  }
+  // 获取文件详情
+  rpc GetFileDetail(FileDetailReq) returns (BaseResp) {
+    option (google.api.http) = {get: "/api/file/detail"};
   }
   // 创建目录
   rpc CreateDir(CreateDirReq) returns (BaseResp);

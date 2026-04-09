@@ -34,7 +34,11 @@ class _TransferPageState extends State<TransferPage>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    // 可以在这里触发事件更新当前标签页
+    context.read<TransferBloc>().add(
+      TransferTabChangedEvent(
+        _tabController.index == 0 ? TransferTab.upload : TransferTab.download,
+      ),
+    );
   }
 
   @override

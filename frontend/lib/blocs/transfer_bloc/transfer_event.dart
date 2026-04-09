@@ -57,3 +57,32 @@ class TransferCancelEvent extends TransferEvent {
   TransferCancelEvent(this.taskId);
   final String? taskId;
 }
+
+/// 新增下载任务
+class TransferAddDownloadEvent extends TransferEvent {
+  TransferAddDownloadEvent({
+    required this.fileId,
+    required this.filename,
+    required this.fileSize,
+    required this.savePath,
+    this.fileHash,
+  });
+
+  final String fileId;
+  final String filename;
+  final int fileSize;
+  final String savePath;
+  final String? fileHash;
+}
+
+/// Tab 页切换
+class TransferTabChangedEvent extends TransferEvent {
+  TransferTabChangedEvent(this.tab);
+  final TransferTab tab;
+}
+
+/// 重试下载任务
+class TransferRetryEvent extends TransferEvent {
+  TransferRetryEvent(this.taskId);
+  final String taskId;
+}

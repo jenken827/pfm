@@ -38,10 +38,10 @@ func route(mux *http.ServeMux) {
 // fileStreamRoute 文件流式传输路由（预览/下载）
 func fileStreamRoute(mux *http.ServeMux) {
 	// 文件预览（直接在浏览器中打开）
-	mux.HandleFunc("/api/file/preview", api.PreviewFileHandler)
+	mux.HandleFunc("/api/file/stream/preview", api.PreviewFileHandler)
 
 	// 文件下载（强制下载）
-	mux.HandleFunc("/api/file/download", api.DownloadFileHandler)
+	mux.HandleFunc("/api/file/stream/download", api.DownloadFileHandler)
 }
 
 // FileRoute 文件服务

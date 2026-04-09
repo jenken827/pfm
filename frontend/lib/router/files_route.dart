@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../pages/pages.dart';
+import '../proto/native/file.pb.dart';
 
 part 'files_route.g.dart';
 
 /// 文件列表路由
-@TypedGoRoute<FileListRoute>(path: '/files')
+@TypedGoRoute<FileListRoute>(
+  path: '/files',
+  routes: [
+    TypedGoRoute<FilePreviewRoute>(path: 'preview'),
+    TypedGoRoute<FileDetailRoute>(path: 'detail'),
+  ],
+)
 @immutable
 class FileListRoute extends GoRouteData with $FileListRoute {
   const FileListRoute();
@@ -13,5 +20,38 @@ class FileListRoute extends GoRouteData with $FileListRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const FilePage();
+  }
+}
+
+/// 文件预览路由
+@immutable
+class FilePreviewRoute extends GoRouteData with $FilePreviewRoute {
+  const FilePreviewRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    // 支持 PreviewArgs（带图片列表）或单 File 对象
+    final extra = state.extra;
+    if (extra is PreviewArgs) {
+      return FilePreviewPage(
+        file: extra.file,
+        images: extra.images,
+        initialIndex: extra.initialIndex,
+      );
+    }
+    final file = extra! as File;
+    return FilePreviewPage(file: file);
+  }
+}
+
+/// 文件详情路由
+@immutable
+class FileDetailRoute extends GoRouteData with $FileDetailRoute {
+  const FileDetailRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    final file = state.extra! as File;
+    return FileDetailPage(file: file);
   }
 }

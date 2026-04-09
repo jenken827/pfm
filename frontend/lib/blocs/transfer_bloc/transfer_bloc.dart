@@ -25,6 +25,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferCancelEvent>(_onCancel);
     on<TransferRemoveEvent>(_onRemove);
     on<TransferAddUploadEvent>(_onAddUpload);
+    on<TransferAddDownloadEvent>(_onAddDownload);
+    on<TransferTabChangedEvent>(_onTabChanged);
+    on<TransferRetryEvent>(_onRetry);
   }
 
   final BackgroundService _bgService;
@@ -48,12 +51,13 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferDownloadSubscribeEvent event,
     Emitter<TransferState> emit,
   ) async {
-    // await emit.forEach(
-    //   _bgService.downloadTaskStream,
-    //   onData: (tasks) {
-    //     return state.copyWith(downloadTasks: tasks);
-    //   },
-    // );
+    await emit.forEach(
+      _bgService.downloadTaskStream,
+      onData: (records) {
+        final tasks = records.map(_recordToState).toList();
+        return state.copyWith(downloadTasks: tasks);
+      },
+    );
   }
 
   /// 刷新传输列表
@@ -66,6 +70,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
@@ -80,6 +88,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      await _bgService.storage.clearDownloadCompleted();
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
@@ -95,10 +108,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      // 下载暂不支持单独清除失败，后续可按需添加
     }
   }
 
-  /// 暂停所有上传
+  /// 暂停传输
   Future<void> _onPause(
     TransferPauseEvent event,
     Emitter<TransferState> emit,
@@ -109,26 +124,34 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      await _bgService.pauseDownload(event.taskId!);
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
-  /// 恢复所有上传
+  /// 恢复传输
   Future<void> _onResume(
     TransferResumeEvent event,
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
       await _bgService.resumeUploadTasks(event.taskId);
-
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
-
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      await _bgService.resumeDownload(event.taskId!);
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
-  /// 取消所有上传
+  /// 取消传输
   Future<void> _onCancel(
     TransferCancelEvent event,
     Emitter<TransferState> emit,
@@ -139,20 +162,34 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      await _bgService.cancelDownload(event.taskId!);
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
-  /// 删除
+  /// 删除传输记录
   Future<void> _onRemove(
     TransferRemoveEvent event,
     Emitter<TransferState> emit,
   ) async {
+    getLogger().debug(
+      '_onRemove: taskId: ${event.taskId}, isUpload: ${state.isUpload}',
+    );
     if (state.isUpload) {
       await _bgService.storage.deleteUploadTask(event.taskId);
       final tasks = await _bgService.storage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
+    } else {
+      await _bgService.storage.deleteDownloadTask(event.taskId);
+
+      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final tasks = records.map(_recordToState).toList();
+      emit(state.copyWith(downloadTasks: tasks));
     }
   }
 
@@ -194,6 +231,73 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } catch (e) {
       getLogger().error('Start upload failed: $e');
+    }
+  }
+
+  Future<void> _onAddDownload(
+    TransferAddDownloadEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    try {
+      final record = DownloadTaskRecord(
+        id: Uuid().v8(),
+        fileId: event.fileId,
+        filename: event.filename,
+        fileSize: event.fileSize,
+        savePath: event.savePath,
+        fileHash: event.fileHash,
+        status: DownloadStatus.PENDING,
+      );
+
+      await _bgService.scheduleNewDownloadTask(record);
+      getLogger().info('Scheduled download task: ${record.id}');
+    } catch (e) {
+      getLogger().error('Start download failed: $e');
+    }
+  }
+
+  void _onTabChanged(
+    TransferTabChangedEvent event,
+    Emitter<TransferState> emit,
+  ) {
+    emit(state.copyWith(currentTab: event.tab));
+  }
+
+  void _onRetry(
+    TransferRetryEvent event,
+    Emitter<TransferState> emit,
+  ) {
+    _bgService.retryDownload(event.taskId);
+  }
+
+  /// DownloadTaskRecord -> DownloadTaskState 转换
+  DownloadTaskState _recordToState(DownloadTaskRecord record) {
+    return DownloadTaskState(
+      taskId: record.id,
+      fileName: record.filename,
+      fileId: record.fileId,
+      fileSize: record.fileSize,
+      downloadedSize: record.downloadedBytes,
+      status: _toDownloadTaskStatus(record.status),
+      errorMessage: record.errorMessage,
+      localPath: record.savePath,
+    );
+  }
+
+  DownloadTaskStatus _toDownloadTaskStatus(DownloadStatus status) {
+    switch (status) {
+      case DownloadStatus.PENDING:
+        return DownloadTaskStatus.pending;
+      case DownloadStatus.DOWNLOADING:
+        return DownloadTaskStatus.downloading;
+      case DownloadStatus.COMPLETED:
+        return DownloadTaskStatus.completed;
+      case DownloadStatus.FAILED:
+        return DownloadTaskStatus.failed;
+      case DownloadStatus.CANCELED:
+        return DownloadTaskStatus.cancelled;
+      case DownloadStatus.PAUSED:
+        return DownloadTaskStatus.paused;
     }
   }
 }

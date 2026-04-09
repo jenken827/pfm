@@ -95,3 +95,15 @@ func GetFileLocationsByProviderAndHash(providerIDs []uint32, blake3Hash string) 
 
 	return locations, nil
 }
+
+// GetFileHistoriesByFileID 根据文件ID获取文件历史
+func GetFileHistoriesByFileID(fileID string) ([]*native.FileHistoryORM, error) {
+	ctx := context.Background()
+	var histories []*native.FileHistoryORM
+
+	if err := GetDB().WithContext(ctx).Where("file_id = ?", fileID).Order("version_number DESC").Find(&histories).Error; err != nil {
+		return nil, err
+	}
+
+	return histories, nil
+}

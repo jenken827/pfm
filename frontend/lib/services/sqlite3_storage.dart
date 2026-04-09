@@ -110,6 +110,7 @@ class Sqlite3Storage {
   /// 创建表
   Future<void> _onCreate(Database db, int version) async {
     await db.execute(UploadTaskRecord.createSql());
+    await db.execute(DownloadTaskRecord.createSql());
 
     getLogger().info('Sqlite3Storage tables created');
   }
@@ -334,6 +335,200 @@ class Sqlite3Storage {
       () => _database!.update(
         uploadTaskTableName,
         {'status': UploadStatus.CANCELED.value},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+  }
+
+  // ========== 下载任务 CRUD ==========
+
+  /// 获取所有下载任务
+  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      orderBy: 'created_at DESC',
+    );
+    return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
+  }
+
+  /// 获取指定下载任务
+  Future<DownloadTaskRecord?> getDownloadTaskAsync(String id) async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return DownloadTaskRecord.fromJson(maps.first);
+  }
+
+  /// 新增下载任务
+  Future<void> addDownloadTask(DownloadTaskRecord task) async {
+    getLogger().info('add download task: ${task.id}');
+    await _withRetry(
+      () => _database!.insert(
+        downloadTaskTableName,
+        task.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      ),
+    );
+  }
+
+  /// 更新下载任务
+  Future<void> updateDownloadTask(
+    String id, {
+    DownloadStatus? status,
+    String? errorMessage,
+    int? downloadedBytes,
+    int? speed,
+    int? chunkTotal,
+  }) async {
+    final values = <String, dynamic>{};
+
+    if (status != null) {
+      values['status'] = status.index;
+      if (status == DownloadStatus.COMPLETED) {
+        values['completed_at'] = DateTime.now().toIso8601String();
+      }
+    }
+    if (errorMessage != null) values['error_message'] = errorMessage;
+    if (downloadedBytes != null) values['downloaded_bytes'] = downloadedBytes;
+    if (speed != null) values['speed'] = speed;
+    if (chunkTotal != null) values['chunk_total'] = chunkTotal;
+
+    if (values.isEmpty) return;
+
+    await _withRetry(
+      () => _database!.update(
+        downloadTaskTableName,
+        values,
+        where: 'id = ?',
+        whereArgs: [id],
+      ),
+    );
+  }
+
+  /// 删除下载任务
+  Future<void> deleteDownloadTask(String? id) async {
+    final where = id == null ? '' : 'id=?';
+    final whereArgs = id == null ? [] : [id];
+    await _withRetry(
+      () => _database!.delete(
+        downloadTaskTableName,
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+    getLogger().debug('Deleted download task: $id');
+  }
+
+  /// 获取待处理的下载任务
+  Future<List<DownloadTaskRecord>> getPendingDownloadTasksAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [DownloadStatus.PENDING.index],
+      orderBy: 'created_at ASC',
+    );
+    return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
+  }
+
+  /// 获取暂停的下载任务
+  Future<List<DownloadTaskRecord>> getPausedDownloadTasksAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [DownloadStatus.PAUSED.index],
+      orderBy: 'created_at ASC',
+    );
+    return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
+  }
+
+  /// 获取下一个待处理的下载任务
+  Future<DownloadTaskRecord?> getNextPendingDownloadTaskAsync() async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [DownloadStatus.PENDING.index],
+      orderBy: 'created_at ASC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return DownloadTaskRecord.fromJson(maps.first);
+  }
+
+  /// 清除已完成的下载任务
+  Future<void> clearDownloadCompleted() async {
+    final count = await _withRetry(
+      () => _database!.delete(
+        downloadTaskTableName,
+        where: 'status = ?',
+        whereArgs: [DownloadStatus.COMPLETED.index],
+      ),
+    );
+    getLogger().info('Cleared $count completed download tasks');
+  }
+
+  /// 暂停下载任务
+  Future<void> pauseDownloadTasks(String? taskId) async {
+    final where = taskId == null
+        ? 'status IN (?, ?)'
+        : 'id=?';
+    final whereArgs = taskId == null
+        ? [DownloadStatus.DOWNLOADING.index, DownloadStatus.PENDING.index]
+        : [taskId];
+    await _withRetry(
+      () => _database!.update(
+        downloadTaskTableName,
+        {'status': DownloadStatus.PAUSED.index},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+  }
+
+  /// 恢复下载任务
+  Future<List<String>> resumeDownloadTasks(String? taskId) async {
+    List<String> taskIds = [];
+    String where;
+    List<dynamic> whereArgs;
+    if (taskId == null) {
+      final tasks = await getPausedDownloadTasksAsync();
+      taskIds = tasks.map((t) => t.id).toList();
+      where = 'status=?';
+      whereArgs = [DownloadStatus.PAUSED.index];
+    } else {
+      taskIds.add(taskId);
+      where = 'id=?';
+      whereArgs = [taskId];
+    }
+
+    await _withRetry(
+      () => _database!.update(
+        downloadTaskTableName,
+        {'status': DownloadStatus.PENDING.index},
+        where: where,
+        whereArgs: whereArgs,
+      ),
+    );
+
+    return taskIds;
+  }
+
+  /// 取消下载任务
+  Future<void> cancelDownloadTask(String? taskId) async {
+    final where = taskId == null
+        ? 'status IN (?, ?)'
+        : 'id=?';
+    final whereArgs = taskId == null
+        ? [DownloadStatus.DOWNLOADING.index, DownloadStatus.PENDING.index]
+        : [taskId];
+    await _withRetry(
+      () => _database!.update(
+        downloadTaskTableName,
+        {'status': DownloadStatus.CANCELED.index},
         where: where,
         whereArgs: whereArgs,
       ),

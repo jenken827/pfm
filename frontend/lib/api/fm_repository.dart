@@ -270,6 +270,29 @@ class FmRepository {
     }
   }
 
+  /// 获取文件详情
+  Future<ApiResult<FileDetailRespData>> getFileDetail(String fileId) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFileDetail',
+        data: {'file_id': fileId},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<FileDetailRespData>(
+        data,
+        FileDetailRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取文件详情失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取文件详情失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   // /// 上传文件
   // /// 返回文件 ID 和是否已存在（通过哈希判断）
   // Future<ApiResult<UploadRespData>> uploadFile({
