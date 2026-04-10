@@ -56,47 +56,47 @@ class MainScaffold extends StatelessWidget {
   /// 构建底部导航栏布局（移动端）
   Widget _buildBottomBarScaffold(BuildContext context) {
     final al = AppLocalizations.of(context)!;
-    return Scaffold(
-      body: BlocProvider.value(
-        value: GetIt.I.get<TransferBloc>(),
-        child: navigationShell,
-      ),
-      bottomNavigationBar: Builder(
-        builder: (context) {
-          final activeCount = context.select(
-            (TransferBloc bloc) => bloc.state.activeTransferCount,
-          );
-          return BottomNavigationBar(
-            selectedFontSize: 16,
-            unselectedFontSize: 14,
-            showUnselectedLabels: false,
-            type: BottomNavigationBarType.fixed,
-            items: <BottomNavigationBarItem>[
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.home_outlined),
-                activeIcon: Icon(Icons.home),
-                label: '主页',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.folder_outlined),
-                activeIcon: Icon(Icons.folder),
-                label: '文件',
-              ),
-              BottomNavigationBarItem(
-                icon: _buildTransferIcon(activeCount, false),
-                activeIcon: _buildTransferIcon(activeCount, true),
-                label: al.transfer,
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.settings_outlined),
-                activeIcon: Icon(Icons.settings),
-                label: '设置',
-              ),
-            ],
-            currentIndex: navigationShell.currentIndex,
-            onTap: (index) => _onTap(context, index),
-          );
-        },
+    return BlocProvider.value(
+      value: GetIt.I.get<TransferBloc>(),
+      child: Scaffold(
+        body: navigationShell,
+        bottomNavigationBar: Builder(
+          builder: (context) {
+            final activeCount = context.select(
+              (TransferBloc bloc) => bloc.state.activeTransferCount,
+            );
+            return BottomNavigationBar(
+              selectedFontSize: 16,
+              unselectedFontSize: 14,
+              showUnselectedLabels: false,
+              type: BottomNavigationBarType.fixed,
+              items: <BottomNavigationBarItem>[
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: '主页',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.folder_outlined),
+                  activeIcon: Icon(Icons.folder),
+                  label: '文件',
+                ),
+                BottomNavigationBarItem(
+                  icon: _buildTransferIcon(activeCount, false),
+                  activeIcon: _buildTransferIcon(activeCount, true),
+                  label: al.transfer,
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.settings_outlined),
+                  activeIcon: Icon(Icons.settings),
+                  label: '设置',
+                ),
+              ],
+              currentIndex: navigationShell.currentIndex,
+              onTap: (index) => _onTap(context, index),
+            );
+          },
+        ),
       ),
     );
   }
@@ -104,12 +104,12 @@ class MainScaffold extends StatelessWidget {
   /// 构建传输图标（带徽章）
   Widget _buildTransferIcon(int count, bool isActive) {
     if (count <= 0) {
-      return Icon(isActive ? Icons.sync : Icons.sync_outlined);
+      return Icon(isActive ? Icons.swap_vert : Icons.swap_vert_outlined);
     }
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(isActive ? Icons.sync : Icons.sync_outlined),
+        Icon(isActive ? Icons.swap_vert : Icons.swap_vert_outlined),
         Positioned(
           right: -6,
           top: -4,

@@ -324,6 +324,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
                   filename: fileName,
                   fileSize: widget.file.size.toInt(),
                   savePath: savePath,
+                  providerId: loc.providerId,
                 ),
               );
               ScaffoldMessenger.of(

@@ -247,6 +247,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         savePath: event.savePath,
         fileHash: event.fileHash,
         status: DownloadStatus.PENDING,
+        providerId: event.providerId,
       );
 
       await _bgService.scheduleNewDownloadTask(record);

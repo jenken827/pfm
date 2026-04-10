@@ -31,8 +31,11 @@ Future<void> downloadFile({
 
   try {
     // 构建下载 URL
-    final downloadUrl =
+    var downloadUrl =
         '$baseUrl/api/file/stream/download?file_id=${task.fileId}';
+    if (task.providerId != null) {
+      downloadUrl += '&provider_id=${task.providerId}';
+    }
     final headers = <String, String>{
       'Authorization': 'Bearer ${token.accessToken}',
     };

@@ -38,6 +38,8 @@ class DownloadTaskRecord {
   int chunkTotal;
   // 并发下载线程数
   int workerCount;
+  /// 指定下载的存储提供者 ID（可选，为空则由后端自动选择）
+  int? providerId;
   DateTime createdAt;
   DateTime? completedAt;
 
@@ -55,6 +57,7 @@ class DownloadTaskRecord {
     this.chunkSize = 5 * 1024 * 1024, // 默认 5MB
     this.chunkTotal = 0,
     this.workerCount = 3,
+    this.providerId,
     DateTime? createdAt,
     this.completedAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -97,6 +100,7 @@ class DownloadTaskRecord {
       'chunk_size': chunkSize,
       'chunk_total': chunkTotal,
       'worker_count': workerCount,
+      'provider_id': providerId,
       'created_at': createdAt.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
     };
@@ -119,6 +123,7 @@ class DownloadTaskRecord {
       chunkSize: json['chunk_size'] ?? 5 * 1024 * 1024,
       chunkTotal: json['chunk_total'] ?? 0,
       workerCount: json['worker_count'] ?? 3,
+      providerId: json['provider_id'],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -144,6 +149,7 @@ class DownloadTaskRecord {
         chunk_size INTEGER,
         chunk_total INTEGER,
         worker_count INTEGER,
+        provider_id INTEGER,
         created_at TEXT,
         completed_at TEXT
       );

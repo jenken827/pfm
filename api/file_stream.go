@@ -12,6 +12,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/middleware"
 )
 
@@ -33,8 +34,17 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 流式传输文件（支持断点续传）
-	streamFile(ctx, w, r, fileID, "inline")
+	// 3. 获取指定的 provider_id（可选）
+	var providerID *uint32
+	if pidStr := r.URL.Query().Get("provider_id"); pidStr != "" {
+		if pid, err := strconv.ParseUint(pidStr, 10, 32); err == nil {
+			id := uint32(pid)
+			providerID = &id
+		}
+	}
+
+	// 4. 流式传输文件（支持断点续传）
+	streamFile(ctx, w, r, fileID, "inline", providerID)
 }
 
 // DownloadFileHandler 文件下载HTTP handler（强制下载，支持断点续传）
@@ -55,12 +65,22 @@ func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 流式传输文件（支持断点续传）
-	streamFile(ctx, w, r, fileID, "attachment")
+	// 3. 获取指定的 provider_id（可选）
+	var providerID *uint32
+	if pidStr := r.URL.Query().Get("provider_id"); pidStr != "" {
+		if pid, err := strconv.ParseUint(pidStr, 10, 32); err == nil {
+			id := uint32(pid)
+			providerID = &id
+		}
+	}
+
+	// 4. 流式传输文件（支持断点续传）
+	streamFile(ctx, w, r, fileID, "attachment", providerID)
 }
 
 // streamFile 流式传输文件（支持多分片自动合并、断点续传）
-func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fileID string, disposition string) {
+// 若 providerID 不为空，则强制使用该提供者；否则自动选择最优提供者
+func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fileID string, disposition string, providerID *uint32) {
 	// 1. 获取文件信息
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
@@ -87,12 +107,24 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 		return
 	}
 
-	// 3. 选择最优源提供者
-	sourceProviderID, sourceLocations, err := storage.SelectBestSourceProvider(locations)
-	if err != nil {
-		llog.L().Errorf("select best source provider failed: %v", err)
-		http.Error(w, "no available provider", http.StatusServiceUnavailable)
-		return
+	// 3. 选择源提供者（指定 provider_id 则强制使用，否则自动选择最优）
+	var sourceProviderID uint32
+	var sourceLocations []*native.FileLocationORM
+	if providerID != nil {
+		sourceProviderID = *providerID
+		sourceLocations, err = storage.GetCompleteProviderLocations(locations, sourceProviderID)
+		if err != nil {
+			llog.L().Errorf("get provider %d locations failed: %v", sourceProviderID, err)
+			http.Error(w, "provider location not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		sourceProviderID, sourceLocations, err = storage.SelectBestSourceProvider(locations)
+		if err != nil {
+			llog.L().Errorf("select best source provider failed: %v", err)
+			http.Error(w, "no available provider", http.StatusServiceUnavailable)
+			return
+		}
 	}
 
 	llog.L().Infof("stream file: %s, provider: %d, chunks: %d", *file.Name, sourceProviderID, len(sourceLocations))

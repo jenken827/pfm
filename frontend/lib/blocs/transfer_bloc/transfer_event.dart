@@ -66,6 +66,7 @@ class TransferAddDownloadEvent extends TransferEvent {
     required this.fileSize,
     required this.savePath,
     this.fileHash,
+    this.providerId,
   });
 
   final String fileId;
@@ -73,6 +74,8 @@ class TransferAddDownloadEvent extends TransferEvent {
   final int fileSize;
   final String savePath;
   final String? fileHash;
+  /// 指定下载的存储提供者 ID（可选，为空则由后端自动选择最优提供者）
+  final int? providerId;
 }
 
 /// Tab 页切换
