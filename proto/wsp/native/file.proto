@@ -216,6 +216,16 @@ message FileListRespData {
   optional bool has_more = 3;
 }
 
+// 获取文件夹列表请求
+message FolderListReq {
+  optional string parent_id = 1 [(buf.validate.field).required = true];
+}
+
+// 文件夹列表响应数据
+message FolderListRespData {
+  repeated File folders = 1;
+}
+
 // 创建目录请求
 message CreateDirReq {
   optional string name = 1 [(buf.validate.field).required = true];
@@ -255,6 +265,24 @@ message RenameObj {
   optional string new_name = 2;
 }
 
+// 移动文件请求
+message MoveFileReq {
+  // 要移动的文件ID列表
+  repeated string file_ids = 1 [(buf.validate.field).required = true];
+  // 目标文件夹ID
+  optional string target_parent_id = 2 [(buf.validate.field).required = true];
+}
+
+// 移动文件响应数据
+message MoveFileRespData {
+  // 成功移动的文件数量
+  optional uint32 success_count = 1;
+  // 失败的文件ID列表
+  repeated string failed_ids = 2;
+  // 失败原因（按文件ID索引）
+  map<string, string> failed_reasons = 3;
+}
+
 // 文件详情请求
 message FileDetailReq {
   optional string file_id = 1 [(buf.validate.field).required = true];
@@ -282,6 +310,48 @@ message ProviderLocationInfo {
   optional CacheStatus cache_status = 9;
 }
 
+// FileShare 文件分享记录
+message FileShare {
+  option (gorm.opts).ormable = true;
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  // 分享码（短链标识，用于URL中，防止暴露文件ID）
+  optional string share_code = 5 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_fs_code, unique"
+  }];
+  // 文件ID
+  optional string file_id = 6 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_fs_fid"
+  }];
+  // 签名（HMAC-SHA256，防篡改）
+  optional string sign = 7 [(gorm.field).tag = {not_null: true}];
+  // 过期时间
+  optional google.protobuf.Timestamp expire_at = 8;
+  // 是否永久有效
+  optional bool never_expire = 9 [(gorm.field).tag = {
+    not_null: true
+    default: "false"
+  }];
+  // 分享状态
+  optional ShareStatus status = 10 [(gorm.field).tag = {not_null: true}];
+  // 访问次数
+  optional uint32 access_count = 11 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
+  // 最大访问次数（0=不限制）
+  optional uint32 max_access_count = 12;
+  // 备注
+  optional string remark = 13;
+}
+
 // 文件详情响应数据
 message FileDetailRespData {
   // 文件信息
@@ -298,6 +368,10 @@ service FileService {
   rpc GetFileList(FileListReq) returns (BaseResp) {
     option (google.api.http) = {get: "/api/file/list"};
   }
+  // 获取文件夹列表（用于移动文件选择目标文件夹）
+  rpc GetFolderList(FolderListReq) returns (BaseResp) {
+    option (google.api.http) = {get: "/api/file/folders"};
+  }
   // 获取文件详情
   rpc GetFileDetail(FileDetailReq) returns (BaseResp) {
     option (google.api.http) = {get: "/api/file/detail"};
@@ -310,4 +384,6 @@ service FileService {
   rpc DeleteFile(DeleteFileReq) returns (BaseResp);
   // 文件重命名
   rpc RenameFile(RenameFileReq) returns (BaseResp);
+  // 移动文件
+  rpc MoveFile(MoveFileReq) returns (BaseResp);
 }

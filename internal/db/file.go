@@ -91,6 +91,25 @@ func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, i
 	return files, total, hasMore, nil
 }
 
+// GetFolderList 获取指定目录下的所有文件夹
+func GetFolderList(parentID string) ([]*native.FileORM, error) {
+	var folders []*native.FileORM
+	var err error
+	ctx := context.Background()
+
+	// 查询文件夹类型（FileType_FOLDER = 2）
+	folderType := int32(native.FileType_FOLDER)
+	if folders, err = gorm.G[*native.FileORM](db).
+		Where("parent_id = ?", parentID).
+		Where("type = ?", folderType).
+		Order("name ASC").
+		Find(ctx); err != nil {
+		return nil, err
+	}
+
+	return folders, nil
+}
+
 // UpdateDir 更新文件夹配置
 func UpdateDir(orm *native.FileORM) error {
 	ctx := context.Background()
@@ -169,13 +188,13 @@ func RenameFiles(renames []*native.RenameObj) error {
 }
 
 // UpdateFile 更新文件记录
-// func UpdateFile(file *native.FileORM) error {
-// 	ctx := context.Background()
-// 	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *file.Id).Updates(ctx, file)
-
-// 	return err
-
-// }
+func UpdateFile(file *native.FileORM, updateFields []string) error {
+	ctx := context.Background()
+	if err := GetDB().WithContext(ctx).Model(file).Select(updateFields).Updates(file).Error; err != nil {
+		return err
+	}
+	return nil
+}
 
 // UpdateFileWithHistory 更新文件记录并记录历史
 func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *native.FileORM) error {

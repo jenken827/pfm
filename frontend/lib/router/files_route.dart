@@ -11,6 +11,7 @@ part 'files_route.g.dart';
   routes: [
     TypedGoRoute<FilePreviewRoute>(path: 'preview'),
     TypedGoRoute<FileDetailRoute>(path: 'detail'),
+    TypedGoRoute<FolderPickerRoute>(path: 'picker'),
   ],
 )
 @immutable
@@ -53,5 +54,22 @@ class FileDetailRoute extends GoRouteData with $FileDetailRoute {
   Widget build(BuildContext context, GoRouterState state) {
     final file = state.extra! as File;
     return FileDetailPage(file: file);
+  }
+}
+
+/// 文件夹选择路由
+@immutable
+class FolderPickerRoute extends GoRouteData with $FolderPickerRoute {
+  const FolderPickerRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    final extra = state.extra as Map<String, dynamic>?;
+    final initialFolderId = extra?['initialFolderId'] as String? ?? '0';
+    final excludeIds = (extra?['excludeIds'] as List<String>?) ?? [];
+    return FolderPickerPage(
+      initialFolderId: initialFolderId,
+      excludeIds: excludeIds,
+    );
   }
 }

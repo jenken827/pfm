@@ -49,6 +49,26 @@ func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[nativ
 	})
 }
 
+// GetFolderList 获取文件夹列表
+func (s *FileServer) GetFolderList(ctx context.Context, req *connect.Request[native.FolderListReq]) (*connect.Response[native.BaseResp], error) {
+	folders, mErr := service.GetFolderList(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	var result []*native.File
+	for _, f := range folders {
+		pb, err := f.ToPB(ctx)
+		if err != nil {
+			llog.L().Errorf("convert folder to pb failed, err: %v", err)
+			continue
+		}
+		result = append(result, &pb)
+	}
+	return response.SuccessResp(&native.FolderListRespData{
+		Folders: result,
+	})
+}
+
 // UpdateDir 更新文件夹
 func (s *FileServer) UpdateDir(ctx context.Context, req *connect.Request[native.UpdateDirReq]) (*connect.Response[native.BaseResp], error) {
 	err := service.UpdateDir(ctx, req.Msg)
@@ -77,6 +97,20 @@ func (s *FileServer) RenameFile(ctx context.Context, req *connect.Request[native
 	}
 
 	return response.SuccessResp(nil)
+}
+
+// MoveFile 移动文件
+func (s *FileServer) MoveFile(ctx context.Context, req *connect.Request[native.MoveFileReq]) (*connect.Response[native.BaseResp], error) {
+	successCount, failedIDs, failedReasons, err := service.MoveFile(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+
+	return response.SuccessResp(&native.MoveFileRespData{
+		SuccessCount:  &successCount,
+		FailedIds:     failedIDs,
+		FailedReasons: failedReasons,
+	})
 }
 
 // GetFileDetail 获取文件详情

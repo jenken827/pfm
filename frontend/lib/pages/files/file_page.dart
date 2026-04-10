@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/proto/native/file.pb.dart';
@@ -373,8 +375,8 @@ class _FileView extends StatelessWidget {
                 .where((f) => f.type == pbenum.FileType.IMAGE)
                 .toList();
             final index = images.indexWhere((f) => f.id == file.id);
-            const FilePreviewRoute().push(
-              context,
+            context.push(
+              FilePreviewRoute().location,
               extra: PreviewArgs(
                 file: file,
                 images: images,
@@ -382,11 +384,11 @@ class _FileView extends StatelessWidget {
               ),
             );
           } else {
-            const FilePreviewRoute().push(context, extra: file);
+            context.push(FilePreviewRoute().location, extra: file);
           }
         } else {
           // 跳转到详情页
-          const FileDetailRoute().push(context, extra: file);
+          context.push(FileDetailRoute().location, extra: file);
         }
       }
     }
@@ -442,28 +444,34 @@ class _FileView extends StatelessWidget {
   }
 
   void _showFileMenu(BuildContext context, File file) {
+    final isFolder = file.type == pbenum.FileType.FOLDER;
+
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 查看详情
             ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('查看详情'),
               onTap: () {
                 Navigator.pop(ctx);
-                // TODO: 跳转详情页
+                context.push(FileDetailRoute().location, extra: file);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('下载'),
-              onTap: () {
-                Navigator.pop(ctx);
-                // TODO: 下载文件
-              },
-            ),
+            // 下载（仅文件，文件夹不显示）
+            if (!isFolder)
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: const Text('下载'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _downloadFile(context, file);
+                },
+              ),
+            // 重命名
             ListTile(
               leading: const Icon(Icons.edit),
               title: const Text('重命名'),
@@ -472,22 +480,56 @@ class _FileView extends StatelessWidget {
                 _showRenameDialog(context, file);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('复制链接'),
-              onTap: () {
-                Navigator.pop(ctx);
-                // TODO: 复制链接
-              },
-            ),
+            // 复制链接（仅文件）
+            if (!isFolder)
+              ListTile(
+                leading: const Icon(Icons.link),
+                title: const Text('复制链接'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final fmRepo = context.read<FmRepository>();
+                    final result = await fmRepo.getShareLink(fileId: file.id);
+                    if (result.success && result.data != null) {
+                      final url = result.data!['url'] as String?;
+                      if (url != null) {
+                        await Clipboard.setData(ClipboardData(text: url));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('链接已复制到剪贴板')),
+                          );
+                        }
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '获取链接失败: ${result.message ?? "未知错误"}',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('获取链接失败: $e')));
+                    }
+                  }
+                },
+              ),
+            // 移动
             ListTile(
               leading: const Icon(Icons.drive_file_move),
               title: const Text('移动'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                // TODO: 移动文件
+                await _showMoveDialog(context, [file]);
               },
             ),
+            // 删除
             ListTile(
               leading: Icon(
                 Icons.delete,
@@ -506,6 +548,34 @@ class _FileView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 下载文件
+  Future<void> _downloadFile(BuildContext context, File file) async {
+    try {
+      final downloadDir = await getDownloadsDirectory();
+      if (downloadDir == null) return;
+      final fileName = file.name.isNotEmpty ? file.name : 'unnamed';
+      final savePath = '${downloadDir.path}/$fileName';
+      if (!context.mounted) return;
+      GetIt.I.get<TransferBloc>().add(
+        TransferAddDownloadEvent(
+          fileId: file.id,
+          filename: fileName,
+          fileSize: file.size.toInt(),
+          savePath: savePath,
+        ),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已开始下载: $fileName')));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
+      }
+    }
   }
 
   void _showFabMenu(BuildContext context) {
@@ -877,6 +947,58 @@ class _FileView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 显示移动文件对话框
+  Future<void> _showMoveDialog(BuildContext context, List<File> files) async {
+    // 要排除的文件夹ID（不能移动到自己或子文件夹）
+    final fileIds = files.map((f) => f.id).toList();
+
+    // 导航到选择文件夹页面
+    final targetFolderId = await context.push<String>(
+      FolderPickerRoute().location,
+      extra: {'initialFolderId': '', 'excludeIds': fileIds},
+    );
+
+    // 用户取消选择
+    if (targetFolderId == null || !context.mounted) return;
+
+    // 用户选择了目标文件夹，执行移动
+    final fmRepo = context.read<FmRepository>();
+    final moveResult = await fmRepo.moveFile(
+      fileIds: fileIds,
+      targetParentId: targetFolderId,
+    );
+
+    if (context.mounted) {
+      if (moveResult.success) {
+        final data = moveResult.data!;
+        final successCount = data.successCount ?? 0;
+        final failedIds = data.failedIds;
+
+        if (failedIds.isEmpty) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('成功移动 $successCount 个文件')));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('成功移动 $successCount 个文件，失败 ${failedIds.length} 个'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        // 刷新文件列表
+        context.read<FileBloc>().add(const FileRefreshEvent());
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('移动失败: ${moveResult.message ?? "未知错误"}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 

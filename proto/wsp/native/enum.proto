@@ -144,3 +144,14 @@ enum CacheStatus {
   // 缓存完成，文件已缓存在本地，可直接读取
   CACHED = 3;
 }
+
+// ShareStatus 分享状态
+enum ShareStatus {
+  SHARE_STATUS_UNSPECIFIED = 0;
+  // 活跃
+  ACTIVE = 1;
+  // 已取消
+  CANCELLED = 2;
+  // 已过期
+  EXPIRED = 3;
+}

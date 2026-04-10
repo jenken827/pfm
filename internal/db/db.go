@@ -104,6 +104,7 @@ func autoMigrate() error {
 	return db.AutoMigrate(
 		&native.FileORM{},
 		&native.FileTagORM{},
+		&native.FileShareORM{},
 		&native.FileLocationORM{},
 		&native.StorageProviderORM{},
 		&native.UploadRecordORM{},

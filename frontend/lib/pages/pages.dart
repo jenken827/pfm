@@ -4,6 +4,7 @@ export 'home/home_index_page.dart';
 export 'files/file_page.dart';
 export 'files/file_preview_page.dart';
 export 'files/file_detail_page.dart';
+export 'files/folder_picker_page.dart';
 export 'transfer/transfer_page.dart';
 export 'settings/setting_page.dart';
 export 'login/login_page.dart';

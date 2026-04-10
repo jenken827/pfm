@@ -30,4 +30,8 @@ casdoor:
   organization_name: "org"
   application_name: "app"
 
+# 分享链接签名密钥，用于生成和验证分享链接的签名
+# 如果不设置，将自动生成随机密钥（每次重启后之前的分享链接将失效）
+sign_token: ""
+
 

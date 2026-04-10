@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/fm_repository.dart';
@@ -71,7 +72,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
             icon: const Icon(Icons.preview),
             onPressed: () {
               if (_isPreviewable()) {
-                FilePreviewRoute().push(context, extra: widget.file);
+                context.push(FilePreviewRoute().location, extra: widget.file);
               }
             },
           ),
@@ -248,8 +249,9 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final isTelegram = loc.providerType == StorageProviderType.TELEGRAM;
 
     // Telegram 缓存状态
-    final cacheStatusText =
-        isTelegram && loc.cacheStatus != null ? _getCacheStatusText(loc.cacheStatus!) : null;
+    final cacheStatusText = isTelegram && loc.cacheStatus != null
+        ? _getCacheStatusText(loc.cacheStatus!)
+        : null;
     // 实际存储大小（可能是加密后）
     final storedSize = loc.size > 0 ? _formatFileSize(loc.size.toInt()) : null;
 
@@ -375,9 +377,9 @@ class _FileDetailPageState extends State<FileDetailPage> {
               final snackMsg = isTelegram && cacheStatusText != null
                   ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
                   : '已开始下载: $fileName';
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(snackMsg)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(snackMsg)));
             },
             tooltip: '下载',
           ),

@@ -27,6 +27,17 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 	return files, total, hasMore, nil
 }
 
+// GetFolderList 获取文件夹列表（用于移动文件选择目标文件夹）
+func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.FileORM, *models.Err) {
+	folders, err := db.GetFolderList(req.GetParentId())
+	if err != nil {
+		llog.L().Errorf("GetFolderList failed, err: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return folders, nil
+}
+
 // CreateDir 创建文件夹
 func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	providerIds := req.ProviderIds

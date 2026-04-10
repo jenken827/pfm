@@ -165,6 +165,32 @@ class FmRepository {
     }
   }
 
+  /// 获取文件夹列表（用于移动文件选择目标文件夹）
+  Future<ApiResult<FolderListRespData>> getFolderList({
+    required String parentId,
+  }) async {
+    try {
+      final req = FolderListReq(parentId: parentId);
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFolderList',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<FolderListRespData>(
+        data,
+        FolderListRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取文件夹列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取文件夹列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 创建目录
   Future<ApiResult<void>> createDir({
     required String name,
@@ -362,6 +388,97 @@ class FmRepository {
         return '连接失败，请检查网络';
       default:
         return e.message ?? '未知错误';
+    }
+  }
+
+  // ==================== Share Link ====================
+
+  /// 获取分享链接
+  /// [fileId] 文件ID
+  /// [expireSeconds] 过期时间（秒），默认一周
+  /// [neverExpire] 是否永久有效
+  /// [maxAccess] 最大访问次数（0=不限制）
+  /// [remark] 备注
+  Future<ApiResult<Map<String, dynamic>>> getShareLink({
+    required String fileId,
+    int expireSeconds = 604800,
+    bool neverExpire = false,
+    int maxAccess = 0,
+    String remark = '',
+  }) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrl/api/file/share',
+        queryParameters: {
+          'file_id': fileId,
+          'expire': expireSeconds,
+          if (neverExpire) 'never_expire': 'true',
+          if (maxAccess > 0) 'max_access': maxAccess,
+          if (remark.isNotEmpty) 'remark': remark,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      return ApiResult(success: true, data: data);
+    } on DioException catch (e) {
+      _logger.error('获取分享链接失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取分享链接失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 取消分享链接
+  Future<ApiResult<void>> cancelShareLink(String shareCode) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/file/share/cancel?share_code=$shareCode',
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return ApiResult(success: true);
+      }
+      return ApiResult(success: false, message: '取消分享失败');
+    } on DioException catch (e) {
+      _logger.error('取消分享失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('取消分享失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 移动文件
+  /// [fileIds] 要移动的文件ID列表
+  /// [targetParentId] 目标文件夹ID
+  Future<ApiResult<MoveFileRespData>> moveFile({
+    required List<String> fileIds,
+    required String targetParentId,
+  }) async {
+    try {
+      final req = MoveFileReq(
+        fileIds: fileIds,
+        targetParentId: targetParentId,
+      );
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/MoveFile',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<MoveFileRespData>(
+        data,
+        MoveFileRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('移动文件失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('移动文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
     }
   }
 

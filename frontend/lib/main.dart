@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/hive/hive.dart';
@@ -10,6 +11,9 @@ import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化 MediaKit
+  MediaKit.ensureInitialized();
 
   initTalkerLogger();
   await Hive.initFlutter('pfm');

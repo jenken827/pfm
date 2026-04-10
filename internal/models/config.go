@@ -11,6 +11,8 @@ type Config struct {
 	//服务对外地址，用于telegram回调，i.e. https://example.com
 	ServerURL string      `json:"server_url" yaml:"server_url"`
 	Aria2     Aria2Config `json:"aria2" yaml:"aria2"`
+	// 分享链接签名密钥，用于生成和验证分享链接的签名
+	SignToken string `json:"sign_token" yaml:"sign_token"`
 }
 
 // Schema http server config
