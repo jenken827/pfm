@@ -245,6 +245,13 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final isChunked = loc.isChunked;
     final chunkTotal = loc.chunkTotal;
     final statusText = _getProviderStatusText(loc.status);
+    final isTelegram = loc.providerType == StorageProviderType.TELEGRAM;
+
+    // Telegram 缓存状态
+    final cacheStatusText =
+        isTelegram && loc.cacheStatus != null ? _getCacheStatusText(loc.cacheStatus!) : null;
+    // 实际存储大小（可能是加密后）
+    final storedSize = loc.size > 0 ? _formatFileSize(loc.size.toInt()) : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -259,6 +266,23 @@ class _FileDetailPageState extends State<FileDetailPage> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
+          // 实际大小
+          if (storedSize != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                storedSize,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // 加密标记
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -297,6 +321,27 @@ class _FileDetailPageState extends State<FileDetailPage> {
             ),
           ),
           const SizedBox(width: 8),
+          // Telegram 缓存状态
+          if (cacheStatusText != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: loc.cacheStatus == CacheStatus.CACHED
+                    ? Colors.green.withOpacity(0.2)
+                    : Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                cacheStatusText,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: loc.cacheStatus == CacheStatus.CACHED
+                      ? Colors.green
+                      : Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // 状态
           Text(
             statusText,
@@ -327,9 +372,12 @@ class _FileDetailPageState extends State<FileDetailPage> {
                   providerId: loc.providerId,
                 ),
               );
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('已开始下载: $fileName')));
+              final snackMsg = isTelegram && cacheStatusText != null
+                  ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
+                  : '已开始下载: $fileName';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(snackMsg)),
+              );
             },
             tooltip: '下载',
           ),
@@ -563,6 +611,19 @@ class _FileDetailPageState extends State<FileDetailPage> {
         return '已完成';
       case UploadProviderStatus.PFAILED:
         return '失败';
+      default:
+        return '未知';
+    }
+  }
+
+  String _getCacheStatusText(CacheStatus status) {
+    switch (status) {
+      case CacheStatus.UNCACHED:
+        return '未缓存';
+      case CacheStatus.CACHING:
+        return '缓存中';
+      case CacheStatus.CACHED:
+        return '已缓存';
       default:
         return '未知';
     }

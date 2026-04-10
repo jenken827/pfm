@@ -45,6 +45,33 @@ func UpdateFileLocation(fl *native.FileLocationORM, updateFields []string) error
 	return nil
 }
 
+// UpdateFileLocationCacheStatus 更新文件位置的缓存状态
+func UpdateFileLocationCacheStatus(id uint64, status native.CacheStatus) error {
+	ctx := context.Background()
+	if err := GetDB().WithContext(ctx).Model(&native.FileLocationORM{}).
+		Where("id = ?", id).
+		Update("cache_status", status).Error; err != nil {
+		llog.L().Errorf("update file location cache status failed: %v", err)
+		return err
+	}
+	return nil
+}
+
+// UpdateFileLocationCache 更新文件位置的缓存路径和状态
+func UpdateFileLocationCache(id uint64, path string, status native.CacheStatus) error {
+	ctx := context.Background()
+	if err := GetDB().WithContext(ctx).Model(&native.FileLocationORM{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"path":         path,
+			"cache_status": status,
+		}).Error; err != nil {
+		llog.L().Errorf("update file location cache failed: %v", err)
+		return err
+	}
+	return nil
+}
+
 // GetFileLocationByProviderAndHash 根据提供者ID和文件哈希获取文件位置
 func GetFileLocationByProviderAndHash(providerId uint32, blake3Hash string) (*native.FileLocationORM, error) {
 	ctx := context.Background()

@@ -79,6 +79,8 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 		chunkTotal   uint32
 		status       native.UploadProviderStatus
 		chunkCount   int
+		size         uint64
+		cacheStatus  native.CacheStatus
 	}
 
 	groupMap := make(map[uint32]*providerGroup)
@@ -100,16 +102,26 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			if loc.Status != nil {
 				status = native.UploadProviderStatus(*loc.Status)
 			}
+			cacheStatus := native.CacheStatus_CACHE_STATUS_UNSPECIFIED
+			if loc.CacheStatus != nil {
+				cacheStatus = native.CacheStatus(*loc.CacheStatus)
+			}
 
 			group = &providerGroup{
-				providerID: providerID,
-				encrypted:  encrypted,
-				chunkTotal: chunkTotal,
-				status:     status,
+				providerID:  providerID,
+				encrypted:   encrypted,
+				chunkTotal:  chunkTotal,
+				status:      status,
+				cacheStatus: cacheStatus,
 			}
 			groupMap[providerID] = group
 		}
 		group.chunkCount++
+
+		// size 取第一个分片（chunk_number=0）的值，即文件总大小
+		if loc.ChunkNumber != nil && *loc.ChunkNumber == 0 && loc.Size != nil {
+			group.size = *loc.Size
+		}
 	}
 
 	var result []*native.ProviderLocationInfo
@@ -133,6 +145,8 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			IsChunked:    &isChunked,
 			ChunkTotal:   &group.chunkTotal,
 			Status:       &group.status,
+			Size:         &group.size,
+			CacheStatus:  &group.cacheStatus,
 		}
 		result = append(result, info)
 	}

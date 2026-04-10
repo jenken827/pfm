@@ -508,9 +508,15 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 			chunkTotalValue := chunkTotal
 			fl.ChunkTotal = &chunkTotalValue
 			fl.ChunkNumber = &chunkNumber
+			if chunkInfo.Size > 0 {
+				fl.Size = &chunkInfo.Size
+			}
+			if chunkInfo.ChunkSize > 0 {
+				fl.ChunkSize = &chunkInfo.ChunkSize
+			}
 
 			// 更新字段列表
-			updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total"}
+			updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
 			if fl.Encrypted != nil {
 				updateFields = append(updateFields, "encrypted", "encryption_salt")
 			}
@@ -534,6 +540,12 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 			}
 			if chunkInfo.Hash != "" {
 				newFl.Hash = &chunkInfo.Hash
+			}
+			if chunkInfo.Size > 0 {
+				newFl.Size = &chunkInfo.Size
+			}
+			if chunkInfo.ChunkSize > 0 {
+				newFl.ChunkSize = &chunkInfo.ChunkSize
 			}
 			// // 复制加密信息
 			// if fl.Encrypted != nil {

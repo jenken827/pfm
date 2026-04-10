@@ -72,6 +72,7 @@ enum DownloadTaskStatus {
   completed,
   failed,
   cancelled,
+  preDownload, // 预下载中（Telegram 大文件等待缓存）
 }
 
 /// 下载任务
@@ -95,6 +96,9 @@ class DownloadTaskState extends Equatable {
     this.errorMessage,
     this.localPath,
   });
+
+  /// 是否预下载中
+  bool get isPreDownload => status == DownloadTaskStatus.preDownload;
 
   /// 下载进度（0-100）
   double get progress {

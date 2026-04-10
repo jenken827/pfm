@@ -4,12 +4,13 @@ import 'package:pfm/utils/format.dart';
 
 /// 下载状态枚举（用于持久化存储）
 enum DownloadStatus {
-  PENDING,     // 待开始
-  DOWNLOADING, // 下载中
-  COMPLETED,   // 已完成
-  FAILED,      // 失败
-  CANCELED,    // 已取消
-  PAUSED,      // 已暂停
+  PENDING,       // 待开始
+  DOWNLOADING,   // 下载中
+  COMPLETED,     // 已完成
+  FAILED,        // 失败
+  CANCELED,      // 已取消
+  PAUSED,        // 已暂停
+  PRE_DOWNLOAD,  // 预下载中（Telegram 大文件等待缓存）
 }
 
 /// 下载任务持久化记录

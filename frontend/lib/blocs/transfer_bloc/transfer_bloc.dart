@@ -299,6 +299,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         return DownloadTaskStatus.cancelled;
       case DownloadStatus.PAUSED:
         return DownloadTaskStatus.paused;
+      case DownloadStatus.PRE_DOWNLOAD:
+        return DownloadTaskStatus.preDownload;
     }
   }
 }

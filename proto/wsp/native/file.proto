@@ -189,6 +189,13 @@ message FileLocation {
     not_null: true
     default: "false"
   }];
+  // 文件在存储提供者上的实际存储大小（加密后）
+  optional uint64 size = 21;
+  // 缓存状态（仅 Telegram 使用，UNCACHED/CACHING/CACHED）
+  optional CacheStatus cache_status = 22 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
 }
 
 // 获取文件列表
@@ -269,6 +276,10 @@ message ProviderLocationInfo {
   optional uint32 chunk_total = 6;
   // 上传状态
   optional UploadProviderStatus status = 7;
+  // 文件在存储提供者上的实际存储大小（加密后）
+  optional uint64 size = 8;
+  // 缓存状态（仅 Telegram 使用）
+  optional CacheStatus cache_status = 9;
 }
 
 // 文件详情响应数据

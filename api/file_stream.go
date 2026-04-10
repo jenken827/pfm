@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"jenken827.com/jenken827/pfm/driver/telegram"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -136,7 +138,32 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 		return
 	}
 
-	// 5. 创建加密器（用于解密，如果需要）
+	// 5. Telegram 大文件预下载检查
+	// 对于大文件（>20MB），如果尚未缓存完成，返回预下载标记，前端需手动重试
+	if sourceStorage.GetType() == native.StorageProviderType_TELEGRAM {
+		locSize := sourceLocations[0].Size
+		if locSize != nil && int64(*locSize) > telegram.LargeFileSizeThreshold {
+			cacheStatus := sourceLocations[0].CacheStatus
+			if cacheStatus == nil || *cacheStatus != int32(native.CacheStatus_CACHED) {
+				actualStatus := native.CacheStatus_CACHE_STATUS_UNSPECIFIED
+				if cacheStatus != nil {
+					actualStatus = native.CacheStatus(*cacheStatus)
+				}
+				llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, size=%d, cache_status=%v",
+					fileID, sourceProviderID, *locSize, actualStatus)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"status":       "pre_download",
+					"provider_id":   sourceProviderID,
+					"cache_status":  actualStatus,
+				})
+				return
+			}
+		}
+	}
+
+	// 6. 创建加密器（用于解密，如果需要）
 	var encryptor types.Encryptor
 	if sourceLocations[0].Encrypted != nil && *sourceLocations[0].Encrypted {
 		providerOrm := sourceStorage.GetOrm()
@@ -154,7 +181,7 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 		}
 	}
 
-	// 6. 打开文件（支持多分片合并、Seek）
+	// 7. 打开文件（支持多分片合并、Seek）
 	reader, err := sourceStorage.Open(ctx, sourceLocations, encryptor)
 	if err != nil {
 		llog.L().Errorf("open file failed: %v", err)

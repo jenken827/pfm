@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:pfm/models/models.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/services/services.dart';
 
 /// 下载文件核心逻辑
@@ -12,6 +14,7 @@ import 'package:pfm/services/services.dart';
 /// - 断点续传（从 downloadedBytes 恢复）
 /// - 多线程并发下载（默认 3 线程，通过 HTTP Range 实现）
 /// - 小文件单线程直接下载
+/// - Telegram 大文件预下载（202 响应处理）
 Future<void> downloadFile({
   required String taskId,
   required Sqlite3Storage storage,
@@ -48,6 +51,22 @@ Future<void> downloadFile({
       task.id,
       status: DownloadStatus.DOWNLOADING,
     );
+
+    // 预下载检查：Telegram 大文件场景下，后端可能返回 202 等待缓存
+    final preCheck = await _checkPreDownload(
+      client: client,
+      downloadUrl: downloadUrl,
+      headers: headers,
+    );
+    if (preCheck != null) {
+      l.info('Pre-download detected: $preCheck, task: ${task.id}');
+      await storage.updateDownloadTask(
+        task.id,
+        status: DownloadStatus.PRE_DOWNLOAD,
+        errorMessage: preCheck,
+      );
+      return;
+    }
 
     // 判断使用单线程还是多线程
     const smallFileThreshold = 50 * 1024 * 1024; // 50MB
@@ -86,6 +105,39 @@ Future<void> downloadFile({
   } finally {
     client?.close();
   }
+}
+
+/// 检查是否需要预下载
+///
+/// 对于 Telegram 大文件（>20MB），后端可能返回 202 + {"status": "pre_download", ...}
+/// 表示文件正在缓存中，需要前端更新状态并提示用户手动重试。
+///
+/// 返回 null 表示正常下载，返回字符串表示预下载原因（cache_status 描述）
+Future<String?> _checkPreDownload({
+  required http.Client client,
+  required String downloadUrl,
+  required Map<String, String> headers,
+}) async {
+  // 发送 HEAD 请求探测，不下载 body
+  final resp = await client.head(Uri.parse(downloadUrl), headers: headers);
+  if (resp.statusCode != 200 && resp.statusCode != 206) {
+    // 非正常响应，尝试读取 body（可能是 202 JSON）
+    if (resp.statusCode == 202 || resp.body.isNotEmpty) {
+      try {
+        final body = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (body['status'] == 'pre_download') {
+          final cacheStatus = body['cache_status'];
+          final providerId = body['provider_id'];
+          return 'provider=$providerId, cache_status=$cacheStatus';
+        }
+      } catch (_) {
+        // JSON 解析失败，忽略
+      }
+    }
+    // 其他非正常状态码，抛出异常走原有失败流程
+    throw Exception('HTTP ${resp.statusCode}: ${resp.reasonPhrase}');
+  }
+  return null;
 }
 
 /// 单线程下载（用于小文件）

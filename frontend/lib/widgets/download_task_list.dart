@@ -135,7 +135,7 @@ class _DownloadTaskItem extends StatelessWidget {
                       const PopupMenuItem(value: 'pause', child: Text('暂停')),
                     if (task.isPaused)
                       const PopupMenuItem(value: 'resume', child: Text('继续')),
-                    if (task.isFailed)
+                    if (task.isFailed || task.isPreDownload)
                       const PopupMenuItem(value: 'retry', child: Text('重试')),
                     if (task.isDownloading || task.isPaused)
                       const PopupMenuItem(value: 'cancel', child: Text('取消')),
@@ -172,8 +172,9 @@ class _DownloadTaskItem extends StatelessWidget {
                 ],
               ),
             ],
-            // 错误信息
-            if (task.isFailed && task.errorMessage != null)
+            // 错误信息（失败或预下载状态）
+            if ((task.isFailed || task.isPreDownload) &&
+                task.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -219,6 +220,10 @@ class _DownloadTaskItem extends StatelessWidget {
       case DownloadTaskStatus.failed:
         label = '失败';
         color = Theme.of(context).colorScheme.error;
+        break;
+      case DownloadTaskStatus.preDownload:
+        label = '预下载';
+        color = Colors.blue;
         break;
     }
 

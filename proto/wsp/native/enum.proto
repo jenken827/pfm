@@ -131,3 +131,16 @@ enum RespCode {
   RATE_LIMIT_EXCEEDED = 9;
   PARTIAL_UPLOAD_ERROR = 10;
 }
+
+// CacheStatus
+// 缓存状态，仅 Telegram 存储提供者使用
+// 当文件大于阈值时，需要先通过 bot-api 预缓存到本地，再进行下载
+enum CacheStatus {
+  CACHE_STATUS_UNSPECIFIED = 0;
+  // 未缓存，需要通过 bot-api 预缓存
+  UNCACHED = 1;
+  // 缓存中，bot-api 正在缓存文件
+  CACHING = 2;
+  // 缓存完成，文件已缓存在本地，可直接读取
+  CACHED = 3;
+}
