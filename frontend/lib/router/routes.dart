@@ -82,8 +82,8 @@ class MainScaffold extends StatelessWidget {
                   label: '文件',
                 ),
                 BottomNavigationBarItem(
-                  icon: _buildTransferIcon(activeCount, false),
-                  activeIcon: _buildTransferIcon(activeCount, true),
+                  icon: _buildTransferIcon(context, activeCount, false),
+                  activeIcon: _buildTransferIcon(context, activeCount, true),
                   label: al.transfer,
                 ),
                 const BottomNavigationBarItem(
@@ -102,14 +102,14 @@ class MainScaffold extends StatelessWidget {
   }
 
   /// 构建传输图标（带徽章）
-  Widget _buildTransferIcon(int count, bool isActive) {
+  Widget _buildTransferIcon(BuildContext context, int count, bool isActive) {
     if (count <= 0) {
-      return Icon(isActive ? Icons.swap_vert : Icons.swap_vert_outlined);
+      return Icon(Icons.swap_vert);
     }
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(isActive ? Icons.swap_vert : Icons.swap_vert_outlined),
+        Icon(Icons.swap_vert),
         Positioned(
           right: -6,
           top: -4,
@@ -170,8 +170,12 @@ class MainScaffold extends StatelessWidget {
                         label: Text('文件'),
                       ),
                       NavigationRailDestination(
-                        icon: _buildTransferIcon(activeCount, false),
-                        selectedIcon: _buildTransferIcon(activeCount, true),
+                        icon: _buildTransferIcon(context, activeCount, false),
+                        selectedIcon: _buildTransferIcon(
+                          context,
+                          activeCount,
+                          true,
+                        ),
                         label: Text(al.transfer),
                       ),
                       const NavigationRailDestination(

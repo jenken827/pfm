@@ -49,6 +49,15 @@ type StorageDriver interface {
 	Close()
 }
 
+// PreDownloader 预下载接口（可选）
+// 用于支持大文件预缓存的存储驱动（如 Telegram）
+type PreDownloader interface {
+	// PreDownload 预下载文件的所有分片
+	// fileLocations: 该文件在当前存储提供者的所有分片
+	// 返回第一个错误，如果没有错误返回 nil
+	PreDownload(ctx context.Context, fileLocations []*native.FileLocationORM) error
+}
+
 // DriverConstructor 驱动构造函数
 type DriverConstructor func(provider *native.StorageProviderORM) (StorageDriver, error)
 

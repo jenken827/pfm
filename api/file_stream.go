@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -139,24 +138,51 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 	}
 
 	// 5. Telegram 大文件预下载检查
-	// 对于大文件（>20MB），如果尚未缓存完成，返回预下载标记，前端需手动重试
+	// 对于大文件（>20MB），如果第一个分片（整体状态）未缓存或缓存失败，触发异步预下载并返回状态
 	if sourceStorage.GetType() == native.StorageProviderType_TELEGRAM {
 		locSize := sourceLocations[0].Size
 		if locSize != nil && int64(*locSize) > telegram.LargeFileSizeThreshold {
+			// 检查第一个分片的缓存状态（整体状态）
 			cacheStatus := sourceLocations[0].CacheStatus
-			if cacheStatus == nil || *cacheStatus != int32(native.CacheStatus_CACHED) {
+			
+			// 只有未缓存或缓存失败时才触发预下载（避免重复触发）
+			shouldTriggerPreDownload := cacheStatus == nil || 
+				*cacheStatus == int32(native.CacheStatus_CACHE_STATUS_UNSPECIFIED) ||
+				*cacheStatus == int32(native.CacheStatus_UNCACHED)
+			
+			if shouldTriggerPreDownload {
 				actualStatus := native.CacheStatus_CACHE_STATUS_UNSPECIFIED
 				if cacheStatus != nil {
 					actualStatus = native.CacheStatus(*cacheStatus)
 				}
-				llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, size=%d, cache_status=%v",
+
+				llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, size=%d, cache_status=%v, triggering async download",
 					fileID, sourceProviderID, *locSize, actualStatus)
+
+				// 检查是否实现了 PreDownloader 接口
+				if preDownloader, ok := sourceStorage.(types.PreDownloader); ok {
+					// 异步触发预下载（不阻塞当前请求）
+					go func() {
+						bgCtx := context.Background()
+						if err := preDownloader.PreDownload(bgCtx, sourceLocations); err != nil {
+							llog.L().Errorf("async pre-download failed: file_id=%s, provider=%d, err=%v",
+								fileID, sourceProviderID, err)
+						} else {
+							llog.L().Infof("async pre-download completed: file_id=%s, provider=%d",
+								fileID, sourceProviderID)
+						}
+					}()
+				}
+
+				// 返回预下载状态给前端
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusAccepted)
 				json.NewEncoder(w).Encode(map[string]interface{}{
-					"status":       "pre_download",
+					"status":        "pre_download",
 					"provider_id":   sourceProviderID,
 					"cache_status":  actualStatus,
+					"file_id":       fileID,
+					"message":       "Large file is being cached, please retry later",
 				})
 				return
 			}
