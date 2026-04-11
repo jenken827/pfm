@@ -27,7 +27,6 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     this.capacity,
     this.fileSizeLimit,
     this.encryptionKey,
-    this.encryptFilename,
     this.encryptionSuffix,
     this.defaultBound,
     this.proxy,
@@ -42,7 +41,6 @@ class StorageProviderAddEvent extends StorageProviderEvent {
   final int? capacity;
   final int? fileSizeLimit;
   final String? encryptionKey;
-  final bool? encryptFilename;
   final String? encryptionSuffix;
   final bool? defaultBound;
   final String? proxy;

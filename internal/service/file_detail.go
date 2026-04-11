@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // GetFileDetail 获取文件详情
@@ -152,4 +153,26 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 	}
 
 	return result
+}
+
+// GetFileCacheStatus 查询文件缓存状态
+func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) (*native.GetFileCacheStatusResp, *models.Err) {
+	// 查询文件位置记录
+	location, err := db.GetFileLocationByFileHashAndProvider(*req.FileHash, *req.ProviderId)
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	var expiredAt *timestamppb.Timestamp
+	if location.ExpiredAt != nil {
+		expiredAt = timestamppb.New(*location.ExpiredAt)
+	}
+
+	return &native.GetFileCacheStatusResp{
+		CacheStatus:    (*native.CacheStatus)(location.CacheStatus),
+		Message:        location.Message,
+		ExpiredAt:      expiredAt,
+		UploadStatus:   (*native.UploadProviderStatus)(location.Status),
+		UploadProgress: location.Progress,
+	}, nil
 }

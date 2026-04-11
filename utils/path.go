@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -56,12 +57,31 @@ func GetChunkTempPath(fileHash string, chunkIndex int) string {
 
 // CleanupFileTempDir 清理文件临时目录
 // 删除整个 filehash 目录及其所有内容
+// 包含重试机制，处理文件仍被占用的情况
 func CleanupFileTempDir(fileHash string) error {
 	tempDir := filepath.Join(globals.TempDir, fileHash)
-	if err := os.RemoveAll(tempDir); err != nil {
-		llog.L().Warnf("cleanup file temp dir failed: %v", err)
-		return err
+
+	// 重试机制：Windows 上文件可能仍被占用
+	maxRetries := 3
+	retryDelay := 100 * time.Millisecond
+
+	for i := range maxRetries {
+		err := os.RemoveAll(tempDir)
+		if err == nil {
+			llog.L().Infof("cleaned up temp dir for file: %s", fileHash)
+			return nil
+		}
+
+		// 如果是文件被占用的错误，等待后重试
+		if i < maxRetries-1 {
+			llog.L().Warnf("cleanup file temp dir failed (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, err, retryDelay)
+			time.Sleep(retryDelay)
+			retryDelay *= 2 // 指数退避：200ms, 400ms, 800ms, 1600ms
+		} else {
+			llog.L().Warnf("cleanup file temp dir failed after %d attempts: %v", maxRetries, err)
+			return err
+		}
 	}
-	llog.L().Infof("cleaned up temp dir for file: %s", fileHash)
+
 	return nil
 }

@@ -196,14 +196,12 @@ class FmRepository {
     required String name,
     required String parentId,
     required bool enableEncryption,
-    bool encryptFilename = false,
     List<int>? providerIds,
   }) async {
     try {
       final req = CreateDirReq(
         name: name,
         parentId: parentId,
-        encryptFilename: encryptFilename,
         enableEncryption: enableEncryption,
         providerIds: providerIds,
       );
@@ -228,13 +226,11 @@ class FmRepository {
   Future<ApiResult<void>> updateDir({
     required String id,
     String? name,
-    bool? encryptFilename,
     List<int>? providerIds,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
-      if (encryptFilename != null) req.encryptFilename = encryptFilename;
       if (providerIds != null) req.providerIds.addAll(providerIds);
 
       final response = await _dio.post(
@@ -458,10 +454,7 @@ class FmRepository {
     required String targetParentId,
   }) async {
     try {
-      final req = MoveFileReq(
-        fileIds: fileIds,
-        targetParentId: targetParentId,
-      );
+      final req = MoveFileReq(fileIds: fileIds, targetParentId: targetParentId);
       final response = await _dio.post(
         '$_baseUrl/native.FileService/MoveFile',
         data: req.toProto3Json(),
@@ -542,7 +535,6 @@ class FmRepository {
     int? totalCapacity,
     int? fileSizeLimit,
     String? encryptionKey,
-    bool? encryptFilename,
     String? encryptionSuffix,
     bool? defaultBound,
     String? proxy,
@@ -557,7 +549,6 @@ class FmRepository {
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (encryptionKey != null) req.encryptionKey = encryptionKey;
-      if (encryptFilename != null) req.encryptFilename = encryptFilename;
       if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
@@ -812,6 +803,96 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('取消上传失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取上传记录列表
+  Future<ApiResult<ListUploadRecordsResp>> listUploadRecords({
+    int page = 1,
+    int pageSize = 20,
+    int? status,
+  }) async {
+    try {
+      final req = ListUploadRecordsReq(page: page, pageSize: pageSize);
+      if (status != null) {
+        req.status = UploadProviderStatus.valueOf(status)!;
+      }
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/ListUploadRecords',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListUploadRecordsResp>(
+        data,
+        ListUploadRecordsResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取上传记录列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取上传记录列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取上传记录详情
+  Future<ApiResult<GetUploadRecordDetailResp>> getUploadRecordDetail(
+    int id,
+  ) async {
+    try {
+      final req = GetUploadRecordDetailReq(id: id);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/GetUploadRecordDetail',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetUploadRecordDetailResp>(
+        data,
+        GetUploadRecordDetailResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取上传记录详情失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取上传记录详情失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 查询文件缓存状态
+  Future<ApiResult<GetFileCacheStatusResp>> getFileCacheStatus(
+    String fileHash,
+    int providerId,
+  ) async {
+    try {
+      final req = GetFileCacheStatusReq(
+        fileHash: fileHash,
+        providerId: providerId,
+      );
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFileCacheStatus',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetFileCacheStatusResp>(
+        data,
+        GetFileCacheStatusResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('查询文件缓存状态失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('查询文件缓存状态失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

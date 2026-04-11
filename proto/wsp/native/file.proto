@@ -59,17 +59,14 @@ message File {
     not_null: true
     default: "false"
   }];
-  optional bool encrypt_filename = 12 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+
   // 绑定的存储提供者ID列表
-  optional string bound_provider_ids = 13 [(gorm.field).tag = {
+  optional string bound_provider_ids = 12 [(gorm.field).tag = {
     not_null: true
     default: "[]"
   }];
   // 文件是否就绪（至少一个存储提供者上传成功）
-  optional bool is_ready = 14 [(gorm.field).tag = {
+  optional bool is_ready = 13 [(gorm.field).tag = {
     not_null: true
     default: "false"
   }];
@@ -185,14 +182,11 @@ message FileLocation {
 
   // 加密salt，随机生成的字符串
   optional string encryption_salt = 19 [(gorm.field).tag = {default: "''"}];
-  optional bool encrypt_filename = 20 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+
   // 文件在存储提供者上的实际存储大小（加密后）
-  optional uint64 size = 21;
+  optional uint64 size = 20;
   // 缓存状态（仅 Telegram 使用，UNCACHED/CACHING/CACHED）
-  optional CacheStatus cache_status = 22 [(gorm.field).tag = {
+  optional CacheStatus cache_status = 21 [(gorm.field).tag = {
     not_null: true
     default: "0"
   }];
@@ -231,9 +225,8 @@ message CreateDirReq {
   optional string name = 1 [(buf.validate.field).required = true];
   optional string parent_id = 2 [(buf.validate.field).required = true];
   optional bool enable_encryption = 3;
-  optional bool encrypt_filename = 4;
   // 绑定的存储提供者ID列表（可选，不传则使用默认绑定）
-  repeated uint32 provider_ids = 5;
+  repeated uint32 provider_ids = 4;
 }
 
 // 更新目录请求
@@ -244,9 +237,8 @@ message UpdateDirReq {
   ];
   optional string name = 2;
   optional bool enable_encryption = 3;
-  optional bool encrypt_filename = 4;
   // 更新绑定的存储提供者ID列表
-  repeated uint32 provider_ids = 5;
+  repeated uint32 provider_ids = 4;
 }
 
 // 删除文件请求
@@ -363,6 +355,24 @@ message FileDetailRespData {
 }
 
 // FileService文件服务
+// 查询文件缓存状态请求
+message GetFileCacheStatusReq {
+  // 文件哈希
+  optional string file_hash = 1 [(buf.validate.field).required = true];
+  // 存储提供者ID
+  optional uint32 provider_id = 2 [(buf.validate.field).required = true];
+}
+
+// 查询文件缓存状态响应
+message GetFileCacheStatusResp {
+  optional CacheStatus cache_status = 1;
+  optional string message = 2;
+  optional google.protobuf.Timestamp expired_at = 3;
+  // 上传状态（如果文件还未上传完成）
+  optional UploadProviderStatus upload_status = 4;
+  optional uint32 upload_progress = 5;
+}
+
 service FileService {
   // 获取文件列表
   rpc GetFileList(FileListReq) returns (BaseResp) {
@@ -386,4 +396,7 @@ service FileService {
   rpc RenameFile(RenameFileReq) returns (BaseResp);
   // 移动文件
   rpc MoveFile(MoveFileReq) returns (BaseResp);
+
+  // 查询文件缓存状态（用于预下载任务）
+  rpc GetFileCacheStatus(GetFileCacheStatusReq) returns (BaseResp);
 }

@@ -57,26 +57,3 @@ type PreDownloader interface {
 	// 返回第一个错误，如果没有错误返回 nil
 	PreDownload(ctx context.Context, fileLocations []*native.FileLocationORM) error
 }
-
-// DriverConstructor 驱动构造函数
-type DriverConstructor func(provider *native.StorageProviderORM) (StorageDriver, error)
-
-// DriverConstructors 驱动构造函数映射
-var DriverConstructors map[native.StorageProviderType]DriverConstructor
-
-// RegisterStorageDriver 注册存储驱动
-func RegisterStorageDriver(d DriverConstructor, t native.StorageProviderType) {
-	DriverConstructors[t] = d
-}
-
-// GetDriverConstructor 获取驱动构造函数
-func GetDriverConstructor(t native.StorageProviderType) DriverConstructor {
-	if c, ok := DriverConstructors[t]; ok {
-		return c
-	}
-	return nil
-}
-
-func init() {
-	DriverConstructors = make(map[native.StorageProviderType]DriverConstructor)
-}

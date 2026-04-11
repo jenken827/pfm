@@ -17,6 +17,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"lukechampine.com/blake3"
 )
@@ -607,8 +608,9 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		llog.L().Warnf("remove temp path failed: %v", err)
 	}
 
-	// 5. 上传到存储（异步）
-	storage.Dispatch(context.Background(), uploadRecord)
+	// 5. 上传到存储（异步，在独立协程中执行）
+	// 注意：必须在独立协程中执行，否则 outputFile 的 defer Close() 无法及时释放文件句柄
+	go storage.Dispatch(context.Background(), uploadRecord)
 }
 
 // CancelUpload 取消上传
@@ -776,5 +778,152 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		Size:   newFileRecord.Size,
 		Hash:   newFileRecord.Hash,
 		Exists: &exists,
+	}, nil
+}
+
+// ListUploadRecords 获取上传记录列表
+func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*native.ListUploadRecordsResp, *models.Err) {
+	// 默认参数
+	page := int32(1)
+	if req.Page != nil {
+		page = int32(*req.Page)
+	}
+	pageSize := int32(20)
+	if req.PageSize != nil {
+		pageSize = int32(*req.PageSize)
+	}
+
+	// 查询数据库
+	records, total, err := db.ListUploadRecords(page, pageSize, (*int32)(req.Status))
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 转换为 Proto
+	var uploadRecords []*native.UploadRecordInfo
+	for _, record := range records {
+		var createdAt *timestamppb.Timestamp
+		if record.CreatedAt != nil {
+			createdAt = timestamppb.New(*record.CreatedAt)
+		}
+		var updatedAt *timestamppb.Timestamp
+		if record.UpdatedAt != nil {
+			updatedAt = timestamppb.New(*record.UpdatedAt)
+		}
+
+		info := &native.UploadRecordInfo{
+			Id:               record.Id,
+			FileName:         record.FileName,
+			FileSize:         record.FileSize,
+			FileHash:         record.FileHash,
+			ParentId:         record.ParentId,
+			Status:           (*native.UploadProviderStatus)(record.Status),
+			TargetProviderIds: record.TargetProviderIds,
+			TaskType:         (*native.UploadTaskType)(record.TaskType),
+			CreatedAt:        createdAt,
+			UpdatedAt:         updatedAt,
+		}
+		uploadRecords = append(uploadRecords, info)
+	}
+
+	totalUint32 := uint32(total)
+	return &native.ListUploadRecordsResp{
+		Records: uploadRecords,
+		Total:   &totalUint32,
+	}, nil
+}
+
+// GetUploadRecordDetail 获取上传记录详情
+func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetailReq) (*native.GetUploadRecordDetailResp, *models.Err) {
+	// 查询上传记录
+	record, _, err := db.GetUploadRecordByID(*req.Id, false)
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 查询文件位置记录
+	locations, err := db.GetFileLocationsByFileHash(*record.FileHash)
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 查询存储提供者名称
+	providerIDs := []uint32{}
+	for _, loc := range locations {
+		providerIDs = append(providerIDs, *loc.ProviderId)
+	}
+
+	providers, err := db.GetStorageProvidersByIDs(providerIDs)
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	providerMap := make(map[uint32]string)
+	for _, p := range providers {
+		providerMap[*p.Id] = *p.Name
+	}
+
+	// 转换为 Proto
+	var locationInfos []*native.FileLocationInfo
+	for _, loc := range locations {
+		providerName := providerMap[*loc.ProviderId]
+
+		var expiredAt *timestamppb.Timestamp
+		if loc.ExpiredAt != nil {
+			expiredAt = timestamppb.New(*loc.ExpiredAt)
+		}
+		var createdAt *timestamppb.Timestamp
+		if loc.CreatedAt != nil {
+			createdAt = timestamppb.New(*loc.CreatedAt)
+		}
+		var updatedAt *timestamppb.Timestamp
+		if loc.UpdatedAt != nil {
+			updatedAt = timestamppb.New(*loc.UpdatedAt)
+		}
+
+		info := &native.FileLocationInfo{
+			Id:             loc.Id,
+			ProviderId:     loc.ProviderId,
+			ProviderName:   &providerName,
+			Status:         (*native.UploadProviderStatus)(loc.Status),
+			Message:        loc.Message,
+			Progress:       loc.Progress,
+			Encrypted:      loc.Encrypted,
+			Size:           loc.Size,
+			ProviderFileId: loc.ProviderFileId,
+			CacheStatus:    (*native.CacheStatus)(loc.CacheStatus),
+			ExpiredAt:      expiredAt,
+			CreatedAt:      createdAt,
+			UpdatedAt:      updatedAt,
+		}
+		locationInfos = append(locationInfos, info)
+	}
+
+	// 构建上传记录信息
+	var recordCreatedAt *timestamppb.Timestamp
+	if record.CreatedAt != nil {
+		recordCreatedAt = timestamppb.New(*record.CreatedAt)
+	}
+	var recordUpdatedAt *timestamppb.Timestamp
+	if record.UpdatedAt != nil {
+		recordUpdatedAt = timestamppb.New(*record.UpdatedAt)
+	}
+
+	recordInfo := &native.UploadRecordInfo{
+		Id:               record.Id,
+		FileName:         record.FileName,
+		FileSize:         record.FileSize,
+		FileHash:         record.FileHash,
+		ParentId:         record.ParentId,
+		Status:           (*native.UploadProviderStatus)(record.Status),
+		TargetProviderIds: record.TargetProviderIds,
+		TaskType:         (*native.UploadTaskType)(record.TaskType),
+		CreatedAt:        recordCreatedAt,
+		UpdatedAt:         recordUpdatedAt,
+	}
+
+	return &native.GetUploadRecordDetailResp{
+		Record:    recordInfo,
+		Locations: locationInfos,
 	}, nil
 }

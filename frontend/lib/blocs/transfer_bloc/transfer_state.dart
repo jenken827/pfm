@@ -1,7 +1,7 @@
 part of 'transfer_bloc.dart';
 
 /// 传输标签页
-enum TransferTab { upload, download }
+enum TransferTab { upload, download, uploadRecord }
 
 /// 传输状态
 class TransferState extends Equatable {

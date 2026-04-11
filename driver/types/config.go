@@ -10,6 +10,9 @@ type DriverRegistry struct {
 	metadata    *native.StorageProviderTypeInfo
 }
 
+// DriverConstructor 驱动构造函数
+type DriverConstructor func(provider *native.StorageProviderORM) (StorageDriver, error)
+
 // driverRegistries 驱动注册表
 var driverRegistries = make(map[native.StorageProviderType]*DriverRegistry)
 
@@ -19,8 +22,6 @@ func RegisterStorageDriverWithMetadata(constructor DriverConstructor, metadata *
 		constructor: constructor,
 		metadata:    metadata,
 	}
-	// 同时注册到旧的构造函数映射，保持向后兼容
-	DriverConstructors[*metadata.Type] = constructor
 }
 
 // GetDriverMetadata 获取驱动元数据
@@ -38,4 +39,12 @@ func GetAllDriverMetadata() []*native.StorageProviderTypeInfo {
 		metadatas = append(metadatas, registry.metadata)
 	}
 	return metadatas
+}
+
+// GetDriverConstructor 获取驱动构造函数
+func GetDriverConstructor(t native.StorageProviderType) DriverConstructor {
+	if registry, ok := driverRegistries[t]; ok {
+		return registry.constructor
+	}
+	return nil
 }

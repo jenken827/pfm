@@ -120,9 +120,7 @@ func UpdateDir(orm *native.FileORM) error {
 	if orm.EnableEncryption != nil {
 		fields = append(fields, "enable_encryption")
 	}
-	if orm.EncryptFilename != nil {
-		fields = append(fields, "encrypt_filename")
-	}
+
 	if orm.BoundProviderIds != nil {
 		fields = append(fields, "bound_provider_ids")
 	}

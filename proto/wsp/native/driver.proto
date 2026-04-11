@@ -21,3 +21,12 @@ message TelegramDriverConfig {
     optional string webhook_secret_token=3;
     optional string chat_id=4;
 }
+
+// 123pan 驱动器配置
+message Pan123DriverConfig {
+    optional string username = 1;
+    optional string password = 2;
+    optional string root_id = 3;
+    optional string access_token = 4;
+
+}

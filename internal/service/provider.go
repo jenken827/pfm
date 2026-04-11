@@ -37,16 +37,15 @@ func GetStorageProviderTypes(ctx context.Context, req *native.GetStorageProvider
 // AddStorageProvider 添加存储提供者
 func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) *models.Err {
 	orm := &native.StorageProviderORM{
-		ProviderType:    utils.EnumPtr(*req.ProviderType),
-		Name:            req.Name,
-		Config:          req.Config,
-		TotalCapacity:   req.TotalCapacity,
-		UsedCapacity:    new(uint64),
-		Enabled:         req.Enabled,
-		Order:           req.Order,
-		FileSizeLimit:   req.FileSizeLimit,
-		EncryptFilename: req.EncryptFilename,
-		DefaultBound:    req.DefaultBound,
+		ProviderType:  utils.EnumPtr(*req.ProviderType),
+		Name:          req.Name,
+		Config:        req.Config,
+		TotalCapacity: req.TotalCapacity,
+		UsedCapacity:  new(uint64),
+		Enabled:       req.Enabled,
+		Order:         req.Order,
+		FileSizeLimit: req.FileSizeLimit,
+		DefaultBound:  req.DefaultBound,
 	}
 
 	if req.Description != nil {

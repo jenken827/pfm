@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 
+	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"gorm.io/gorm"
 )
@@ -24,6 +25,9 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 	}
 	if provider.Description != nil {
 		fields = append(fields, "description")
+	}
+	if provider.Config != nil {
+		fields = append(fields, "config")
 	}
 	if provider.Enabled != nil {
 		fields = append(fields, "enabled")
@@ -98,4 +102,26 @@ func GetProviderByID(id uint32) (*native.StorageProviderORM, error) {
 func GetAllProviders() ([]*native.StorageProviderORM, error) {
 	ctx := context.Background()
 	return gorm.G[*native.StorageProviderORM](db).Find(ctx)
+}
+
+// UpdateStorageProviderConfig 更新存储提供者的配置
+func UpdateStorageProviderConfig(id uint32, config string) error {
+	ctx := context.Background()
+	// 使用原生 GORM 的 Update 方法，确保更新成功
+	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+		Where("id = ?", id).
+		Update("config", config)
+
+	if result.Error != nil {
+		llog.L().Errorf("update storage provider config failed: id=%d, err=%v", id, result.Error)
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		llog.L().Warnf("update storage provider config: no rows affected, id=%d may not exist", id)
+	} else {
+		llog.L().Infof("update storage provider config successful: id=%d, rows_affected=%d", id, result.RowsAffected)
+	}
+
+	return nil
 }

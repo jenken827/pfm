@@ -105,3 +105,77 @@ func ClearUploadRecords(id uint32) error {
 		return nil
 	})
 }
+
+// ListUploadRecords 分页查询上传记录
+func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRecordORM, int64, error) {
+	var total int64
+
+	// 构建基础查询
+	query := db.Model(&native.UploadRecordORM{})
+	if status != nil {
+		query = query.Where("status = ?", *status)
+	}
+
+	// 统计总数
+	if err := query.Count(&total).Error; err != nil {
+		llog.L().Errorf("count upload records failed: %v", err)
+		return nil, 0, err
+	}
+
+	// 分页查询
+	var records []*native.UploadRecordORM
+	offset := (page - 1) * pageSize
+	if err := db.Model(&native.UploadRecordORM{}).
+		Scopes(func(d *gorm.DB) *gorm.DB {
+			if status != nil {
+				return d.Where("status = ?", *status)
+			}
+			return d
+		}).
+		Order("created_at DESC").
+		Limit(int(pageSize)).
+		Offset(int(offset)).
+		Find(&records).Error; err != nil {
+		llog.L().Errorf("query upload records failed: %v", err)
+		return nil, 0, err
+	}
+
+	return records, total, nil
+}
+
+// GetFileLocationsByFileHash 根据文件哈希查询文件位置记录
+func GetFileLocationsByFileHash(fileHash string) ([]*native.FileLocationORM, error) {
+	ctx := context.Background()
+	locations, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ?", fileHash).Order("provider_id").Find(ctx)
+	if err != nil {
+		llog.L().Errorf("query file locations failed: %v", err)
+		return nil, err
+	}
+	return locations, nil
+}
+
+// GetFileLocationByFileHashAndProvider 根据文件哈希和提供者查询
+func GetFileLocationByFileHashAndProvider(fileHash string, providerID uint32) (*native.FileLocationORM, error) {
+	ctx := context.Background()
+	location, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ? AND provider_id = ?", fileHash, providerID).First(ctx)
+	if err != nil {
+		llog.L().Errorf("query file location failed: %v", err)
+		return nil, err
+	}
+	return location, nil
+}
+
+// GetStorageProvidersByIDs 批量查询存储提供者
+func GetStorageProvidersByIDs(ids []uint32) ([]*native.StorageProviderORM, error) {
+	if len(ids) == 0 {
+		return []*native.StorageProviderORM{}, nil
+	}
+
+	ctx := context.Background()
+	providers, err := gorm.G[*native.StorageProviderORM](db).Where("id IN ?", ids).Find(ctx)
+	if err != nil {
+		llog.L().Errorf("query storage providers failed: %v", err)
+		return nil, err
+	}
+	return providers, nil
+}

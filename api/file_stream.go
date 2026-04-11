@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -144,12 +145,12 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 		if locSize != nil && int64(*locSize) > telegram.LargeFileSizeThreshold {
 			// 检查第一个分片的缓存状态（整体状态）
 			cacheStatus := sourceLocations[0].CacheStatus
-			
+
 			// 只有未缓存或缓存失败时才触发预下载（避免重复触发）
-			shouldTriggerPreDownload := cacheStatus == nil || 
+			shouldTriggerPreDownload := cacheStatus == nil ||
 				*cacheStatus == int32(native.CacheStatus_CACHE_STATUS_UNSPECIFIED) ||
 				*cacheStatus == int32(native.CacheStatus_UNCACHED)
-			
+
 			if shouldTriggerPreDownload {
 				actualStatus := native.CacheStatus_CACHE_STATUS_UNSPECIFIED
 				if cacheStatus != nil {
@@ -178,11 +179,11 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusAccepted)
 				json.NewEncoder(w).Encode(map[string]interface{}{
-					"status":        "pre_download",
-					"provider_id":   sourceProviderID,
-					"cache_status":  actualStatus,
-					"file_id":       fileID,
-					"message":       "Large file is being cached, please retry later",
+					"status":       "pre_download",
+					"provider_id":  sourceProviderID,
+					"cache_status": actualStatus,
+					"file_id":      fileID,
+					"message":      "Large file is being cached, please retry later",
 				})
 				return
 			}

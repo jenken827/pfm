@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -49,6 +50,12 @@ func GenerateObfuscatedFilename(originalName, suffix string) (string, error) {
 // GetUniqueFileName 获取唯一文件名
 func GetUniqueFileName(fileName string) string {
 	timestamp := time.Now().Format("20060102150405")
-	finalFileName := fmt.Sprintf("%s_%s", fileName, timestamp)
+
+	// 分离文件名和扩展名
+	ext := filepath.Ext(fileName)
+	name := fileName[:len(fileName)-len(ext)]
+
+	// 在文件名和扩展名之间插入时间戳
+	finalFileName := fmt.Sprintf("%s_%s%s", name, timestamp, ext)
 	return finalFileName
 }

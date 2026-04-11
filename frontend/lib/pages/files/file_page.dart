@@ -779,7 +779,6 @@ class _FileView extends StatelessWidget {
   void _showCreateDirDialog(BuildContext context) {
     final nameController = TextEditingController();
     bool enableEncryption = false;
-    bool encryptFilename = false;
     List<int> selectedProviderIds = [];
 
     // 从 Bloc 获取存储提供者列表
@@ -850,14 +849,6 @@ class _FileView extends StatelessWidget {
                 ),
                 if (enableEncryption) ...[
                   const Divider(),
-                  SwitchListTile(
-                    title: const Text('加密文件名'),
-                    subtitle: const Text('隐藏文件的真实名称'),
-                    value: encryptFilename,
-                    onChanged: (value) {
-                      setState(() => encryptFilename = value);
-                    },
-                  ),
                 ],
               ],
             ),
@@ -874,7 +865,6 @@ class _FileView extends StatelessWidget {
                     FileCreateDirEvent(
                       name: nameController.text,
                       enableEncryption: enableEncryption,
-                      encryptFilename: encryptFilename,
                       providerIds: selectedProviderIds.isEmpty
                           ? null
                           : selectedProviderIds,

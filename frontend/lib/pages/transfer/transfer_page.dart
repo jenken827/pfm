@@ -5,6 +5,7 @@ import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/widgets/download_task_list.dart';
 import 'package:pfm/widgets/upload_task_list.dart';
+import 'package:pfm/widgets/upload_record_list.dart';
 
 /// 传输页面 - 包含上传和下载标签页
 class TransferPage extends StatefulWidget {
@@ -21,7 +22,7 @@ class _TransferPageState extends State<TransferPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -34,11 +35,21 @@ class _TransferPageState extends State<TransferPage>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    context.read<TransferBloc>().add(
-      TransferTabChangedEvent(
-        _tabController.index == 0 ? TransferTab.upload : TransferTab.download,
-      ),
-    );
+    TransferTab tab;
+    switch (_tabController.index) {
+      case 0:
+        tab = TransferTab.upload;
+        break;
+      case 1:
+        tab = TransferTab.download;
+        break;
+      case 2:
+        tab = TransferTab.uploadRecord;
+        break;
+      default:
+        tab = TransferTab.upload;
+    }
+    context.read<TransferBloc>().add(TransferTabChangedEvent(tab));
   }
 
   @override
@@ -62,6 +73,10 @@ class _TransferPageState extends State<TransferPage>
                 Tab(
                   icon: const Icon(Icons.cloud_download_outlined),
                   text: '下载', // al.download,
+                ),
+                Tab(
+                  icon: const Icon(Icons.history),
+                  text: '上传记录',
                 ),
               ],
             ),
@@ -87,6 +102,8 @@ class _TransferPageState extends State<TransferPage>
                   UploadTaskList(),
                   // 下载任务列表
                   DownloadTaskList(),
+                  // 上传记录列表
+                  UploadRecordList(),
                 ],
               );
             },

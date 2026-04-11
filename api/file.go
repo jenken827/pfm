@@ -121,3 +121,12 @@ func (s *FileServer) GetFileDetail(ctx context.Context, req *connect.Request[nat
 	}
 	return response.SuccessResp(data)
 }
+
+// GetFileCacheStatus 查询文件缓存状态
+func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *connect.Request[native.GetFileCacheStatusReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.GetFileCacheStatus(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(result)
+}

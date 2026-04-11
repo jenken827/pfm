@@ -85,7 +85,6 @@ class StorageProviderBloc
       totalCapacity: event.capacity,
       fileSizeLimit: event.fileSizeLimit,
       encryptionKey: event.encryptionKey,
-      encryptFilename: event.encryptFilename,
       encryptionSuffix: event.encryptionSuffix,
       defaultBound: event.defaultBound,
       proxy: event.proxy,

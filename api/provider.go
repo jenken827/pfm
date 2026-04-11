@@ -76,6 +76,7 @@ func (s *StorageProviderServer) ListStorageProviders(ctx context.Context, req *c
 
 // UpdateStorageProvider 更新存储提供者
 func (s *StorageProviderServer) UpdateStorageProvider(ctx context.Context, req *connect.Request[native.UpdateStorageProviderReq]) (*connect.Response[native.BaseResp], error) {
+	llog.L().Infof("UpdateStorageProvider, req: %v", req.Msg)
 	err := service.UpdateStorageProvider(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)

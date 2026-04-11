@@ -89,7 +89,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 		ParentId:         req.ParentId,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		EnableEncryption: req.EnableEncryption,
-		EncryptFilename:  req.EncryptFilename,
 		BoundProviderIds: &boundProviderIds,
 	}
 	e := db.CreateFile(f)
@@ -105,7 +104,6 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		Id:               req.Id,
 		Name:             req.Name,
 		EnableEncryption: req.EnableEncryption,
-		EncryptFilename:  req.EncryptFilename,
 	}
 
 	// 如果提供了 provider_ids，更新绑定关系

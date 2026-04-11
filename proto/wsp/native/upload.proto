@@ -153,6 +153,68 @@ message CancelUploadReq {
   optional uint32 upload_id = 1;
 }
 
+// 获取上传记录列表请求
+message ListUploadRecordsReq {
+  // 页码，默认1
+  optional uint32 page = 1;
+  // 每页数量，默认20
+  optional uint32 page_size = 2;
+  // 可选：按状态过滤
+  optional UploadProviderStatus status = 3;
+}
+
+// 上传记录信息
+message UploadRecordInfo {
+  optional uint32 id = 1;
+  optional string file_name = 2;
+  optional uint64 file_size = 3;
+  optional string file_hash = 4;
+  optional string parent_id = 5;
+  optional UploadProviderStatus status = 6;
+  // 目标存储提供者ID列表（逗号分隔）
+  optional string target_provider_ids = 7;
+  // 任务类型
+  optional UploadTaskType task_type = 8;
+  optional google.protobuf.Timestamp created_at = 9;
+  optional google.protobuf.Timestamp updated_at = 10;
+}
+
+// 获取上传记录列表响应
+message ListUploadRecordsResp {
+  repeated UploadRecordInfo records = 1;
+  optional uint32 total = 2;
+}
+
+// 获取上传记录详情请求
+message GetUploadRecordDetailReq {
+  optional uint32 id = 1 [(buf.validate.field).required = true];
+}
+
+// 文件位置信息（简化版）
+message FileLocationInfo {
+  optional uint64 id = 1;
+  optional uint32 provider_id = 2;
+  // 存储提供者名称（从 StorageProvider 表关联查询）
+  optional string provider_name = 3;
+  optional UploadProviderStatus status = 4;
+  optional string message = 5;
+  optional uint32 progress = 6;
+  optional bool encrypted = 7;
+  optional uint64 size = 8;
+  optional string provider_file_id = 9;
+  // 缓存状态（仅 Telegram 使用）
+  optional CacheStatus cache_status = 10;
+  optional google.protobuf.Timestamp expired_at = 11;
+  optional google.protobuf.Timestamp created_at = 12;
+  optional google.protobuf.Timestamp updated_at = 13;
+}
+
+// 获取上传记录详情响应
+message GetUploadRecordDetailResp {
+  optional UploadRecordInfo record = 1;
+  repeated FileLocationInfo locations = 2;
+}
+
 // 上传服务
 service UploadService {
   // 小文件上传（< 10MB）
@@ -171,4 +233,10 @@ service UploadService {
   // 取消上传
   // 删除临时分片文件
   rpc CancelUpload(CancelUploadReq) returns (BaseResp);
+
+  // 获取上传记录列表
+  rpc ListUploadRecords(ListUploadRecordsReq) returns (BaseResp);
+
+  // 获取上传记录详情
+  rpc GetUploadRecordDetail(GetUploadRecordDetailReq) returns (BaseResp);
 }

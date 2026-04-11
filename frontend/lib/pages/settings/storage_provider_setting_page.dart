@@ -410,14 +410,6 @@ class _StorageProviderView extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      FormBuilderSwitch(
-                        name: 'encrypt_filename',
-                        title: const Text('加密文件名'),
-                        subtitle: const Text('上传时对文件名进行混淆处理'),
-                        initialValue: provider?.encryptFilename ?? false,
-                      ),
-                      const SizedBox(height: 16),
-
                       FormBuilderTextField(
                         name: 'encryption_suffix',
                         decoration: const InputDecoration(
@@ -453,16 +445,6 @@ class _StorageProviderView extends StatelessWidget {
                                 ? Theme.of(context).textTheme.bodyLarge?.color
                                 : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: '加密文件名',
-                          prefixIcon: Icon(Icons.lock),
-                        ),
-                        child: Text(
-                          provider.encryptFilename ? '是' : '否',
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -559,8 +541,6 @@ class _StorageProviderView extends StatelessWidget {
                                 formData['encryption_key']?.isNotEmpty == true
                                 ? formData['encryption_key']
                                 : null,
-                            encryptFilename:
-                                formData['encrypt_filename'] as bool?,
                             encryptionSuffix:
                                 formData['encryption_suffix']?.isNotEmpty ==
                                     true

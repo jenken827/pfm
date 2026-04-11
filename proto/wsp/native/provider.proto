@@ -73,25 +73,21 @@ message StorageProvider {
     not_null: true
     default: "''"
   }];
-  // 是否加密文件名
-  optional bool encrypt_filename = 15 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+
   // 加密后缀
-  optional string encryption_suffix = 16 [(gorm.field).tag = {
+  optional string encryption_suffix = 15 [(gorm.field).tag = {
     not_null: true
     default: "bin"
   }];
   // 存储提供者所提供的存储类型
-  optional HashType hash_type = 17;
+  optional HashType hash_type = 16;
   // 是否为默认绑定的存储提供者
-  optional bool default_bound = 18 [(gorm.field).tag = {
+  optional bool default_bound = 17 [(gorm.field).tag = {
     not_null: true
     default: "false"
   }];
   // 代理地址（如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080）
-  optional string proxy = 19;
+  optional string proxy = 18;
 }
 
 // StorageProviderGetReq 获取存储提供者请求

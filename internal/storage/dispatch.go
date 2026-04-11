@@ -12,9 +12,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/llog"
-	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -48,15 +46,7 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 	// 1. 根据 task_type 判断任务类型
 	isSyncTask := ur.TaskType != nil && *ur.TaskType == int32(native.UploadTaskType_SYNC)
 
-	// 2. 如果是同步任务，检查是否已经触发过异步下载
-	if isSyncTask && ur.Id != nil {
-		_, err := db.GetDownloadRecordByUploadID(*ur.Id)
-		if err == nil {
-			return
-		}
-	}
-
-	// 3. 如果是普通上传任务，检查临时文件是否存在
+	// 2. 如果是普通上传任务，检查临时文件是否存在
 	if !isSyncTask {
 		if ur.TempPath == nil || *ur.TempPath == "" {
 			markUploadFailed(ctx, ur, "temp file path is empty for upload task")
@@ -270,55 +260,55 @@ func isLocalPath(path string) bool {
 }
 
 // triggerAsyncDownload 触发异步下载任务
-func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
-	// 1. 创建文件临时目录
-	if err := utils.CreateFileTempDir(*ur.FileHash, false); err != nil {
-		llog.L().Errorf("create file temp dir failed: %v", err)
-		return err
-	}
+// func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
+// 	// 1. 创建文件临时目录
+// 	if err := utils.CreateFileTempDir(*ur.FileHash, false); err != nil {
+// 		llog.L().Errorf("create file temp dir failed: %v", err)
+// 		return err
+// 	}
 
-	// 2. 创建下载记录（只记录必要信息）
-	downloadRecord := &native.DownloadRecordORM{
-		Blake3Hash:       ur.FileHash,
-		SourceLocationId: sourceLocation.Id,
-		UploadRecordId:   ur.Id,
-		State:            (*int32)(native.DownloadRecordState_DOWNLOAD_PENDING.Enum()),
-	}
+// 	// 2. 创建下载记录（只记录必要信息）
+// 	downloadRecord := &native.DownloadRecordORM{
+// 		Blake3Hash:       ur.FileHash,
+// 		SourceLocationId: sourceLocation.Id,
+// 		UploadRecordId:   ur.Id,
+// 		State:            (*int32)(native.DownloadRecordState_DOWNLOAD_PENDING.Enum()),
+// 	}
 
-	if err := db.CreateDownloadRecord(downloadRecord); err != nil {
-		llog.L().Errorf("create download record failed: %v", err)
-		return err
-	}
+// 	if err := db.CreateDownloadRecord(downloadRecord); err != nil {
+// 		llog.L().Errorf("create download record failed: %v", err)
+// 		return err
+// 	}
 
-	// 3. 调用 aria2 添加下载任务
-	if downloader.Aria2Downloader == nil {
-		llog.L().Errorf("aria2 downloader not initialized")
-		return fmt.Errorf("aria2 downloader not initialized")
-	}
+// 	// 3. 调用 aria2 添加下载任务
+// 	if downloader.Aria2Downloader == nil {
+// 		llog.L().Errorf("aria2 downloader not initialized")
+// 		return fmt.Errorf("aria2 downloader not initialized")
+// 	}
 
-	// 下载到文件临时目录
-	downloadDir := utils.GetFileTempDir(*ur.FileHash)
-	gid, err := downloader.Aria2Downloader.AddURI([]string{downloadLink}, aria2.Option{
-		"dir": downloadDir,
-	})
-	if err != nil {
-		llog.L().Errorf("add aria2 download task failed: %v", err)
-		return err
-	}
+// 	// 下载到文件临时目录
+// 	downloadDir := utils.GetFileTempDir(*ur.FileHash)
+// 	gid, err := downloader.Aria2Downloader.AddURI([]string{downloadLink}, aria2.Option{
+// 		"dir": downloadDir,
+// 	})
+// 	if err != nil {
+// 		llog.L().Errorf("add aria2 download task failed: %v", err)
+// 		return err
+// 	}
 
-	// 4. 更新下载记录的 GID
-	downloadRecord.Gid = &gid
-	downloadRecord.State = (*int32)(native.DownloadRecordState_DOWNLOADING.Enum())
-	if err := db.UpdateDownloadRecord(downloadRecord, []string{"gid", "state"}); err != nil {
-		llog.L().Errorf("update download record gid failed: %v", err)
-		return err
-	}
+// 	// 4. 更新下载记录的 GID
+// 	downloadRecord.Gid = &gid
+// 	downloadRecord.State = (*int32)(native.DownloadRecordState_DOWNLOADING.Enum())
+// 	if err := db.UpdateDownloadRecord(downloadRecord, []string{"gid", "state"}); err != nil {
+// 		llog.L().Errorf("update download record gid failed: %v", err)
+// 		return err
+// 	}
 
-	llog.L().Infof("download task created, gid: %s, record_id: %d, hash: %s, dir: %s, waiting for aria2 callback", gid, *downloadRecord.Id, *ur.FileHash, downloadDir)
+// 	llog.L().Infof("download task created, gid: %s, record_id: %d, hash: %s, dir: %s, waiting for aria2 callback", gid, *downloadRecord.Id, *ur.FileHash, downloadDir)
 
-	// 5. 返回成功，等待 aria2 下载完成回调
-	return nil
-}
+// 	// 5. 返回成功，等待 aria2 下载完成回调
+// 	return nil
+// }
 
 // batchUploadFromSource 从源文件批量上传到多个目标提供者
 func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, sourcePath string) {
@@ -334,6 +324,16 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	}
 	if ur.ParentId != nil {
 		parentID = *ur.ParentId
+	}
+
+	// 查询父文件夹的加密设置
+	var fileEncrypt bool
+	if parentID != "" {
+		parentFolder, err := db.GetFileByID(parentID)
+		if err == nil && parentFolder != nil && parentFolder.EnableEncryption != nil {
+			fileEncrypt = *parentFolder.EnableEncryption
+			llog.L().Infof("parent folder encryption setting: %v, parent_id: %s, file: %s", fileEncrypt, parentID, fileName)
+		}
 	}
 
 	for _, targetID := range targetProviderIds {
@@ -371,7 +371,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			}
 
 			// 上传到目标提供者（加密器在uploadToProvider内部生成）
-			err := uploadToProvider(ctx, sourcePath, fileName, tid, fl)
+			err := uploadToProvider(ctx, sourcePath, fileName, tid, fl, fileEncrypt)
 			if err != nil {
 				llog.L().Errorf("upload to provider %d failed: %v", tid, err)
 				failedCount++
@@ -403,8 +403,9 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 // uploadToProvider 上传到单个提供者
 // sourcePath: 源文件路径（明文）
 // fileName: 目标文件名
-// providerId: 目标存储提供者ID
-func uploadToProvider(ctx context.Context, sourcePath string, fileName string, providerID uint32, fl *native.FileLocationORM) error {
+// providerID: 目标存储提供者ID
+// fileEncrypt: 文件是否启用加密（文件夹设置）
+func uploadToProvider(ctx context.Context, sourcePath string, fileName string, providerID uint32, fl *native.FileLocationORM, fileEncrypt bool) error {
 	// 更新状态为上传中
 	fl.Status = utils.EnumPtr(native.UploadProviderStatus_PUPLOADING)
 	db.UpdateFileLocation(fl, []string{"status"})
@@ -439,10 +440,15 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 	}
 
 	// 生成加密器（如果需要加密）
+	// 加密条件：文件启用加密 且 存储提供者配置了加密密钥
 	var encryptor types.Encryptor = &types.NullEncryptor{}
 	var saltStr string
 
-	if orm.EncryptionKey != nil && *orm.EncryptionKey != "" {
+	if fileEncrypt && orm.EncryptionKey != nil && *orm.EncryptionKey != "" {
+		// 文件启用加密 + 提供者配置密钥 = 加密
+
+		llog.L().Infof("encryption enabled for file, provider: %d, file: %s", providerID, fileName)
+
 		// 生成随机salt（32字节）
 		saltBytes := make([]byte, 32)
 		if _, err := rand.Read(saltBytes); err != nil {
@@ -469,6 +475,12 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 		encrypted := true
 		fl.Encrypted = &encrypted
 		fl.EncryptionSalt = &saltStr
+
+		llog.L().Infof("file will be encrypted, provider: %d, salt: %s...", providerID, saltStr[:16])
+	} else {
+		// 确保标记为未加密
+		encrypted := false
+		fl.Encrypted = &encrypted
 	}
 
 	// 执行上传
@@ -591,126 +603,126 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileL
 	return fl
 }
 
-// selectBestSourceStorage 选择最优源存储提供者
-// 只选择所有分片都完成的提供者
-func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native.StorageProviderORM, *native.FileLocationORM) {
-	type candidate struct {
-		provider    *native.StorageProviderORM
-		location    *native.FileLocationORM
-		order       uint32
-		isLocal     bool
-		isEncrypted bool
-	}
+// // selectBestSourceStorage 选择最优源存储提供者
+// // 只选择所有分片都完成的提供者
+// func selectBestSourceStorage(sourceLocations []*native.FileLocationORM) (*native.StorageProviderORM, *native.FileLocationORM) {
+// 	type candidate struct {
+// 		provider    *native.StorageProviderORM
+// 		location    *native.FileLocationORM
+// 		order       uint32
+// 		isLocal     bool
+// 		isEncrypted bool
+// 	}
 
-	var (
-		localCandidate     *candidate
-		orderedUnencrypted *candidate
-		unencrypted        *candidate
-		ordered            *candidate
-	)
+// 	var (
+// 		localCandidate     *candidate
+// 		orderedUnencrypted *candidate
+// 		unencrypted        *candidate
+// 		ordered            *candidate
+// 	)
 
-	// 按提供者分组
-	providerChunksMap := make(map[uint32][]*native.FileLocationORM)
-	for _, loc := range sourceLocations {
-		providerChunksMap[*loc.ProviderId] = append(providerChunksMap[*loc.ProviderId], loc)
-	}
+// 	// 按提供者分组
+// 	providerChunksMap := make(map[uint32][]*native.FileLocationORM)
+// 	for _, loc := range sourceLocations {
+// 		providerChunksMap[*loc.ProviderId] = append(providerChunksMap[*loc.ProviderId], loc)
+// 	}
 
-	// 遍历每个提供者，检查是否所有分片都完成
-	for providerID, chunks := range providerChunksMap {
-		if len(chunks) == 0 {
-			continue
-		}
+// 	// 遍历每个提供者，检查是否所有分片都完成
+// 	for providerID, chunks := range providerChunksMap {
+// 		if len(chunks) == 0 {
+// 			continue
+// 		}
 
-		// 检查所有分片是否都完成
-		allCompleted := true
-		var firstChunk *native.FileLocationORM
-		for i, chunk := range chunks {
-			if i == 0 {
-				firstChunk = chunk
-			}
-			if *chunk.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
-				allCompleted = false
-				break
-			}
-		}
+// 		// 检查所有分片是否都完成
+// 		allCompleted := true
+// 		var firstChunk *native.FileLocationORM
+// 		for i, chunk := range chunks {
+// 			if i == 0 {
+// 				firstChunk = chunk
+// 			}
+// 			if *chunk.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+// 				allCompleted = false
+// 				break
+// 			}
+// 		}
 
-		if !allCompleted {
-			continue
-		}
+// 		if !allCompleted {
+// 			continue
+// 		}
 
-		// 检查分片数量是否正确
-		expectedChunkTotal := *firstChunk.ChunkTotal
-		if len(chunks) != int(expectedChunkTotal) {
-			llog.L().Warnf("provider %d has incomplete chunks: expected %d, got %d",
-				providerID, expectedChunkTotal, len(chunks))
-			continue
-		}
+// 		// 检查分片数量是否正确
+// 		expectedChunkTotal := *firstChunk.ChunkTotal
+// 		if len(chunks) != int(expectedChunkTotal) {
+// 			llog.L().Warnf("provider %d has incomplete chunks: expected %d, got %d",
+// 				providerID, expectedChunkTotal, len(chunks))
+// 			continue
+// 		}
 
-		// 所有分片都完成，作为候选
-		st := GetStorage(providerID)
-		if st == nil {
-			continue
-		}
+// 		// 所有分片都完成，作为候选
+// 		st := GetStorage(providerID)
+// 		if st == nil {
+// 			continue
+// 		}
 
-		orm := st.GetOrm()
-		if orm == nil || !*orm.Enabled {
-			continue
-		}
+// 		orm := st.GetOrm()
+// 		if orm == nil || !*orm.Enabled {
+// 			continue
+// 		}
 
-		order := uint32(0)
-		if orm.Order != nil {
-			order = *orm.Order
-		}
+// 		order := uint32(0)
+// 		if orm.Order != nil {
+// 			order = *orm.Order
+// 		}
 
-		isLocal := orm.ProviderType != nil && *orm.ProviderType == int32(native.StorageProviderType_LOCAL)
-		isEncrypted := orm.EncryptionKey != nil && *orm.EncryptionKey != ""
+// 		isLocal := orm.ProviderType != nil && *orm.ProviderType == int32(native.StorageProviderType_LOCAL)
+// 		isEncrypted := orm.EncryptionKey != nil && *orm.EncryptionKey != ""
 
-		c := &candidate{
-			provider:    orm,
-			location:    firstChunk, // 使用第一个分片的位置信息
-			order:       order,
-			isLocal:     isLocal,
-			isEncrypted: isEncrypted,
-		}
+// 		c := &candidate{
+// 			provider:    orm,
+// 			location:    firstChunk, // 使用第一个分片的位置信息
+// 			order:       order,
+// 			isLocal:     isLocal,
+// 			isEncrypted: isEncrypted,
+// 		}
 
-		if isLocal {
-			// 优先级1: 本地存储
-			if localCandidate == nil || order < localCandidate.order {
-				localCandidate = c
-			}
-		} else if !isEncrypted {
-			// 优先级2: 顺序靠前且未加密
-			if orderedUnencrypted == nil || order < orderedUnencrypted.order {
-				orderedUnencrypted = c
-			}
-			// 优先级3: 未加密
-			if unencrypted == nil {
-				unencrypted = c
-			}
-		} else {
-			// 优先级4: 顺序靠前
-			if ordered == nil || order < ordered.order {
-				ordered = c
-			}
-		}
-	}
+// 		if isLocal {
+// 			// 优先级1: 本地存储
+// 			if localCandidate == nil || order < localCandidate.order {
+// 				localCandidate = c
+// 			}
+// 		} else if !isEncrypted {
+// 			// 优先级2: 顺序靠前且未加密
+// 			if orderedUnencrypted == nil || order < orderedUnencrypted.order {
+// 				orderedUnencrypted = c
+// 			}
+// 			// 优先级3: 未加密
+// 			if unencrypted == nil {
+// 				unencrypted = c
+// 			}
+// 		} else {
+// 			// 优先级4: 顺序靠前
+// 			if ordered == nil || order < ordered.order {
+// 				ordered = c
+// 			}
+// 		}
+// 	}
 
-	// 按优先级返回
-	if localCandidate != nil {
-		return localCandidate.provider, localCandidate.location
-	}
-	if orderedUnencrypted != nil {
-		return orderedUnencrypted.provider, orderedUnencrypted.location
-	}
-	if unencrypted != nil {
-		return unencrypted.provider, unencrypted.location
-	}
-	if ordered != nil {
-		return ordered.provider, ordered.location
-	}
+// 	// 按优先级返回
+// 	if localCandidate != nil {
+// 		return localCandidate.provider, localCandidate.location
+// 	}
+// 	if orderedUnencrypted != nil {
+// 		return orderedUnencrypted.provider, orderedUnencrypted.location
+// 	}
+// 	if unencrypted != nil {
+// 		return unencrypted.provider, unencrypted.location
+// 	}
+// 	if ordered != nil {
+// 		return ordered.provider, ordered.location
+// 	}
 
-	return nil, nil
-}
+// 	return nil, nil
+// }
 
 // completeUpload 完成上传，清理临时文件
 func completeUpload(ctx context.Context, ur *native.UploadRecordORM) {

@@ -60,3 +60,21 @@ func (s *UploadServer) CancelUpload(ctx context.Context, req *connect.Request[na
 	}
 	return response.SuccessResp(nil)
 }
+
+// ListUploadRecords 获取上传记录列表
+func (s *UploadServer) ListUploadRecords(ctx context.Context, req *connect.Request[native.ListUploadRecordsReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.ListUploadRecords(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(result)
+}
+
+// GetUploadRecordDetail 获取上传记录详情
+func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *connect.Request[native.GetUploadRecordDetailReq]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.GetUploadRecordDetail(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(result)
+}

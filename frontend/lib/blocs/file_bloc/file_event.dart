@@ -63,13 +63,11 @@ class FileCreateDirEvent extends FileEvent {
   const FileCreateDirEvent({
     required this.name,
     this.enableEncryption = false,
-    this.encryptFilename = false,
     this.providerIds,
   });
 
   final String name;
   final bool enableEncryption;
-  final bool encryptFilename;
   final List<int>? providerIds;
 }
 
