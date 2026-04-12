@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"jenken827.com/jenken827/pfm/driver/types"
@@ -219,45 +220,45 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 }
 
 // isLocalPath 判断路径是否为本地路径
-func isLocalPath(path string) bool {
-	// 判断是否为本地文件路径
-	// 支持以下格式：
-	// - Unix路径: /path/to/file
-	// - Windows路径: C:\path\to\file, D:/path/to/file
-	// - 相对路径: ./path/to/file, path/to/file
+// func isLocalPath(path string) bool {
+// 	// 判断是否为本地文件路径
+// 	// 支持以下格式：
+// 	// - Unix路径: /path/to/file
+// 	// - Windows路径: C:\path\to\file, D:/path/to/file
+// 	// - 相对路径: ./path/to/file, path/to/file
 
-	if path == "" {
-		return false
-	}
+// 	if path == "" {
+// 		return false
+// 	}
 
-	// 检查是否包含 :// 协议标识符（排除 Windows 盘符如 C:）
-	// Windows 盘符格式: C:\path 或 C:/path
-	// URL 格式: http://, https://, ftp:// 等
-	if len(path) >= 2 {
-		// Windows 盘符检查：第二个字符是冒号且后面跟着反斜杠或斜杠
-		if path[1] == ':' && (len(path) < 3 || path[2] == '\\' || path[2] == '/') {
-			return true
-		}
-	}
+// 	// 检查是否包含 :// 协议标识符（排除 Windows 盘符如 C:）
+// 	// Windows 盘符格式: C:\path 或 C:/path
+// 	// URL 格式: http://, https://, ftp:// 等
+// 	if len(path) >= 2 {
+// 		// Windows 盘符检查：第二个字符是冒号且后面跟着反斜杠或斜杠
+// 		if path[1] == ':' && (len(path) < 3 || path[2] == '\\' || path[2] == '/') {
+// 			return true
+// 		}
+// 	}
 
-	// 检查是否包含协议标识符
-	for i := 0; i < len(path); i++ {
-		if path[i] == ':' {
-			// 如果冒号后面跟着 //，则是URL协议
-			if i+2 < len(path) && path[i+1] == '/' && path[i+2] == '/' {
-				return false
-			}
-		}
-	}
+// 	// 检查是否包含协议标识符
+// 	for i := 0; i < len(path); i++ {
+// 		if path[i] == ':' {
+// 			// 如果冒号后面跟着 //，则是URL协议
+// 			if i+2 < len(path) && path[i+1] == '/' && path[i+2] == '/' {
+// 				return false
+// 			}
+// 		}
+// 	}
 
-	// 以 / 或 . 开头的路径视为本地路径
-	if path[0] == '/' || path[0] == '.' {
-		return true
-	}
+// 	// 以 / 或 . 开头的路径视为本地路径
+// 	if path[0] == '/' || path[0] == '.' {
+// 		return true
+// 	}
 
-	// 其他情况，假设为本地路径（保守估计）
-	return true
-}
+// 	// 其他情况，假设为本地路径（保守估计）
+// 	return true
+// }
 
 // triggerAsyncDownload 触发异步下载任务
 // func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
@@ -315,6 +316,8 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	// 使用 WaitGroup 并发上传
 	var wg sync.WaitGroup
 	var failedCount int32
+	var errorMessages []string
+	var errorMu sync.Mutex // 保护 errorMessages 的并发访问
 
 	// 获取文件名和父目录ID
 	fileName := "unknown"
@@ -361,6 +364,9 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			fl := getOrCreateFileLocation(tid, *ur.FileHash)
 			if fl == nil {
 				failedCount++
+				errorMu.Lock()
+				errorMessages = append(errorMessages, fmt.Sprintf("provider %d: failed to create file location", tid))
+				errorMu.Unlock()
 				return
 			}
 
@@ -371,10 +377,12 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			}
 
 			// 上传到目标提供者（加密器在uploadToProvider内部生成）
+			// 错误信息已在 uploadToProvider 中记录到 FileLocation.message
 			err := uploadToProvider(ctx, sourcePath, fileName, tid, fl, fileEncrypt)
 			if err != nil {
 				llog.L().Errorf("upload to provider %d failed: %v", tid, err)
 				failedCount++
+				// 错误信息已记录在 FileLocation.message，无需重复记录
 			} else {
 				// 上传成功，立即更新文件状态为就绪
 				if parentID != "" && fileName != "" {
@@ -394,10 +402,30 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	// 记录失败数量
 	if failedCount > 0 {
 		llog.L().Warnf("batch upload completed with %d failures, hash: %s", failedCount, *ur.FileHash)
-	}
 
-	// 检查是否所有上传都完成
-	completeUpload(ctx, ur)
+		// 组合错误信息（仅记录那些没有创建 FileLocation 的错误）
+		var errorMsg string
+		if len(errorMessages) > 0 {
+			errorMsg = fmt.Sprintf("%d providers failed: %s", failedCount, strings.Join(errorMessages, "; "))
+			if len(errorMsg) > 500 {
+				errorMsg = errorMsg[:500] + "..."
+			}
+		} else {
+			// 所有失败都有对应的 FileLocation 记录，错误信息已在那里记录
+			errorMsg = fmt.Sprintf("%d providers failed, see file locations for details", failedCount)
+		}
+
+		// 有失败的情况，更新上传记录状态为失败
+		failedStatus := int32(native.UploadProviderStatus_PFAILED)
+		ur.Status = &failedStatus
+		ur.Message = &errorMsg
+		if err := db.UpdateUploadRecord(ur, []string{"status", "message"}); err != nil {
+			llog.L().Errorf("update upload record status to failed error: %v, id: %d", err, *ur.Id)
+		}
+	} else {
+		// 所有上传都完成，检查是否可以完成上传
+		completeUpload(ctx, ur)
+	}
 }
 
 // uploadToProvider 上传到单个提供者
@@ -783,7 +811,10 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 		return
 	}
 
-	db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.UploadProviderStatus_PFAILED)}, []string{"status"})
+	// 更新状态和错误信息
+	ur.Status = utils.EnumPtr(native.UploadProviderStatus_PFAILED)
+	ur.Message = &reason
+	db.UpdateUploadRecord(ur, []string{"status", "message"})
 	llog.L().Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
 }
 

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 import 'package:pfm/router/files_route.dart';
@@ -220,9 +221,25 @@ class _FileDetailPageState extends State<FileDetailPage> {
   Widget _buildLocationDistribution(BuildContext context) {
     final locations = _detailData?.locations ?? [];
 
+    // Check if there's at least one completed location
+    final hasCompletedLocation = locations.any(
+      (loc) => loc.status == UploadProviderStatus.PCOMPLETED,
+    );
+
     return _buildSection(
       context,
-      title: '位置分布',
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('位置分布'),
+          if (hasCompletedLocation)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              onPressed: () => _showSyncDialog(context),
+              tooltip: '同步到其他存储',
+            ),
+        ],
+      ),
       child: locations.isEmpty
           ? Center(
               child: Text(
@@ -354,35 +371,36 @@ class _FileDetailPageState extends State<FileDetailPage> {
             ),
           ),
           const SizedBox(width: 4),
-          // 下载按钮
-          IconButton(
-            icon: const Icon(Icons.download, size: 20),
-            onPressed: () async {
-              final downloadDir = await getDownloadsDirectory();
-              if (!mounted) return;
-              final fileName = widget.file.name.isNotEmpty
-                  ? widget.file.name
-                  : 'unnamed';
-              final savePath = '${downloadDir!.path}/$fileName';
-              if (!mounted) return;
-              context.read<TransferBloc>().add(
-                TransferAddDownloadEvent(
-                  fileId: widget.file.id,
-                  filename: fileName,
-                  fileSize: widget.file.size.toInt(),
-                  savePath: savePath,
-                  providerId: loc.providerId,
-                ),
-              );
-              final snackMsg = isTelegram && cacheStatusText != null
-                  ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
-                  : '已开始下载: $fileName';
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(snackMsg)));
-            },
-            tooltip: '下载',
-          ),
+          // 下载按钮（仅在状态不是失败时显示）
+          if (loc.status == UploadProviderStatus.PCOMPLETED)
+            IconButton(
+              icon: const Icon(Icons.download, size: 20),
+              onPressed: () async {
+                final downloadDir = await getDownloadsDirectory();
+                if (!mounted) return;
+                final fileName = widget.file.name.isNotEmpty
+                    ? widget.file.name
+                    : 'unnamed';
+                final savePath = '${downloadDir!.path}/$fileName';
+                if (!mounted) return;
+                context.read<TransferBloc>().add(
+                  TransferAddDownloadEvent(
+                    fileId: widget.file.id,
+                    filename: fileName,
+                    fileSize: widget.file.size.toInt(),
+                    savePath: savePath,
+                    providerId: loc.providerId,
+                  ),
+                );
+                final snackMsg = isTelegram && cacheStatusText != null
+                    ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
+                    : '已开始下载: $fileName';
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(snackMsg)));
+              },
+              tooltip: '下载',
+            ),
         ],
       ),
     );
@@ -457,13 +475,15 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   Widget _buildSection(
     BuildContext context, {
-    required String title,
+    required dynamic title,
     required Widget child,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        title is String
+            ? Text(title, style: Theme.of(context).textTheme.titleMedium)
+            : title,
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
@@ -647,5 +667,184 @@ class _FileDetailPageState extends State<FileDetailPage> {
     if (ts == null) return '-';
     final dt = DateTime.fromMillisecondsSinceEpoch(ts.seconds.toInt() * 1000);
     return DateFormat('yyyy-MM-dd HH:mm:ss').format(dt);
+  }
+
+  /// Show sync dialog to select target providers
+  Future<void> _showSyncDialog(BuildContext context) async {
+    final repo = FmRepository();
+
+    // Get file hash from current file
+    final fileHash = _detailData?.file.hash;
+    if (fileHash == null || fileHash.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('文件哈希不存在，无法同步')),
+      );
+      return;
+    }
+
+    // Fetch available providers and provider types in parallel
+    setState(() => _isLoading = true);
+    
+    final results = await Future.wait([
+      repo.getAvailableProvidersForSync(fileHash),
+      repo.getStorageProviderTypes(),
+    ]);
+    
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    final providersResult = results[0] as ApiResult<List<StorageProvider>>;
+    final typesResult = results[1] as ApiResult<GetStorageProviderTypesRespData>;
+
+    if (!providersResult.success || providersResult.data == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(providersResult.message ?? '获取可用提供者失败')),
+      );
+      return;
+    }
+
+    final availableProviders = providersResult.data!;
+    final providerTypes = typesResult.data?.types.toList() ?? [];
+
+    if (availableProviders.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有可用的存储提供者')),
+      );
+      return;
+    }
+
+    // Show multi-select dialog
+    final selectedProviderIds = await showDialog<List<int>>(
+      context: context,
+      builder: (context) => _SyncProviderSelectionDialog(
+        providers: availableProviders,
+        providerTypes: providerTypes,
+      ),
+    );
+
+    if (selectedProviderIds == null || selectedProviderIds.isEmpty) {
+      return; // User cancelled or no selection
+    }
+
+    // Trigger sync
+    setState(() => _isLoading = true);
+    final syncResult = await repo.syncFileToProviders(
+      widget.file.id,
+      selectedProviderIds,
+    );
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (syncResult.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已创建 ${selectedProviderIds.length} 个同步任务'),
+        ),
+      );
+      // Refresh detail data
+      await _loadDetail();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(syncResult.message ?? '同步失败')),
+      );
+    }
+  }
+}
+
+/// Dialog for selecting target storage providers for sync
+class _SyncProviderSelectionDialog extends StatefulWidget {
+  const _SyncProviderSelectionDialog({
+    required this.providers,
+    this.providerTypes = const [],
+  });
+
+  final List<StorageProvider> providers;
+  final List<StorageProviderTypeInfo> providerTypes;
+
+  @override
+  State<_SyncProviderSelectionDialog> createState() =>
+      _SyncProviderSelectionDialogState();
+}
+
+class _SyncProviderSelectionDialogState
+    extends State<_SyncProviderSelectionDialog> {
+  final Set<int> _selectedProviderIds = {};
+
+  /// Get icon from icon name string
+  IconData _typeIcon(String iconName) {
+    final iconMap = {
+      'computer': Icons.computer,
+      'storage': Icons.storage,
+      'telegram': Icons.telegram,
+      'discord': Icons.discord,
+      'cloud': Icons.cloud,
+      'send': Icons.send,
+    };
+    return iconMap[iconName] ?? Icons.storage;
+  }
+
+  /// Get provider type display name
+  String _getTypeName(StorageProviderType type) {
+    final typeInfo = widget.providerTypes.where(
+      (t) => t.type == type,
+    ).firstOrNull;
+    return typeInfo?.displayName.isNotEmpty == true
+        ? typeInfo!.displayName
+        : '未知类型';
+  }
+
+  /// Get provider icon name
+  String _getIconName(StorageProviderType type) {
+    final typeInfo = widget.providerTypes.where(
+      (t) => t.type == type,
+    ).firstOrNull;
+    return typeInfo?.iconName.isNotEmpty == true ? typeInfo!.iconName : 'storage';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('选择同步目标'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.providers.length,
+          itemBuilder: (context, index) {
+            final provider = widget.providers[index];
+            return CheckboxListTile(
+              title: Text(provider.name),
+              subtitle: Text(_getTypeName(provider.providerType)),
+              secondary: Icon(_typeIcon(_getIconName(provider.providerType))),
+              value: _selectedProviderIds.contains(provider.id),
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    _selectedProviderIds.add(provider.id);
+                  } else {
+                    _selectedProviderIds.remove(provider.id);
+                  }
+                });
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _selectedProviderIds.isEmpty
+              ? null
+              : () => Navigator.pop(context, _selectedProviderIds.toList()),
+          child: const Text('确认'),
+        ),
+      ],
+    );
   }
 }

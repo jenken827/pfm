@@ -49,6 +49,11 @@ func getUploadRecord(expression string, withChunk bool, args ...any) (*native.Up
 	return record, nil, nil
 }
 
+// CreateUploadRecord 创建上传记录
+func CreateUploadRecord(record *native.UploadRecordORM) error {
+	return db.Create(record).Error
+}
+
 // DelUploadRecord 删除上传记录
 // func DelUploadRecord(id uint32) error {
 // 	ctx := context.Background()
@@ -178,4 +183,15 @@ func GetStorageProvidersByIDs(ids []uint32) ([]*native.StorageProviderORM, error
 		return nil, err
 	}
 	return providers, nil
+}
+
+// DeleteFileLocation 删除文件位置记录
+func DeleteFileLocation(id uint64) error {
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileLocationORM](db).Where("id = ?", id).Delete(ctx)
+	if err != nil {
+		llog.L().Errorf("delete file location failed, id: %d, err: %v", id, err)
+		return err
+	}
+	return nil
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
@@ -226,11 +225,13 @@ class FmRepository {
   Future<ApiResult<void>> updateDir({
     required String id,
     String? name,
+    bool? enableEncryption,
     List<int>? providerIds,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
+      if (enableEncryption != null) req.enableEncryption = enableEncryption;
       if (providerIds != null) req.providerIds.addAll(providerIds);
 
       final response = await _dio.post(
@@ -389,38 +390,39 @@ class FmRepository {
 
   // ==================== Share Link ====================
 
-  /// 获取分享链接
-  /// [fileId] 文件ID
-  /// [expireSeconds] 过期时间（秒），默认一周
-  /// [neverExpire] 是否永久有效
-  /// [maxAccess] 最大访问次数（0=不限制）
-  /// [remark] 备注
-  Future<ApiResult<Map<String, dynamic>>> getShareLink({
+  /// 创建分享链接
+  Future<ApiResult<CreateShareLinkRespData>> createShareLink({
     required String fileId,
     int expireSeconds = 604800,
     bool neverExpire = false,
-    int maxAccess = 0,
+    int maxAccessCount = 0,
     String remark = '',
   }) async {
     try {
-      final response = await _dio.get(
-        '$_baseUrl/api/file/share',
-        queryParameters: {
-          'file_id': fileId,
-          'expire': expireSeconds,
-          if (neverExpire) 'never_expire': 'true',
-          if (maxAccess > 0) 'max_access': maxAccess,
-          if (remark.isNotEmpty) 'remark': remark,
-        },
+      final req = CreateShareLinkReq(
+        fileId: fileId,
+        expireSeconds: Int64(expireSeconds),
+        neverExpire: neverExpire,
+        maxAccessCount: maxAccessCount,
+        remark: remark,
+      );
+      
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/CreateShareLink',
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      return ApiResult(success: true, data: data);
+      final respData = extractRespData<CreateShareLinkRespData>(
+        data,
+        CreateShareLinkRespData(),
+      );
+      return ApiResult(success: true, data: respData);
     } on DioException catch (e) {
-      _logger.error('获取分享链接失败: ${e.message}');
+      _logger.error('创建分享链接失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
-      _logger.error('获取分享链接失败: $e');
+      _logger.error('创建分享链接失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }
@@ -428,20 +430,21 @@ class FmRepository {
   /// 取消分享链接
   Future<ApiResult<void>> cancelShareLink(String shareCode) async {
     try {
+      final req = CancelShareLinkReq(shareCode: shareCode);
+      
       final response = await _dio.post(
-        '$_baseUrl/api/file/share/cancel?share_code=$shareCode',
+        '$_baseUrl/native.FileService/CancelShareLink',
+        data: req.toProto3Json(),
       );
 
       final data = response.data as Map<String, dynamic>;
-      if (data['success'] == true) {
-        return ApiResult(success: true);
-      }
-      return ApiResult(success: false, message: '取消分享失败');
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
     } on DioException catch (e) {
-      _logger.error('取消分享失败: ${e.message}');
+      _logger.error('取消分享链接失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
-      _logger.error('取消分享失败: $e');
+      _logger.error('取消分享链接失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }
@@ -893,6 +896,107 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('查询文件缓存状态失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 重试上传记录
+  Future<ApiResult<void>> retryUploadRecord(int id) async {
+    try {
+      final req = RetryUploadRecordReq(id: id);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/RetryUploadRecord',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('重试上传记录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('重试上传记录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 删除上传记录
+  Future<ApiResult<void>> deleteUploadRecord(int id) async {
+    try {
+      final req = DeleteUploadRecordReq(id: id);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/DeleteUploadRecord',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('删除上传记录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('删除上传记录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取可用于同步的存储提供者列表
+  /// 返回：已启用且文件尚未上传到的提供者
+  Future<ApiResult<List<StorageProvider>>> getAvailableProvidersForSync(
+    String fileHash,
+  ) async {
+    try {
+      final req = GetAvailableProvidersReq()..fileHash = fileHash;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetAvailableProvidersForSync',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final resp = extractRespData<GetAvailableProvidersResp>(
+        data,
+        GetAvailableProvidersResp(),
+      );
+
+      return ApiResult(success: true, data: resp.providers);
+    } on DioException catch (e) {
+      _logger.error('获取可用提供者失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取可用提供者失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 同步文件到指定存储提供者
+  Future<ApiResult<void>> syncFileToProviders(
+    String fileId,
+    List<int> providerIds,
+  ) async {
+    try {
+      final req = SyncFileToProvidersReq()
+        ..fileId = fileId
+        ..providerIds.addAll(providerIds.map((id) => id));
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/SyncFileToProviders',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('同步文件失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('同步文件失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

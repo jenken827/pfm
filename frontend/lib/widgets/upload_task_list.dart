@@ -198,7 +198,7 @@ class _UploadTaskItem extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             LinearProgressIndicator(
-              value: task.progress,
+              value: task.progress / 100,
               backgroundColor: colorScheme.surfaceContainerHighest,
               color: colorScheme.primary,
               borderRadius: BorderRadius.circular(4),

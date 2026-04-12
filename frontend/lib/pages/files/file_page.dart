@@ -13,6 +13,7 @@ import 'package:pfm/router/files_route.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/utils/utils.dart';
+import 'package:pfm/widgets/folder_settings_dialog.dart';
 
 /// 文件列表页面
 class FilePage extends StatelessWidget {
@@ -489,23 +490,21 @@ class _FileView extends StatelessWidget {
                   Navigator.pop(ctx);
                   try {
                     final fmRepo = context.read<FmRepository>();
-                    final result = await fmRepo.getShareLink(fileId: file.id);
+                    final result = await fmRepo.createShareLink(fileId: file.id);
                     if (result.success && result.data != null) {
-                      final url = result.data!['url'] as String?;
-                      if (url != null) {
-                        await Clipboard.setData(ClipboardData(text: url));
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('链接已复制到剪贴板')),
-                          );
-                        }
+                      final url = result.data!.shareUrl;
+                      await Clipboard.setData(ClipboardData(text: url));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('链接已复制到剪贴板')),
+                        );
                       }
                     } else {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              '获取链接失败: ${result.message ?? "未知错误"}',
+                              '创建链接失败: ${result.message ?? "未知错误"}',
                             ),
                           ),
                         );
@@ -529,6 +528,16 @@ class _FileView extends StatelessWidget {
                 await _showMoveDialog(context, [file]);
               },
             ),
+            // 设置（仅文件夹）
+            if (isFolder)
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('设置'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showFolderSettings(context, file);
+                },
+              ),
             // 删除
             ListTile(
               leading: Icon(
@@ -847,9 +856,7 @@ class _FileView extends StatelessWidget {
                     setState(() => enableEncryption = value);
                   },
                 ),
-                if (enableEncryption) ...[
-                  const Divider(),
-                ],
+                if (enableEncryption) ...[const Divider()],
               ],
             ),
           ),
@@ -909,6 +916,19 @@ class _FileView extends StatelessWidget {
             child: const Text('确定'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showFolderSettings(BuildContext context, File folder) {
+    showDialog(
+      context: context,
+      builder: (ctx) => FolderSettingsDialog(
+        folder: folder,
+        onUpdate: () {
+          // 刷新文件列表
+          context.read<FileBloc>().add(const FileRefreshEvent());
+        },
       ),
     );
   }

@@ -105,6 +105,7 @@ func autoMigrate() error {
 		&native.FileORM{},
 		&native.FileTagORM{},
 		&native.FileShareORM{},
+		&native.FileHistoryORM{},
 		&native.FileLocationORM{},
 		&native.StorageProviderORM{},
 		&native.UploadRecordORM{},

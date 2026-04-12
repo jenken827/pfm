@@ -43,10 +43,10 @@ message UploadRecord {
     default: "false"
   }];
   optional  UploadProviderStatus status = 12 [(gorm.field).tag = {not_null: true}];
-  // 目标存储提供者ID列表（逗号分隔字符串）
+  // 目标存储提供者ID列表（JSON 数组格式）
   optional string target_provider_ids = 13 [(gorm.field).tag = {
     not_null: true
-    default: "''"
+    default: "[]"
   }];
   // 任务类型：普通上传(UPLOAD)或同步任务(SYNC)
   optional UploadTaskType task_type = 14 [(gorm.field).tag = {
@@ -55,6 +55,11 @@ message UploadRecord {
   }];
   // 文件标签（逗号分隔）
   optional string tags = 15 [(gorm.field).tag = {default: "''"}];
+  // 错误信息
+  optional string message = 16 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+  }];
 }
 
 
@@ -171,12 +176,14 @@ message UploadRecordInfo {
   optional string file_hash = 4;
   optional string parent_id = 5;
   optional UploadProviderStatus status = 6;
-  // 目标存储提供者ID列表（逗号分隔）
+  // 目标存储提供者ID列表（JSON 数组格式）
   optional string target_provider_ids = 7;
   // 任务类型
   optional UploadTaskType task_type = 8;
   optional google.protobuf.Timestamp created_at = 9;
   optional google.protobuf.Timestamp updated_at = 10;
+  // 错误信息
+  optional string message = 11;
 }
 
 // 获取上传记录列表响应
@@ -239,4 +246,20 @@ service UploadService {
 
   // 获取上传记录详情
   rpc GetUploadRecordDetail(GetUploadRecordDetailReq) returns (BaseResp);
+
+  // 重试上传记录
+  rpc RetryUploadRecord(RetryUploadRecordReq) returns (BaseResp);
+
+  // 删除上传记录
+  rpc DeleteUploadRecord(DeleteUploadRecordReq) returns (BaseResp);
+}
+
+// 重试上传记录请求
+message RetryUploadRecordReq {
+  optional uint32 id = 1 [(buf.validate.field).required = true];
+}
+
+// 删除上传记录请求
+message DeleteUploadRecordReq {
+  optional uint32 id = 1 [(buf.validate.field).required = true];
 }

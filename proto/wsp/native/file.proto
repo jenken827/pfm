@@ -9,6 +9,7 @@ import "google/protobuf/empty.proto";
 import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
+import "native/provider.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
@@ -373,6 +374,52 @@ message GetFileCacheStatusResp {
   optional uint32 upload_progress = 5;
 }
 
+// 获取可用提供者请求
+message GetAvailableProvidersReq {
+  optional string file_hash = 1 [(buf.validate.field).required = true];
+}
+
+// 获取可用提供者响应
+message GetAvailableProvidersResp {
+  repeated StorageProvider providers = 1;
+}
+
+// 同步文件请求
+message SyncFileToProvidersReq {
+  optional string file_id = 1 [(buf.validate.field).required = true];
+  repeated uint32 provider_ids = 2 [(buf.validate.field).required = true];
+}
+
+// 创建分享链接请求
+message CreateShareLinkReq {
+  // 文件ID
+  optional string file_id = 1 [(buf.validate.field).required = true];
+  // 过期时间（秒），默认604800（7天）
+  optional int64 expire_seconds = 2;
+  // 是否永久有效
+  optional bool never_expire = 3;
+  // 最大访问次数（0=不限制）
+  optional uint32 max_access_count = 4;
+  // 备注
+  optional string remark = 5;
+}
+
+// 创建分享链接响应
+message CreateShareLinkRespData {
+  // 分享链接 URL
+  optional string share_url = 1;
+  // 分享码
+  optional string share_code = 2;
+  // 过期时间戳（Unix 时间戳，秒），null 表示永不过期
+  optional int64 expire_at = 3;
+}
+
+// 取消分享链接请求
+message CancelShareLinkReq {
+  // 分享码
+  optional string share_code = 1 [(buf.validate.field).required = true];
+}
+
 service FileService {
   // 获取文件列表
   rpc GetFileList(FileListReq) returns (BaseResp) {
@@ -399,4 +446,16 @@ service FileService {
 
   // 查询文件缓存状态（用于预下载任务）
   rpc GetFileCacheStatus(GetFileCacheStatusReq) returns (BaseResp);
+
+  // 获取可用于同步的存储提供者列表
+  rpc GetAvailableProvidersForSync(GetAvailableProvidersReq) returns (BaseResp);
+
+  // 同步文件到指定存储提供者
+  rpc SyncFileToProviders(SyncFileToProvidersReq) returns (BaseResp);
+
+  // 创建分享链接
+  rpc CreateShareLink(CreateShareLinkReq) returns (BaseResp);
+
+  // 取消分享链接
+  rpc CancelShareLink(CancelShareLinkReq) returns (BaseResp);
 }

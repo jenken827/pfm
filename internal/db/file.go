@@ -199,7 +199,7 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 
 	err := db.Transaction(func(tx *gorm.DB) error {
 		// Use Generics API inside the transaction
-		if _, err := gorm.G[*native.FileORM](tx).Where("id=?", *file.Id).Select("*").Updates(ctx, file); err != nil {
+		if _, err := gorm.G[*native.FileORM](tx).Where("id=?", *file.Id).Select("hash", "size").Updates(ctx, file); err != nil {
 			return err
 		}
 		history := &native.FileHistoryORM{

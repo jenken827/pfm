@@ -66,8 +66,19 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 // DeleteStorageProvider 删除存储提供者
 func DeleteStorageProvider(ids []uint32) error {
 	ctx := context.Background()
-	_, err := gorm.G[native.StorageProviderORM](db).Where("id in ?", ids).Delete(ctx)
-	return err
+	return db.Transaction(func(tx *gorm.DB) error {
+		// 先删除关联的 FileLocation 记录，避免孤儿记录
+		if _, err := gorm.G[*native.FileLocationORM](tx).Where("provider_id IN ?", ids).Delete(ctx); err != nil {
+			llog.L().Errorf("delete file locations for providers failed, ids: %v, err: %v", ids, err)
+			return err
+		}
+		// 再删除存储提供者
+		if _, err := gorm.G[native.StorageProviderORM](tx).Where("id in ?", ids).Delete(ctx); err != nil {
+			llog.L().Errorf("delete storage providers failed, ids: %v, err: %v", ids, err)
+			return err
+		}
+		return nil
+	})
 }
 
 // GetEnabledProviders 获取启用的存储提供者
@@ -124,4 +135,35 @@ func UpdateStorageProviderConfig(id uint32, config string) error {
 	}
 
 	return nil
+}
+
+// GetAvailableProvidersForSync 获取可用于同步的存储提供者
+// 返回：已启用的提供者，排除文件已存在且完成的提供者
+func GetAvailableProvidersForSync(fileHash string) ([]*native.StorageProviderORM, error) {
+	ctx := context.Background()
+
+	// Get all enabled providers
+	enabledProviders, err := gorm.G[*native.StorageProviderORM](db).
+		Where("enabled = ?", true).
+		Order("`order` ASC").
+		Find(ctx)
+	if err != nil {
+		llog.L().Errorf("get enabled providers failed: %v", err)
+		return nil, err
+	}
+
+	// Filter out providers where file already exists and is completed
+	var available []*native.StorageProviderORM
+	for _, provider := range enabledProviders {
+		loc, err := gorm.G[*native.FileLocationORM](db).
+			Where("blake3_hash = ? AND provider_id = ?", fileHash, *provider.Id).
+			First(ctx)
+
+		// If no location found, or location is not completed, include this provider
+		if err != nil || loc == nil || *loc.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+			available = append(available, provider)
+		}
+	}
+
+	return available, nil
 }

@@ -130,3 +130,43 @@ func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *connect.Reques
 	}
 	return response.SuccessResp(result)
 }
+
+// GetAvailableProvidersForSync 获取可用于同步的存储提供者
+func (s *FileServer) GetAvailableProvidersForSync(ctx context.Context, req *connect.Request[native.GetAvailableProvidersReq]) (*connect.Response[native.BaseResp], error) {
+	providers, err := service.GetAvailableProvidersForSync(ctx, *req.Msg.FileHash)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+
+	return response.SuccessResp(&native.GetAvailableProvidersResp{
+		Providers: providers,
+	})
+}
+
+// SyncFileToProviders 同步文件到指定存储提供者
+func (s *FileServer) SyncFileToProviders(ctx context.Context, req *connect.Request[native.SyncFileToProvidersReq]) (*connect.Response[native.BaseResp], error) {
+	err := service.SyncFileToProviders(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+
+	return response.SuccessResp(nil)
+}
+
+// CreateShareLink 创建分享链接
+func (s *FileServer) CreateShareLink(ctx context.Context, req *connect.Request[native.CreateShareLinkReq]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.CreateShareLink(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}
+
+// CancelShareLink 取消分享链接
+func (s *FileServer) CancelShareLink(ctx context.Context, req *connect.Request[native.CancelShareLinkReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.CancelShareLink(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}

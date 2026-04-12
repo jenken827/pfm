@@ -76,7 +76,7 @@ class _TransferPageState extends State<TransferPage>
                 ),
                 Tab(
                   icon: const Icon(Icons.history),
-                  text: '上传记录',
+                  text: '云上传记录',
                 ),
               ],
             ),

@@ -25,7 +25,6 @@ func route(mux *http.ServeMux) {
 	uploadRoute(mux)
 	storageProviderRoute(mux)
 	fileStreamRoute(mux)       // 文件流式传输路由
-	shareLinkRoute(mux)        // 分享链接路由
 	publicDownloadRoute(mux)   // 公共下载路由
 
 	// Then create transcoder with all registered services
@@ -44,12 +43,6 @@ func fileStreamRoute(mux *http.ServeMux) {
 
 	// 文件下载（强制下载）
 	mux.HandleFunc("/api/file/stream/download", api.DownloadFileHandler)
-}
-
-// shareLinkRoute 分享链接路由（需认证）
-func shareLinkRoute(mux *http.ServeMux) {
-	mux.HandleFunc("/api/file/share", api.CreateShareLinkHandler)
-	mux.HandleFunc("/api/file/share/cancel", api.CancelShareLinkHandler)
 }
 
 // publicDownloadRoute 公共下载路由（无需认证，签名验证）

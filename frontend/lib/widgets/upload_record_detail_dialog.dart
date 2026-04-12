@@ -96,6 +96,17 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
     }
   }
 
+  String _getTaskTypeText(UploadTaskType taskType) {
+    switch (taskType) {
+      case UploadTaskType.UPLOAD:
+        return '普通上传';
+      case UploadTaskType.SYNC:
+        return '同步任务';
+      default:
+        return '未知';
+    }
+  }
+
   Color _getCacheStatusColor(CacheStatus status) {
     switch (status) {
       case CacheStatus.UNCACHED:
@@ -170,7 +181,40 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
         Text('文件名：${_record!.fileName}'),
         Text('文件大小：${formatCapacityString(_record!.fileSize.toInt())}'),
         Text('文件哈希：${_record!.fileHash}'),
+        Text('上传类型：${_record!.taskType != null ? _getTaskTypeText(_record!.taskType!) : "未知"}'),
         Text('上传时间：${_record!.createdAt?.toDateTime().toLocal() ?? "未知"}'),
+        // 显示错误信息
+        if (_record!.message.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '错误信息：${_record!.message}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -205,7 +249,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                     location.progress!.toInt() > 0) ...[
                   const SizedBox(width: 8),
                   Text(
-                    '进度: ${(location.progress!.toInt() / 10).toStringAsFixed(1)}%',
+                    '进度: ${location.progress!.toInt()}%',
                   ),
                 ],
               ],

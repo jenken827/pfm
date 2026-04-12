@@ -78,3 +78,21 @@ func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *connect.R
 	}
 	return response.SuccessResp(result)
 }
+
+// RetryUploadRecord 重试上传记录
+func (s *UploadServer) RetryUploadRecord(ctx context.Context, req *connect.Request[native.RetryUploadRecordReq]) (*connect.Response[native.BaseResp], error) {
+	err := service.RetryUploadRecord(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(nil)
+}
+
+// DeleteUploadRecord 删除上传记录
+func (s *UploadServer) DeleteUploadRecord(ctx context.Context, req *connect.Request[native.DeleteUploadRecordReq]) (*connect.Response[native.BaseResp], error) {
+	err := service.DeleteUploadRecord(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(nil)
+}

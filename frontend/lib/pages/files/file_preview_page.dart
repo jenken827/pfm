@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/router/files_route.dart';
+import 'package:pfm/widgets/document_preview_widget.dart';
+import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
+import 'package:pfm/api/fm_repository.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// 预览页面参数
 class PreviewArgs {
@@ -97,7 +104,6 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     }
   }
 
-  bool get _isImage => _currentFile.type == FileType.IMAGE;
   bool get _hasMultipleImages => _images != null && _images!.length > 1;
 
   /// 构建预览流URL
@@ -105,13 +111,6 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.fileServer ?? '';
     return '$baseUrl/api/file/stream/preview?file_id=$fileId';
-  }
-
-  /// 构建下载流URL
-  String _buildDownloadUrl() {
-    final ls = GetIt.I.get<LocalStorage>();
-    final baseUrl = ls.fileServer ?? '';
-    return '$baseUrl/api/file/stream/download?file_id=${_currentFile.id}';
   }
 
   /// 获取认证请求头
@@ -460,43 +459,12 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildDocumentPreview(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 200,
-            height: 250,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.description, size: 100, color: Colors.blue),
-          ),
-          const SizedBox(height: 24),
-          Text('文档预览', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            _currentFile.name,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => _downloadFile(context),
-            icon: const Icon(Icons.download),
-            label: const Text('下载文件'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '文档预览功能开发中',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+    final ls = GetIt.I.get<LocalStorage>();
+    final baseUrl = ls.fileServer ?? '';
+    
+    return DocumentPreviewWidget(
+      file: _currentFile,
+      baseUrl: baseUrl,
     );
   }
 
@@ -557,36 +525,209 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     );
   }
 
-  void _downloadFile(BuildContext context) {
-    final downloadUrl = _buildDownloadUrl();
-    // TODO: 实现下载逻辑
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('下载功能开发中: $downloadUrl')));
+  void _downloadFile(BuildContext context) async {
+    try {
+      final downloadDir = await getDownloadsDirectory();
+      if (!mounted) return;
+      
+      final fileName = _currentFile.name.isNotEmpty ? _currentFile.name : 'unnamed';
+      final savePath = '${downloadDir!.path}/$fileName';
+      
+      // 添加到下载队列
+      context.read<TransferBloc>().add(
+        TransferAddDownloadEvent(
+          fileId: _currentFile.id,
+          filename: fileName,
+          fileSize: _currentFile.size.toInt(),
+          savePath: savePath,
+          fileHash: _currentFile.hash,
+        ),
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已添加到下载队列: $fileName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('下载失败: $e')),
+        );
+      }
+    }
   }
 
-  void _openInExternalPlayer(BuildContext context) {
+  Future<void> _openInExternalPlayer(BuildContext context) async {
     final previewUrl = _buildPreviewUrl(_currentFile.id);
-    // TODO: 使用 url_launcher 打开外部播放器
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('外部播放器功能开发中: $previewUrl')));
+    final uri = Uri.parse(previewUrl);
+    
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法打开外部播放器')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('打开外部播放器失败: $e')),
+        );
+      }
+    }
   }
 
-  void _handleMenuAction(BuildContext context, String action) {
+  void _handleMenuAction(BuildContext context, String action) async {
     switch (action) {
       case 'share':
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('分享功能开发中')));
+        await _shareFile(context);
+        break;
       case 'rename':
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('重命名功能开发中')));
+        await _renameFile(context);
+        break;
       case 'delete':
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('删除功能开发中')));
+        await _deleteFile(context);
+        break;
+    }
+  }
+  
+  Future<void> _shareFile(BuildContext context) async {
+    try {
+      final repo = FmRepository();
+      final result = await repo.createShareLink(
+        fileId: _currentFile.id,
+        expireSeconds: 604800, // 7天
+      );
+      
+      if (result.success && result.data != null) {
+        final shareUrl = result.data!.shareUrl;
+        if (mounted) {
+          // 复制到剪贴板
+          await Clipboard.setData(ClipboardData(text: shareUrl));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('分享链接已复制到剪贴板')),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? '创建分享链接失败')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('分享失败: $e')),
+        );
+      }
+    }
+  }
+  
+  Future<void> _renameFile(BuildContext context) async {
+    final controller = TextEditingController(text: _currentFile.name);
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重命名'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '文件名',
+            hintText: '请输入新文件名',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && controller.text.isNotEmpty && mounted) {
+      try {
+        final repo = FmRepository();
+        final result = await repo.renameFile([
+          RenameObj(id: _currentFile.id, newName: controller.text),
+        ]);
+        
+        if (result.success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('重命名成功')),
+          );
+          // 返回上一页刷新列表
+          context.pop();
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.message ?? '重命名失败')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('重命名失败: $e')),
+          );
+        }
+      }
+    }
+    controller.dispose();
+  }
+  
+  Future<void> _deleteFile(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除 "${_currentFile.name}" 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      try {
+        final repo = FmRepository();
+        final result = await repo.deleteFile([_currentFile.id]);
+        
+        if (result.success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('删除成功')),
+          );
+          // 返回上一页刷新列表
+          context.pop();
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.message ?? '删除失败')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('删除失败: $e')),
+          );
+        }
+      }
     }
   }
 }

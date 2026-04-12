@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -46,7 +48,10 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
       if (result.success) {
         setState(() {
-          _records = result.data!.records;
+          // 只显示进行中和失败的记录，过滤已成功的
+          _records = result.data!.records.where((r) =>
+            r.status != UploadProviderStatus.PCOMPLETED
+          ).toList();
           _total = result.data!.total.toInt();
           _isLoading = false;
         });
@@ -61,6 +66,18 @@ class _UploadRecordListState extends State<UploadRecordList> {
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  /// 解析 JSON 数组并返回提供者数量
+  String _getProviderCount(String providerIds) {
+    if (providerIds.isEmpty) return '0 个';
+
+    try {
+      final ids = jsonDecode(providerIds) as List;
+      return '${ids.length} 个';
+    } catch (e) {
+      return '0 个';
     }
   }
 
@@ -120,15 +137,43 @@ class _UploadRecordListState extends State<UploadRecordList> {
       return const Center(child: Text('暂无上传记录'));
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadRecords,
-      child: ListView.builder(
-        itemCount: _records.length,
-        itemBuilder: (context, index) {
-          final record = _records[index];
-          return _buildRecordTile(record);
-        },
-      ),
+    return Column(
+      children: [
+        // 提示信息
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '仅显示进行中和失败的云上传记录，已成功的记录不显示',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 列表
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _loadRecords,
+            child: ListView.builder(
+              itemCount: _records.length,
+              itemBuilder: (context, index) {
+                final record = _records[index];
+                return _buildRecordTile(record);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -162,18 +207,127 @@ class _UploadRecordListState extends State<UploadRecordList> {
               ),
               const SizedBox(width: 8),
               Text(
-                '目标: ${record.targetProviderIds}',
+                '目标: ${_getProviderCount(record.targetProviderIds)}',
                 style: const TextStyle(fontSize: 12),
               ),
             ],
           ),
         ],
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.info_outline),
-        onPressed: () => _showDetailDialog(record),
+      trailing: PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (value) => _handleMenuAction(value, record),
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'detail',
+            child: ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text('查看详情'),
+            ),
+          ),
+          if (record.status == UploadProviderStatus.PFAILED)
+            const PopupMenuItem(
+              value: 'retry',
+              child: ListTile(
+                leading: Icon(Icons.refresh),
+                title: Text('重试'),
+              ),
+            ),
+          const PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              leading: Icon(Icons.delete),
+              title: Text('删除'),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _handleMenuAction(String action, UploadRecordInfo record) async {
+    switch (action) {
+      case 'detail':
+        _showDetailDialog(record);
+        break;
+      case 'retry':
+        await _retryRecord(record);
+        break;
+      case 'delete':
+        await _deleteRecord(record);
+        break;
+    }
+  }
+
+  Future<void> _retryRecord(UploadRecordInfo record) async {
+    try {
+      final repository = context.read<FmRepository>();
+      final result = await repository.retryUploadRecord(record.id.toInt());
+
+      if (result.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已重新开始上传')),
+        );
+        // 刷新列表
+        _loadRecords();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('重试失败: ${result.message}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('重试失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRecord(UploadRecordInfo record) async {
+    // 确认删除
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除上传记录"${record.fileName}"吗？\n这将同时删除相关的失败文件位置记录。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final repository = context.read<FmRepository>();
+      final result = await repository.deleteUploadRecord(record.id.toInt());
+
+      if (result.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已删除上传记录')),
+        );
+        // 刷新列表
+        _loadRecords();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('删除失败: ${result.message}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('删除失败: $e')),
+        );
+      }
+    }
   }
 
   void _showDetailDialog(UploadRecordInfo record) {

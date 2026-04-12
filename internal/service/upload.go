@@ -812,16 +812,17 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 		}
 
 		info := &native.UploadRecordInfo{
-			Id:               record.Id,
-			FileName:         record.FileName,
-			FileSize:         record.FileSize,
-			FileHash:         record.FileHash,
-			ParentId:         record.ParentId,
-			Status:           (*native.UploadProviderStatus)(record.Status),
+			Id:                record.Id,
+			FileName:          record.FileName,
+			FileSize:          record.FileSize,
+			FileHash:          record.FileHash,
+			ParentId:          record.ParentId,
+			Status:            (*native.UploadProviderStatus)(record.Status),
 			TargetProviderIds: record.TargetProviderIds,
-			TaskType:         (*native.UploadTaskType)(record.TaskType),
-			CreatedAt:        createdAt,
+			TaskType:          (*native.UploadTaskType)(record.TaskType),
+			CreatedAt:         createdAt,
 			UpdatedAt:         updatedAt,
+			Message:           record.Message,
 		}
 		uploadRecords = append(uploadRecords, info)
 	}
@@ -910,20 +911,79 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 	}
 
 	recordInfo := &native.UploadRecordInfo{
-		Id:               record.Id,
-		FileName:         record.FileName,
-		FileSize:         record.FileSize,
-		FileHash:         record.FileHash,
-		ParentId:         record.ParentId,
-		Status:           (*native.UploadProviderStatus)(record.Status),
+		Id:                record.Id,
+		FileName:          record.FileName,
+		FileSize:          record.FileSize,
+		FileHash:          record.FileHash,
+		ParentId:          record.ParentId,
+		Status:            (*native.UploadProviderStatus)(record.Status),
 		TargetProviderIds: record.TargetProviderIds,
-		TaskType:         (*native.UploadTaskType)(record.TaskType),
-		CreatedAt:        recordCreatedAt,
+		TaskType:          (*native.UploadTaskType)(record.TaskType),
+		CreatedAt:         recordCreatedAt,
 		UpdatedAt:         recordUpdatedAt,
+		Message:           record.Message,
 	}
 
 	return &native.GetUploadRecordDetailResp{
 		Record:    recordInfo,
 		Locations: locationInfos,
 	}, nil
+}
+
+// DeleteUploadRecord 删除上传记录
+func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) *models.Err {
+	// 查询上传记录
+	record, _, err := db.GetUploadRecordByID(*req.Id, false)
+	if err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 删除失败的 FileLocation 记录
+	if record.FileHash != nil && *record.FileHash != "" {
+		// 查询该文件的所有位置记录
+		locations, err := db.GetFileLocationsByFileHash(*record.FileHash)
+		if err != nil {
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+
+		// 删除失败的记录
+		for _, loc := range locations {
+			if loc.Status != nil && *loc.Status == int32(native.UploadProviderStatus_PFAILED) {
+				if err := db.DeleteFileLocation(*loc.Id); err != nil {
+					llog.L().Errorf("delete file location failed: %v", err)
+					// 继续删除其他记录
+				}
+			}
+		}
+	}
+
+	// 删除上传记录
+	if err := db.ClearUploadRecords(*req.Id); err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return nil
+}
+
+// RetryUploadRecord 重试上传记录
+func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *models.Err {
+	// 查询上传记录
+	record, _, err := db.GetUploadRecordByID(*req.Id, false)
+	if err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 重置状态为等待中
+	pendingStatus := int32(native.UploadProviderStatus_PPENDING)
+	record.Status = &pendingStatus
+
+	// 更新数据库
+	if err := db.UpdateUploadRecord(record, []string{"status"}); err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 重新分发上传任务
+	go storage.Dispatch(ctx, record)
+
+	return nil
 }

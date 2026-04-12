@@ -95,6 +95,14 @@ func BoolPtr(b bool) *bool {
 	return &b
 }
 
+func Uint32Ptr(u uint32) *uint32 {
+	return &u
+}
+
+func Uint64Ptr(u uint64) *uint64 {
+	return &u
+}
+
 // EnumPtr 泛型辅助函数：枚举类型转int32指针
 // 支持所有枚举类型，返回*int32以便与protobuf的optional int32字段兼容
 func EnumPtr[T ~int32](v T) *int32 {
