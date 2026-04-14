@@ -208,7 +208,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 
 	// 5. 更新上传记录的临时文件路径
 	uploadRecord.TempPath = &finalFilePath
-	uploadRecord.Status = utils.EnumPtr(native.UploadProviderStatus_PUPLOADING)
+	uploadRecord.Status = utils.EnumPtr(native.LocationStatus_PUPLOADING)
 	if err := db.GetDB().Save(uploadRecord).Error; err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return

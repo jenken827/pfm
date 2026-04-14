@@ -170,3 +170,39 @@ func (s *FileServer) CancelShareLink(ctx context.Context, req *connect.Request[n
 	}
 	return response.SuccessResp(nil)
 }
+
+// RestoreFromTrash 从回收站恢复文件
+func (s *FileServer) RestoreFromTrash(ctx context.Context, req *connect.Request[native.RestoreFromTrashReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.RestoreFromTrash(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
+// DeletePermanently 彻底删除文件
+func (s *FileServer) DeletePermanently(ctx context.Context, req *connect.Request[native.DeletePermanentlyReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.DeletePermanently(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
+// EmptyTrash 清空回收站
+func (s *FileServer) EmptyTrash(ctx context.Context, req *connect.Request[native.EmptyTrashReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.EmptyTrash(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
+// GetTrashList 获取回收站文件列表
+func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[native.BaseResp]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.GetTrashList(ctx)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}

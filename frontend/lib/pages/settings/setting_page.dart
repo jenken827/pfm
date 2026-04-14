@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
 
@@ -37,6 +38,18 @@ class SettingPage extends StatelessWidget {
             title: '存储提供者设置',
             subtitle: '管理存储提供者',
             onTap: () => const StorageProviderSettingRoute().push(context),
+          ),
+          const Divider(height: 1),
+
+          // 关于
+          _SettingsTile(
+            icon: Icons.info_outline,
+            title: '关于',
+            subtitle: '查看应用信息',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AboutPage()),
+            ),
           ),
           const Divider(height: 1),
 

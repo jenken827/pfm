@@ -53,7 +53,7 @@ func Init() {
 		}
 	case "sqlite3":
 		{
-			db, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental",
+			db, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental&_time_format=sqlite",
 				path.Join(globals.DataDir, cdb.Name))), gormConfig)
 		}
 	default:

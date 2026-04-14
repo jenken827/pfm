@@ -12,6 +12,7 @@ part 'files_route.g.dart';
     TypedGoRoute<FilePreviewRoute>(path: 'preview'),
     TypedGoRoute<FileDetailRoute>(path: 'detail'),
     TypedGoRoute<FolderPickerRoute>(path: 'picker'),
+    TypedGoRoute<TrashRoute>(path: 'trash'),
   ],
 )
 @immutable
@@ -71,5 +72,16 @@ class FolderPickerRoute extends GoRouteData with $FolderPickerRoute {
       initialFolderId: initialFolderId,
       excludeIds: excludeIds,
     );
+  }
+}
+
+/// 回收站路由
+@immutable
+class TrashRoute extends GoRouteData with $TrashRoute {
+  const TrashRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const TrashPage();
   }
 }

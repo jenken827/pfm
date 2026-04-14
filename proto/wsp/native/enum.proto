@@ -63,27 +63,28 @@ enum UploadStatus {
   PAUSED = 7;
 }
 
-// UploadProviderStatus
+// LocationStatus
 // After the file is uploaded to our server, it still needs to be uploaded to the storage provider's server.
 // This field represents the status of the file's upload to the storage provider's server.
-enum UploadProviderStatus {
+enum LocationStatus {
   UPLOAD_PROVIDER_STATUS_UNSPECIFIED = 0;
   PPENDING = 1;
   PUPLOADING = 2;
   PCOMPLETED = 3;
   PFAILED = 4;
+  PDELETED_FAILED = 5;
 }
 
 // UploadMethod
-enum UploadMethod {
-  UPLOAD_METHOD_UNSPECIFIED = 0;
-  // form data
-  FORM = 1;
-  // stream
-  STREAM = 2;
-  // chunk 
-  CHUNK = 3;
-}
+// enum UploadMethod {
+//   UPLOAD_METHOD_UNSPECIFIED = 0;
+//   // form data
+//   FORM = 1;
+//   // stream
+//   STREAM = 2;
+//   // chunk 
+//   CHUNK = 3;
+// }
 
 
 // DownloadRecordState

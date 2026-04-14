@@ -41,12 +41,28 @@ type StorageDriver interface {
 	// fileLocations: 该文件在当前存储提供者的所有分片（已按chunk_number排序）
 	// encryptor: 加密器（用于解密，如果存储提供者配置了加密）
 	Open(ctx context.Context, fileLocations []*native.FileLocationORM, encryptor Encryptor) (ReadSeekCloser, error)
-	// Link 获取文件下载链接
-	Link(ctx context.Context, fileLocation *native.FileLocationORM) (string, error)
-	// Delete 删除文件
-	Delete(ctx context.Context, fileLocation *native.FileLocationORM) error
+}
 
+// Closer 关闭接口（可选）
+type Closer interface {
 	Close()
+}
+
+// DeleteResult 删除结果
+type DeleteResult struct {
+	ID      uint64 // FileLocationORM.Id
+	Success bool   // 是否成功
+	Error   error  // 失败时的错误信息
+}
+
+// BatchDeleter 批量删除接口
+type BatchDeleter interface {
+	// BatchDelete 批量删除文件
+	// 返回值说明：
+	// - results=nil, err=nil: 全部执行成功
+	// - results=nil, err!=nil: 全部执行失败
+	// - results!=nil: 部分成功，需检查每条记录的状态
+	BatchDelete(ctx context.Context, fileLocations []*native.FileLocationORM) (results []DeleteResult, err error)
 }
 
 // PreDownloader 预下载接口（可选）

@@ -449,6 +449,97 @@ class FmRepository {
     }
   }
 
+  // ==================== Trash (Recycle Bin) ====================
+
+  /// 从回收站恢复文件
+  Future<ApiResult<void>> restoreFromTrash(List<String> ids) async {
+    try {
+      final req = RestoreFromTrashReq()..ids.addAll(ids);
+      
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/RestoreFromTrash',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('从回收站恢复失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('从回收站恢复失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 彻底删除文件（从回收站永久删除）
+  Future<ApiResult<void>> deletePermanently(List<String> ids) async {
+    try {
+      final req = DeletePermanentlyReq()..ids.addAll(ids);
+      
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/DeletePermanently',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('彻底删除失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('彻底删除失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 清空回收站
+  Future<ApiResult<void>> emptyTrash() async {
+    try {
+      final req = EmptyTrashReq();
+      
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/EmptyTrash',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('清空回收站失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('清空回收站失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取回收站文件列表
+  Future<ApiResult<TrashListRespData>> getTrashList() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetTrashList',
+        data: {},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<TrashListRespData>(
+        data,
+        TrashListRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取回收站列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取回收站列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 移动文件
   /// [fileIds] 要移动的文件ID列表
   /// [targetParentId] 目标文件夹ID
@@ -819,7 +910,7 @@ class FmRepository {
     try {
       final req = ListUploadRecordsReq(page: page, pageSize: pageSize);
       if (status != null) {
-        req.status = UploadProviderStatus.valueOf(status)!;
+        req.status = LocationStatus.valueOf(status)!;
       }
 
       final response = await _dio.post(

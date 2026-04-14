@@ -61,7 +61,10 @@ func createAndStoreDriver(sp *native.StorageProviderORM) error {
 func closeAndDeleteStorage(id uint32) {
 	if v, ok := storages.Load(id); ok {
 		driver := v.(types.StorageDriver)
-		driver.Close()
+		// 检查是否实现了 Closer 接口
+		if closer, ok := driver.(types.Closer); ok {
+			closer.Close()
+		}
 		storages.Delete(id)
 	}
 }
@@ -113,8 +116,11 @@ func DeleteStorage(ids []uint32) {
 func CloseAll() {
 	storages.Range(func(key, value any) bool {
 		if driver, ok := value.(types.StorageDriver); ok {
-			driver.Close()
-			llog.L().Infof("storage provider closed, id: %v", key)
+			// 检查是否实现了 Closer 接口
+			if closer, ok := driver.(types.Closer); ok {
+				closer.Close()
+				llog.L().Infof("storage provider closed, id: %v", key)
+			}
 		}
 		return true
 	})

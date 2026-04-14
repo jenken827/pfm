@@ -160,10 +160,56 @@ func GetAvailableProvidersForSync(fileHash string) ([]*native.StorageProviderORM
 			First(ctx)
 
 		// If no location found, or location is not completed, include this provider
-		if err != nil || loc == nil || *loc.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+		if err != nil || loc == nil || *loc.Status != int32(native.LocationStatus_PCOMPLETED) {
 			available = append(available, provider)
 		}
 	}
 
 	return available, nil
+}
+
+// IncrementUsedCapacity 增加存储提供者的已使用容量
+func IncrementUsedCapacity(providerID uint32, size uint64) error {
+	ctx := context.Background()
+
+	// 使用原子操作增加已使用容量
+	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+		Where("id = ?", providerID).
+		Update("used_capacity", gorm.Expr("used_capacity + ?", size))
+
+	if result.Error != nil {
+		llog.L().Errorf("increment used capacity failed: provider_id=%d, size=%d, err=%v", providerID, size, result.Error)
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		llog.L().Warnf("increment used capacity: no rows affected, provider_id=%d may not exist", providerID)
+	} else {
+		llog.L().Infof("increment used capacity successful: provider_id=%d, size=%d", providerID, size)
+	}
+
+	return nil
+}
+
+// DecrementUsedCapacity 减少存储提供者的已使用容量
+func DecrementUsedCapacity(providerID uint32, size uint64) error {
+	ctx := context.Background()
+
+	// 使用原子操作减少已使用容量
+	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+		Where("id = ?", providerID).
+		Update("used_capacity", gorm.Expr("used_capacity - ?", size))
+
+	if result.Error != nil {
+		llog.L().Errorf("decrement used capacity failed: provider_id=%d, size=%d, err=%v", providerID, size, result.Error)
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		llog.L().Warnf("decrement used capacity: no rows affected, provider_id=%d may not exist", providerID)
+	} else {
+		llog.L().Infof("decrement used capacity successful: provider_id=%d, size=%d", providerID, size)
+	}
+
+	return nil
 }

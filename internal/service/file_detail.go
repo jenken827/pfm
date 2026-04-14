@@ -75,13 +75,13 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 // groupLocationsByProvider 按存储提供者分组文件位置信息
 func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.ProviderLocationInfo {
 	type providerGroup struct {
-		providerID   uint32
-		encrypted    bool
-		chunkTotal   uint32
-		status       native.UploadProviderStatus
-		chunkCount   int
-		size         uint64
-		cacheStatus  native.CacheStatus
+		providerID  uint32
+		encrypted   bool
+		chunkTotal  uint32
+		status      native.LocationStatus
+		chunkCount  int
+		size        uint64
+		cacheStatus native.CacheStatus
 	}
 
 	groupMap := make(map[uint32]*providerGroup)
@@ -99,9 +99,9 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			if loc.ChunkTotal != nil {
 				chunkTotal = *loc.ChunkTotal
 			}
-			status := native.UploadProviderStatus_PPENDING
+			status := native.LocationStatus_PPENDING
 			if loc.Status != nil {
-				status = native.UploadProviderStatus(*loc.Status)
+				status = native.LocationStatus(*loc.Status)
 			}
 			cacheStatus := native.CacheStatus_CACHE_STATUS_UNSPECIFIED
 			if loc.CacheStatus != nil {
@@ -172,7 +172,7 @@ func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) 
 		CacheStatus:    (*native.CacheStatus)(location.CacheStatus),
 		Message:        location.Message,
 		ExpiredAt:      expiredAt,
-		UploadStatus:   (*native.UploadProviderStatus)(location.Status),
+		UploadStatus:   (*native.LocationStatus)(location.Status),
 		UploadProgress: location.Progress,
 	}, nil
 }

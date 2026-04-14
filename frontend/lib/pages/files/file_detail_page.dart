@@ -223,7 +223,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
     // Check if there's at least one completed location
     final hasCompletedLocation = locations.any(
-      (loc) => loc.status == UploadProviderStatus.PCOMPLETED,
+      (loc) => loc.status == LocationStatus.PCOMPLETED,
     );
 
     return _buildSection(
@@ -365,14 +365,14 @@ class _FileDetailPageState extends State<FileDetailPage> {
           Text(
             statusText,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: loc.status == UploadProviderStatus.PCOMPLETED
+              color: loc.status == LocationStatus.PCOMPLETED
                   ? Colors.green
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(width: 4),
           // 下载按钮（仅在状态不是失败时显示）
-          if (loc.status == UploadProviderStatus.PCOMPLETED)
+          if (loc.status == LocationStatus.PCOMPLETED)
             IconButton(
               icon: const Icon(Icons.download, size: 20),
               onPressed: () async {
@@ -623,15 +623,15 @@ class _FileDetailPageState extends State<FileDetailPage> {
     }
   }
 
-  String _getProviderStatusText(UploadProviderStatus status) {
+  String _getProviderStatusText(LocationStatus status) {
     switch (status) {
-      case UploadProviderStatus.PPENDING:
+      case LocationStatus.PPENDING:
         return '待上传';
-      case UploadProviderStatus.PUPLOADING:
+      case LocationStatus.PUPLOADING:
         return '上传中';
-      case UploadProviderStatus.PCOMPLETED:
+      case LocationStatus.PCOMPLETED:
         return '已完成';
-      case UploadProviderStatus.PFAILED:
+      case LocationStatus.PFAILED:
         return '失败';
       default:
         return '未知';
@@ -677,26 +677,27 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final fileHash = _detailData?.file.hash;
     if (fileHash == null || fileHash.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('文件哈希不存在，无法同步')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('文件哈希不存在，无法同步')));
       return;
     }
 
     // Fetch available providers and provider types in parallel
     setState(() => _isLoading = true);
-    
+
     final results = await Future.wait([
       repo.getAvailableProvidersForSync(fileHash),
       repo.getStorageProviderTypes(),
     ]);
-    
+
     setState(() => _isLoading = false);
 
     if (!mounted) return;
 
     final providersResult = results[0] as ApiResult<List<StorageProvider>>;
-    final typesResult = results[1] as ApiResult<GetStorageProviderTypesRespData>;
+    final typesResult =
+        results[1] as ApiResult<GetStorageProviderTypesRespData>;
 
     if (!providersResult.success || providersResult.data == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -709,9 +710,9 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final providerTypes = typesResult.data?.types.toList() ?? [];
 
     if (availableProviders.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可用的存储提供者')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可用的存储提供者')));
       return;
     }
 
@@ -740,16 +741,14 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
     if (syncResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已创建 ${selectedProviderIds.length} 个同步任务'),
-        ),
+        SnackBar(content: Text('已创建 ${selectedProviderIds.length} 个同步任务')),
       );
       // Refresh detail data
       await _loadDetail();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(syncResult.message ?? '同步失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(syncResult.message ?? '同步失败')));
     }
   }
 }
@@ -788,9 +787,9 @@ class _SyncProviderSelectionDialogState
 
   /// Get provider type display name
   String _getTypeName(StorageProviderType type) {
-    final typeInfo = widget.providerTypes.where(
-      (t) => t.type == type,
-    ).firstOrNull;
+    final typeInfo = widget.providerTypes
+        .where((t) => t.type == type)
+        .firstOrNull;
     return typeInfo?.displayName.isNotEmpty == true
         ? typeInfo!.displayName
         : '未知类型';
@@ -798,10 +797,12 @@ class _SyncProviderSelectionDialogState
 
   /// Get provider icon name
   String _getIconName(StorageProviderType type) {
-    final typeInfo = widget.providerTypes.where(
-      (t) => t.type == type,
-    ).firstOrNull;
-    return typeInfo?.iconName.isNotEmpty == true ? typeInfo!.iconName : 'storage';
+    final typeInfo = widget.providerTypes
+        .where((t) => t.type == type)
+        .firstOrNull;
+    return typeInfo?.iconName.isNotEmpty == true
+        ? typeInfo!.iconName
+        : 'storage';
   }
 
   @override

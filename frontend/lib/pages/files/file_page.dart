@@ -119,6 +119,17 @@ class _FileView extends StatelessWidget {
                 ],
               ),
             ),
+            // 回收站
+            const PopupMenuItem(
+              value: 'trash',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline),
+                  SizedBox(width: 8),
+                  Text('回收站'),
+                ],
+              ),
+            ),
             const PopupMenuDivider(),
             // 排序选项
             const PopupMenuItem(value: 'sort_name', child: Text('按名称排序')),
@@ -416,6 +427,9 @@ class _FileView extends StatelessWidget {
     switch (action) {
       case 'view':
         bloc.add(FileViewModeEvent(!state.isGridView));
+        break;
+      case 'trash':
+        context.push(const TrashRoute().location);
         break;
       case 'sort_name':
         bloc.add(const FileSortEvent(FileSort(type: FileSortType.name)));
@@ -938,7 +952,7 @@ class _FileView extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认删除'),
-        content: Text('确定要删除 ${ids.length} 个文件吗？此操作不可恢复。'),
+        content: Text('确定要删除 ${ids.length} 个文件吗？文件将移至回收站。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),

@@ -2,8 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:docx_file_viewer/docx_file_viewer.dart';
 import 'package:get_it/get_it.dart';
-import 'package:pdfx/pdfx.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/services/local_storage.dart';
 
@@ -29,22 +30,13 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   // TXT 内容
   String? _textContent;
   
-  // PDF 文档和控制器
-  PdfDocument? _pdfDocument;
-  PdfController? _pdfController;
-  int _totalPages = 0;
-  int _currentPage = 1;
+  // DOCX 数据
+  Uint8List? _docxData;
 
   @override
   void initState() {
     super.initState();
     _loadDocument();
-  }
-
-  @override
-  void dispose() {
-    _pdfController?.dispose();
-    super.dispose();
   }
 
   /// 加载文档
@@ -60,7 +52,18 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
       if (extension == 'txt') {
         await _loadTxtDocument();
       } else if (extension == 'pdf') {
-        await _loadPdfDocument();
+        // PDF 使用 URI 流式加载，无需预先下载
+        setState(() {
+          _isLoading = false;
+        });
+      } else if (extension == 'docx') {
+        await _loadDocxDocument();
+      } else if (extension == 'doc') {
+        // .doc 是旧版 Word 格式，暂不支持
+        setState(() {
+          _error = '暂不支持 .doc 格式预览\n\n建议：\n• 将文件转换为 .docx 格式\n• 或下载后使用 Word 打开';
+          _isLoading = false;
+        });
       } else {
         setState(() {
           _error = '暂不支持此文件格式预览';
@@ -84,21 +87,26 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
     return '';
   }
 
+  /// 获取认证请求头
+  Map<String, String> _getAuthHeaders() {
+    final ls = GetIt.I.get<LocalStorage>();
+    final token = ls.token;
+    final headers = <String, String>{};
+    if (token?.accessToken != null) {
+      headers['Authorization'] = 'Bearer ${token!.accessToken}';
+    }
+    return headers;
+  }
+
   /// 加载 TXT 文档
   Future<void> _loadTxtDocument() async {
     try {
-      final ls = GetIt.I.get<LocalStorage>();
-      final token = ls.token;
-      
       final dio = Dio();
       final response = await dio.get(
         '${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}',
         options: Options(
           responseType: ResponseType.plain,
-          headers: {
-            if (token?.accessToken != null)
-              'Authorization': 'Bearer ${token!.accessToken}',
-          },
+          headers: _getAuthHeaders(),
         ),
       );
 
@@ -114,59 +122,28 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
     }
   }
 
-  /// 加载 PDF 文档
-  Future<void> _loadPdfDocument() async {
+  /// 加载 DOCX 文档
+  Future<void> _loadDocxDocument() async {
     try {
-      final ls = GetIt.I.get<LocalStorage>();
-      final token = ls.token;
-      
-      final headers = <String, String>{};
-      if (token?.accessToken != null) {
-        headers['Authorization'] = 'Bearer ${token!.accessToken}';
-      }
-
-      // 获取 PDF 数据
-      final pdfData = await _fetchPdfData(
+      final dio = Dio();
+      final response = await dio.get(
         '${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}',
-        headers,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: _getAuthHeaders(),
+        ),
       );
 
-      // 使用数据打开 PDF
-      _pdfDocument = await PdfDocument.openData(pdfData);
-      
-      if (_pdfDocument != null) {
-        _pdfController = PdfController(
-          document: Future.value(_pdfDocument),
-        );
-        setState(() {
-          _totalPages = _pdfDocument!.pagesCount;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = '无法加载 PDF 文档';
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _docxData = Uint8List.fromList(response.data as List<int>);
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
-        _error = '加载 PDF 失败: $e';
+        _error = '加载 Word 文档失败: $e';
         _isLoading = false;
       });
     }
-  }
-
-  /// 获取 PDF 数据
-  Future<Uint8List> _fetchPdfData(String url, Map<String, String> headers) async {
-    final dio = Dio();
-    final response = await dio.get(
-      url,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: headers,
-      ),
-    );
-    return Uint8List.fromList(response.data as List<int>);
   }
 
   @override
@@ -177,13 +154,20 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
 
     if (_error != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
-            const SizedBox(height: 16),
-            Text(_error!, style: Theme.of(context).textTheme.bodyLarge),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 24),
+              Text(
+                _error!, 
+                style: Theme.of(context).textTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -194,6 +178,8 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
       return _buildTxtViewer(context);
     } else if (extension == 'pdf') {
       return _buildPdfViewer(context);
+    } else if (extension == 'docx') {
+      return _buildDocxViewer(context);
     }
 
     return const Center(child: Text('不支持的文件格式'));
@@ -232,76 +218,44 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
     );
   }
 
-  /// PDF 查看器
+  /// PDF 查看器（使用 URI 流式加载）
   Widget _buildPdfViewer(BuildContext context) {
-    if (_pdfController == null) {
-      return const Center(child: Text('PDF 加载失败'));
+    return PdfViewer.uri(
+      Uri.parse('${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}'),
+      useProgressiveLoading: true,   // 渐进式加载
+      preferRangeAccess: true,       // 使用 Range 请求，按需加载
+      headers: _getAuthHeaders(),    // 认证头
+      params: PdfViewerParams(
+        textSelectionParams: const PdfTextSelectionParams(enabled: true),
+        // 自适应屏幕：使用 fitZoom（适应宽度）
+        calculateInitialZoom: (document, controller, fitZoom, coverZoom) {
+          return fitZoom; // 适应查看器宽度
+        },
+        // 页面锚点：顶部居中
+        pageAnchor: PdfPageAnchor.top,
+        // 允许缩放范围
+        minScale: 0.5,
+        maxScale: 4.0,
+        // 启用缩放和平移
+        scaleEnabled: true,
+        panEnabled: true,
+      ),
+    );
+  }
+
+  /// DOCX 查看器
+  Widget _buildDocxViewer(BuildContext context) {
+    if (_docxData == null) {
+      return const Center(child: Text('Word 文档加载失败'));
     }
 
-    return Column(
-      children: [
-        // 标题栏和页码控制
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.file.name,
-                  style: Theme.of(context).textTheme.titleSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // 页码控制
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: _currentPage > 1
-                        ? () {
-                            _pdfController!.animateToPage(
-                              _currentPage - 1,
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeInOut,
-                            );
-                            setState(() => _currentPage--);
-                          }
-                        : null,
-                  ),
-                  Text('$_currentPage / $_totalPages'),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: _currentPage < _totalPages
-                        ? () {
-                            _pdfController!.animateToPage(
-                              _currentPage + 1,
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeInOut,
-                            );
-                            setState(() => _currentPage++);
-                          }
-                        : null,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        // PDF 内容
-        Expanded(
-          child: PdfView(
-            controller: _pdfController!,
-            onPageChanged: (page) {
-              setState(() {
-                _currentPage = page + 1;
-              });
-            },
-          ),
-        ),
-      ],
+    return DocxView.bytes(
+      _docxData!,
+      config: const DocxViewConfig(
+        enableSearch: true,
+        enableZoom: true,
+        pageMode: DocxPageMode.continuous,
+      ),
     );
   }
 }

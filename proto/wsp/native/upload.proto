@@ -42,7 +42,7 @@ message UploadRecord {
     not_null: true
     default: "false"
   }];
-  optional  UploadProviderStatus status = 12 [(gorm.field).tag = {not_null: true}];
+  optional  LocationStatus status = 12 [(gorm.field).tag = {not_null: true}];
   // 目标存储提供者ID列表（JSON 数组格式）
   optional string target_provider_ids = 13 [(gorm.field).tag = {
     not_null: true
@@ -165,7 +165,7 @@ message ListUploadRecordsReq {
   // 每页数量，默认20
   optional uint32 page_size = 2;
   // 可选：按状态过滤
-  optional UploadProviderStatus status = 3;
+  optional LocationStatus status = 3;
 }
 
 // 上传记录信息
@@ -175,7 +175,7 @@ message UploadRecordInfo {
   optional uint64 file_size = 3;
   optional string file_hash = 4;
   optional string parent_id = 5;
-  optional UploadProviderStatus status = 6;
+  optional LocationStatus status = 6;
   // 目标存储提供者ID列表（JSON 数组格式）
   optional string target_provider_ids = 7;
   // 任务类型
@@ -203,7 +203,7 @@ message FileLocationInfo {
   optional uint32 provider_id = 2;
   // 存储提供者名称（从 StorageProvider 表关联查询）
   optional string provider_name = 3;
-  optional UploadProviderStatus status = 4;
+  optional LocationStatus status = 4;
   optional string message = 5;
   optional uint32 progress = 6;
   optional bool encrypted = 7;

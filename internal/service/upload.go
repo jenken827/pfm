@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -28,6 +29,34 @@ const (
 	// SmallFileThreshold 小文件阈值 10MB
 	SmallFileThreshold = 10 * 1024 * 1024
 )
+
+// chunkUploadKey 分片上传并发控制键
+type chunkUploadKey struct {
+	uploadID   uint32
+	chunkIndex uint32
+}
+
+// chunkUploadLocks 分片上传锁管理
+var chunkUploadLocks sync.Map // map[chunkUploadKey]chan struct{}
+
+// acquireChunkLock 获取分片上传锁（非阻塞）
+func acquireChunkLock(key chunkUploadKey) bool {
+	ch := make(chan struct{})
+	_, loaded := chunkUploadLocks.LoadOrStore(key, ch)
+	if loaded {
+		// 已经有任务在处理
+		return false
+	}
+	return true
+}
+
+// releaseChunkLock 释放分片上传锁
+func releaseChunkLock(key chunkUploadKey) {
+	if ch, ok := chunkUploadLocks.Load(key); ok {
+		close(ch.(chan struct{}))
+		chunkUploadLocks.Delete(key)
+	}
+}
 
 // parseAndCreateTags 解析标签字符串并创建文件标签
 func parseAndCreateTags(fileID string, tagsStr *string) {
@@ -121,7 +150,7 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		FileHash:          &fileHash,
 		TargetProviderIds: &targetProviderIds,
 		TempPath:          &emptyStr,
-		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
 	}
 
@@ -404,7 +433,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		ChunkSize:         &chunkSize,
 		TempPath:          &tp,
 		OverwriteId:       &overwriteID,
-		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TargetProviderIds: parentFile.BoundProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 		Tags:              req.Tags,
@@ -444,11 +473,32 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 
 	llog.L().Infof("upload chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 
+	// 并发控制：防止同时上传同一个分片
+	key := chunkUploadKey{
+		uploadID:   uint32(uploadID),
+		chunkIndex: chunkIndex,
+	}
+	if !acquireChunkLock(key) {
+		llog.L().Warnf("chunk upload already in progress: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		return &models.Err{
+			E: errors.New("chunk upload already in progress"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+	defer releaseChunkLock(key)
+
 	// 获取上传记录
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, false)
 	if err != nil {
 		llog.L().Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 检查分片记录是否已存在（幂等性）
+	existingChunk, err := db.GetChunkRecord(uploadID, chunkIndex)
+	if err == nil && existingChunk != nil {
+		llog.L().Infof("chunk record already exists, skip: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		return nil
 	}
 
 	chunkPath := utils.GetChunkTempPath(*uploadRecord.FileHash, int(chunkIndex))
@@ -494,6 +544,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
+	llog.L().Infof("chunk uploaded successfully: upload_id=%d, chunk_index=%d, size=%d", uploadID, chunkIndex, totalSize)
 	return nil
 }
 
@@ -760,7 +811,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		ParentId:          req.ParentId,
 		TempPath:          &tempPath,
 		OverwriteId:       &overwriteID,
-		Status:            utils.EnumPtr(native.UploadProviderStatus_PPENDING),
+		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TargetProviderIds: parentFile.BoundProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 	}
@@ -817,7 +868,7 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 			FileSize:          record.FileSize,
 			FileHash:          record.FileHash,
 			ParentId:          record.ParentId,
-			Status:            (*native.UploadProviderStatus)(record.Status),
+			Status:            (*native.LocationStatus)(record.Status),
 			TargetProviderIds: record.TargetProviderIds,
 			TaskType:          (*native.UploadTaskType)(record.TaskType),
 			CreatedAt:         createdAt,
@@ -886,7 +937,7 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 			Id:             loc.Id,
 			ProviderId:     loc.ProviderId,
 			ProviderName:   &providerName,
-			Status:         (*native.UploadProviderStatus)(loc.Status),
+			Status:         (*native.LocationStatus)(loc.Status),
 			Message:        loc.Message,
 			Progress:       loc.Progress,
 			Encrypted:      loc.Encrypted,
@@ -916,7 +967,7 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 		FileSize:          record.FileSize,
 		FileHash:          record.FileHash,
 		ParentId:          record.ParentId,
-		Status:            (*native.UploadProviderStatus)(record.Status),
+		Status:            (*native.LocationStatus)(record.Status),
 		TargetProviderIds: record.TargetProviderIds,
 		TaskType:          (*native.UploadTaskType)(record.TaskType),
 		CreatedAt:         recordCreatedAt,
@@ -948,7 +999,7 @@ func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) 
 
 		// 删除失败的记录
 		for _, loc := range locations {
-			if loc.Status != nil && *loc.Status == int32(native.UploadProviderStatus_PFAILED) {
+			if loc.Status != nil && *loc.Status == int32(native.LocationStatus_PFAILED) {
 				if err := db.DeleteFileLocation(*loc.Id); err != nil {
 					llog.L().Errorf("delete file location failed: %v", err)
 					// 继续删除其他记录
@@ -974,7 +1025,7 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 	}
 
 	// 重置状态为等待中
-	pendingStatus := int32(native.UploadProviderStatus_PPENDING)
+	pendingStatus := int32(native.LocationStatus_PPENDING)
 	record.Status = &pendingStatus
 
 	// 更新数据库

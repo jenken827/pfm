@@ -15,14 +15,17 @@ type Encryptor interface {
 // NullEncryptor 空加密器（不加密）
 type NullEncryptor struct{}
 
+// Encrypt 加密
 func (n *NullEncryptor) Encrypt(in io.Reader) (io.ReadCloser, error) {
 	return io.NopCloser(in), nil
 }
 
+// Decrypt 解密
 func (n *NullEncryptor) Decrypt(in io.ReadCloser) (io.ReadCloser, error) {
 	return in, nil
 }
 
+// IsEncrypted 是否启用加密
 func (n *NullEncryptor) IsEncrypted() bool {
 	return false
 }

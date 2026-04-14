@@ -40,7 +40,7 @@ func CheckProviderComplete(locations []*native.FileLocationORM) (bool, int, int)
 	firstLoc := locations[0]
 	if firstLoc.ChunkTotal == nil {
 		// 兼容旧数据：没有分片字段，认为是单文件
-		if firstLoc.Status != nil && *firstLoc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
+		if firstLoc.Status != nil && *firstLoc.Status == int32(native.LocationStatus_PCOMPLETED) {
 			return true, 1, 1
 		}
 		return false, 1, 1
@@ -56,7 +56,7 @@ func CheckProviderComplete(locations []*native.FileLocationORM) (bool, int, int)
 
 	// 检查所有分片状态
 	for _, loc := range locations {
-		if loc.Status == nil || *loc.Status != int32(native.UploadProviderStatus_PCOMPLETED) {
+		if loc.Status == nil || *loc.Status != int32(native.LocationStatus_PCOMPLETED) {
 			return false, expectedTotal, actualTotal
 		}
 	}
@@ -88,7 +88,7 @@ func GetCompleteProviderLocations(locations []*native.FileLocationORM, providerI
 
 	for _, loc := range locations {
 		if loc.ProviderId != nil && *loc.ProviderId == providerID {
-			if loc.Status != nil && *loc.Status == int32(native.UploadProviderStatus_PCOMPLETED) {
+			if loc.Status != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
 				result = append(result, loc)
 			}
 		}

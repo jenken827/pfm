@@ -19,7 +19,7 @@ func GetUploadRecordByHash(hash string, withChunk bool) (*native.UploadRecordORM
 }
 
 // GetUploadRecordsByStatus 获取上传记录
-func GetUploadRecordsByStatus(status []native.UploadProviderStatus) ([]*native.UploadRecordORM, error) {
+func GetUploadRecordsByStatus(status []native.LocationStatus) ([]*native.UploadRecordORM, error) {
 	ints := []int32{}
 	for _, s := range status {
 
@@ -29,6 +29,18 @@ func GetUploadRecordsByStatus(status []native.UploadProviderStatus) ([]*native.U
 
 	return gorm.G[*native.UploadRecordORM](db).Where("status in ?", ints).Find(context.Background())
 
+}
+
+// GetChunkRecord 获取分片记录
+func GetChunkRecord(uploadID uint32, chunkIndex uint32) (*native.UploadChunkRecordORM, error) {
+	ctx := context.Background()
+	chunk, err := gorm.G[*native.UploadChunkRecordORM](db).
+		Where("upload_id = ? AND `index` = ?", uploadID, chunkIndex).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return chunk, nil
 }
 
 func getUploadRecord(expression string, withChunk bool, args ...any) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
@@ -191,6 +203,20 @@ func DeleteFileLocation(id uint64) error {
 	_, err := gorm.G[*native.FileLocationORM](db).Where("id = ?", id).Delete(ctx)
 	if err != nil {
 		llog.L().Errorf("delete file location failed, id: %d, err: %v", id, err)
+		return err
+	}
+	return nil
+}
+
+// DeleteFileLocations 批量删除文件位置记录
+func DeleteFileLocations(ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileLocationORM](db).Where("id IN ?", ids).Delete(ctx)
+	if err != nil {
+		llog.L().Errorf("batch delete file locations failed, err: %v", err)
 		return err
 	}
 	return nil

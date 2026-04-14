@@ -49,9 +49,9 @@ class _UploadRecordListState extends State<UploadRecordList> {
       if (result.success) {
         setState(() {
           // 只显示进行中和失败的记录，过滤已成功的
-          _records = result.data!.records.where((r) =>
-            r.status != UploadProviderStatus.PCOMPLETED
-          ).toList();
+          _records = result.data!.records
+              .where((r) => r.status != LocationStatus.PCOMPLETED)
+              .toList();
           _total = result.data!.total.toInt();
           _isLoading = false;
         });
@@ -81,30 +81,30 @@ class _UploadRecordListState extends State<UploadRecordList> {
     }
   }
 
-  String _getStatusText(UploadProviderStatus status) {
+  String _getStatusText(LocationStatus status) {
     switch (status) {
-      case UploadProviderStatus.PPENDING:
+      case LocationStatus.PPENDING:
         return '等待中';
-      case UploadProviderStatus.PUPLOADING:
+      case LocationStatus.PUPLOADING:
         return '上传中';
-      case UploadProviderStatus.PCOMPLETED:
+      case LocationStatus.PCOMPLETED:
         return '已完成';
-      case UploadProviderStatus.PFAILED:
+      case LocationStatus.PFAILED:
         return '失败';
       default:
         return '未知';
     }
   }
 
-  Color _getStatusColor(UploadProviderStatus status) {
+  Color _getStatusColor(LocationStatus status) {
     switch (status) {
-      case UploadProviderStatus.PPENDING:
+      case LocationStatus.PPENDING:
         return Colors.grey;
-      case UploadProviderStatus.PUPLOADING:
+      case LocationStatus.PUPLOADING:
         return Colors.blue;
-      case UploadProviderStatus.PCOMPLETED:
+      case LocationStatus.PCOMPLETED:
         return Colors.green;
-      case UploadProviderStatus.PFAILED:
+      case LocationStatus.PFAILED:
         return Colors.red;
       default:
         return Colors.grey;
@@ -124,10 +124,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           children: [
             Text('加载失败: $_errorMessage'),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadRecords,
-              child: const Text('重试'),
-            ),
+            ElevatedButton(onPressed: _loadRecords, child: const Text('重试')),
           ],
         ),
       );
@@ -146,7 +143,11 @@ class _UploadRecordListState extends State<UploadRecordList> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: Row(
             children: [
-              Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.info_outline,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -225,20 +226,14 @@ class _UploadRecordListState extends State<UploadRecordList> {
               title: Text('查看详情'),
             ),
           ),
-          if (record.status == UploadProviderStatus.PFAILED)
+          if (record.status == LocationStatus.PFAILED)
             const PopupMenuItem(
               value: 'retry',
-              child: ListTile(
-                leading: Icon(Icons.refresh),
-                title: Text('重试'),
-              ),
+              child: ListTile(leading: Icon(Icons.refresh), title: Text('重试')),
             ),
           const PopupMenuItem(
             value: 'delete',
-            child: ListTile(
-              leading: Icon(Icons.delete),
-              title: Text('删除'),
-            ),
+            child: ListTile(leading: Icon(Icons.delete), title: Text('删除')),
           ),
         ],
       ),
@@ -265,21 +260,21 @@ class _UploadRecordListState extends State<UploadRecordList> {
       final result = await repository.retryUploadRecord(record.id.toInt());
 
       if (result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已重新开始上传')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已重新开始上传')));
         // 刷新列表
         _loadRecords();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('重试失败: ${result.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('重试失败: ${result.message}')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('重试失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('重试失败: $e')));
       }
     }
   }
@@ -311,21 +306,21 @@ class _UploadRecordListState extends State<UploadRecordList> {
       final result = await repository.deleteUploadRecord(record.id.toInt());
 
       if (result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除上传记录')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已删除上传记录')));
         // 刷新列表
         _loadRecords();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败: ${result.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败: ${result.message}')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
       }
     }
   }
@@ -333,9 +328,8 @@ class _UploadRecordListState extends State<UploadRecordList> {
   void _showDetailDialog(UploadRecordInfo record) {
     showDialog(
       context: context,
-      builder: (context) => UploadRecordDetailDialog(
-        uploadId: record.id.toInt(),
-      ),
+      builder: (context) =>
+          UploadRecordDetailDialog(uploadId: record.id.toInt()),
     );
   }
 }

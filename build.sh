@@ -21,7 +21,7 @@ VERSION="${DATETIME}-${COMMIT_HASH}"
 echo "Building with version: $VERSION"
 
 # Build with version injected via ldflags
-go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/flags.Version=${VERSION}" -o pfm .
+go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o pfm .
 
 echo "Build completed successfully!"
 echo "Version: $VERSION"

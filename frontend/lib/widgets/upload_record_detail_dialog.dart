@@ -53,30 +53,30 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
     }
   }
 
-  String _getStatusText(UploadProviderStatus status) {
+  String _getStatusText(LocationStatus status) {
     switch (status) {
-      case UploadProviderStatus.PPENDING:
+      case LocationStatus.PPENDING:
         return '等待中';
-      case UploadProviderStatus.PUPLOADING:
+      case LocationStatus.PUPLOADING:
         return '上传中';
-      case UploadProviderStatus.PCOMPLETED:
+      case LocationStatus.PCOMPLETED:
         return '已完成';
-      case UploadProviderStatus.PFAILED:
+      case LocationStatus.PFAILED:
         return '失败';
       default:
         return '未知';
     }
   }
 
-  Color _getStatusColor(UploadProviderStatus status) {
+  Color _getStatusColor(LocationStatus status) {
     switch (status) {
-      case UploadProviderStatus.PPENDING:
+      case LocationStatus.PPENDING:
         return Colors.grey;
-      case UploadProviderStatus.PUPLOADING:
+      case LocationStatus.PUPLOADING:
         return Colors.blue;
-      case UploadProviderStatus.PCOMPLETED:
+      case LocationStatus.PCOMPLETED:
         return Colors.green;
-      case UploadProviderStatus.PFAILED:
+      case LocationStatus.PFAILED:
         return Colors.red;
       default:
         return Colors.grey;
@@ -181,7 +181,9 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
         Text('文件名：${_record!.fileName}'),
         Text('文件大小：${formatCapacityString(_record!.fileSize.toInt())}'),
         Text('文件哈希：${_record!.fileHash}'),
-        Text('上传类型：${_record!.taskType != null ? _getTaskTypeText(_record!.taskType!) : "未知"}'),
+        Text(
+          '上传类型：${_record!.taskType != null ? _getTaskTypeText(_record!.taskType!) : "未知"}',
+        ),
         Text('上传时间：${_record!.createdAt?.toDateTime().toLocal() ?? "未知"}'),
         // 显示错误信息
         if (_record!.message.isNotEmpty) ...[
@@ -248,9 +250,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 if (location.progress != null &&
                     location.progress!.toInt() > 0) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    '进度: ${location.progress!.toInt()}%',
-                  ),
+                  Text('进度: ${location.progress!.toInt()}%'),
                 ],
               ],
             ),

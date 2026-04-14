@@ -67,6 +67,9 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
+  pdfrx: ^2.2.24
+  docx_file_viewer: ^1.0.1  # PDF 查看库
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

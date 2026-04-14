@@ -28,9 +28,8 @@ func (l *LocalDriver) Upload(ctx context.Context, filePath string, fileName stri
 		return nil, fmt.Errorf("create directory failed: %w", err)
 	}
 
-	// 2. 生成带时间戳的文件名，避免同名覆盖
-	timestamp := now.Format("20060102150405")
-	finalFileName := fmt.Sprintf("%s_%s", fileName, timestamp)
+	// 2. 使用公共方法生成唯一文件名
+	finalFileName := types.GetUniqueFileName(fileName)
 
 	// 目标文件路径
 	targetPath := path.Join(yearMonthDir, finalFileName)
@@ -94,17 +93,31 @@ func (l *LocalDriver) Open(ctx context.Context, fileLocations []*native.FileLoca
 	return file, nil
 }
 
-// Link 获取文件链接
-func (l *LocalDriver) Link(ctx context.Context, fileLocation *native.FileLocationORM) (string, error) {
-	return *fileLocation.Path, nil
-}
+// BatchDelete 批量删除文件
+func (l *LocalDriver) BatchDelete(ctx context.Context, fileLocations []*native.FileLocationORM) ([]types.DeleteResult, error) {
+	results := make([]types.DeleteResult, len(fileLocations))
+	var hasFailure bool
 
-// Delete 删除文件
-func (l *LocalDriver) Delete(ctx context.Context, fileLocation *native.FileLocationORM) error {
-	return os.Remove(*fileLocation.Path)
-}
+	for i, loc := range fileLocations {
+		results[i].ID = *loc.Id
+		if loc.Path == nil {
+			results[i].Success = false
+			results[i].Error = fmt.Errorf("file path is nil")
+			hasFailure = true
+			continue
+		}
+		if err := os.Remove(*loc.Path); err != nil {
+			results[i].Success = false
+			results[i].Error = fmt.Errorf("delete file failed: %w, path: %s", err, *loc.Path)
+			hasFailure = true
+		} else {
+			results[i].Success = true
+		}
+	}
 
-// Close 关闭存储驱动
-func (l *LocalDriver) Close() {
-
+	// 如果有失败，返回详细结果；否则返回 nil, nil 表示全部成功
+	if hasFailure {
+		return results, nil
+	}
+	return nil, nil
 }

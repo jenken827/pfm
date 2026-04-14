@@ -1,11 +1,13 @@
 package service
 
 import (
+	"archive/zip"
 	"bytes"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
@@ -44,6 +46,13 @@ func detectFileTypeFromContent(path string) (native.FileType, string) {
 	// 使用http.DetectContentType检测MIME类型
 	mimeType := http.DetectContentType(buffer[:n])
 
+	// 如果是 ZIP 格式，进一步检测具体类型
+	if bytes.Contains([]byte(mimeType), []byte("zip")) {
+		if fileType, specificMime := detectZipBasedFormat(path); fileType != native.FileType_FILE_TYPE_UNKNOWN {
+			return fileType, specificMime
+		}
+	}
+
 	// 从MIME类型映射到FileType
 	return mimeTypeToFileType(mimeType), mimeType
 }
@@ -65,6 +74,13 @@ func mimeTypeToFileType(mimeType string) native.FileType {
 		if len(mimeType) >= 15 && mimeType[:15] == "application/pdf" {
 			return native.FileType_DOCUMENT
 		}
+		// 检查是否是Office文档
+		if bytes.Contains([]byte(mimeType), []byte("wordprocessing")) ||
+			bytes.Contains([]byte(mimeType), []byte("spreadsheet")) ||
+			bytes.Contains([]byte(mimeType), []byte("presentation")) ||
+			bytes.Contains([]byte(mimeType), []byte("opendocument")) {
+			return native.FileType_DOCUMENT
+		}
 		// 检查是否是压缩文件
 		if bytes.Contains([]byte(mimeType), []byte("zip")) ||
 			bytes.Contains([]byte(mimeType), []byte("rar")) ||
@@ -80,6 +96,104 @@ func mimeTypeToFileType(mimeType string) native.FileType {
 	}
 
 	return native.FileType_FILE_TYPE_UNKNOWN
+}
+
+// detectZipBasedFormat 检测基于 ZIP 的文件格式（Office Open XML、OpenDocument、EPUB等）
+func detectZipBasedFormat(path string) (native.FileType, string) {
+	// 打开 ZIP 文件
+	reader, err := zip.OpenReader(path)
+	if err != nil {
+		return native.FileType_FILE_TYPE_UNKNOWN, ""
+	}
+	defer reader.Close()
+
+	// 检查是否有 [Content_Types].xml（Office Open XML 标志）
+	hasContentTypes := false
+	for _, f := range reader.File {
+		if f.Name == "[Content_Types].xml" {
+			hasContentTypes = true
+			break
+		}
+	}
+
+	// 如果是 Office Open XML 格式
+	if hasContentTypes {
+		// 检查 [Content_Types].xml 内容判断具体类型
+		for _, f := range reader.File {
+			if f.Name == "[Content_Types].xml" {
+				rc, err := f.Open()
+				if err != nil {
+					break
+				}
+				defer rc.Close()
+
+				content, err := io.ReadAll(rc)
+				if err != nil {
+					break
+				}
+
+				contentStr := string(content)
+
+				// Word 文档
+				if strings.Contains(contentStr, "word/document.xml") {
+					return native.FileType_DOCUMENT, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+				}
+				// Excel 文档
+				if strings.Contains(contentStr, "xl/workbook.xml") {
+					return native.FileType_DOCUMENT, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+				}
+				// PowerPoint 文档
+				if strings.Contains(contentStr, "ppt/presentation.xml") {
+					return native.FileType_DOCUMENT, "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+				}
+
+				break
+			}
+		}
+	}
+
+	// 检查 OpenDocument / EPUB 格式（根目录有 mimetype 文件）
+	for _, f := range reader.File {
+		if f.Name == "mimetype" {
+			rc, err := f.Open()
+			if err != nil {
+				break
+			}
+			defer rc.Close()
+
+			content, err := io.ReadAll(rc)
+			if err != nil {
+				break
+			}
+
+			mimetype := string(content)
+
+			// EPUB
+			if mimetype == "application/epub+zip" {
+				return native.FileType_DOCUMENT, "application/epub+zip"
+			}
+
+			// OpenDocument Text
+			if mimetype == "application/vnd.oasis.opendocument.text" {
+				return native.FileType_DOCUMENT, mimetype
+			}
+
+			// OpenDocument Spreadsheet
+			if mimetype == "application/vnd.oasis.opendocument.spreadsheet" {
+				return native.FileType_DOCUMENT, mimetype
+			}
+
+			// OpenDocument Presentation
+			if mimetype == "application/vnd.oasis.opendocument.presentation" {
+				return native.FileType_DOCUMENT, mimetype
+			}
+
+			break
+		}
+	}
+
+	// 无法确定具体类型，返回 UNKNOWN
+	return native.FileType_FILE_TYPE_UNKNOWN, ""
 }
 
 // detectFileTypeFromExt 根据文件扩展名获取文件类型

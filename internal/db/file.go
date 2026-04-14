@@ -20,6 +20,18 @@ func GetFileByID(id string) (*native.FileORM, error) {
 	return file, nil
 }
 
+// GetFilesByIDs 批量获取文件
+func GetFilesByIDs(ids []string) ([]*native.FileORM, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	files, err := gorm.G[*native.FileORM](db).Where("id IN ?", ids).Find(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 // GetFileByHash 获取文件
 func GetFileByHash(hash string) (*native.FileORM, error) {
 	file, err := gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
@@ -47,11 +59,69 @@ func CreateFile(file *native.FileORM) error {
 	return db.Create(file).Error
 }
 
-// DeleteFiles 批量删除文件
+// DeleteFiles 批量删除文件（软删除，移至回收站）
 func DeleteFiles(ids []string) error {
 	_, err := gorm.G[native.FileORM](db).Where("id IN ?", ids).Delete(context.Background())
 	return err
+}
 
+// RestoreFromTrash 从回收站恢复文件
+func RestoreFromTrash(ids []string) error {
+	ctx := context.Background()
+	return db.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+		Where("id IN ?", ids).
+		Update("deleted_at", nil).Error
+}
+
+// GetTrashList 获取回收站文件列表
+func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
+	ctx := context.Background()
+	
+	// 默认每页500条
+	if pageSize == 0 {
+		pageSize = 500
+	}
+
+	// 获取总数
+	var total int64
+	if err := db.WithContext(ctx).Model(&native.FileORM{}).
+		Unscoped(). // 查询包含软删除的记录
+		Where("deleted_at IS NOT NULL").
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	var files []*native.FileORM
+	if err := db.WithContext(ctx).
+		Unscoped(). // 查询包含软删除的记录
+		Where("deleted_at IS NOT NULL").
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Order("deleted_at DESC").
+		Find(&files).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return files, total, nil
+}
+
+// DeletePermanently 彻底删除文件（从回收站永久删除，删除实际文件和数据库记录）
+func DeletePermanently(ids []string) error {
+	ctx := context.Background()
+	return db.WithContext(ctx).
+		Unscoped(). // 永久删除，绕过软删除
+		Where("id IN ?", ids).
+		Delete(&native.FileORM{}).Error
+}
+
+// EmptyTrash 清空回收站
+func EmptyTrash() error {
+	ctx := context.Background()
+	return db.WithContext(ctx).
+		Unscoped(). // 永久删除，绕过软删除
+		Where("deleted_at IS NOT NULL").
+		Delete(&native.FileORM{}).Error
 }
 
 // GetFileList 获取文件列表
@@ -228,3 +298,38 @@ func UpdateFileIsReady(parentID, fileName string) error {
 		Update(ctx, "is_ready", isReady)
 	return err
 }
+
+// UpdateFileLocationStatus 批量更新文件位置记录状态
+func UpdateFileLocationStatus(ids []uint64, status int32) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileLocationORM](db).
+		Where("id IN ?", ids).
+		Update(ctx, "status", status)
+	return err
+}
+
+// GetFileHistoryByFileID 根据文件 ID 获取历史记录
+func GetFileHistoryByFileID(fileID string) ([]*native.FileHistoryORM, error) {
+	ctx := context.Background()
+	var histories []*native.FileHistoryORM
+	err := db.WithContext(ctx).Where("file_id = ?", fileID).Find(&histories).Error
+	if err != nil {
+		return nil, err
+	}
+	return histories, nil
+}
+
+// DeleteFileHistoryByFileIDs 批量删除文件历史记录
+func DeleteFileHistoryByFileIDs(fileIDs []string) error {
+	if len(fileIDs) == 0 {
+		return nil
+	}
+
+	return db.Where("file_id IN ?", fileIDs).Delete(&native.FileHistoryORM{}).Error
+}
+
+
