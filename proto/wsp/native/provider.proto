@@ -58,8 +58,8 @@ message StorageProvider {
     default: "true"
     not_null: true
   }];
-  // 优先级
-  optional uint32 order = 12 [(gorm.field).tag = {
+  // 优先级（数字越小优先级越高）
+  optional uint32 sort_order = 12 [(gorm.field).tag = {
     default: "0"
     not_null: true
   }];
@@ -204,8 +204,8 @@ message AddStorageProviderReq {
   optional string config = 4 [(buf.validate.field).required = true];
   // 是否启用
   optional bool enabled = 5;
-  // 优先级
-  optional uint32 order = 6;
+  // 优先级（数字越小优先级越高）
+  optional uint32 sort_order = 6;
   // 总容量（字节）
   optional uint64 total_capacity = 7;
   // 文件大小限制（字节）
@@ -234,8 +234,8 @@ message UpdateStorageProviderReq {
   optional string config = 4;
   // 是否启用
   optional bool enabled = 5;
-  // 优先级
-  optional uint32 order = 6;
+  // 优先级（数字越小优先级越高）
+  optional uint32 sort_order = 6;
   // 总容量（字节）
   optional uint64 total_capacity = 7;
   // 文件大小限制（字节）

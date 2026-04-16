@@ -625,7 +625,7 @@ class FmRepository {
     String? description,
     String? config,
     bool? enabled,
-    int? order,
+    int? sortOrder,
     int? totalCapacity,
     int? fileSizeLimit,
     String? encryptionKey,
@@ -639,7 +639,7 @@ class FmRepository {
       if (description != null) req.description = description;
       if (config != null) req.config = config;
       if (enabled != null) req.enabled = enabled;
-      if (order != null) req.order = order;
+      if (sortOrder != null) req.sortOrder = sortOrder;
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (encryptionKey != null) req.encryptionKey = encryptionKey;
@@ -671,7 +671,7 @@ class FmRepository {
     String? description,
     String? config,
     bool? enabled,
-    int? order,
+    int? sortOrder,
     int? totalCapacity,
     int? fileSizeLimit,
     bool? defaultBound,
@@ -683,7 +683,7 @@ class FmRepository {
       if (description != null) req.description = description;
       if (config != null) req.config = config;
       if (enabled != null) req.enabled = enabled;
-      if (order != null) req.order = order;
+      if (sortOrder != null) req.sortOrder = sortOrder;
       if (totalCapacity != null) req.totalCapacity = Int64(totalCapacity);
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (defaultBound != null) req.defaultBound = defaultBound;

@@ -557,9 +557,15 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 				fl.ChunkSize = &chunkInfo.ChunkSize
 				totalUploadedSize += chunkInfo.ChunkSize // 累加上传大小
 			}
+			if chunkInfo.S3KeyFlag != "" {
+				fl.S3KeyFlag = &chunkInfo.S3KeyFlag
+			}
 
 			// 更新字段列表
 			updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
+			if chunkInfo.S3KeyFlag != "" {
+				updateFields = append(updateFields, "s3_key_flag")
+			}
 			if fl.Encrypted != nil {
 				updateFields = append(updateFields, "encrypted", "encryption_salt")
 			}
@@ -590,6 +596,9 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 			if chunkInfo.ChunkSize > 0 {
 				newFl.ChunkSize = &chunkInfo.ChunkSize
 				totalUploadedSize += chunkInfo.ChunkSize // 累加上传大小
+			}
+			if chunkInfo.S3KeyFlag != "" {
+				newFl.S3KeyFlag = &chunkInfo.S3KeyFlag
 			}
 			// // 复制加密信息
 			// if fl.Encrypted != nil {

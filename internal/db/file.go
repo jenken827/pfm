@@ -32,6 +32,19 @@ func GetFilesByIDs(ids []string) ([]*native.FileORM, error) {
 	return files, nil
 }
 
+// GetFilesByIDsUnscoped 批量获取文件（包含软删除的记录）
+func GetFilesByIDsUnscoped(ids []string) ([]*native.FileORM, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	ctx := context.Background()
+	var files []*native.FileORM
+	if err := db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Find(&files).Error; err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 // GetFileByHash 获取文件
 func GetFileByHash(hash string) (*native.FileORM, error) {
 	file, err := gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())

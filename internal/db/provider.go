@@ -38,8 +38,8 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 	if provider.Name != nil {
 		fields = append(fields, "name")
 	}
-	if provider.Order != nil {
-		fields = append(fields, "order")
+	if provider.SortOrder != nil {
+		fields = append(fields, "sort_order")
 	}
 	if provider.TotalCapacity != nil {
 		fields = append(fields, "total_capacity")
@@ -145,7 +145,7 @@ func GetAvailableProvidersForSync(fileHash string) ([]*native.StorageProviderORM
 	// Get all enabled providers
 	enabledProviders, err := gorm.G[*native.StorageProviderORM](db).
 		Where("enabled = ?", true).
-		Order("`order` ASC").
+		Order("sort_order ASC").
 		Find(ctx)
 	if err != nil {
 		llog.L().Errorf("get enabled providers failed: %v", err)

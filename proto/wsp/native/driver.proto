@@ -19,7 +19,8 @@ message TelegramDriverConfig {
     optional string bot_token=1;
     optional string bot_server=2;
     optional string webhook_secret_token=3;
-    optional string chat_id=4;
+    repeated string chat_id=4;
+    optional bool enabled_webhook = 5; 
 }
 
 // 123pan 驱动器配置

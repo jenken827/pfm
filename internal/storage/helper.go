@@ -193,8 +193,8 @@ func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*n
 		}
 		orm := st.GetOrm()
 		order := uint32(0)
-		if orm != nil && orm.Order != nil {
-			order = *orm.Order
+		if orm != nil && orm.SortOrder != nil {
+			order = *orm.SortOrder
 		}
 		sorted = append(sorted, providerOrder{providerID: pid, order: order})
 	}

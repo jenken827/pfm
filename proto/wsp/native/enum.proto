@@ -23,6 +23,7 @@ enum ConfigFieldType {
   NUMBER = 2; // 数字
   BOOLEAN = 3; // 布尔值
   SELECT = 4; // 下拉选择
+  STRING_LIST = 5; // 字符串列表
 }
 
 // FileType

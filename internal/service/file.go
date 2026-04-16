@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -225,9 +226,10 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	if len(fileIDs) == 0 {
 		return
 	}
+	llog.L().Infof("delet files  from providers,id length: %d", len(fileIDs))
 
-	// 1. 批量获取文件信息
-	files, err := db.GetFilesByIDs(fileIDs)
+	// 1. 批量获取文件信息（包含软删除的记录，因为可能是回收站文件）
+	files, err := db.GetFilesByIDsUnscoped(fileIDs)
 	if err != nil {
 		llog.L().Errorf("batch get files failed: %v", err)
 		return
@@ -240,6 +242,7 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 		if file.Id != nil && file.Hash != nil && *file.Hash != "" {
 			fileHashMap[*file.Id] = *file.Hash
 			hashSet[*file.Hash] = true
+			llog.L().Debugf("get file hash success %s", *file.Hash)
 		}
 	}
 
@@ -251,15 +254,18 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 			llog.L().Errorf("get file locations failed: %v, hash: %s", err, fileHash)
 			continue
 		}
+		llog.L().Debugf("success get fil locatione by hash: %s,locations len: %d", fileHash, len(locations))
 
 		for _, loc := range locations {
 			if loc.ProviderId == nil {
+				llog.L().Debugf("location provider id is nil, locaiton id: %d", loc.Id)
 				continue
 			}
 			providerID := *loc.ProviderId
 			providerLocations[providerID] = append(providerLocations[providerID], loc)
 		}
 	}
+	llog.L().Infof("delet files  from providers,provider len: %d", len(providerLocations))
 
 	// 4. 按 provider_id 批量删除文件，并跟踪删除结果
 	providerDeletedSizes := make(map[uint32]uint64) // providerID -> deletedSize
@@ -267,6 +273,7 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	locationIDsFailed := make([]uint64, 0) // 删除失败的 location ID
 
 	for providerID, locations := range providerLocations {
+		llog.L().Infof("delet files loop providerlocations,providerID: %d", providerID)
 		st := storage.GetStorage(providerID)
 		if st == nil {
 			llog.L().Warnf("storage provider not found, id: %d", providerID)
@@ -278,9 +285,11 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 			}
 			continue
 		}
+		llog.L().Infof("delet files  get storage success,name: %s", st.GetName())
 
 		// 尝试使用批量删除接口
 		if batchDeleter, ok := st.(types.BatchDeleter); ok {
+			llog.L().Infof("provider id:%d support batch delete", providerID)
 			results, err := batchDeleter.BatchDelete(ctx, locations)
 
 			// 处理返回结果
@@ -427,7 +436,7 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	if len(fileIDs) == 0 {
 		return
 	}
-
+	llog.L().Infof("delete file history ids length: %d", len(fileIDs))
 	// 1. 批量获取所有文件的历史记录
 	allHistories := make([]*native.FileHistoryORM, 0)
 	for _, fileID := range fileIDs {
@@ -440,6 +449,7 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	}
 
 	if len(allHistories) == 0 {
+		llog.L().Infof("no file history need delete")
 		return
 	}
 
@@ -454,6 +464,7 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	// 3. 根据 hash 批量获取文件位置记录
 	providerLocations := make(map[uint32][]*native.FileLocationORM)
 	for hash := range hashSet {
+		llog.L().Infof("delete history get locations by hash:%s", hash)
 		locations, err := db.GetFileLocationsByBlake3Hash(hash)
 		if err != nil {
 			llog.L().Errorf("get file locations by hash failed, hash: %s, err: %v", hash, err)
@@ -468,6 +479,8 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 			providerLocations[providerID] = append(providerLocations[providerID], loc)
 		}
 	}
+
+	llog.L().Infof("delete history provider ids:%+v", maps.Keys(providerLocations))
 
 	// 4. 按 provider 批量删除历史文件
 	providerDeletedSizes := make(map[uint32]uint64)
@@ -704,7 +717,8 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 	}
 
 	// 7. Trigger storage dispatch (will handle multi-provider distribution)
-	go storage.Dispatch(ctx, uploadRecord)
+	// 使用独立的 context，避免 HTTP context 在请求结束后被取消
+	go storage.Dispatch(context.Background(), uploadRecord)
 
 	llog.L().Infof("created sync task for file %s to %d providers", *file.Id, len(validProviderIDs))
 	return nil

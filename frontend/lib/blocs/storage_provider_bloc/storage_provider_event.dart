@@ -23,7 +23,7 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     this.description,
     this.config,
     this.enabled,
-    this.order,
+    this.sortOrder,
     this.capacity,
     this.fileSizeLimit,
     this.encryptionKey,
@@ -37,7 +37,7 @@ class StorageProviderAddEvent extends StorageProviderEvent {
   final String? description;
   final String? config;
   final bool? enabled;
-  final int? order;
+  final int? sortOrder;
   final int? capacity;
   final int? fileSizeLimit;
   final String? encryptionKey;
@@ -54,7 +54,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     this.description,
     this.config,
     this.enabled,
-    this.order,
+    this.sortOrder,
     this.capacity,
     this.fileSizeLimit,
     this.defaultBound,
@@ -66,7 +66,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
   final String? description;
   final String? config;
   final bool? enabled;
-  final int? order;
+  final int? sortOrder;
   final int? capacity;
   final int? fileSizeLimit;
   final bool? defaultBound;

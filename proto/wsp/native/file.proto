@@ -132,65 +132,66 @@ message FileLocation {
   }];
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  // optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
   // 文件blake3哈希值，
-  optional string blake3_hash = 5 [(gorm.field).tag = {
+  optional string blake3_hash = 4 [(gorm.field).tag = {
     index: "idx_fl_bh, length:10"
     not_null: true
   }];
   // 存储介质文件id，可能不存在
-  optional string provider_file_id = 6 [(gorm.field).tag = {
+  optional string provider_file_id = 5 [(gorm.field).tag = {
     not_null: true
     default: "''"
   }];
 
   // 存储实例id，同一存储类型可能有多个实例
-  optional uint32 provider_id = 7 [(gorm.field).tag = {not_null: true}];
+  optional uint32 provider_id = 6 [(gorm.field).tag = {not_null: true}];
   // 文件在存储介质中的路径
-  optional string path = 8 [(gorm.field).tag = {
+  optional string path = 7 [(gorm.field).tag = {
     not_null: true
     default: "/"
   }];
   // 文件在存储介质中的哈希值
-  optional string hash = 9 [(gorm.field).tag = {
+  optional string hash = 8 [(gorm.field).tag = {
     not_null: true
     default: "''"
   }];
   // 上传状态，文件一般会先上传到本地服务，然后再上传到存储介质的服务
   // 所以客户端虽然上传完成了，但是文件实际还未上传到存储介质，此时无法获取到下载链接
-  optional LocationStatus status = 10;
+  optional LocationStatus status = 9;
   // 失败信息
-  optional string message = 11;
+  optional string message = 10;
   // 上传进度，百分比*1000, 也就是保留一位小数，比如543, 表示54.3%
-  optional uint32 progress = 12;
+  optional uint32 progress = 11;
   // 文件过期时间
-  optional google.protobuf.Timestamp expired_at = 13;
+  optional google.protobuf.Timestamp expired_at = 12;
   // 分块编号
-  optional uint32 chunk_number = 14 [(gorm.field).tag = {
+  optional uint32 chunk_number = 13 [(gorm.field).tag = {
     not_null: true
     default: "0"
   }];
   // 分块总数
-  optional uint32 chunk_total = 15 [(gorm.field).tag = {
+  optional uint32 chunk_total = 14 [(gorm.field).tag = {
     not_null: true
     default: "1"
   }];
   // 分块大小
-  optional uint64 chunk_size = 16;
+  optional uint64 chunk_size = 15;
   // 分块hash
-  optional string chunk_hash = 17;
-  optional bool encrypted = 18;
+  optional string chunk_hash = 16;
+  optional bool encrypted = 17;
 
   // 加密salt，随机生成的字符串
-  optional string encryption_salt = 19 [(gorm.field).tag = {default: "''"}];
+  optional string encryption_salt = 18 [(gorm.field).tag = {default: "''"}];
 
   // 文件在存储提供者上的实际存储大小（加密后）
-  optional uint64 size = 20;
+  optional uint64 size = 19;
   // 缓存状态（仅 Telegram 使用，UNCACHED/CACHING/CACHED）
-  optional CacheStatus cache_status = 21 [(gorm.field).tag = {
+  optional CacheStatus cache_status = 20 [(gorm.field).tag = {
     not_null: true
     default: "0"
   }];
+  optional string s3_key_flag = 21;
 }
 
 // 获取文件列表

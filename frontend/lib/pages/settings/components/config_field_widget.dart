@@ -93,8 +93,207 @@ Widget buildConfigField(
         ),
       );
     
+    case ConfigFieldType.STRING_LIST:
+      // 解析初始值
+      List<String> initialList = [];
+      if (initialValue != null) {
+        if (initialValue is List) {
+          initialList = initialValue.map((e) => e.toString()).toList();
+        } else if (initialValue.toString().isNotEmpty) {
+          initialList = [initialValue.toString()];
+        }
+      }
+      return _StringListField(
+        name: field.name,
+        label: field.label,
+        placeholder: field.placeholder,
+        helperText: field.helperText,
+        iconName: field.iconName,
+        required: field.required,
+        initialValue: initialList,
+      );
+    
     default:
       return const SizedBox.shrink();
+  }
+}
+
+/// 字符串列表字段组件
+/// 每行一个值，支持动态添加/删除行
+class _StringListField extends StatefulWidget {
+  final String name;
+  final String label;
+  final String placeholder;
+  final String helperText;
+  final String iconName;
+  final bool required;
+  final List<String> initialValue;
+
+  const _StringListField({
+    required this.name,
+    required this.label,
+    this.placeholder = '',
+    this.helperText = '',
+    this.iconName = '',
+    this.required = false,
+    this.initialValue = const [],
+  });
+
+  @override
+  State<_StringListField> createState() => _StringListFieldState();
+}
+
+class _StringListFieldState extends State<_StringListField> {
+  late List<String> _items;
+  late List<TextEditingController> _controllers;
+  late List<FocusNode> _focusNodes;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.from(widget.initialValue);
+    _controllers = _items.map((e) => TextEditingController(text: e)).toList();
+    _focusNodes = _items.map((_) => FocusNode()).toList();
+    // 如果没有初始项，添加一个空行
+    if (_controllers.isEmpty) {
+      _addRow();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addRow() {
+    setState(() {
+      _items.add('');
+      _controllers.add(TextEditingController());
+      _focusNodes.add(FocusNode());
+    });
+    // 聚焦到新添加的行
+    Future.microtask(() {
+      if (_focusNodes.isNotEmpty) {
+        _focusNodes.last.requestFocus();
+      }
+    });
+  }
+
+  void _removeRow(int index) {
+    setState(() {
+      _controllers[index].dispose();
+      _focusNodes[index].dispose();
+      _controllers.removeAt(index);
+      _focusNodes.removeAt(index);
+      _items.removeAt(index);
+    });
+    // 至少保留一行
+    if (_controllers.isEmpty) {
+      _addRow();
+    }
+  }
+
+  List<String> _getValues() {
+    return _controllers
+        .map((c) => c.text.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: FormBuilderField<List<String>>(
+        name: widget.name,
+        initialValue: widget.initialValue,
+        builder: (field) {
+          return InputDecorator(
+            decoration: InputDecoration(
+              labelText: widget.label,
+              helperText: widget.helperText.isNotEmpty ? widget.helperText : null,
+              prefixIcon: widget.iconName.isNotEmpty 
+                  ? Icon(_getIconData(widget.iconName)) 
+                  : null,
+              errorText: field.errorText,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...List.generate(_controllers.length, (index) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controllers[index],
+                            focusNode: _focusNodes[index],
+                            decoration: InputDecoration(
+                              hintText: widget.placeholder.isNotEmpty 
+                                  ? widget.placeholder 
+                                  : null,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              border: const OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              _items[index] = value;
+                              field.didChange(_getValues());
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, size: 20),
+                          onPressed: _controllers.length > 1
+                              ? () => _removeRow(index)
+                              : null,
+                          tooltip: '删除',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _addRow,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('添加'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        validator: widget.required
+            ? (value) {
+                final values = _getValues();
+                if (values.isEmpty) {
+                  return '请输入${widget.label}';
+                }
+                return null;
+              }
+            : null,
+      ),
+    );
   }
 }
 
@@ -114,6 +313,7 @@ IconData _getIconData(String iconName) {
     'cloud': Icons.cloud,
     'lock': Icons.lock,
     'chat': Icons.chat,
+    'webhook': Icons.sync_alt,
   };
   return iconMap[iconName] ?? Icons.info;
 }

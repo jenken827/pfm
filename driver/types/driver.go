@@ -9,13 +9,14 @@ import (
 
 // StorageProviderFileInfo 存储提供商文件信息
 type StorageProviderFileInfo struct {
-	ID        string
-	Name      string
-	Path      string
-	ChunkSize uint64 // 单位：字节 文件可能进行了加密操作，这个是加密后的大小
-	ChunkHash string
-	Hash      string // 文件hash，如果触发了分片，记录在第一个分片上
-	Size      uint64 // 文件总大小，如果触发了分片，记录在第一个分片上
+	ID         string
+	Name       string
+	Path       string
+	ChunkSize  uint64 // 单位：字节 文件可能进行了加密操作，这个是加密后的大小
+	ChunkHash  string
+	Hash       string // 文件hash，如果触发了分片，记录在第一个分片上
+	Size       uint64 // 文件总大小，如果触发了分片，记录在第一个分片上
+	S3KeyFlag  string // 123pan 专用：用于标识文件在 S3 存储中的唯一标识
 }
 
 // ReadSeekCloser 支持定位的 Reader（用于断点续传）

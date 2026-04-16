@@ -1033,8 +1033,8 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 重新分发上传任务
-	go storage.Dispatch(ctx, record)
+	// 重新分发上传任务（使用独立的 context，避免 HTTP context 在请求结束后被取消）
+	go storage.Dispatch(context.Background(), record)
 
 	return nil
 }

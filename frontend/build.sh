@@ -42,6 +42,10 @@ show_help() {
 EOF
 }
 
+//关于页面路径
+ABOUT_FILE="lib/pages/settings/about_page.dart"
+
+
 # 检查必要的命令是否存在
 check_command() {
     if ! command -v "$1" &> /dev/null; then
@@ -162,7 +166,6 @@ restore_build_number() {
 
 # 替换about页面中的commit hash占位符
 replace_commit_hash_in_about() {
-    ABOUT_FILE="lib/pages/settings/about_page.dart"
     if [[ ! -f "$ABOUT_FILE" ]]; then
         echo "⚠️  警告: about页面文件未找到: $ABOUT_FILE"
         return 0
@@ -191,7 +194,6 @@ replace_commit_hash_in_about() {
 
 # 恢复about页面中的commit hash占位符
 restore_commit_hash_in_about() {
-    ABOUT_FILE="lib/pages/settings_about/about_page.dart"
     if [[ -f "$ABOUT_FILE.backup" ]]; then
         echo "🔄 恢复about页面中的commit hash占位符..."
         cp "$ABOUT_FILE.backup" "$ABOUT_FILE"

@@ -6,6 +6,7 @@ import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/pages/settings/components/config_field_widget.dart';
 import 'package:pfm/pages/settings/components/storage_provider_tile.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/utils/format.dart';
 import 'dart:convert';
@@ -286,7 +287,7 @@ class _StorageProviderView extends StatelessWidget {
                         prefixIcon: Icon(Icons.sort),
                       ),
                       keyboardType: TextInputType.number,
-                      initialValue: (provider?.order ?? 0).toString(),
+                      initialValue: (provider?.sortOrder ?? 0).toString(),
                     ),
 
                     const SizedBox(height: 24),
@@ -507,9 +508,19 @@ class _StorageProviderView extends StatelessWidget {
                     final configMap = <String, dynamic>{};
                     for (final field in effectiveTypeInfo.configFields) {
                       final fieldValue = formData[field.name];
-                      if (fieldValue != null &&
-                          fieldValue.toString().isNotEmpty) {
-                        configMap[field.name] = fieldValue;
+                      if (fieldValue != null) {
+                        // STRING_LIST 类型：直接使用 List<String>
+                        if (field.fieldType == ConfigFieldType.STRING_LIST) {
+                          final values = (fieldValue as List)
+                              .whereType<String>()
+                              .where((s) => s.isNotEmpty)
+                              .toList();
+                          if (values.isNotEmpty) {
+                            configMap[field.name] = values;
+                          }
+                        } else if (fieldValue.toString().isNotEmpty) {
+                          configMap[field.name] = fieldValue;
+                        }
                       }
                     }
                     if (configMap.isNotEmpty) {
@@ -534,7 +545,7 @@ class _StorageProviderView extends StatelessWidget {
                                 : null,
                             config: configJson,
                             enabled: formData['enabled'] as bool? ?? true,
-                            order: orderValue,
+                            sortOrder: orderValue,
                             capacity: capacity,
                             fileSizeLimit: fileSizeLimit,
                             encryptionKey:
@@ -560,7 +571,7 @@ class _StorageProviderView extends StatelessWidget {
                                 : null,
                             config: configJson,
                             enabled: formData['enabled'] as bool?,
-                            order: orderValue,
+                            sortOrder: orderValue,
                             capacity: capacity,
                             fileSizeLimit: fileSizeLimit,
                             defaultBound: formData['default_bound'] as bool?,

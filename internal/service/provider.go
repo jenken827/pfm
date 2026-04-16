@@ -43,7 +43,7 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 		TotalCapacity: req.TotalCapacity,
 		UsedCapacity:  new(uint64),
 		Enabled:       req.Enabled,
-		Order:         req.Order,
+		SortOrder:     req.SortOrder,
 		FileSizeLimit: req.FileSizeLimit,
 		DefaultBound:  req.DefaultBound,
 	}
@@ -112,8 +112,8 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 	if req.Enabled != nil {
 		orm.Enabled = req.Enabled
 	}
-	if req.Order != nil {
-		orm.Order = req.Order
+	if req.SortOrder != nil {
+		orm.SortOrder = req.SortOrder
 	}
 	if req.TotalCapacity != nil {
 		orm.TotalCapacity = req.TotalCapacity
