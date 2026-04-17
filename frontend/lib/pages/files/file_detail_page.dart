@@ -11,6 +11,7 @@ import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/services/logger.dart';
+import 'package:pfm/utils/file_utils.dart';
 
 /// 文件详情页面（从API获取完整数据）
 class FileDetailPage extends StatefulWidget {
@@ -125,6 +126,8 @@ class _FileDetailPageState extends State<FileDetailPage> {
             _buildFileHeader(context, file),
             const SizedBox(height: 24),
             _buildBasicInfo(context, file),
+            const SizedBox(height: 24),
+            _buildTagsSection(context),
             const SizedBox(height: 24),
             _buildLocationDistribution(context),
             const SizedBox(height: 24),
@@ -266,8 +269,8 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final isTelegram = loc.providerType == StorageProviderType.TELEGRAM;
 
     // Telegram 缓存状态
-    final cacheStatusText = isTelegram && loc.cacheStatus != null
-        ? _getCacheStatusText(loc.cacheStatus!)
+    final cacheStatusText = isTelegram
+        ? _getCacheStatusText(loc.cacheStatus)
         : null;
     // 实际存储大小（可能是加密后）
     final storedSize = loc.size > 0 ? _formatFileSize(loc.size.toInt()) : null;
@@ -346,7 +349,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: loc.cacheStatus == CacheStatus.CACHED
-                    ? Colors.green.withOpacity(0.2)
+                    ? Colors.green.withValues(alpha: 0.2)
                     : Theme.of(context).colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -381,8 +384,10 @@ class _FileDetailPageState extends State<FileDetailPage> {
                 final fileName = widget.file.name.isNotEmpty
                     ? widget.file.name
                     : 'unnamed';
-                final savePath = '${downloadDir!.path}/$fileName';
-                if (!mounted) return;
+                final initialPath = '${downloadDir!.path}/$fileName';
+                // 生成唯一文件路径，避免覆盖
+                final savePath = await FileUtils.getUniqueFilePath(initialPath);
+                if (!context.mounted) return;
                 context.read<TransferBloc>().add(
                   TransferAddDownloadEvent(
                     fileId: widget.file.id,
@@ -404,6 +409,151 @@ class _FileDetailPageState extends State<FileDetailPage> {
         ],
       ),
     );
+  }
+
+  // ==================== 标签管理 ====================
+
+  Widget _buildTagsSection(BuildContext context) {
+    final tags = _detailData?.tags ?? [];
+
+    return _buildSection(
+      context,
+      title: '标签',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (tags.isEmpty)
+            Text(
+              '暂无标签',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in tags)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      tag,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonal(
+              onPressed: () => _showEditTagsDialog(context),
+              child: const Text('编辑标签'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 显示编辑标签对话框
+  Future<void> _showEditTagsDialog(BuildContext context) async {
+    final currentTags = List<String>.from(_detailData?.tags ?? []);
+    final controller = TextEditingController(text: currentTags.join(','));
+
+    final result = await showDialog<List<String>?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑标签'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '输入标签，用逗号分隔',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              // 解析输入的标签
+              final input = controller.text.trim();
+              final newTags = input.isEmpty
+                  ? <String>[]
+                  : input
+                        .split(',')
+                        .map((tag) => tag.trim())
+                        .where((tag) => tag.isNotEmpty)
+                        .toList();
+
+              Navigator.pop(context, newTags);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      _updateFileTags(result);
+    }
+  }
+
+  // 更新文件标签
+  Future<void> _updateFileTags(List<String> newTags) async {
+    final fileId = _detailData?.file?.id;
+    if (fileId == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final repo = FmRepository();
+      final result = await repo.updateFileTags(fileId: fileId, tags: newTags);
+
+      if (result.success) {
+        // 刷新详情以获取最新的标签
+        await _loadDetail();
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('标签更新失败: ${result.message}')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('标签更新失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   // ==================== 文件历史 ====================
@@ -465,6 +615,33 @@ class _FileDetailPageState extends State<FileDetailPage> {
               fontFamily: 'monospace',
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
+          ),
+          const SizedBox(width: 8),
+          // 预览按钮（仅对可预览的文件类型显示）
+          if (_isHistoryPreviewable(h))
+            IconButton(
+              icon: const Icon(Icons.preview, size: 18),
+              onPressed: () => _previewHistory(h),
+              tooltip: '预览此版本',
+              visualDensity: VisualDensity.compact,
+            ),
+          // 下载按钮
+          IconButton(
+            icon: const Icon(Icons.download, size: 18),
+            onPressed: () => _downloadHistory(h),
+            tooltip: '下载此版本',
+            visualDensity: VisualDensity.compact,
+          ),
+          // 删除按钮
+          IconButton(
+            icon: Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => _confirmDeleteHistory(h),
+            tooltip: '删除此版本',
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -549,6 +726,41 @@ class _FileDetailPageState extends State<FileDetailPage> {
         type == FileType.DOCUMENT;
   }
 
+  /// 判断历史版本是否可预览
+  bool _isHistoryPreviewable(FileHistory h) {
+    // 获取文件类型
+    final type = widget.file.type;
+    return type == FileType.IMAGE ||
+        type == FileType.VIDEO ||
+        type == FileType.AUDIO ||
+        type == FileType.DOCUMENT;
+  }
+
+  /// 预览文件历史版本
+  Future<void> _previewHistory(FileHistory h) async {
+    getLogger().debug("priview icon button pressed,preview file");
+    try {
+      // 跳转到预览页面，传递历史版本 ID
+      final historyFile = File(
+        id: 'history:${h.id}', // 使用特殊 ID 标识历史版本
+        name: widget.file.name,
+        size: h.size,
+        hash: h.hash,
+        type: widget.file.type,
+        mime: widget.file.mime,
+      );
+
+      context.push(FilePreviewRoute().location, extra: historyFile);
+    } catch (e) {
+      getLogger().error('预览历史版本失败: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('预览失败: $e')));
+    }
+  }
+
+  /// 下载文件历史版本
   IconData _getFileIcon(FileType type) {
     switch (type) {
       case FileType.FOLDER:
@@ -669,6 +881,133 @@ class _FileDetailPageState extends State<FileDetailPage> {
     return DateFormat('yyyy-MM-dd HH:mm:ss').format(dt);
   }
 
+  /// 下载文件历史版本
+  Future<void> _downloadHistory(FileHistory h) async {
+    try {
+      final downloadDir = await getDownloadsDirectory();
+      if (!mounted) return;
+
+      // 获取文件名
+      String fileName = 'history_file';
+      if (h.fileId.isNotEmpty) {
+        // 尝试从文件信息获取文件名
+        final file = _detailData?.file;
+        if (file != null && file.name.isNotEmpty) {
+          fileName = file.name;
+        }
+      }
+
+      // 分离文件名和扩展名，正确插入历史版本标记
+      final lastDotIndex = fileName.lastIndexOf('.');
+      String baseName;
+      String extension = '';
+
+      if (lastDotIndex > 0) {
+        baseName = fileName.substring(0, lastDotIndex);
+        extension = fileName.substring(lastDotIndex); // 包含点号
+      } else {
+        baseName = fileName;
+      }
+
+      final historyFileName = '${baseName}_history_${h.id}$extension';
+      final initialPath = '${downloadDir!.path}/$historyFileName';
+
+      // 生成唯一文件路径，避免覆盖
+      final savePath = await FileUtils.getUniqueFilePath(initialPath);
+
+      if (!mounted) return;
+
+      // 使用特殊的 fileId 格式：history:{historyId}
+      final historyFileId = 'history:${h.id}';
+
+      context.read<TransferBloc>().add(
+        TransferAddDownloadEvent(
+          fileId: historyFileId,
+          filename: historyFileName,
+          fileSize: h.size.toInt(),
+          savePath: savePath,
+          fileHash: h.hash,
+        ),
+      );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已添加到下载队列')));
+    } catch (e) {
+      getLogger().error('下载历史版本失败: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
+    }
+  }
+
+  /// 确认删除文件历史版本
+  Future<void> _confirmDeleteHistory(FileHistory h) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text(
+          '确定要删除这个历史版本吗？\n'
+          '版本：v${_formatTimestamp(h.versionNumber)}\n'
+          '大小：${_formatFileSize(h.size.toInt())}\n\n'
+          '此操作不可撤销！',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteHistory(h.id.toInt());
+    }
+  }
+
+  /// 删除文件历史版本
+  Future<void> _deleteHistory(int historyId) async {
+    try {
+      setState(() => _isLoading = true);
+
+      final repo = FmRepository();
+      final result = await repo.deleteFileHistory([historyId]);
+
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
+
+      if (result.success) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('删除成功')));
+        // 刷新文件详情
+        await _loadDetail();
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
+      }
+    } catch (e) {
+      getLogger().error('删除历史版本失败: $e');
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+    }
+  }
+
   /// Show sync dialog to select target providers
   Future<void> _showSyncDialog(BuildContext context) async {
     final repo = FmRepository();
@@ -700,9 +1039,11 @@ class _FileDetailPageState extends State<FileDetailPage> {
         results[1] as ApiResult<GetStorageProviderTypesRespData>;
 
     if (!providersResult.success || providersResult.data == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(providersResult.message ?? '获取可用提供者失败')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(providersResult.message ?? '获取可用提供者失败')),
+        );
+      }
       return;
     }
 
@@ -710,13 +1051,17 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final providerTypes = typesResult.data?.types.toList() ?? [];
 
     if (availableProviders.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('没有可用的存储提供者')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('没有可用的存储提供者')));
+      }
       return;
     }
 
     // Show multi-select dialog
+    if (!context.mounted) return;
+
     final selectedProviderIds = await showDialog<List<int>>(
       context: context,
       builder: (context) => _SyncProviderSelectionDialog(
@@ -737,7 +1082,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
     );
     setState(() => _isLoading = false);
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (syncResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(

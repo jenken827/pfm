@@ -86,10 +86,11 @@ func RestoreFromTrash(ids []string) error {
 		Update("deleted_at", nil).Error
 }
 
-// GetTrashList 获取回收站文件列表
+// GetTrashList 获取回收站文件列表（分页）
+// 只显示顶级被删除的文件：parent_id 指向未删除的文件夹
 func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
 	ctx := context.Background()
-	
+
 	// 默认每页500条
 	if pageSize == 0 {
 		pageSize = 500
@@ -104,7 +105,8 @@ func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
 		return nil, 0, err
 	}
 
-	// 分页查询
+	// 分页查询 - 显示所有有软删除标记的文件
+	// 因为删除文件夹时只会标记文件夹本身，所以有软删除标记的都是用户显式删除的
 	var files []*native.FileORM
 	if err := db.WithContext(ctx).
 		Unscoped(). // 查询包含软删除的记录
@@ -126,6 +128,48 @@ func DeletePermanently(ids []string) error {
 		Unscoped(). // 永久删除，绕过软删除
 		Where("id IN ?", ids).
 		Delete(&native.FileORM{}).Error
+}
+
+// GetAllChildrenIDs 递归获取文件夹下的所有子文件和子文件夹的ID（包括软删除的）
+func GetAllChildrenIDs(parentIDs []string) ([]string, error) {
+	if len(parentIDs) == 0 {
+		return nil, nil
+	}
+
+	ctx := context.Background()
+	allIDs := make([]string, 0)
+
+	// 使用 BFS 遍历所有子节点
+	queue := make([]string, len(parentIDs))
+	copy(queue, parentIDs)
+
+	for len(queue) > 0 {
+		// 取出当前层的所有父ID
+		currentParents := queue
+		queue = make([]string, 0)
+
+		// 查询这些父ID下的所有子文件和子文件夹（包括软删除的）
+		var children []*native.FileORM
+		if err := db.WithContext(ctx).Unscoped().
+			Model(&native.FileORM{}).
+			Where("parent_id IN ?", currentParents).
+			Find(&children).Error; err != nil {
+			return nil, err
+		}
+
+		// 收集子项ID，并添加到队列中继续处理
+		for _, child := range children {
+			if child.Id != nil {
+				allIDs = append(allIDs, *child.Id)
+				// 如果是文件夹，添加到队列继续处理
+				if child.Type != nil && *child.Type == int32(native.FileType_FOLDER) {
+					queue = append(queue, *child.Id)
+				}
+			}
+		}
+	}
+
+	return allIDs, nil
 }
 
 // EmptyTrash 清空回收站
@@ -345,4 +389,31 @@ func DeleteFileHistoryByFileIDs(fileIDs []string) error {
 	return db.Where("file_id IN ?", fileIDs).Delete(&native.FileHistoryORM{}).Error
 }
 
+// GetFileHistoryByID 根据历史记录 ID 获取历史记录
+func GetFileHistoryByID(id uint64) (*native.FileHistoryORM, error) {
+	ctx := context.Background()
+	var history native.FileHistoryORM
+	err := db.WithContext(ctx).Where("id = ?", id).First(&history).Error
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
 
+// DeleteFileHistoryByIDs 批量删除历史记录（根据 ID）
+func DeleteFileHistoryByIDs(ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	return db.Where("id IN ?", ids).Delete(&native.FileHistoryORM{}).Error
+}
+
+// DeleteFileLocationsByBlake3Hash 根据 blake3_hash 删除文件位置记录
+func DeleteFileLocationsByBlake3Hash(hash string) error {
+	if hash == "" {
+		return nil
+	}
+
+	return db.Where("blake3_hash = ?", hash).Delete(&native.FileLocationORM{}).Error
+}

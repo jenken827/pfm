@@ -13,7 +13,7 @@ class TrashPage extends StatefulWidget {
 
 class _TrashPageState extends State<TrashPage> {
   List<File> _files = [];
-  Set<String> _selectedIds = {};
+  final Set<String> _selectedIds = {};
   bool _isLoading = true;
   String? _error;
 
@@ -80,21 +80,21 @@ class _TrashPageState extends State<TrashPage> {
       final result = await repo.restoreFromTrash(_selectedIds.toList());
 
       if (result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件已恢复')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件已恢复')));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? '恢复失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message ?? '恢复失败')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('恢复失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
       }
     }
   }
@@ -130,21 +130,21 @@ class _TrashPageState extends State<TrashPage> {
       final result = await repo.deletePermanently(_selectedIds.toList());
 
       if (result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件已彻底删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件已彻底删除')));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? '删除失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
       }
     }
   }
@@ -180,21 +180,21 @@ class _TrashPageState extends State<TrashPage> {
       final result = await repo.emptyTrash();
 
       if (result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('回收站已清空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('回收站已清空')));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? '清空失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message ?? '清空失败')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清空失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('清空失败: $e')));
       }
     }
   }
@@ -239,7 +239,11 @@ class _TrashPageState extends State<TrashPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: 16),
             Text(_error!, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 16),
@@ -254,7 +258,11 @@ class _TrashPageState extends State<TrashPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.delete_outline, size: 64, color: Theme.of(context).colorScheme.outline),
+            Icon(
+              Icons.delete_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
             const SizedBox(height: 16),
             Text('回收站是空的', style: Theme.of(context).textTheme.bodyLarge),
           ],

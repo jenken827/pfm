@@ -43,6 +43,12 @@ func fileStreamRoute(mux *http.ServeMux) {
 
 	// 文件下载（强制下载）
 	mux.HandleFunc("/api/file/stream/download", api.DownloadFileHandler)
+
+	// 文件历史版本预览
+	mux.HandleFunc("/api/file/history/preview", api.PreviewFileHistoryHandler)
+
+	// 文件历史版本下载
+	mux.HandleFunc("/api/file/history/download", api.DownloadFileHistoryHandler)
 }
 
 // publicDownloadRoute 公共下载路由（无需认证，签名验证）

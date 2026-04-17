@@ -191,7 +191,7 @@ class FmRepository {
   }
 
   /// 创建目录
-  Future<ApiResult<void>> createDir({
+  Future<ApiResult<CreateDirRespData>> createDir({
     required String name,
     required String parentId,
     required bool enableEncryption,
@@ -210,8 +210,12 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
+      final respData = extractRespData<CreateDirRespData>(
+        data,
+        CreateDirRespData(),
+      );
+      
+      return ApiResult(data: respData, success: true);
     } on DioException catch (e) {
       _logger.error('创建目录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -406,7 +410,7 @@ class FmRepository {
         maxAccessCount: maxAccessCount,
         remark: remark,
       );
-      
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateShareLink',
         data: req.toProto3Json(),
@@ -431,7 +435,7 @@ class FmRepository {
   Future<ApiResult<void>> cancelShareLink(String shareCode) async {
     try {
       final req = CancelShareLinkReq(shareCode: shareCode);
-      
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CancelShareLink',
         data: req.toProto3Json(),
@@ -455,7 +459,7 @@ class FmRepository {
   Future<ApiResult<void>> restoreFromTrash(List<String> ids) async {
     try {
       final req = RestoreFromTrashReq()..ids.addAll(ids);
-      
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/RestoreFromTrash',
         data: req.toProto3Json(),
@@ -477,7 +481,7 @@ class FmRepository {
   Future<ApiResult<void>> deletePermanently(List<String> ids) async {
     try {
       final req = DeletePermanentlyReq()..ids.addAll(ids);
-      
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/DeletePermanently',
         data: req.toProto3Json(),
@@ -499,7 +503,7 @@ class FmRepository {
   Future<ApiResult<void>> emptyTrash() async {
     try {
       final req = EmptyTrashReq();
-      
+
       final response = await _dio.post(
         '$_baseUrl/native.FileService/EmptyTrash',
         data: req.toProto3Json(),
@@ -515,6 +519,34 @@ class FmRepository {
       _logger.error('清空回收站失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
+  }
+
+  /// 删除文件历史版本
+  Future<ApiResult<void>> deleteFileHistory(List<int> ids) async {
+    try {
+      final req = DeleteFileHistoryReq()
+        ..ids.addAll(ids.map((id) => Int64(id)));
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/DeleteFileHistory',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('删除文件历史版本失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('删除文件历史版本失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取文件历史版本下载 URL
+  String getFileHistoryDownloadUrl(int historyId) {
+    return '$_baseUrl/api/file/history/download?id=$historyId';
   }
 
   /// 获取回收站文件列表
@@ -1088,6 +1120,60 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('同步文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新文件标签
+  Future<ApiResult<void>> updateFileTags({
+    required String fileId,
+    required List<String> tags,
+  }) async {
+    try {
+      final req = UpdateFileTagsReq()
+        ..fileId = fileId
+        ..tags.addAll(tags);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/UpdateFileTags',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('更新文件标签失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新文件标签失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取文件标签
+  Future<ApiResult<List<String>>> getFileTags({
+    required String fileId,
+  }) async {
+    try {
+      final req = GetFileTagsReq()..fileId = fileId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFileTags',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetFileTagsRespData>(
+        data,
+        GetFileTagsRespData(),
+      );
+      return ApiResult(success: true, data: respData.tags);
+    } on DioException catch (e) {
+      _logger.error('获取文件标签失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取文件标签失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

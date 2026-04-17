@@ -42,37 +42,26 @@ func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.Fi
 }
 
 // CreateDir 创建文件夹
-func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
+func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.Err) {
 	providerIds := req.ProviderIds
-	// 如果客户端未传 provider_ids，使用默认绑定的存储提供者
-	if len(providerIds) == 0 {
-		defaultProviders, err := db.GetDefaultBoundEnabledProviders()
-		if err != nil {
-			llog.L().Errorf("get default bound providers failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		if len(defaultProviders) == 0 {
-			return &models.Err{
-				E: errors.New("no default bound provider available, please specify provider_ids or set default_bound in storage providers"),
-				C: native.RespCode_PARAMS_ERROR,
-			}
-		}
 
-		// 提取ID列表
-		providerIds = make([]uint32, len(defaultProviders))
-		for i, p := range defaultProviders {
-			providerIds[i] = *p.Id
+	// 如果客户端未传 provider_ids，按优先级选择存储提供者
+	if len(providerIds) == 0 {
+		var mErr *models.Err
+		providerIds, mErr = getInheritedProviderIds(req.ParentId)
+		if mErr != nil {
+			return "", mErr
 		}
 	} else {
 		// 验证提供者是否存在且启用（批量查询）
 		providers, err := db.GetEnabledProvidersByIds(providerIds)
 		if err != nil {
 			llog.L().Errorf("query providers failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+			return "", &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 		// 验证所有提供的ID都有效
 		if len(providers) != len(providerIds) {
-			return &models.Err{
+			return "", &models.Err{
 				E: errors.New("some providers are invalid or disabled"),
 				C: native.RespCode_PARAMS_ERROR,
 			}
@@ -83,7 +72,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	providerIdsJSON, err := json.Marshal(providerIds)
 	if err != nil {
 		llog.L().Errorf("marshal provider_ids failed: %v", err)
-		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 	boundProviderIds := string(providerIdsJSON)
 
@@ -96,9 +85,56 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) *models.Err {
 	}
 	e := db.CreateFile(f)
 	if e != nil {
-		return &models.Err{E: e, C: native.RespCode_DB_ERROR}
+		return "", &models.Err{E: e, C: native.RespCode_DB_ERROR}
 	}
-	return nil
+
+	// 返回新创建的目录 ID
+	if f.Id == nil {
+		return "", &models.Err{E: errors.New("failed to get created directory ID"), C: native.RespCode_INTERNAL_ERROR}
+	}
+	return *f.Id, nil
+}
+
+// getInheritedProviderIds 获取继承的存储提供者ID列表
+// 优先级：父文件夹绑定 > 默认绑定
+func getInheritedProviderIds(parentID *string) ([]uint32, *models.Err) {
+	// 1. 尝试从父文件夹获取绑定的存储提供者
+	if parentID != nil && *parentID != "" {
+		parentFile, err := db.GetFileByID(*parentID)
+		if err == nil && parentFile != nil && parentFile.BoundProviderIds != nil && *parentFile.BoundProviderIds != "" {
+			// 解析父文件夹的绑定
+			var providerIds []uint32
+			if err := json.Unmarshal([]byte(*parentFile.BoundProviderIds), &providerIds); err == nil && len(providerIds) > 0 {
+				// 验证这些提供者是否仍然有效
+				providers, dbErr := db.GetEnabledProvidersByIds(providerIds)
+				if dbErr == nil && len(providers) > 0 {
+					llog.L().Infof("using parent folder's bound providers: %v", providerIds)
+					return providerIds, nil
+				}
+			}
+		}
+	}
+
+	// 2. 父文件夹没有绑定或无效，使用默认绑定的存储提供者
+	defaultProviders, err := db.GetDefaultBoundEnabledProviders()
+	if err != nil {
+		llog.L().Errorf("get default bound providers failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	if len(defaultProviders) == 0 {
+		return nil, &models.Err{
+			E: errors.New("no default bound provider available, please specify provider_ids or set default_bound in storage providers"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 提取ID列表
+	providerIds := make([]uint32, len(defaultProviders))
+	for i, p := range defaultProviders {
+		providerIds[i] = *p.Id
+	}
+	llog.L().Infof("using default bound providers: %v", providerIds)
+	return providerIds, nil
 }
 
 // UpdateDir 更新文件夹
@@ -145,18 +181,22 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 }
 
 // DeleteFile 删除文件（移动到回收站）
+// 只软删除指定的文件，不递归删除子文件
+// 回收站中只显示被删除的文件夹本身，不显示子文件
 func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 	ids := req.Ids
 	if len(ids) == 0 {
 		return nil
 	}
 
-	// 移动到回收站（软删除）
+	// 只软删除指定的文件，不递归删除子文件
+	// 子文件会通过 parent_id 关联到已删除的文件夹
 	if err := db.DeleteFiles(ids); err != nil {
 		llog.L().Errorf("DeleteFiles failed, err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
+	llog.L().Infof("deleted %d files", len(ids))
 	return nil
 }
 
@@ -206,18 +246,72 @@ func GetAvailableProvidersForSync(ctx context.Context, fileHash string) ([]*nati
 }
 
 // RestoreFromTrash 从回收站恢复文件
+// 恢复时需要递归恢复所有父级目录
 func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *models.Err {
 	if len(req.Ids) == 0 {
 		return nil
 	}
 
-	if err := db.RestoreFromTrash(req.Ids); err != nil {
+	// 收集所有需要恢复的文件ID（包括父级目录）
+	allRestoreIDs := make([]string, 0)
+	allRestoreIDs = append(allRestoreIDs, req.Ids...)
+
+	// 递归恢复父级目录
+	for _, fileID := range req.Ids {
+		parentIDs, err := getDeletedParentIDs(fileID)
+		if err != nil {
+			llog.L().Errorf("get deleted parent IDs failed: %v", err)
+			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		allRestoreIDs = append(allRestoreIDs, parentIDs...)
+	}
+
+	llog.L().Infof("restoring %d files (including %d parents)", len(allRestoreIDs), len(allRestoreIDs)-len(req.Ids))
+
+	if err := db.RestoreFromTrash(allRestoreIDs); err != nil {
 		llog.L().Errorf("restore from trash failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("restored %d files from trash", len(req.Ids))
+	llog.L().Infof("restored %d files from trash", len(allRestoreIDs))
 	return nil
+}
+
+// getDeletedParentIDs 获取所有被删除的父级目录ID
+func getDeletedParentIDs(fileID string) ([]string, error) {
+	parentIDs := make([]string, 0)
+	currentID := fileID
+
+	for {
+		// 获取当前文件信息
+		file, err := db.GetFileByID(currentID)
+		if err != nil {
+			break
+		}
+
+		// 检查 parent_id
+		if file.ParentId == nil || *file.ParentId == "" {
+			break
+		}
+
+		parentID := *file.ParentId
+
+		// 获取父文件信息
+		parentFile, err := db.GetFileByID(parentID)
+		if err != nil {
+			break
+		}
+
+		// 检查父文件是否被软删除
+		if parentFile.DeletedAt != nil {
+			parentIDs = append(parentIDs, parentID)
+			currentID = parentID
+		} else {
+			break
+		}
+	}
+
+	return parentIDs, nil
 }
 
 // deleteFilesFromProviders 从存储提供者批量删除文件（内部函数）
@@ -402,6 +496,17 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 	fileIDs := make([]string, len(req.Ids))
 	copy(fileIDs, req.Ids)
 
+	// 获取所有子文件和子文件夹的ID（包括软删除的）
+	allChildrenIDs, err := db.GetAllChildrenIDs(fileIDs)
+	if err != nil {
+		llog.L().Errorf("get all children IDs failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 合并指定的文件ID和所有子文件ID
+	allFileIDs := append(fileIDs, allChildrenIDs...)
+	llog.L().Infof("permanently deleting %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
+
 	// 异步执行删除操作
 	go func() {
 		defer func() {
@@ -414,18 +519,18 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 		asyncCtx := context.Background()
 
 		// 1. 删除文件的历史记录和对应的存储提供者上的文件
-		deleteFileHistories(asyncCtx, fileIDs)
+		deleteFileHistories(asyncCtx, allFileIDs)
 
 		// 2. 从存储提供者删除当前文件
-		deleteFilesFromProviders(asyncCtx, fileIDs)
+		deleteFilesFromProviders(asyncCtx, allFileIDs)
 
 		// 3. 永久删除数据库记录
-		if err := db.DeletePermanently(fileIDs); err != nil {
+		if err := db.DeletePermanently(allFileIDs); err != nil {
 			llog.L().Errorf("delete permanently failed: %v", err)
 			return
 		}
 
-		llog.L().Infof("permanently deleted %d files", len(fileIDs))
+		llog.L().Infof("permanently deleted %d files", len(allFileIDs))
 	}()
 
 	return nil
@@ -549,6 +654,99 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	}
 }
 
+// DeleteFileHistory 删除文件历史版本
+func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// 1. 获取所有历史记录
+	var histories []*native.FileHistoryORM
+	for _, id := range ids {
+		history, err := db.GetFileHistoryByID(id)
+		if err != nil {
+			llog.L().Errorf("get file history failed, id: %d, err: %v", id, err)
+			continue
+		}
+		histories = append(histories, history)
+	}
+
+	if len(histories) == 0 {
+		return nil
+	}
+
+	// 2. 收集所有历史记录的 hash
+	hashSet := make(map[string]bool)
+	for _, history := range histories {
+		if history.Hash != nil && *history.Hash != "" {
+			hashSet[*history.Hash] = true
+		}
+	}
+
+	// 3. 根据 hash 批量获取文件位置记录
+	providerLocations := make(map[uint32][]*native.FileLocationORM)
+	for hash := range hashSet {
+		locations, err := db.GetFileLocationsByBlake3Hash(hash)
+		if err != nil {
+			llog.L().Errorf("get file locations by hash failed, hash: %s, err: %v", hash, err)
+			continue
+		}
+
+		for _, loc := range locations {
+			if loc.ProviderId == nil {
+				continue
+			}
+			providerID := *loc.ProviderId
+			providerLocations[providerID] = append(providerLocations[providerID], loc)
+		}
+	}
+
+	// 4. 从各个存储提供者删除文件
+	for providerID, locations := range providerLocations {
+		storageInstance := storage.GetStorage(providerID)
+		if storageInstance == nil {
+			llog.L().Errorf("storage not found, provider_id: %d", providerID)
+			continue
+		}
+
+		// 检查是否支持批量删除
+		if batchDeleter, ok := storageInstance.(types.BatchDeleter); ok {
+			results, err := batchDeleter.BatchDelete(ctx, locations)
+			if err != nil {
+				llog.L().Errorf("batch delete files from provider failed, provider_id: %d, err: %v", providerID, err)
+			} else {
+				// 部分成功，记录失败的记录
+				for _, result := range results {
+					if !result.Success {
+						llog.L().Errorf("delete file location %d failed: %v", result.ID, result.Error)
+					}
+				}
+			}
+			llog.L().Infof("deleted %d history files from provider %d", len(locations), providerID)
+		} else {
+			llog.L().Warnf("storage provider %d does not support batch delete", providerID)
+		}
+	}
+
+	// 5. 删除文件位置记录
+	for _, history := range histories {
+		if history.Hash != nil {
+			if err := db.DeleteFileLocationsByBlake3Hash(*history.Hash); err != nil {
+				llog.L().Errorf("delete file locations failed, hash: %s, err: %v", *history.Hash, err)
+			}
+		}
+	}
+
+	// 6. 删除历史记录
+	if err := db.DeleteFileHistoryByIDs(ids); err != nil {
+		llog.L().Errorf("delete file history failed, err: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	llog.L().Infof("deleted %d file history records", len(histories))
+	return nil
+}
+
 // EmptyTrash 清空回收站
 func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	// 1. 获取所有回收站文件
@@ -568,7 +766,18 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 		fileIDs[i] = *file.Id
 	}
 
-	// 3. 异步执行删除操作
+	// 3. 获取所有子文件和子文件夹的ID（包括软删除的）
+	allChildrenIDs, err := db.GetAllChildrenIDs(fileIDs)
+	if err != nil {
+		llog.L().Errorf("get all children IDs failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 合并指定的文件ID和所有子文件ID
+	allFileIDs := append(fileIDs, allChildrenIDs...)
+	llog.L().Infof("emptying trash: %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
+
+	// 4. 异步执行删除操作
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -578,16 +787,19 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 
 		asyncCtx := context.Background()
 
-		// 从存储提供者删除文件
-		deleteFilesFromProviders(asyncCtx, fileIDs)
+		// 删除文件的历史记录和对应的存储提供者上的文件
+		deleteFileHistories(asyncCtx, allFileIDs)
 
-		// 清空回收站数据库记录
-		if err := db.EmptyTrash(); err != nil {
-			llog.L().Errorf("empty trash failed: %v", err)
+		// 从存储提供者删除当前文件
+		deleteFilesFromProviders(asyncCtx, allFileIDs)
+
+		// 永久删除数据库记录（包括所有子文件）
+		if err := db.DeletePermanently(allFileIDs); err != nil {
+			llog.L().Errorf("delete permanently failed: %v", err)
 			return
 		}
 
-		llog.L().Infof("emptied trash, deleted %d files", len(fileIDs))
+		llog.L().Infof("emptied trash, deleted %d files", len(allFileIDs))
 	}()
 
 	return nil
@@ -652,9 +864,7 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 
 	// 3. Validate target providers
 	providerIDs := make([]uint32, len(req.ProviderIds))
-	for i, id := range req.ProviderIds {
-		providerIDs[i] = id
-	}
+	copy(providerIDs, req.ProviderIds)
 
 	providers, err := db.GetStorageProvidersByIDs(providerIDs)
 	if err != nil {
@@ -722,4 +932,9 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 
 	llog.L().Infof("created sync task for file %s to %d providers", *file.Id, len(validProviderIDs))
 	return nil
+}
+
+// UpdateFileTags 更新文件标签
+func UpdateFileTags(ctx context.Context, req *native.UpdateFileTagsReq) *models.Err {
+	return UpdateFileTagsImpl(ctx, req)
 }

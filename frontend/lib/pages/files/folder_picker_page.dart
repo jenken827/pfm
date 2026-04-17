@@ -4,7 +4,7 @@ import 'package:pfm/proto/native/file.pb.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// 选择文件夹页面
-/// 
+///
 /// 用于选择目标文件夹（如移动文件时选择目标位置）
 /// 默认从根目录开始，支持面包屑导航和文件夹浏览
 class FolderPickerPage extends StatefulWidget {
@@ -16,7 +16,7 @@ class FolderPickerPage extends StatefulWidget {
 
   /// 初始文件夹ID（默认根目录 ''）
   final String initialFolderId;
-  
+
   /// 要排除的文件夹ID列表（不能移动到自己或子文件夹）
   final List<String> excludeIds;
 
@@ -27,16 +27,16 @@ class FolderPickerPage extends StatefulWidget {
 class _FolderPickerPageState extends State<FolderPickerPage> {
   /// 当前文件夹ID
   String _currentFolderId = '';
-  
+
   /// 面包屑路径
   List<_BreadcrumbItem> _breadcrumbs = [];
-  
+
   /// 文件夹列表
   List<File> _folders = [];
-  
+
   /// 是否正在加载
   bool _isLoading = false;
-  
+
   /// 错误信息
   String? _errorMessage;
 
@@ -50,7 +50,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
   /// 加载文件夹列表
   Future<void> _loadFolders() async {
     final fmRepo = context.read<FmRepository>();
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -58,7 +58,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
     try {
       final result = await fmRepo.getFolderList(parentId: _currentFolderId);
-      
+
       if (!mounted) return;
 
       if (result.success && result.data != null) {
@@ -95,9 +95,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
     if (_breadcrumbs.isNotEmpty) {
       setState(() {
         _breadcrumbs.removeLast();
-        _currentFolderId = _breadcrumbs.isEmpty 
-            ? '' 
-            : _breadcrumbs.last.id;
+        _currentFolderId = _breadcrumbs.isEmpty ? '' : _breadcrumbs.last.id;
       });
       _loadFolders();
     }
@@ -172,7 +170,10 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
               onTap: () => _navigateToBreadcrumb(-1),
               child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Text('根目录', style: TextStyle(fontWeight: FontWeight.w500)),
+                child: Text(
+                  '根目录',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
               ),
             ),
             // 面包屑路径
@@ -180,7 +181,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
               final index = entry.key;
               final item = entry.value;
               final isLast = index == _breadcrumbs.length - 1;
-              
+
               return Row(
                 children: [
                   Icon(
@@ -195,7 +196,9 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
                       child: Text(
                         item.name,
                         style: TextStyle(
-                          fontWeight: isLast ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isLast
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           color: isLast
                               ? Theme.of(context).colorScheme.primary
                               : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -223,7 +226,11 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: 16),
             Text(_errorMessage!),
             const SizedBox(height: 16),
@@ -246,7 +253,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
       itemBuilder: (context, index) {
         final folder = _folders[index];
         final isExcluded = widget.excludeIds.contains(folder.id);
-        
+
         return ListTile(
           leading: Icon(
             Icons.folder,
@@ -254,9 +261,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
           ),
           title: Text(
             folder.name,
-            style: TextStyle(
-              color: isExcluded ? Colors.grey : null,
-            ),
+            style: TextStyle(color: isExcluded ? Colors.grey : null),
           ),
           trailing: isExcluded
               ? const Icon(Icons.block, color: Colors.grey)
@@ -276,7 +281,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),

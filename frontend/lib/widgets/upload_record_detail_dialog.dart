@@ -181,10 +181,8 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
         Text('文件名：${_record!.fileName}'),
         Text('文件大小：${formatCapacityString(_record!.fileSize.toInt())}'),
         Text('文件哈希：${_record!.fileHash}'),
-        Text(
-          '上传类型：${_record!.taskType != null ? _getTaskTypeText(_record!.taskType!) : "未知"}',
-        ),
-        Text('上传时间：${_record!.createdAt?.toDateTime().toLocal() ?? "未知"}'),
+        Text('上传类型：${_getTaskTypeText(_record!.taskType)}'),
+        Text('上传时间：${_record!.createdAt.toDateTime().toLocal()}'),
         // 显示错误信息
         if (_record!.message.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -236,7 +234,9 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(location.status).withOpacity(0.1),
+                    color: _getStatusColor(
+                      location.status,
+                    ).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -247,16 +247,14 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                     ),
                   ),
                 ),
-                if (location.progress != null &&
-                    location.progress!.toInt() > 0) ...[
+                if (location.progress.toInt() > 0) ...[
                   const SizedBox(width: 8),
-                  Text('进度: ${location.progress!.toInt()}%'),
+                  Text('进度: ${location.progress.toInt()}%'),
                 ],
               ],
             ),
-            if (location.cacheStatus != null &&
-                location.cacheStatus !=
-                    CacheStatus.CACHE_STATUS_UNSPECIFIED) ...[
+            if (location.cacheStatus !=
+                CacheStatus.CACHE_STATUS_UNSPECIFIED) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -267,14 +265,14 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                     ),
                     decoration: BoxDecoration(
                       color: _getCacheStatusColor(
-                        location.cacheStatus!,
-                      ).withOpacity(0.1),
+                        location.cacheStatus,
+                      ).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '缓存: ${_getCacheStatusText(location.cacheStatus!)}',
+                      '缓存: ${_getCacheStatusText(location.cacheStatus)}',
                       style: TextStyle(
-                        color: _getCacheStatusColor(location.cacheStatus!),
+                        color: _getCacheStatusColor(location.cacheStatus),
                         fontSize: 12,
                       ),
                     ),
@@ -282,7 +280,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 ],
               ),
             ],
-            if (location.message != null && location.message!.isNotEmpty)
+            if (location.message.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(

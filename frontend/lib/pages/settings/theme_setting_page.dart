@@ -21,23 +21,33 @@ class ThemeSettingPage extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Text('主题模式', style: theme.textTheme.titleMedium),
           ),
-          _ThemeModeTile(
-            title: '浅色模式',
-            subtitle: '使用浅色主题',
-            mode: ThemeMode.light,
-            currentMode: ls.themeLanguage.themeMode,
-          ),
-          _ThemeModeTile(
-            title: '深色模式',
-            subtitle: '使用深色主题',
-            mode: ThemeMode.dark,
-            currentMode: ls.themeLanguage.themeMode,
-          ),
-          _ThemeModeTile(
-            title: '跟随系统',
-            subtitle: '根据系统设置自动切换',
-            mode: ThemeMode.system,
-            currentMode: ls.themeLanguage.themeMode,
+          RadioGroup<ThemeMode>(
+            groupValue: ls.themeLanguage.themeMode,
+            onChanged: (ThemeMode? value) async {
+              if (value != null) {
+                final tl = ls.themeLanguage.copyWith(themeMode: value);
+                await ls.saveThemeLanguage(tl);
+              }
+            },
+            child: Column(
+              children: [
+                RadioListTile<ThemeMode>(
+                  title: const Text('浅色模式'),
+                  subtitle: const Text('使用浅色主题'),
+                  value: ThemeMode.light,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: const Text('深色模式'),
+                  subtitle: const Text('使用深色主题'),
+                  value: ThemeMode.dark,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: const Text('跟随系统'),
+                  subtitle: const Text('根据系统设置自动切换'),
+                  value: ThemeMode.system,
+                ),
+              ],
+            ),
           ),
           const Divider(height: 32),
 
@@ -49,38 +59,6 @@ class ThemeSettingPage extends StatelessWidget {
           _ThemeColorGrid(currentColor: ls.currentThemeName),
         ],
       ),
-    );
-  }
-}
-
-/// 主题模式选择项
-class _ThemeModeTile extends StatelessWidget {
-  const _ThemeModeTile({
-    required this.title,
-    required this.subtitle,
-    required this.mode,
-    required this.currentMode,
-  });
-
-  final String title;
-  final String subtitle;
-  final ThemeMode mode;
-  final ThemeMode currentMode;
-
-  @override
-  Widget build(BuildContext context) {
-    return RadioListTile<ThemeMode>(
-      title: Text(title),
-      subtitle: Text(subtitle),
-      value: mode,
-      groupValue: currentMode,
-      onChanged: (value) async {
-        if (value != null) {
-          final ls = GetIt.I.get<LocalStorage>();
-          final tl = ls.themeLanguage.copyWith(themeMode: value);
-          await ls.saveThemeLanguage(tl);
-        }
-      },
     );
   }
 }

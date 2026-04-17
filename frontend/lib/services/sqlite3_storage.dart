@@ -364,6 +364,29 @@ class Sqlite3Storage {
     return DownloadTaskRecord.fromJson(maps.first);
   }
 
+  /// 根据 fileId 获取未完成的下载任务
+  ///
+  /// 用于断点续传：如果存在未完成的下载任务，返回该任务记录
+  Future<DownloadTaskRecord?> getUncompletedDownloadTaskByFileId(
+    String fileId,
+  ) async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'file_id = ? AND status IN (?, ?, ?, ?)',
+      whereArgs: [
+        fileId,
+        DownloadStatus.pending.index,
+        DownloadStatus.downloading.index,
+        DownloadStatus.paused.index,
+        DownloadStatus.predownload.index,
+      ],
+      limit: 1,
+      orderBy: 'created_at DESC',
+    );
+    if (maps.isEmpty) return null;
+    return DownloadTaskRecord.fromJson(maps.first);
+  }
+
   /// 新增下载任务
   Future<void> addDownloadTask(DownloadTaskRecord task) async {
     getLogger().info('add download task: ${task.id}');
@@ -389,7 +412,7 @@ class Sqlite3Storage {
 
     if (status != null) {
       values['status'] = status.index;
-      if (status == DownloadStatus.COMPLETED) {
+      if (status == DownloadStatus.completed) {
         values['completed_at'] = DateTime.now().toIso8601String();
       }
     }
@@ -429,7 +452,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       downloadTaskTableName,
       where: 'status = ?',
-      whereArgs: [DownloadStatus.PENDING.index],
+      whereArgs: [DownloadStatus.pending.index],
       orderBy: 'created_at ASC',
     );
     return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
@@ -440,7 +463,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       downloadTaskTableName,
       where: 'status = ?',
-      whereArgs: [DownloadStatus.PAUSED.index],
+      whereArgs: [DownloadStatus.paused.index],
       orderBy: 'created_at ASC',
     );
     return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
@@ -451,7 +474,7 @@ class Sqlite3Storage {
     final List<Map<String, dynamic>> maps = await _database!.query(
       downloadTaskTableName,
       where: 'status = ?',
-      whereArgs: [DownloadStatus.PENDING.index],
+      whereArgs: [DownloadStatus.pending.index],
       orderBy: 'created_at ASC',
       limit: 1,
     );
@@ -465,7 +488,7 @@ class Sqlite3Storage {
       () => _database!.delete(
         downloadTaskTableName,
         where: 'status = ?',
-        whereArgs: [DownloadStatus.COMPLETED.index],
+        whereArgs: [DownloadStatus.completed.index],
       ),
     );
     getLogger().info('Cleared $count completed download tasks');
@@ -473,16 +496,14 @@ class Sqlite3Storage {
 
   /// 暂停下载任务
   Future<void> pauseDownloadTasks(String? taskId) async {
-    final where = taskId == null
-        ? 'status IN (?, ?)'
-        : 'id=?';
+    final where = taskId == null ? 'status IN (?, ?)' : 'id=?';
     final whereArgs = taskId == null
-        ? [DownloadStatus.DOWNLOADING.index, DownloadStatus.PENDING.index]
+        ? [DownloadStatus.downloading.index, DownloadStatus.pending.index]
         : [taskId];
     await _withRetry(
       () => _database!.update(
         downloadTaskTableName,
-        {'status': DownloadStatus.PAUSED.index},
+        {'status': DownloadStatus.paused.index},
         where: where,
         whereArgs: whereArgs,
       ),
@@ -498,7 +519,7 @@ class Sqlite3Storage {
       final tasks = await getPausedDownloadTasksAsync();
       taskIds = tasks.map((t) => t.id).toList();
       where = 'status=?';
-      whereArgs = [DownloadStatus.PAUSED.index];
+      whereArgs = [DownloadStatus.paused.index];
     } else {
       taskIds.add(taskId);
       where = 'id=?';
@@ -508,7 +529,7 @@ class Sqlite3Storage {
     await _withRetry(
       () => _database!.update(
         downloadTaskTableName,
-        {'status': DownloadStatus.PENDING.index},
+        {'status': DownloadStatus.pending.index},
         where: where,
         whereArgs: whereArgs,
       ),
@@ -519,16 +540,14 @@ class Sqlite3Storage {
 
   /// 取消下载任务
   Future<void> cancelDownloadTask(String? taskId) async {
-    final where = taskId == null
-        ? 'status IN (?, ?)'
-        : 'id=?';
+    final where = taskId == null ? 'status IN (?, ?)' : 'id=?';
     final whereArgs = taskId == null
-        ? [DownloadStatus.DOWNLOADING.index, DownloadStatus.PENDING.index]
+        ? [DownloadStatus.downloading.index, DownloadStatus.pending.index]
         : [taskId];
     await _withRetry(
       () => _database!.update(
         downloadTaskTableName,
-        {'status': DownloadStatus.CANCELED.index},
+        {'status': DownloadStatus.canceled.index},
         where: where,
         whereArgs: whereArgs,
       ),

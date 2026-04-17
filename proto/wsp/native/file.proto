@@ -231,6 +231,12 @@ message CreateDirReq {
   repeated uint32 provider_ids = 4;
 }
 
+// 创建目录响应数据
+message CreateDirRespData {
+  // 新创建的目录 ID
+  optional string id = 1;
+}
+
 // 更新目录请求
 message UpdateDirReq {
   optional string id = 1 [
@@ -354,6 +360,8 @@ message FileDetailRespData {
   repeated ProviderLocationInfo locations = 2;
   // 文件历史版本
   repeated FileHistory histories = 3;
+  // 文件标签
+  repeated string tags = 4;
 }
 
 // FileService文件服务
@@ -446,6 +454,33 @@ message TrashListRespData {
   optional uint32 total = 2;
 }
 
+// 删除文件历史版本请求
+message DeleteFileHistoryReq {
+  // 历史版本ID列表
+  repeated uint64 ids = 1 [(buf.validate.field).required = true];
+}
+
+// 更新文件标签请求
+message UpdateFileTagsReq {
+  // 文件ID
+  optional string file_id = 1 [(buf.validate.field).required = true];
+  // 标签列表
+  repeated string tags = 2;
+}
+
+// 获取文件标签请求
+message GetFileTagsReq {
+  // 文件ID
+  optional string file_id = 1 [(buf.validate.field).required = true];
+}
+
+// 获取文件标签响应数据
+message GetFileTagsRespData {
+  // 标签列表
+  repeated string tags = 1;
+}
+
+// 文件服务
 service FileService {
   // 获取文件列表
   rpc GetFileList(FileListReq) returns (BaseResp) {
@@ -496,4 +531,13 @@ service FileService {
 
   // 获取回收站文件列表
   rpc GetTrashList(BaseResp) returns (BaseResp);
+
+  // 删除文件历史版本
+  rpc DeleteFileHistory(DeleteFileHistoryReq) returns (BaseResp);
+
+  // 更新文件标签
+  rpc UpdateFileTags(UpdateFileTagsReq) returns (BaseResp);
+
+  // 获取文件标签
+  rpc GetFileTags(GetFileTagsReq) returns (BaseResp);
 }

@@ -72,34 +72,28 @@ class SettingPage extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('选择语言'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<String>(
-              title: const Text('简体中文'),
-              value: 'zh',
-              groupValue: ls.themeLanguage.locale,
-              onChanged: (value) async {
-                if (value != null) {
-                  final tl = ls.themeLanguage.copyWith(locale: value);
-                  await ls.saveThemeLanguage(tl);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('English'),
-              value: 'en',
-              groupValue: ls.themeLanguage.locale,
-              onChanged: (value) async {
-                if (value != null) {
-                  final tl = ls.themeLanguage.copyWith(locale: value);
-                  await ls.saveThemeLanguage(tl);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                }
-              },
-            ),
-          ],
+        content: RadioGroup<String>(
+          groupValue: ls.themeLanguage.locale,
+          onChanged: (String? value) async {
+            if (value != null) {
+              final tl = ls.themeLanguage.copyWith(locale: value);
+              await ls.saveThemeLanguage(tl);
+              if (ctx.mounted) Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<String>(
+                title: const Text('简体中文'),
+                value: 'zh',
+              ),
+              RadioListTile<String>(
+                title: const Text('English'),
+                value: 'en',
+              ),
+            ],
+          ),
         ),
       ),
     );

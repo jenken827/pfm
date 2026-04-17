@@ -18,11 +18,13 @@ var _ = (nativeconnect.FileServiceHandler)((*FileServer)(nil))
 
 // CreateDir 创建文件夹
 func (s *FileServer) CreateDir(ctx context.Context, req *connect.Request[native.CreateDirReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.CreateDir(ctx, req.Msg)
+	dirId, err := service.CreateDir(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)
 	}
-	return response.SuccessResp(nil)
+	// 返回新创建的目录 ID
+	resp := &native.CreateDirRespData{Id: &dirId}
+	return response.SuccessResp(resp)
 }
 
 // GetFileList 获取文件列表
@@ -198,6 +200,15 @@ func (s *FileServer) EmptyTrash(ctx context.Context, req *connect.Request[native
 	return response.SuccessResp(nil)
 }
 
+// DeleteFileHistory 删除文件历史版本
+func (s *FileServer) DeleteFileHistory(ctx context.Context, req *connect.Request[native.DeleteFileHistoryReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.DeleteFileHistory(ctx, req.Msg.Ids)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
 // GetTrashList 获取回收站文件列表
 func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[native.BaseResp]) (*connect.Response[native.BaseResp], error) {
 	data, mErr := service.GetTrashList(ctx)
@@ -205,4 +216,22 @@ func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[nati
 		return response.ErrResp(mErr)
 	}
 	return response.SuccessResp(data)
+}
+
+// UpdateFileTags 更新文件标签
+func (s *FileServer) UpdateFileTags(ctx context.Context, req *connect.Request[native.UpdateFileTagsReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.UpdateFileTags(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
+// GetFileTags 获取文件标签
+func (s *FileServer) GetFileTags(ctx context.Context, req *connect.Request[native.GetFileTagsReq]) (*connect.Response[native.BaseResp], error) {
+	resp, mErr := service.GetFileTags(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(resp)
 }

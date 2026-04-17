@@ -176,7 +176,7 @@ class BackgroundService {
   /// 新增下载任务
   Future<void> scheduleNewDownloadTask(DownloadTaskRecord task) async {
     _logger.info('Adding new download task: ${task.id}');
-    task.status = DownloadStatus.PENDING;
+    task.status = DownloadStatus.pending;
     await _storage.addDownloadTask(task);
     await scheduleDownload(task.id, true);
   }
@@ -387,13 +387,13 @@ class BackgroundService {
   /// 取消下载任务
   Future<void> cancelDownload(String taskId) async {
     _logger.info('Cancelling download task: $taskId');
-    await _storage.updateDownloadTask(taskId, status: DownloadStatus.CANCELED);
+    await _storage.updateDownloadTask(taskId, status: DownloadStatus.canceled);
   }
 
   /// 暂停下载任务
   Future<void> pauseDownload(String taskId) async {
     _logger.info('Pausing download task: $taskId');
-    await _storage.updateDownloadTask(taskId, status: DownloadStatus.PAUSED);
+    await _storage.updateDownloadTask(taskId, status: DownloadStatus.paused);
   }
 
   /// 恢复下载任务
@@ -409,7 +409,7 @@ class BackgroundService {
     _logger.info('Retrying download task: $taskId');
     await _storage.updateDownloadTask(
       taskId,
-      status: DownloadStatus.PENDING,
+      status: DownloadStatus.pending,
       errorMessage: null,
       downloadedBytes: 0,
     );

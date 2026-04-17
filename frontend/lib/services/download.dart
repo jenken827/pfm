@@ -5,7 +5,6 @@ import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/services/services.dart';
 
 /// 下载文件核心逻辑
@@ -34,11 +33,19 @@ Future<void> downloadFile({
 
   try {
     // 构建下载 URL
-    var downloadUrl =
-        '$baseUrl/api/file/stream/download?file_id=${task.fileId}';
-    if (task.providerId != null) {
-      downloadUrl += '&provider_id=${task.providerId}';
+    String downloadUrl;
+
+    // 检查是否是历史版本下载（格式：history:{historyId}）
+    if (task.fileId.startsWith('history:')) {
+      final historyId = task.fileId.substring(8); // 移除 'history:' 前缀
+      downloadUrl = '$baseUrl/api/file/history/download?id=$historyId';
+    } else {
+      downloadUrl = '$baseUrl/api/file/stream/download?file_id=${task.fileId}';
+      if (task.providerId != null) {
+        downloadUrl += '&provider_id=${task.providerId}';
+      }
     }
+
     final headers = <String, String>{
       'Authorization': 'Bearer ${token.accessToken}',
     };
@@ -49,7 +56,7 @@ Future<void> downloadFile({
     // 更新状态为下载中
     await storage.updateDownloadTask(
       task.id,
-      status: DownloadStatus.DOWNLOADING,
+      status: DownloadStatus.downloading,
     );
 
     // 预下载检查：Telegram 大文件场景下，后端可能返回 202 等待缓存
@@ -62,7 +69,7 @@ Future<void> downloadFile({
       l.info('Pre-download detected: $preCheck, task: ${task.id}');
       await storage.updateDownloadTask(
         task.id,
-        status: DownloadStatus.PRE_DOWNLOAD,
+        status: DownloadStatus.predownload,
         errorMessage: preCheck,
       );
       return;
@@ -98,7 +105,7 @@ Future<void> downloadFile({
     if (tt != null) {
       await storage.updateDownloadTask(
         taskId,
-        status: DownloadStatus.FAILED,
+        status: DownloadStatus.failed,
         errorMessage: e.toString(),
       );
     }
@@ -167,7 +174,7 @@ Future<void> _downloadSingleThread({
     if (downloadedBytes >= task.fileSize) {
       await storage.updateDownloadTask(
         task.id,
-        status: DownloadStatus.COMPLETED,
+        status: DownloadStatus.completed,
         downloadedBytes: task.fileSize,
       );
       return;
@@ -205,8 +212,8 @@ Future<void> _downloadSingleThread({
     // 检查是否被取消或暂停
     final currentTask = await storage.getDownloadTaskAsync(task.id);
     if (currentTask == null ||
-        currentTask.status == DownloadStatus.CANCELED ||
-        currentTask.status == DownloadStatus.PAUSED) {
+        currentTask.status == DownloadStatus.canceled ||
+        currentTask.status == DownloadStatus.paused) {
       l.info('Download cancelled or paused');
       return;
     }
@@ -214,7 +221,7 @@ Future<void> _downloadSingleThread({
     // 更新完成状态
     await storage.updateDownloadTask(
       task.id,
-      status: DownloadStatus.COMPLETED,
+      status: DownloadStatus.completed,
       downloadedBytes: downloadedBytes,
     );
 
@@ -257,7 +264,7 @@ Future<void> _downloadMultiThread({
     if (downloadedBytes >= task.fileSize) {
       await storage.updateDownloadTask(
         task.id,
-        status: DownloadStatus.COMPLETED,
+        status: DownloadStatus.completed,
         downloadedBytes: task.fileSize,
       );
       return;
@@ -360,8 +367,8 @@ Future<void> _downloadWorker({
     // 检查是否被取消或暂停
     final currentTask = await storage.getDownloadTaskAsync(task.id);
     if (currentTask == null ||
-        currentTask.status == DownloadStatus.CANCELED ||
-        currentTask.status == DownloadStatus.PAUSED) {
+        currentTask.status == DownloadStatus.canceled ||
+        currentTask.status == DownloadStatus.paused) {
       l.info('Download cancelled or paused, worker $workerIndex stopping');
       return;
     }

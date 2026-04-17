@@ -13,11 +13,11 @@ class DocumentPreviewWidget extends StatefulWidget {
   const DocumentPreviewWidget({
     super.key,
     required this.file,
-    required this.baseUrl,
+    required this.previewUrl,
   });
 
   final File file;
-  final String baseUrl;
+  final String previewUrl; // 直接传递预览URL，已处理历史版本
 
   @override
   State<DocumentPreviewWidget> createState() => _DocumentPreviewWidgetState();
@@ -103,7 +103,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
     try {
       final dio = Dio();
       final response = await dio.get(
-        '${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}',
+        widget.previewUrl,
         options: Options(
           responseType: ResponseType.plain,
           headers: _getAuthHeaders(),
@@ -127,7 +127,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
     try {
       final dio = Dio();
       final response = await dio.get(
-        '${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}',
+        widget.previewUrl,
         options: Options(
           responseType: ResponseType.bytes,
           headers: _getAuthHeaders(),
@@ -221,7 +221,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   /// PDF 查看器（使用 URI 流式加载）
   Widget _buildPdfViewer(BuildContext context) {
     return PdfViewer.uri(
-      Uri.parse('${widget.baseUrl}/api/file/stream/preview?file_id=${widget.file.id}'),
+      Uri.parse(widget.previewUrl),
       useProgressiveLoading: true,   // 渐进式加载
       preferRangeAccess: true,       // 使用 Range 请求，按需加载
       headers: _getAuthHeaders(),    // 认证头

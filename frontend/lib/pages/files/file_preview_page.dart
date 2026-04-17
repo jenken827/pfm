@@ -8,11 +8,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
-import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/router/files_route.dart';
+import 'package:pfm/services/services.dart';
 import 'package:pfm/widgets/document_preview_widget.dart';
 import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/api/fm_repository.dart';
+import 'package:pfm/utils/file_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 预览页面参数
@@ -90,12 +91,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     _videoController = VideoController(_videoPlayer!);
 
     // 设置播放器
-    await _videoPlayer!.open(
-      Media(
-        previewUrl,
-        httpHeaders: headers,
-      ),
-    );
+    await _videoPlayer!.open(Media(previewUrl, httpHeaders: headers));
 
     if (mounted) {
       setState(() {
@@ -110,7 +106,17 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   String _buildPreviewUrl(String fileId) {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.fileServer ?? '';
-    return '$baseUrl/api/file/stream/preview?file_id=$fileId';
+
+    // 检查是否是历史版本（格式：history:{id}）
+    if (fileId.startsWith('history:')) {
+      final historyId = fileId.substring(8); // 移除 'history:' 前缀
+      final url = '$baseUrl/api/file/history/preview?id=$historyId';
+
+      return url;
+    }
+
+    final url = '$baseUrl/api/file/stream/preview?file_id=$fileId';
+    return url;
   }
 
   /// 获取认证请求头
@@ -184,6 +190,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       case FileType.AUDIO:
         return _buildAudioPreview(context);
       case FileType.DOCUMENT:
+        getLogger().debug("preview document");
         return _buildDocumentPreview(context);
       default:
         return _buildUnsupportedPreview(context);
@@ -305,9 +312,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
 
   Widget _buildVideoPreview(BuildContext context) {
     if (!_isVideoInitialized || _videoController == null) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Column(
@@ -350,9 +355,14 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
               // 倍速选择
               PopupMenuButton<double>(
                 icon: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).colorScheme.outline),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -459,13 +469,8 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildDocumentPreview(BuildContext context) {
-    final ls = GetIt.I.get<LocalStorage>();
-    final baseUrl = ls.fileServer ?? '';
-    
-    return DocumentPreviewWidget(
-      file: _currentFile,
-      baseUrl: baseUrl,
-    );
+    final previewUrl = _buildPreviewUrl(_currentFile.id);
+    return DocumentPreviewWidget(file: _currentFile, previewUrl: previewUrl);
   }
 
   Widget _buildUnsupportedPreview(BuildContext context) {
@@ -528,11 +533,14 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   void _downloadFile(BuildContext context) async {
     try {
       final downloadDir = await getDownloadsDirectory();
-      if (!mounted) return;
-      
-      final fileName = _currentFile.name.isNotEmpty ? _currentFile.name : 'unnamed';
-      final savePath = '${downloadDir!.path}/$fileName';
-      
+
+      final fileName = _currentFile.name.isNotEmpty
+          ? _currentFile.name
+          : 'unnamed';
+      final initialPath = '${downloadDir!.path}/$fileName';
+      // 生成唯一文件路径，避免覆盖
+      final savePath = await FileUtils.getUniqueFilePath(initialPath);
+      if (!context.mounted) return;
       // 添加到下载队列
       context.read<TransferBloc>().add(
         TransferAddDownloadEvent(
@@ -543,17 +551,17 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           fileHash: _currentFile.hash,
         ),
       );
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已添加到下载队列: $fileName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已添加到下载队列: $fileName')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('下载失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
       }
     }
   }
@@ -561,22 +569,22 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   Future<void> _openInExternalPlayer(BuildContext context) async {
     final previewUrl = _buildPreviewUrl(_currentFile.id);
     final uri = Uri.parse(previewUrl);
-    
+
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法打开外部播放器')),
-          );
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法打开外部播放器')));
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('打开外部播放器失败: $e')),
-        );
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('打开外部播放器失败: $e')));
       }
     }
   }
@@ -594,7 +602,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         break;
     }
   }
-  
+
   Future<void> _shareFile(BuildContext context) async {
     try {
       final repo = FmRepository();
@@ -602,33 +610,34 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         fileId: _currentFile.id,
         expireSeconds: 604800, // 7天
       );
-      
+
       if (result.success && result.data != null) {
         final shareUrl = result.data!.shareUrl;
-        if (mounted) {
-          // 复制到剪贴板
-          await Clipboard.setData(ClipboardData(text: shareUrl));
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('分享链接已复制到剪贴板')),
-          );
+
+        // 复制到剪贴板
+        await Clipboard.setData(ClipboardData(text: shareUrl));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('分享链接已复制到剪贴板')));
         }
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? '创建分享链接失败')),
-        );
+      } else if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message ?? '创建分享链接失败')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分享失败: $e')),
-        );
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
       }
     }
   }
-  
+
   Future<void> _renameFile(BuildContext context) async {
     final controller = TextEditingController(text: _currentFile.name);
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -653,36 +662,36 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         ],
       ),
     );
-    
+
     if (confirmed == true && controller.text.isNotEmpty && mounted) {
       try {
         final repo = FmRepository();
         final result = await repo.renameFile([
           RenameObj(id: _currentFile.id, newName: controller.text),
         ]);
-        
+
         if (result.success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('重命名成功')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('重命名成功')));
           // 返回上一页刷新列表
           context.pop();
         } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result.message ?? '重命名失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(result.message ?? '重命名失败')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('重命名失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('重命名失败: $e')));
         }
       }
     }
     controller.dispose();
   }
-  
+
   Future<void> _deleteFile(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -704,28 +713,28 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         ],
       ),
     );
-    
+
     if (confirmed == true && mounted) {
       try {
         final repo = FmRepository();
         final result = await repo.deleteFile([_currentFile.id]);
-        
+
         if (result.success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('删除成功')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('删除成功')));
           // 返回上一页刷新列表
           context.pop();
         } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result.message ?? '删除失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('删除失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
         }
       }
     }

@@ -1,16 +1,14 @@
-import 'package:pfm/proto/native/enum.pb.dart';
-import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/format.dart';
 
 /// 下载状态枚举（用于持久化存储）
 enum DownloadStatus {
-  PENDING,       // 待开始
-  DOWNLOADING,   // 下载中
-  COMPLETED,     // 已完成
-  FAILED,        // 失败
-  CANCELED,      // 已取消
-  PAUSED,        // 已暂停
-  PRE_DOWNLOAD,  // 预下载中（Telegram 大文件等待缓存）
+  pending, // 待开始
+  downloading, // 下载中
+  completed, // 已完成
+  failed, // 失败
+  canceled, // 已取消
+  paused, // 已暂停
+  predownload, // 预下载中（Telegram 大文件等待缓存）
 }
 
 /// 下载任务持久化记录
@@ -39,6 +37,7 @@ class DownloadTaskRecord {
   int chunkTotal;
   // 并发下载线程数
   int workerCount;
+
   /// 指定下载的存储提供者 ID（可选，为空则由后端自动选择）
   int? providerId;
   DateTime createdAt;
@@ -52,7 +51,7 @@ class DownloadTaskRecord {
     this.fileHash,
     this.downloadedBytes = 0,
     this.speed = 0,
-    this.status = DownloadStatus.PENDING,
+    this.status = DownloadStatus.pending,
     this.errorMessage,
     required this.savePath,
     this.chunkSize = 5 * 1024 * 1024, // 默认 5MB
@@ -67,20 +66,20 @@ class DownloadTaskRecord {
   double get progress {
     if (fileSize == 0) return 0;
 
-    if (status == DownloadStatus.FAILED || status == DownloadStatus.CANCELED) {
+    if (status == DownloadStatus.failed || status == DownloadStatus.canceled) {
       return (downloadedBytes / fileSize) * 100;
     }
 
-    if (status == DownloadStatus.COMPLETED) {
+    if (status == DownloadStatus.completed) {
       return 100;
     }
 
-    return (downloadedBytes >= fileSize ? 1.0 : downloadedBytes / fileSize) * 100;
+    return (downloadedBytes >= fileSize ? 1.0 : downloadedBytes / fileSize) *
+        100;
   }
 
   bool get isActive =>
-      status == DownloadStatus.PENDING ||
-      status == DownloadStatus.DOWNLOADING;
+      status == DownloadStatus.pending || status == DownloadStatus.downloading;
 
   String get formatSpeed {
     return '${formatCapacityString(speed)}/s';
@@ -118,7 +117,7 @@ class DownloadTaskRecord {
       speed: json['speed'] ?? 0,
       status: json['status'] != null
           ? DownloadStatus.values[json['status']]
-          : DownloadStatus.PENDING,
+          : DownloadStatus.pending,
       errorMessage: json['error_message'],
       savePath: json['save_path'],
       chunkSize: json['chunk_size'] ?? 5 * 1024 * 1024,

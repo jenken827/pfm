@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/upload.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -19,8 +18,8 @@ class UploadRecordList extends StatefulWidget {
 
 class _UploadRecordListState extends State<UploadRecordList> {
   List<UploadRecordInfo> _records = [];
-  int _total = 0;
-  int _page = 1;
+  // int _total = 0;
+  final int _page = 1;
   final int _pageSize = 20;
   bool _isLoading = false;
   String? _errorMessage;
@@ -52,7 +51,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           _records = result.data!.records
               .where((r) => r.status != LocationStatus.PCOMPLETED)
               .toList();
-          _total = result.data!.total.toInt();
+          // _total = result.data!.total.toInt();
           _isLoading = false;
         });
       } else {
@@ -188,14 +187,14 @@ class _UploadRecordListState extends State<UploadRecordList> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${formatCapacityString(record.fileSize.toInt())}'),
+          Text(formatCapacityString(record.fileSize.toInt())),
           const SizedBox(height: 4),
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _getStatusColor(record.status).withOpacity(0.1),
+                  color: _getStatusColor(record.status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -299,7 +298,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     try {
       final repository = context.read<FmRepository>();

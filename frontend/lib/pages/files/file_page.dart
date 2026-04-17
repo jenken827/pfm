@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
@@ -504,7 +506,9 @@ class _FileView extends StatelessWidget {
                   Navigator.pop(ctx);
                   try {
                     final fmRepo = context.read<FmRepository>();
-                    final result = await fmRepo.createShareLink(fileId: file.id);
+                    final result = await fmRepo.createShareLink(
+                      fileId: file.id,
+                    );
                     if (result.success && result.data != null) {
                       final url = result.data!.shareUrl;
                       await Clipboard.setData(ClipboardData(text: url));
@@ -542,6 +546,16 @@ class _FileView extends StatelessWidget {
                 await _showMoveDialog(context, [file]);
               },
             ),
+            // 修改标签（仅文件）
+            if (!isFolder)
+              ListTile(
+                leading: const Icon(Icons.label),
+                title: const Text('修改标签'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showTagsDialog(context, file);
+                },
+              ),
             // 设置（仅文件夹）
             if (isFolder)
               ListTile(
@@ -579,7 +593,9 @@ class _FileView extends StatelessWidget {
       final downloadDir = await getDownloadsDirectory();
       if (downloadDir == null) return;
       final fileName = file.name.isNotEmpty ? file.name : 'unnamed';
-      final savePath = '${downloadDir.path}/$fileName';
+      final initialPath = '${downloadDir.path}/$fileName';
+      // 生成唯一文件路径，避免覆盖
+      final savePath = await FileUtils.getUniqueFilePath(initialPath);
       if (!context.mounted) return;
       GetIt.I.get<TransferBloc>().add(
         TransferAddDownloadEvent(
@@ -700,7 +716,6 @@ class _FileView extends StatelessWidget {
         final tags = tagsController.text.trim().isEmpty
             ? null
             : tagsController.text.trim();
-        print('tags: $tags');
 
         for (final file in result.files) {
           if (file.path != null) {
@@ -736,12 +751,46 @@ class _FileView extends StatelessWidget {
         final state = context.read<FileBloc>().state;
         final parentId = state.currentDirId;
 
-        // GetIt.I.get<TransferBloc>().add(
-        //   UploadStartEvent(
-        //     filePath: result,
-        //     parentId: parentId.isEmpty ? null : parentId,
-        //   ),
-        // );
+        // 显示进度对话框
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) =>
+              const Center(child: CircularProgressIndicator()),
+        );
+
+        try {
+          // 递归遍历文件夹并上传
+          await _uploadFolder(
+            context: context,
+            folderPath: result,
+            parentDirId: parentId,
+          );
+
+          // 关闭进度对话框
+          if (context.mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('文件夹上传任务已添加'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } catch (e) {
+          // 关闭进度对话框
+          if (context.mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('上传文件夹失败: $e'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -753,6 +802,133 @@ class _FileView extends StatelessWidget {
         );
       }
     }
+  }
+
+  /// 递归上传文件夹
+  ///
+  /// [folderPath] 本地文件夹路径
+  /// [parentDirId] 服务器端父目录 ID
+  /// [tags] 标签（可选）
+  /// [overwrite] 是否覆盖同名文件
+  Future<void> _uploadFolder({
+    required BuildContext context,
+    required String folderPath,
+    required String parentDirId,
+    String? tags,
+    bool overwrite = false,
+  }) async {
+    final folderName = p.basename(folderPath);
+    final fmRepo = context.read<FmRepository>();
+
+    // 1. 在服务器端创建对应的文件夹（带重试）
+    final createResult = await _createDirWithRetry(
+      fmRepo: fmRepo,
+      name: folderName,
+      parentId: parentDirId,
+    );
+
+    if (!createResult.success) {
+      throw Exception('创建目录失败 "$folderName": ${createResult.message}');
+    }
+
+    // 2. 从响应数据中获取目录 ID
+    final respData = createResult.data;
+    if (respData == null || !respData.hasId()) {
+      throw Exception('创建目录失败 "$folderName"：未返回目录 ID');
+    }
+
+    final newDirId = respData.id;
+
+    // 3. 遍历本地文件夹
+    final dir = Directory(folderPath);
+    List<FileSystemEntity> entities;
+
+    try {
+      entities = dir.listSync(recursive: false);
+    } catch (e) {
+      throw Exception('读取目录失败: $e');
+    }
+
+    for (final entity in entities) {
+      if (!context.mounted) return;
+
+      // 使用更可靠的方式判断文件类型
+      final type = FileSystemEntity.typeSync(entity.path);
+
+      if (type == FileSystemEntityType.directory) {
+        // 添加延迟以避免触发频率限制（每个端点限制 3 次/秒）
+        await Future.delayed(const Duration(milliseconds: 350));
+
+        // 检查 context 是否仍然有效
+        if (!context.mounted) return;
+
+        // 递归处理子目录
+        await _uploadFolder(
+          context: context,
+          folderPath: entity.path,
+          parentDirId: newDirId,
+          tags: tags,
+          overwrite: overwrite,
+        );
+      } else if (type == FileSystemEntityType.file) {
+        // 添加文件上传任务
+        GetIt.I.get<TransferBloc>().add(
+          TransferAddUploadEvent(
+            entity.path,
+            newDirId,
+            tags: tags,
+            overwrite: overwrite,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 创建目录（带重试，处理频率限制）
+  Future<ApiResult<CreateDirRespData>> _createDirWithRetry({
+    required FmRepository fmRepo,
+    required String name,
+    required String parentId,
+    int maxRetries = 3,
+  }) async {
+    int retryCount = 0;
+
+    while (retryCount < maxRetries) {
+      final result = await fmRepo.createDir(
+        name: name,
+        parentId: parentId,
+        enableEncryption: false,
+      );
+
+      // 如果成功，直接返回
+      if (result.success) {
+        return result;
+      }
+
+      // 检查是否是频率限制错误
+      final isRateLimitError =
+          result.message != null && result.message!.contains('429');
+
+      if (!isRateLimitError) {
+        // 不是频率限制错误，直接返回失败结果
+        return result;
+      }
+
+      // 频率限制错误，等待后重试
+      retryCount++;
+      if (retryCount < maxRetries) {
+        final waitTime = Duration(seconds: retryCount);
+
+        await Future.delayed(waitTime);
+      }
+    }
+
+    // 重试失败，返回最后一次结果
+    return fmRepo.createDir(
+      name: name,
+      parentId: parentId,
+      enableEncryption: false,
+    );
   }
 
   void _showBatchActionMenu(BuildContext context, FileState state) {
@@ -934,6 +1110,86 @@ class _FileView extends StatelessWidget {
     );
   }
 
+  /// 显示修改标签对话框
+  /// 注意：现在使用专门的 GetFileTags API 获取标签，提高了性能
+  void _showTagsDialog(BuildContext context, File file) async {
+    // 获取文件标签
+    final fmRepo = context.read<FmRepository>();
+    final tagsResult = await fmRepo.getFileTags(fileId: file.id);
+    
+    List<String> currentTags = [];
+    if (tagsResult.success && tagsResult.data != null) {
+      currentTags = List<String>.from(tagsResult.data!);
+    } else {
+      // 如果获取标签失败，显示错误信息
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('获取文件标签失败: ${tagsResult.message}')),
+        );
+      }
+      return;
+    }
+
+    final controller = TextEditingController(text: currentTags.join(','));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('修改标签'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '输入标签，用逗号分隔',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              // 解析输入的标签
+              final input = controller.text.trim();
+              final newTags = input.isEmpty
+                  ? <String>[]
+                  : input
+                      .split(',')
+                      .map((tag) => tag.trim())
+                      .where((tag) => tag.isNotEmpty)
+                      .toList();
+
+              // 更新文件标签
+              final result = await fmRepo.updateFileTags(
+                fileId: file.id,
+                tags: newTags,
+              );
+
+              if (context.mounted) {
+                if (result.success) {
+                  // 成功更新后刷新文件列表
+                  context.read<FileBloc>().add(const FileRefreshEvent());
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('标签更新成功')),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('标签更新失败: ${result.message}')),
+                  );
+                }
+              }
+
+              Navigator.pop(ctx);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showFolderSettings(BuildContext context, File folder) {
     showDialog(
       context: context,
@@ -997,7 +1253,7 @@ class _FileView extends StatelessWidget {
     if (context.mounted) {
       if (moveResult.success) {
         final data = moveResult.data!;
-        final successCount = data.successCount ?? 0;
+        final successCount = data.successCount;
         final failedIds = data.failedIds;
 
         if (failedIds.isEmpty) {
@@ -1243,7 +1499,7 @@ class _FileGridTile extends StatelessWidget {
         fit: BoxFit.cover,
         width: 40,
         height: 40,
-        errorBuilder: (_, __, ___) =>
+        errorBuilder: (_, _, _) =>
             const Icon(Icons.image, color: Colors.green, size: 40),
         loadingBuilder: (_, child, loadingProgress) {
           if (loadingProgress == null) return child;

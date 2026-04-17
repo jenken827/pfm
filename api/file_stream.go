@@ -175,16 +175,16 @@ func streamFile(ctx context.Context, w http.ResponseWriter, r *http.Request, fil
 					}()
 				}
 
-				// 返回预下载状态给前端
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusAccepted)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"status":       "pre_download",
-					"provider_id":  sourceProviderID,
-					"cache_status": actualStatus,
-					"file_id":      fileID,
-					"message":      "Large file is being cached, please retry later",
-				})
+			// 返回预下载状态给前端
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":       "pre_download",
+				"provider_id":  sourceProviderID,
+				"cache_status": actualStatus,
+				"file_id":      fileID,
+				"message":      "Large file is being cached, please retry later",
+			})
 				return
 			}
 		}
@@ -333,3 +333,158 @@ func parseRangeHeader(rangeHeader string, fileSize int64) (start, end int64, err
 
 	return start, end, nil
 }
+
+// DownloadFileHistoryHandler 下载文件历史版本HTTP handler
+func DownloadFileHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	streamFileHistory(w, r, "attachment")
+}
+
+// PreviewFileHistoryHandler 预览文件历史版本HTTP handler
+func PreviewFileHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	streamFileHistory(w, r, "inline")
+}
+
+// streamFileHistory 流式传输文件历史版本
+// disposition: "inline" 表示预览，"attachment" 表示下载
+func streamFileHistory(w http.ResponseWriter, r *http.Request, disposition string) {
+	// 1. 验证认证
+	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	ctx := r.Context()
+	actionType := "download"
+	if disposition == "inline" {
+		actionType = "preview"
+	}
+	llog.L().Infof("%s file history request from user: %s", actionType, claims.User.Name)
+
+	// 2. 获取历史版本 ID
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	// 3. 获取历史记录
+	history, err := db.GetFileHistoryByID(id)
+	if err != nil {
+		llog.L().Errorf("get file history failed: %v", err)
+		http.Error(w, "history not found", http.StatusNotFound)
+		return
+	}
+
+	if history.Hash == nil || *history.Hash == "" {
+		http.Error(w, "history hash is empty", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. 获取关联的文件信息（用于获取文件名和 MIME 类型）
+	var fileName string
+	var mimeType string
+	if history.FileId != nil {
+		file, err := db.GetFileByID(*history.FileId)
+		if err == nil && file.Name != nil {
+			fileName = *file.Name
+		}
+		if err == nil && file.Mime != nil {
+			mimeType = *file.Mime
+		}
+	}
+	if fileName == "" {
+		fileName = "history_file"
+	}
+	// 下载时使用通用 MIME 类型，预览时使用原始 MIME 类型
+	if disposition == "attachment" || mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+
+	// 5. 查询文件位置
+	locations, err := db.GetFileLocationsByBlake3Hash(*history.Hash)
+	if err != nil {
+		llog.L().Errorf("get file locations failed: %v", err)
+		http.Error(w, "file location not found", http.StatusNotFound)
+		return
+	}
+
+	if len(locations) == 0 {
+		http.Error(w, "no file location found", http.StatusNotFound)
+		return
+	}
+
+	// 6. 选择源提供者
+	sourceProviderID, sourceLocations, err := storage.SelectBestSourceProvider(locations)
+	if err != nil {
+		llog.L().Errorf("select best source provider failed: %v", err)
+		http.Error(w, "no available provider", http.StatusServiceUnavailable)
+		return
+	}
+
+	// 7. 获取存储实例
+	sourceStorage := storage.GetStorage(sourceProviderID)
+	if sourceStorage == nil {
+		http.Error(w, "storage not found", http.StatusInternalServerError)
+		return
+	}
+
+	// 8. 处理加密
+	var encryptor types.Encryptor
+	if sourceLocations[0].Encrypted != nil && *sourceLocations[0].Encrypted {
+		providerOrm := sourceStorage.GetOrm()
+		if providerOrm != nil && providerOrm.EncryptionKey != nil {
+			salt := ""
+			if sourceLocations[0].EncryptionSalt != nil {
+				salt = *sourceLocations[0].EncryptionSalt
+			}
+			encryptor, err = storage.NewCryptEncryptor(*providerOrm.EncryptionKey, salt)
+			if err != nil {
+				llog.L().Errorf("create encryptor failed: %v", err)
+				http.Error(w, "decrypt failed", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	// 9. 打开文件
+	reader, err := sourceStorage.Open(ctx, sourceLocations, encryptor)
+	if err != nil {
+		llog.L().Errorf("open file failed: %v", err)
+		http.Error(w, "open file failed", http.StatusInternalServerError)
+		return
+	}
+	defer reader.Close()
+
+	// 10. 设置响应头
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, fileName))
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	// 文件大小
+	fileSize := int64(0)
+	if history.Size != nil {
+		fileSize = int64(*history.Size)
+	}
+	if fileSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	// 11. 流式传输
+	written, err := io.Copy(w, reader)
+	if err != nil {
+		llog.L().Errorf("stream file failed: %v", err)
+		return
+	}
+
+	llog.L().Infof("file history %s completed: %s, %d bytes sent", actionType, fileName, written)
+}
+
+

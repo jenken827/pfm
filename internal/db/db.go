@@ -78,25 +78,9 @@ func GetDB() *gorm.DB {
 	return db
 }
 
-// CreateFileTags 创建文件标签
-func CreateFileTags(fileID string, tags []string) error {
-	if len(tags) == 0 {
-		return nil
-	}
-	var tagRecords []native.FileTagORM
-	for _, tag := range tags {
-		if tag == "" {
-			continue
-		}
-		tagRecords = append(tagRecords, native.FileTagORM{
-			FileId:  &fileID,
-			TagName: &tag,
-		})
-	}
-	if len(tagRecords) == 0 {
-		return nil
-	}
-	return db.Create(&tagRecords).Error
+// Transaction 执行数据库事务
+func Transaction(fc func(tx *gorm.DB) error) error {
+	return db.Transaction(fc)
 }
 
 // 迁移数据库

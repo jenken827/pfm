@@ -239,6 +239,23 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     try {
+      // 检查是否有未完成的下载任务（用于断点续传）
+      final existingTask = await _bgService.storage
+          .getUncompletedDownloadTaskByFileId(event.fileId);
+
+      if (existingTask != null) {
+        // 存在未完成的任务，恢复下载而不是创建新任务
+        getLogger().info(
+          'Found uncompleted download task for file ${event.fileId}, '
+          'resuming from ${existingTask.downloadedBytes} bytes',
+        );
+
+        // 重试任务
+        _bgService.retryDownload(existingTask.id);
+        return;
+      }
+
+      // 没有未完成的任务，创建新任务
       final record = DownloadTaskRecord(
         id: Uuid().v8(),
         fileId: event.fileId,
@@ -246,7 +263,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         fileSize: event.fileSize,
         savePath: event.savePath,
         fileHash: event.fileHash,
-        status: DownloadStatus.PENDING,
+        status: DownloadStatus.pending,
         providerId: event.providerId,
       );
 
@@ -264,10 +281,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     emit(state.copyWith(currentTab: event.tab));
   }
 
-  void _onRetry(
-    TransferRetryEvent event,
-    Emitter<TransferState> emit,
-  ) {
+  void _onRetry(TransferRetryEvent event, Emitter<TransferState> emit) {
     _bgService.retryDownload(event.taskId);
   }
 
@@ -287,19 +301,19 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
   DownloadTaskStatus _toDownloadTaskStatus(DownloadStatus status) {
     switch (status) {
-      case DownloadStatus.PENDING:
+      case DownloadStatus.pending:
         return DownloadTaskStatus.pending;
-      case DownloadStatus.DOWNLOADING:
+      case DownloadStatus.downloading:
         return DownloadTaskStatus.downloading;
-      case DownloadStatus.COMPLETED:
+      case DownloadStatus.completed:
         return DownloadTaskStatus.completed;
-      case DownloadStatus.FAILED:
+      case DownloadStatus.failed:
         return DownloadTaskStatus.failed;
-      case DownloadStatus.CANCELED:
+      case DownloadStatus.canceled:
         return DownloadTaskStatus.cancelled;
-      case DownloadStatus.PAUSED:
+      case DownloadStatus.paused:
         return DownloadTaskStatus.paused;
-      case DownloadStatus.PRE_DOWNLOAD:
+      case DownloadStatus.predownload:
         return DownloadTaskStatus.preDownload;
     }
   }

@@ -73,10 +73,10 @@ func UpdateFileLocationCache(id uint64, path string, status native.CacheStatus) 
 }
 
 // GetFileLocationByProviderAndHash 根据提供者ID和文件哈希获取文件位置
-func GetFileLocationByProviderAndHash(providerId uint32, blake3Hash string) (*native.FileLocationORM, error) {
+func GetFileLocationByProviderAndHash(providerID uint32, blake3Hash string) (*native.FileLocationORM, error) {
 	ctx := context.Background()
 	var fl native.FileLocationORM
-	if err := GetDB().WithContext(ctx).Where("provider_id = ? AND blake3_hash = ?", providerId, blake3Hash).First(&fl).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Where("provider_id = ? AND blake3_hash = ?", providerID, blake3Hash).First(&fl).Error; err != nil {
 		return nil, err
 	}
 	return &fl, nil

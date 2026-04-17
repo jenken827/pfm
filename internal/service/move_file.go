@@ -194,6 +194,7 @@ func providerIDsEqual(a, b []uint32) bool {
 
 // isDescendant 检查 targetID 是否是 fileID 的后代
 func isDescendant(ctx context.Context, fileID, targetID string) bool {
+	_ = ctx
 	// 获取目标文件夹的父文件夹
 	visited := make(map[string]bool)
 	currentID := targetID

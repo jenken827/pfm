@@ -47,7 +47,15 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		histories = nil
 	}
 
-	// 4. 转换历史记录为PB格式
+	// 4. 查询文件标签
+	tags, err := db.GetFileTagsByFileID(fileID)
+	if err != nil {
+		llog.L().Errorf("get file tags failed: %v", err)
+		// 标签查询失败不影响整体返回
+		tags = nil
+	}
+
+	// 5. 转换历史记录为PB格式
 	var historyPBs []*native.FileHistory
 	for _, h := range histories {
 		pb, err := h.ToPB(ctx)
@@ -58,7 +66,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		historyPBs = append(historyPBs, &pb)
 	}
 
-	// 5. 转换文件为PB格式
+	// 6. 转换文件为PB格式
 	filePB, err := file.ToPB(ctx)
 	if err != nil {
 		llog.L().Errorf("convert file to pb failed: %v", err)
@@ -69,6 +77,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		File:      &filePB,
 		Locations: providerLocations,
 		Histories: historyPBs,
+		Tags:      tags,
 	}, nil
 }
 
