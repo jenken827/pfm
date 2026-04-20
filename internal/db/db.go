@@ -83,6 +83,20 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 	return db.Transaction(fc)
 }
 
+// selectFields 将字段列表展开为 GORM Select 所需的参数格式
+// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
+// 此函数将 ["field1", "field2", "field3"] 展开为 ("field1", "field2", "field3")
+func selectFields(fields []string) (string, []any) {
+	if len(fields) == 0 {
+		return "", nil
+	}
+	args := make([]any, len(fields)-1)
+	for i, f := range fields[1:] {
+		args[i] = f
+	}
+	return fields[0], args
+}
+
 // 迁移数据库
 func autoMigrate() error {
 	return db.AutoMigrate(
@@ -95,5 +109,7 @@ func autoMigrate() error {
 		&native.UploadRecordORM{},
 		&native.UploadChunkRecordORM{},
 		&native.DownloadRecordORM{},
+		&native.BackupTaskORM{},
+		&native.BackupFileRecordORM{},
 	)
 }

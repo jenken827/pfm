@@ -7,6 +7,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 ///
 /// 用于选择目标文件夹（如移动文件时选择目标位置）
 /// 默认从根目录开始，支持面包屑导航和文件夹浏览
+/// 文件夹选择结果
+class FolderPickResult {
+  final String id;
+  final String name;
+
+  const FolderPickResult({required this.id, required this.name});
+}
+
 class FolderPickerPage extends StatefulWidget {
   const FolderPickerPage({
     super.key,
@@ -120,7 +128,8 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 确认选择当前文件夹
   void _confirmSelection() {
-    Navigator.of(context).pop(_currentFolderId);
+    final name = _breadcrumbs.isEmpty ? '根目录' : _breadcrumbs.last.name;
+    Navigator.of(context).pop(FolderPickResult(id: _currentFolderId, name: name));
   }
 
   @override

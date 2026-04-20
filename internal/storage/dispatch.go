@@ -44,6 +44,16 @@ var globalDispatcher = &dispatcher{
 // 1. 普通上传：有临时文件，从临时文件上传
 // 2. 同步任务：无临时文件，从现有提供者同步
 func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
+	defer func() {
+		if r := recover(); r != nil {
+			var fileHash string
+			if ur != nil && ur.FileHash != nil {
+				fileHash = *ur.FileHash
+			}
+			llog.L().Errorf("Dispatch panicked, file_hash: %s, recover: %v", fileHash, r)
+		}
+	}()
+
 	// 1. 根据 task_type 判断任务类型
 	isSyncTask := ur.TaskType != nil && *ur.TaskType == int32(native.UploadTaskType_SYNC)
 
@@ -313,15 +323,38 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 
 // batchUploadFromSource 从源文件批量上传到多个目标提供者
 func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, sourcePath string) {
-	// 使用 WaitGroup 并发上传
+	fileName, parentID, fileEncrypt := getUploadContext(ur)
+
 	var wg sync.WaitGroup
 	var failedCount int32
 	var errorMessages []string
-	var errorMu sync.Mutex // 保护 errorMessages 的并发访问
+	var errorMu sync.Mutex
 
-	// 获取文件名和父目录ID
-	fileName := "unknown"
-	parentID := ""
+	for _, targetID := range targetProviderIds {
+		globalDispatcher.semaphore <- struct{}{}
+		wg.Add(1)
+		go func(tid uint32) {
+			defer wg.Done()
+			defer func() { <-globalDispatcher.semaphore }()
+
+			if failed, errMsg := uploadToProviderAsync(ctx, ur, sourcePath, fileName, parentID, fileEncrypt, tid); failed {
+				failedCount++
+				if errMsg != "" {
+					errorMu.Lock()
+					errorMessages = append(errorMessages, errMsg)
+					errorMu.Unlock()
+				}
+			}
+		}(targetID)
+	}
+
+	wg.Wait()
+	finalizeBatchUpload(ur, failedCount, errorMessages)
+}
+
+// getUploadContext 获取上传上下文信息（文件名、父目录ID、加密设置）
+func getUploadContext(ur *native.UploadRecordORM) (fileName, parentID string, fileEncrypt bool) {
+	fileName = "unknown"
 	if ur.FileName != nil {
 		fileName = *ur.FileName
 	}
@@ -329,8 +362,6 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 		parentID = *ur.ParentId
 	}
 
-	// 查询父文件夹的加密设置
-	var fileEncrypt bool
 	if parentID != "" {
 		parentFolder, err := db.GetFileByID(parentID)
 		if err == nil && parentFolder != nil && parentFolder.EnableEncryption != nil {
@@ -338,72 +369,50 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			llog.L().Infof("parent folder encryption setting: %v, parent_id: %s, file: %s", fileEncrypt, parentID, fileName)
 		}
 	}
+	return
+}
 
-	for _, targetID := range targetProviderIds {
-		// 获取并发控制信号量（阻塞等待可用槽位）
-		globalDispatcher.semaphore <- struct{}{}
+// uploadToProviderAsync 异步上传到单个提供者，返回是否失败和错误信息
+func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sourcePath, fileName, parentID string, fileEncrypt bool, tid uint32) (bool, string) {
+	key := uploadKey{blake3Hash: *ur.FileHash, providerID: tid}
+	if !acquireLock(key) {
+		llog.L().Infof("upload already in progress, hash: %s, provider: %d", *ur.FileHash, tid)
+		return false, ""
+	}
+	defer releaseLock(key)
 
-		wg.Add(1)
-		go func(tid uint32) {
-			defer wg.Done()
-			defer func() { <-globalDispatcher.semaphore }() // 释放信号量
-
-			// 并发控制
-			key := uploadKey{
-				blake3Hash: *ur.FileHash,
-				providerID: tid,
-			}
-
-			if !acquireLock(key) {
-				llog.L().Infof("upload already in progress, hash: %s, provider: %d", *ur.FileHash, tid)
-				return
-			}
-			defer releaseLock(key)
-
-			// 获取或创建文件位置记录
-			fl := getOrCreateFileLocation(tid, *ur.FileHash)
-			if fl == nil {
-				failedCount++
-				errorMu.Lock()
-				errorMessages = append(errorMessages, fmt.Sprintf("provider %d: failed to create file location", tid))
-				errorMu.Unlock()
-				return
-			}
-
-			// 如果已经完成，跳过
-			if *fl.Status == int32(native.LocationStatus_PCOMPLETED) {
-				llog.L().Infof("file already exists in provider %d", tid)
-				return
-			}
-
-			// 上传到目标提供者（加密器在uploadToProvider内部生成）
-			// 错误信息已在 uploadToProvider 中记录到 FileLocation.message
-			err := uploadToProvider(ctx, sourcePath, fileName, tid, fl, fileEncrypt)
-			if err != nil {
-				llog.L().Errorf("upload to provider %d failed: %v", tid, err)
-				failedCount++
-				// 错误信息已记录在 FileLocation.message，无需重复记录
-			} else {
-				// 上传成功，立即更新文件状态为就绪
-				if parentID != "" && fileName != "" {
-					if updateErr := db.UpdateFileIsReady(parentID, fileName); updateErr != nil {
-						llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
-					} else {
-						llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d", parentID, fileName, tid)
-					}
-				}
-			}
-		}(targetID)
+	fl := getOrCreateFileLocation(tid, *ur.FileHash)
+	if fl == nil {
+		return true, fmt.Sprintf("provider %d: failed to create file location", tid)
 	}
 
-	// 等待所有上传完成
-	wg.Wait()
+	if *fl.Status == int32(native.LocationStatus_PCOMPLETED) {
+		llog.L().Infof("file already exists in provider %d", tid)
+		return false, ""
+	}
 
-	// 记录失败数量
+	err := uploadToProvider(ctx, sourcePath, fileName, tid, fl, fileEncrypt)
+	if err != nil {
+		llog.L().Errorf("upload to provider %d failed: %v", tid, err)
+		return true, ""
+	}
+
+	// 上传成功，立即更新文件状态为就绪
+	if parentID != "" && fileName != "" {
+		if updateErr := db.UpdateFileIsReady(parentID, fileName); updateErr != nil {
+			llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
+		} else {
+			llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d", parentID, fileName, tid)
+		}
+	}
+	return false, ""
+}
+
+// finalizeBatchUpload 完成批量上传，处理结果
+func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMessages []string) {
 	if failedCount > 0 {
 		llog.L().Warnf("batch upload completed with %d failures, hash: %s", failedCount, *ur.FileHash)
 
-		// 组合错误信息（仅记录那些没有创建 FileLocation 的错误）
 		var errorMsg string
 		if len(errorMessages) > 0 {
 			errorMsg = fmt.Sprintf("%d providers failed: %s", failedCount, strings.Join(errorMessages, "; "))
@@ -411,11 +420,9 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 				errorMsg = errorMsg[:500] + "..."
 			}
 		} else {
-			// 所有失败都有对应的 FileLocation 记录，错误信息已在那里记录
 			errorMsg = fmt.Sprintf("%d providers failed, see file locations for details", failedCount)
 		}
 
-		// 有失败的情况，更新上传记录状态为失败
 		failedStatus := int32(native.LocationStatus_PFAILED)
 		ur.Status = &failedStatus
 		ur.Message = &errorMsg
@@ -423,7 +430,6 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 			llog.L().Errorf("update upload record status to failed error: %v, id: %d", err, *ur.Id)
 		}
 	} else {
-		// 所有上传都完成，检查是否可以完成上传
 		completeUpload(ur)
 	}
 }
@@ -441,63 +447,77 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 	// 获取存储实例
 	st := GetStorage(providerID)
 	if st == nil {
-		msg := fmt.Sprintf("storage provider not found, id: %d", providerID)
-		fl.Message = &msg
-		fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-		db.UpdateFileLocation(fl, []string{"status", "message"})
-		return errors.New(msg)
+		return failFileLocation(fl, fmt.Sprintf("storage provider not found, id: %d", providerID))
 	}
 
 	// 获取ORM对象
 	orm := st.GetOrm()
 	if orm == nil || !*orm.Enabled {
-		msg := fmt.Sprintf("storage provider not enabled, id: %d", providerID)
-		fl.Message = &msg
-		fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-		db.UpdateFileLocation(fl, []string{"status", "message"})
-		return errors.New(msg)
+		return failFileLocation(fl, fmt.Sprintf("storage provider not enabled, id: %d", providerID))
 	}
 
 	// 检查源文件是否存在
 	if _, err := os.Stat(sourcePath); err != nil {
-		msg := fmt.Sprintf("source file not found: %s", sourcePath)
-		fl.Message = &msg
-		fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-		db.UpdateFileLocation(fl, []string{"status", "message"})
-		return errors.New(msg)
+		return failFileLocation(fl, fmt.Sprintf("source file not found: %s", sourcePath))
 	}
 
 	// 生成加密器（如果需要加密）
-	// 加密条件：文件启用加密 且 存储提供者配置了加密密钥
-	var encryptor types.Encryptor = &types.NullEncryptor{}
-	var saltStr string
+	encryptor, err := prepareEncryptor(fileEncrypt, orm, fl, providerID, fileName)
+	if err != nil {
+		return err
+	}
 
+	// 执行上传
+	pinfo, err := st.Upload(ctx, sourcePath, fileName, encryptor)
+	if err != nil {
+		return failFileLocation(fl, err.Error())
+	}
+
+	// 检查返回的分片信息
+	if len(pinfo) == 0 {
+		return failFileLocation(fl, "no file info returned from upload")
+	}
+
+	// 处理分片上传结果
+	totalUploadedSize := saveUploadChunks(fl, pinfo, providerID)
+
+	// 更新存储提供者的已使用容量
+	if totalUploadedSize > 0 {
+		if err := db.IncrementUsedCapacity(providerID, totalUploadedSize); err != nil {
+			llog.L().Errorf("update used capacity failed: %v, provider_id: %d, size: %d", err, providerID, totalUploadedSize)
+		}
+	}
+
+	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v, total chunks: %d, size: %d",
+		*fl.Blake3Hash, providerID, fl.Encrypted != nil, len(pinfo), totalUploadedSize)
+	return nil
+}
+
+// failFileLocation 标记文件位置为失败状态
+func failFileLocation(fl *native.FileLocationORM, msg string) error {
+	fl.Message = &msg
+	fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
+	db.UpdateFileLocation(fl, []string{"status", "message"})
+	return errors.New(msg)
+}
+
+// prepareEncryptor 生成加密器（如果需要加密）
+func prepareEncryptor(fileEncrypt bool, orm *native.StorageProviderORM, fl *native.FileLocationORM, providerID uint32, fileName string) (types.Encryptor, error) {
 	if fileEncrypt && orm.EncryptionKey != nil && *orm.EncryptionKey != "" {
-		// 文件启用加密 + 提供者配置密钥 = 加密
-
 		llog.L().Infof("encryption enabled for file, provider: %d, file: %s", providerID, fileName)
 
 		// 生成随机salt（32字节）
 		saltBytes := make([]byte, 32)
 		if _, err := rand.Read(saltBytes); err != nil {
-			msg := fmt.Sprintf("generate salt failed: %v", err)
-			fl.Message = &msg
-			fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-			db.UpdateFileLocation(fl, []string{"status", "message"})
-			return errors.New(msg)
+			return nil, failFileLocation(fl, fmt.Sprintf("generate salt failed: %v", err))
 		}
-		saltStr = hex.EncodeToString(saltBytes)
+		saltStr := hex.EncodeToString(saltBytes)
 
 		// 创建加密器
 		enc, err := NewCryptEncryptor(*orm.EncryptionKey, saltStr)
 		if err != nil {
-			msg := fmt.Sprintf("create encryptor failed: %v", err)
-			fl.Message = &msg
-			fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-			db.UpdateFileLocation(fl, []string{"status", "message"})
-			return errors.New(msg)
+			return nil, failFileLocation(fl, fmt.Sprintf("create encryptor failed: %v", err))
 		}
-		encryptor = enc
 
 		// 标记为已加密
 		encrypted := true
@@ -505,129 +525,104 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 		fl.EncryptionSalt = &saltStr
 
 		llog.L().Infof("file will be encrypted, provider: %d, salt: %s...", providerID, saltStr[:16])
-	} else {
-		// 确保标记为未加密
-		encrypted := false
-		fl.Encrypted = &encrypted
+		return enc, nil
 	}
 
-	// 执行上传
-	pinfo, err := st.Upload(ctx, sourcePath, fileName, encryptor)
-	if err != nil {
-		msg := err.Error()
-		fl.Message = &msg
-		fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-		db.UpdateFileLocation(fl, []string{"status", "message"})
-		return err
-	}
+	// 确保标记为未加密
+	encrypted := false
+	fl.Encrypted = &encrypted
+	return &types.NullEncryptor{}, nil
+}
 
-	// 检查返回的分片信息
-	if len(pinfo) == 0 {
-		msg := "no file info returned from upload"
-		fl.Message = &msg
-		fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
-		db.UpdateFileLocation(fl, []string{"status", "message"})
-		return errors.New(msg)
-	}
-
-	// 处理分片上传结果
+// saveUploadChunks 处理上传结果，保存分片信息到数据库
+func saveUploadChunks(fl *native.FileLocationORM, pinfo []*types.StorageProviderFileInfo, providerID uint32) uint64 {
 	chunkTotal := uint32(len(pinfo))
-	var totalUploadedSize uint64 // 统计总上传大小
+	var totalUploadedSize uint64
 
 	for i, chunkInfo := range pinfo {
 		chunkNumber := uint32(i)
 
 		if i == 0 {
 			// 第一个分片：更新已有的 FileLocation 记录
-			fl.ProviderFileId = &chunkInfo.ID
-			if chunkInfo.Path != "" {
-				fl.Path = &chunkInfo.Path
-			}
-			if chunkInfo.Hash != "" {
-				fl.Hash = &chunkInfo.Hash
-			}
-			fl.Status = (*int32)(native.LocationStatus_PCOMPLETED.Enum())
-			chunkTotalValue := chunkTotal
-			fl.ChunkTotal = &chunkTotalValue
-			fl.ChunkNumber = &chunkNumber
-			if chunkInfo.Size > 0 {
-				fl.Size = &chunkInfo.Size
-			}
-			if chunkInfo.ChunkSize > 0 {
-				fl.ChunkSize = &chunkInfo.ChunkSize
-				totalUploadedSize += chunkInfo.ChunkSize // 累加上传大小
-			}
-			if chunkInfo.S3KeyFlag != "" {
-				fl.S3KeyFlag = &chunkInfo.S3KeyFlag
-			}
-
-			// 更新字段列表
-			updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
-			if chunkInfo.S3KeyFlag != "" {
-				updateFields = append(updateFields, "s3_key_flag")
-			}
-			if fl.Encrypted != nil {
-				updateFields = append(updateFields, "encrypted", "encryption_salt")
-			}
-
-			db.UpdateFileLocation(fl, updateFields)
-			llog.L().Infof("chunk 1/%d uploaded, hash: %s, provider: %d, file_id: %s",
-				chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
+			updateFirstChunkLocation(fl, chunkInfo, chunkTotal, chunkNumber)
+			totalUploadedSize += chunkInfo.ChunkSize
 		} else {
 			// 后续分片：创建新的 FileLocation 记录
-			newFl := &native.FileLocationORM{
-				Blake3Hash:     fl.Blake3Hash,
-				ProviderId:     fl.ProviderId,
-				ProviderFileId: &chunkInfo.ID,
-				Status:         (*int32)(native.LocationStatus_PCOMPLETED.Enum()),
-				ChunkNumber:    &chunkNumber,
-				ChunkTotal:     &chunkTotal,
-			}
-
-			if chunkInfo.Path != "" {
-				newFl.Path = &chunkInfo.Path
-			}
-			if chunkInfo.Hash != "" {
-				newFl.Hash = &chunkInfo.Hash
-			}
-			if chunkInfo.Size > 0 {
-				newFl.Size = &chunkInfo.Size
-			}
-			if chunkInfo.ChunkSize > 0 {
-				newFl.ChunkSize = &chunkInfo.ChunkSize
-				totalUploadedSize += chunkInfo.ChunkSize // 累加上传大小
-			}
-			if chunkInfo.S3KeyFlag != "" {
-				newFl.S3KeyFlag = &chunkInfo.S3KeyFlag
-			}
-			// // 复制加密信息
-			// if fl.Encrypted != nil {
-			// 	encrypted := *fl.Encrypted
-			// 	newFl.Encrypted = &encrypted
-			// 	newFl.EncryptionSalt = fl.EncryptionSalt
-			// }
-
-			if err := db.CreateFileLocation(newFl); err != nil {
+			if err := createChunkLocation(fl, chunkInfo, chunkTotal, chunkNumber); err != nil {
 				llog.L().Errorf("create file location for chunk %d failed: %v", chunkNumber, err)
-				return err
+				continue
 			}
-
-			llog.L().Infof("chunk %d/%d uploaded, hash: %s, provider: %d, file_id: %s",
-				chunkNumber, chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
+			totalUploadedSize += chunkInfo.ChunkSize
 		}
+
+		llog.L().Infof("chunk %d/%d uploaded, hash: %s, provider: %d, file_id: %s",
+			chunkNumber+1, chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
 	}
 
-	// 更新存储提供者的已使用容量
-	if totalUploadedSize > 0 {
-		if err := db.IncrementUsedCapacity(providerID, totalUploadedSize); err != nil {
-			llog.L().Errorf("update used capacity failed: %v, provider_id: %d, size: %d", err, providerID, totalUploadedSize)
-			// 不影响上传结果，仅记录错误
-		}
+	return totalUploadedSize
+}
+
+// updateFirstChunkLocation 更新第一个分片的 FileLocation 记录
+func updateFirstChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StorageProviderFileInfo, chunkTotal, chunkNumber uint32) {
+	fl.ProviderFileId = &chunkInfo.ID
+	if chunkInfo.Path != "" {
+		fl.Path = &chunkInfo.Path
+	}
+	if chunkInfo.Hash != "" {
+		fl.Hash = &chunkInfo.Hash
+	}
+	fl.Status = (*int32)(native.LocationStatus_PCOMPLETED.Enum())
+	fl.ChunkTotal = &chunkTotal
+	fl.ChunkNumber = &chunkNumber
+	if chunkInfo.Size > 0 {
+		fl.Size = &chunkInfo.Size
+	}
+	if chunkInfo.ChunkSize > 0 {
+		fl.ChunkSize = &chunkInfo.ChunkSize
+	}
+	if chunkInfo.S3KeyFlag != "" {
+		fl.S3KeyFlag = &chunkInfo.S3KeyFlag
 	}
 
-	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v, total chunks: %d, size: %d",
-		*fl.Blake3Hash, providerID, fl.Encrypted != nil, chunkTotal, totalUploadedSize)
-	return nil
+	updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
+	if chunkInfo.S3KeyFlag != "" {
+		updateFields = append(updateFields, "s3_key_flag")
+	}
+	if fl.Encrypted != nil {
+		updateFields = append(updateFields, "encrypted", "encryption_salt")
+	}
+
+	db.UpdateFileLocation(fl, updateFields)
+}
+
+// createChunkLocation 创建后续分片的 FileLocation 记录
+func createChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StorageProviderFileInfo, chunkTotal, chunkNumber uint32) error {
+	newFl := &native.FileLocationORM{
+		Blake3Hash:     fl.Blake3Hash,
+		ProviderId:     fl.ProviderId,
+		ProviderFileId: &chunkInfo.ID,
+		Status:         (*int32)(native.LocationStatus_PCOMPLETED.Enum()),
+		ChunkNumber:    &chunkNumber,
+		ChunkTotal:     &chunkTotal,
+	}
+
+	if chunkInfo.Path != "" {
+		newFl.Path = &chunkInfo.Path
+	}
+	if chunkInfo.Hash != "" {
+		newFl.Hash = &chunkInfo.Hash
+	}
+	if chunkInfo.Size > 0 {
+		newFl.Size = &chunkInfo.Size
+	}
+	if chunkInfo.ChunkSize > 0 {
+		newFl.ChunkSize = &chunkInfo.ChunkSize
+	}
+	if chunkInfo.S3KeyFlag != "" {
+		newFl.S3KeyFlag = &chunkInfo.S3KeyFlag
+	}
+
+	return db.CreateFileLocation(newFl)
 }
 
 // getOrCreateFileLocation 获取或创建文件位置记录

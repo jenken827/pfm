@@ -7,6 +7,7 @@ import 'package:pfm/models/models.dart';
 import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
+import '../proto/native/backup.pb.dart';
 import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/provider.pb.dart';
@@ -293,6 +294,29 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('重命名文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取文件基本信息（轻量接口，只返回id/name/parent_id/type/size）
+  Future<ApiResult<GetFileInfoRespData>> getFileInfo(String fileId) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFileInfo',
+        data: {'file_id': fileId},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetFileInfoRespData>(
+        data,
+        GetFileInfoRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取文件基本信息失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取文件基本信息失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }
@@ -1174,6 +1198,221 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('获取文件标签失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  // ==================== 备份管理 API ====================
+
+  /// 创建备份任务
+  Future<ApiResult<void>> createBackupTask({
+    required String name,
+    required String sourcePath,
+    required String targetDirId,
+    BackupStrategy? strategy,
+    String? cronExpression,
+    String? ignoreRules,
+    bool? recursive,
+    bool? enabled,
+  }) async {
+    try {
+      final req = CreateBackupTaskReq()
+        ..name = name
+        ..sourcePath = sourcePath
+        ..targetDirId = targetDirId;
+      if (strategy != null) req.strategy = strategy;
+      if (cronExpression != null) req.cronExpression = cronExpression;
+      if (ignoreRules != null) req.ignoreRules = ignoreRules;
+      if (recursive != null) req.recursive = recursive;
+      if (enabled != null) req.enabled = enabled;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/CreateBackupTask',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('创建备份任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('创建备份任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新备份任务
+  Future<ApiResult<void>> updateBackupTask({
+    required int id,
+    String? name,
+    String? sourcePath,
+    String? targetDirId,
+    BackupStrategy? strategy,
+    String? cronExpression,
+    String? ignoreRules,
+    bool? recursive,
+    bool? enabled,
+  }) async {
+    try {
+      final req = UpdateBackupTaskReq()..id = Int64(id);
+      if (name != null) req.name = name;
+      if (sourcePath != null) req.sourcePath = sourcePath;
+      if (targetDirId != null) req.targetDirId = targetDirId;
+      if (strategy != null) req.strategy = strategy;
+      if (cronExpression != null) req.cronExpression = cronExpression;
+      if (ignoreRules != null) req.ignoreRules = ignoreRules;
+      if (recursive != null) req.recursive = recursive;
+      if (enabled != null) req.enabled = enabled;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/UpdateBackupTask',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('更新备份任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新备份任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 删除备份任务
+  Future<ApiResult<void>> deleteBackupTask(List<int> ids) async {
+    try {
+      final req = DeleteBackupTaskReq()..ids.addAll(ids.map((id) => Int64(id)));
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/DeleteBackupTask',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('删除备份任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('删除备份任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取备份任务列表
+  Future<ApiResult<ListBackupTasksRespData>> listBackupTasks({
+    int? page,
+    int? pageSize,
+    bool? enabled,
+  }) async {
+    try {
+      final req = ListBackupTasksReq();
+      if (page != null) req.page = page;
+      if (pageSize != null) req.pageSize = pageSize;
+      if (enabled != null) req.enabled = enabled;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/ListBackupTasks',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListBackupTasksRespData>(
+        data,
+        ListBackupTasksRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取备份任务列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取备份任务列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取备份任务详情
+  Future<ApiResult<GetBackupTaskRespData>> getBackupTask(int id) async {
+    try {
+      final req = GetBackupTaskReq()..id = Int64(id);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/GetBackupTask',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetBackupTaskRespData>(
+        data,
+        GetBackupTaskRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取备份任务详情失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取备份任务详情失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 手动触发备份
+  Future<ApiResult<void>> triggerBackup(int id) async {
+    try {
+      final req = TriggerBackupReq()..id = Int64(id);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/TriggerBackup',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on DioException catch (e) {
+      _logger.error('触发备份失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('触发备份失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取备份文件记录
+  Future<ApiResult<ListBackupFilesRespData>> listBackupFiles({
+    required int taskId,
+    int? page,
+    int? pageSize,
+    BackupFileStatus? status,
+  }) async {
+    try {
+      final req = ListBackupFilesReq()..taskId = Int64(taskId);
+      if (page != null) req.page = page;
+      if (pageSize != null) req.pageSize = pageSize;
+      if (status != null) req.status = status;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.BackupService/ListBackupFiles',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListBackupFilesRespData>(
+        data,
+        ListBackupFilesRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on DioException catch (e) {
+      _logger.error('获取备份文件记录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取备份文件记录失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

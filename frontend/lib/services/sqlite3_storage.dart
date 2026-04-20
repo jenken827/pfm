@@ -14,9 +14,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// 确保数据库操作在后台线程执行，不阻塞 UI
 class Sqlite3Storage {
   static const String _dbName = 'pfm.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static const String uploadTaskTableName = 'upload_tasks';
   static const String downloadTaskTableName = 'download_tasks';
+  static const String backupFileTableName = 'backup_file_records';
 
   static Sqlite3Storage? _instance;
   static String? _dbPath;
@@ -111,6 +112,7 @@ class Sqlite3Storage {
   Future<void> _onCreate(Database db, int version) async {
     await db.execute(UploadTaskRecord.createSql());
     await db.execute(DownloadTaskRecord.createSql());
+    await db.execute(_createBackupFileTableSql());
 
     getLogger().info('Sqlite3Storage tables created');
   }
@@ -120,8 +122,31 @@ class Sqlite3Storage {
     getLogger().info(
       'Sqlite3Storage upgrading from $oldVersion to $newVersion',
     );
-    // 未来版本升级逻辑
+    if (oldVersion < 2) {
+      await db.execute(_createBackupFileTableSql());
+    }
   }
+
+  /// 备份文件记录表建表 SQL
+  static String _createBackupFileTableSql() => '''
+    CREATE TABLE IF NOT EXISTS backup_file_records (
+      id TEXT PRIMARY KEY,
+      config_id TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      file_hash TEXT,
+      file_size INTEGER NOT NULL,
+      modified_at INTEGER NOT NULL,
+      server_file_id TEXT,
+      status INTEGER NOT NULL DEFAULT 0,
+      message TEXT,
+      uploaded_at TEXT,
+      created_at TEXT,
+      UNIQUE(config_id, relative_path)
+    );
+    CREATE INDEX IF NOT EXISTS idx_bfr_config ON backup_file_records (config_id);
+    CREATE INDEX IF NOT EXISTS idx_bfr_status ON backup_file_records (status);
+    CREATE INDEX IF NOT EXISTS idx_bfr_hash ON backup_file_records (file_hash);
+  ''';
 
   /// 获取所有任务（异步）
   Future<List<UploadTaskRecord>> getAllUploadTasksAsync() async {
@@ -571,5 +596,90 @@ class Sqlite3Storage {
       await _instance!._init();
     }
     return _instance!;
+  }
+
+  // ========== 备份文件记录 CRUD ==========
+
+  /// 获取某配置+路径的备份记录
+  Future<Map<String, dynamic>?> getBackupFileRecord(
+      String configId, String relativePath) async {
+    final maps = await _database!.query(
+      backupFileTableName,
+      where: 'config_id = ? AND relative_path = ?',
+      whereArgs: [configId, relativePath],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return maps.first;
+  }
+
+  /// 新增备份文件记录
+  Future<void> addBackupFileRecord(Map<String, dynamic> record) async {
+    await _withRetry(
+      () => _database!.insert(
+        backupFileTableName,
+        record,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      ),
+    );
+  }
+
+  /// 更新备份文件记录
+  Future<void> updateBackupFileRecord(
+      String id, Map<String, dynamic> values) async {
+    if (values.isEmpty) return;
+    await _withRetry(
+      () => _database!.update(
+        backupFileTableName,
+        values,
+        where: 'id = ?',
+        whereArgs: [id],
+      ),
+    );
+  }
+
+  /// 获取某配置下所有记录
+  Future<List<Map<String, dynamic>>> getBackupFileRecords(
+      String configId) async {
+    return await _database!.query(
+      backupFileTableName,
+      where: 'config_id = ?',
+      whereArgs: [configId],
+      orderBy: 'relative_path ASC',
+    );
+  }
+
+  /// 获取某配置下未完成的记录（用于断点续传）
+  Future<List<Map<String, dynamic>>> getPendingBackupRecords(
+      String configId) async {
+    // status: 0=pending, 1=uploading, 4=failed, 5=stale
+    return await _database!.query(
+      backupFileTableName,
+      where: 'config_id = ? AND status IN (?, ?, ?, ?)',
+      whereArgs: [configId, 0, 1, 4, 5],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  /// 删除某配置下所有记录
+  Future<void> deleteBackupRecordsByConfig(String configId) async {
+    await _withRetry(
+      () => _database!.delete(
+        backupFileTableName,
+        where: 'config_id = ?',
+        whereArgs: [configId],
+      ),
+    );
+  }
+
+  /// 删除单条备份记录
+  Future<void> deleteBackupRecord(String id) async {
+    await _withRetry(
+      () => _database!.delete(
+        backupFileTableName,
+        where: 'id = ?',
+        whereArgs: [id],
+      ),
+    );
   }
 }

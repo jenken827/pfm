@@ -13,6 +13,7 @@ import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
+import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/utils/utils.dart';
 import 'package:pfm/widgets/folder_settings_dialog.dart';
@@ -1235,19 +1236,19 @@ class _FileView extends StatelessWidget {
     final fileIds = files.map((f) => f.id).toList();
 
     // 导航到选择文件夹页面
-    final targetFolderId = await context.push<String>(
+    final pickResult = await context.push<FolderPickResult>(
       FolderPickerRoute().location,
       extra: {'initialFolderId': '', 'excludeIds': fileIds},
     );
 
     // 用户取消选择
-    if (targetFolderId == null || !context.mounted) return;
+    if (pickResult == null || !context.mounted) return;
 
     // 用户选择了目标文件夹，执行移动
     final fmRepo = context.read<FmRepository>();
     final moveResult = await fmRepo.moveFile(
       fileIds: fileIds,
-      targetParentId: targetFolderId,
+      targetParentId: pickResult.id,
     );
 
     if (context.mounted) {

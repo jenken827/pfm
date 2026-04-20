@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../pages/pages.dart';
 import '../pages/settings/theme_setting_page.dart';
 import '../pages/settings/storage_provider_setting_page.dart';
+import '../pages/settings/server_backup_page.dart';
+import '../pages/settings/client_backup_page.dart';
 
 part 'settings_route.g.dart';
 
@@ -12,6 +14,8 @@ part 'settings_route.g.dart';
   routes: [
     TypedGoRoute<ThemeSettingRoute>(path: 'theme'),
     TypedGoRoute<StorageProviderSettingRoute>(path: 'storage-provider'),
+    TypedGoRoute<ServerBackupRoute>(path: 'server-backup'),
+    TypedGoRoute<ClientBackupRoute>(path: 'client-backup'),
   ],
 )
 @immutable
@@ -45,3 +49,22 @@ class StorageProviderSettingRoute extends GoRouteData
   }
 }
 
+/// 服务端备份路由
+class ServerBackupRoute extends GoRouteData with $ServerBackupRoute {
+  const ServerBackupRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const ServerBackupPage();
+  }
+}
+
+/// 客户端备份路由
+class ClientBackupRoute extends GoRouteData with $ClientBackupRoute {
+  const ClientBackupRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const ClientBackupPage();
+  }
+}

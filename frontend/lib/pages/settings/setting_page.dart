@@ -41,6 +41,24 @@ class SettingPage extends StatelessWidget {
           ),
           const Divider(height: 1),
 
+          // 服务端备份
+          _SettingsTile(
+            icon: Icons.dns_outlined,
+            title: '服务端备份',
+            subtitle: '备份服务器本地文件到应用目录',
+            onTap: () => const ServerBackupRoute().push(context),
+          ),
+          const Divider(height: 1),
+
+          // 自动备份
+          _SettingsTile(
+            icon: Icons.phone_android_outlined,
+            title: '自动备份',
+            subtitle: '备份本地文件到服务器',
+            onTap: () => const ClientBackupRoute().push(context),
+          ),
+          const Divider(height: 1),
+
           // 关于
           _SettingsTile(
             icon: Icons.info_outline,

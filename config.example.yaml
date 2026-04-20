@@ -1,37 +1,56 @@
-# github.com/flipped-aurora/gin-vue-admin/server Global Configuration
+# Personal File Manager / FS-Server example config
 
-# schema
 schema:
   addr: 127.0.0.1
   port: 10999
-# redis configuration
-# redis:
-#     addr: 127.0.0.1
-#     port: 6379
-#     password: "123456"
-#     db: 0
-# log
+
+cors:
+  allow_origins:
+    - "*"
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+    - HEAD
+  allow_headers:
+    - "*"
+
 log:
-  logger: 
-    filename: logs/log.txt
+  filename: logs/log.log
   level: debug
+  max_size: 10
+  max_age: 7
+  max_backups: 10
+  local_time: true
+  compress: false
+
 db:
   type: sqlite3
-  addr:
-  port: 
-  name: "data.db"
+  addr: ""
+  port: 0
+  name: data.db
   user: ""
   password: ""
+  table_prefix: ""
+
 casdoor:
-  endpoint: "https://example.com"
-  client_id: "client_id"
-  client_secret: "client_secret"
+  endpoint: https://example.com
+  client_id: client_id
+  client_secret: client_secret
   certificate: ""
-  organization_name: "org"
-  application_name: "app"
+  organization_name: org
+  application_name: app
 
-# 分享链接签名密钥，用于生成和验证分享链接的签名
-# 如果不设置，将自动生成随机密钥（每次重启后之前的分享链接将失效）
-sign_token: ""
+# 服务对外可访问地址，用于生成公开分享链接等场景
+server_url: http://127.0.0.1:10999
 
+aria2:
+  endpoint: http://127.0.0.1:6800/jsonrpc
+  token: ""
+  timeout: 30
 
+# 分享链接签名密钥。
+# 建议设置为稳定且足够随机的字符串，否则更换后旧分享链接会失效。
+sign_token: replace-with-a-stable-secret

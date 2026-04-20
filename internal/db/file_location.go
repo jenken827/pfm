@@ -5,6 +5,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"gorm.io/gorm"
 )
 
 // GetFileLocations 获取文件位置记录
@@ -133,4 +134,51 @@ func GetFileHistoriesByFileID(fileID string) ([]*native.FileHistoryORM, error) {
 	}
 
 	return histories, nil
+}
+
+// GetFileLocationsByFileHash 根据文件哈希查询文件位置记录（按 provider_id 排序）
+func GetFileLocationsByFileHash(fileHash string) ([]*native.FileLocationORM, error) {
+	ctx := context.Background()
+	locations, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ?", fileHash).Order("provider_id").Find(ctx)
+	if err != nil {
+		llog.L().Errorf("query file locations failed: %v", err)
+		return nil, err
+	}
+	return locations, nil
+}
+
+// GetFileLocationByFileHashAndProvider 根据文件哈希和提供者查询
+func GetFileLocationByFileHashAndProvider(fileHash string, providerID uint32) (*native.FileLocationORM, error) {
+	ctx := context.Background()
+	location, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ? AND provider_id = ?", fileHash, providerID).First(ctx)
+	if err != nil {
+		llog.L().Errorf("query file location failed: %v", err)
+		return nil, err
+	}
+	return location, nil
+}
+
+// DeleteFileLocation 删除文件位置记录
+func DeleteFileLocation(id uint64) error {
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileLocationORM](db).Where("id = ?", id).Delete(ctx)
+	if err != nil {
+		llog.L().Errorf("delete file location failed, id: %d, err: %v", id, err)
+		return err
+	}
+	return nil
+}
+
+// DeleteFileLocations 批量删除文件位置记录
+func DeleteFileLocations(ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileLocationORM](db).Where("id IN ?", ids).Delete(ctx)
+	if err != nil {
+		llog.L().Errorf("batch delete file locations failed, err: %v", err)
+		return err
+	}
+	return nil
 }

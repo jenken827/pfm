@@ -288,6 +288,25 @@ message FileDetailReq {
   optional string file_id = 1 [(buf.validate.field).required = true];
 }
 
+// 获取文件基本信息请求
+message GetFileInfoReq {
+  optional string file_id = 1 [(buf.validate.field).required = true];
+}
+
+// 文件基本信息响应
+message GetFileInfoRespData {
+  // 文件ID
+  optional string id = 1;
+  // 文件名称
+  optional string name = 2;
+  // 父文件夹ID
+  optional string parent_id = 3;
+  // 文件类型
+  optional FileType type = 4;
+  // 文件大小
+  optional uint64 size = 5;
+}
+
 // 存储提供者位置信息（按提供者分组后）
 message ProviderLocationInfo {
   // 存储提供者ID
@@ -493,6 +512,10 @@ service FileService {
   // 获取文件详情
   rpc GetFileDetail(FileDetailReq) returns (BaseResp) {
     option (google.api.http) = {get: "/api/file/detail"};
+  }
+  // 获取文件基本信息
+  rpc GetFileInfo(GetFileInfoReq) returns (BaseResp) {
+    option (google.api.http) = {get: "/api/file/info"};
   }
   // 创建目录
   rpc CreateDir(CreateDirReq) returns (BaseResp);

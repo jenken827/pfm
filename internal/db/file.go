@@ -252,18 +252,12 @@ func UpdateDir(orm *native.FileORM) error {
 		fields = append(fields, "bound_provider_ids")
 	}
 
-	// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
-	// 需要正确展开字段列表
 	if len(fields) == 0 {
 		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
 		return err
 	}
-	// 将剩余字段转换为 []interface{}
-	args := make([]any, len(fields)-1)
-	for i, f := range fields[1:] {
-		args[i] = f
-	}
-	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Select(fields[0], args...).Updates(ctx, orm)
+	query, args := selectFields(fields)
+	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Select(query, args...).Updates(ctx, orm)
 	return err
 }
 

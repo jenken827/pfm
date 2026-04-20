@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"jenken827.com/jenken827/pfm/internal/backup"
 	"jenken827.com/jenken827/pfm/internal/casdoor"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -32,5 +33,8 @@ func Init() {
 
 	// 初始化存储
 	storage.Init()
+
+	// 初始化备份调度器
+	backup.Init()
 
 }

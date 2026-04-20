@@ -342,40 +342,9 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	// 如果存在未完成的上传任务
+	// 如果存在未完成的上传任务，返回续传信息
 	if record != nil {
-		// 判断是否是同一个上传记录
-		if *record.ParentId != *req.ParentId || *record.FileName != *req.Name {
-			llog.L().Errorf("A same hash file is uploading, but file name or parent id not match,uploading file path: %d", *record.Id)
-			return nil, &models.Err{E: errors.New("A same hash file is uploading, but file name or parent id not match"), C: native.RespCode_INTERNAL_ERROR}
-		}
-
-		// 根据 task_type 区分任务类型
-		if record.TaskType != nil && *record.TaskType == int32(native.UploadTaskType_SYNC) {
-			// 同步任务：文件已存在，直接返回 exists=true
-			llog.L().Infof("found sync task for hash: %s, file already exists", blake3Hash)
-			exists := true
-			return &native.InitUploadRespData{Exists: &exists}, nil
-		}
-
-		// 普通上传任务：返回 upload_id 和已上传分片（位图）
-		llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
-			*record.Id, *record.ChunkTotal, *record.ChunkSize)
-		uploadID := *record.Id
-		chunkTotal := *record.ChunkTotal
-		chunkSize := *record.ChunkSize
-
-		uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
-		if chunks != nil {
-			uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
-		}
-
-		return &native.InitUploadRespData{
-			UploadId:       &uploadID,
-			UploadedChunks: uploadedChunksBitmap,
-			ChunkTotal:     &chunkTotal,
-			ChunkSize:      &chunkSize,
-		}, nil
+		return resumeExistingUpload(record, chunks, blake3Hash)
 	}
 
 	// 验证父文件夹并获取存储提供者列表
@@ -405,6 +374,40 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 文件不存在，创建新的上传任务
+	return createNewUploadTask(req, blake3Hash, parentFile, sameNameFile)
+}
+
+// resumeExistingUpload 处理断点续传
+func resumeExistingUpload(record *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM, blake3Hash string) (*native.InitUploadRespData, *models.Err) {
+	// 根据 task_type 区分任务类型
+	if record.TaskType != nil && *record.TaskType == int32(native.UploadTaskType_SYNC) {
+		llog.L().Infof("found sync task for hash: %s, file already exists", blake3Hash)
+		exists := true
+		return &native.InitUploadRespData{Exists: &exists}, nil
+	}
+
+	// 普通上传任务：返回 upload_id 和已上传分片（位图）
+	llog.L().Infof("resume upload: %d, chunk_total: %d, chunk_size: %d",
+		*record.Id, *record.ChunkTotal, *record.ChunkSize)
+	uploadID := *record.Id
+	chunkTotal := *record.ChunkTotal
+	chunkSize := *record.ChunkSize
+
+	uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
+	if chunks != nil {
+		uploadedChunksBitmap = buildUploadedBitmap(chunks, chunkTotal)
+	}
+
+	return &native.InitUploadRespData{
+		UploadId:       &uploadID,
+		UploadedChunks: uploadedChunksBitmap,
+		ChunkTotal:     &chunkTotal,
+		ChunkSize:      &chunkSize,
+	}, nil
+}
+
+// createNewUploadTask 创建新的上传任务
+func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFile *native.FileORM, sameNameFile *native.FileORM) (*native.InitUploadRespData, *models.Err) {
 	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
 	if mErr != nil {
 		return nil, mErr
@@ -623,7 +626,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	llog.L().Infof("file merged successfully: %d bytes", totalSize)
 
 	// 2. 获取文件类型
-	filetype, mime := getFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, 0), *uploadRecord.FileName)
+	filetype, mime := GetFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, 0), *uploadRecord.FileName)
 
 	// 3. 创建文件记录
 	fileRecord := &native.FileORM{
@@ -738,26 +741,8 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	// 文件不存在，需要实际上传
-	// 验证文件内容 hash
-	hasher := blake3.New(32, nil)
-	hasher.Write(req.Content)
-	actualHash := hex.EncodeToString(hasher.Sum(nil))
-
-	if actualHash != blake3Hash {
-		llog.L().Errorf("file hash mismatch: expected %s, got %s", blake3Hash, actualHash)
-		return nil, &models.Err{
-			E: errors.New("file hash mismatch"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	// 验证文件大小
-	if uint64(len(req.Content)) != *req.Size {
-		llog.L().Errorf("file size mismatch: expected %d, got %d", *req.Size, len(req.Content))
-		return nil, &models.Err{
-			E: fmt.Errorf("file size mismatch: expected %d, got %d", *req.Size, len(req.Content)),
-			C: native.RespCode_PARAMS_ERROR,
-		}
+	if mErr := validateSmallFileContent(req.Content, blake3Hash, *req.Size); mErr != nil {
+		return nil, mErr
 	}
 
 	// 处理同名文件
@@ -766,22 +751,71 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		return nil, mErr
 	}
 
-	// 创建临时目录和文件
-	if err := utils.CreateFileTempDir(blake3Hash, true); err != nil {
-		llog.L().Errorf("create temp dir failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	// 创建临时文件
+	tempPath, mErr := writeSmallFileTemp(blake3Hash, *req.Name, req.Content)
+	if mErr != nil {
+		return nil, mErr
 	}
-
-	tempPath := utils.GetFileTempPath(blake3Hash, *req.Name)
-	if err := os.WriteFile(tempPath, req.Content, 0644); err != nil {
-		llog.L().Errorf("write temp file failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-	}
-
-	// 获取文件类型
-	filetype, mime := getFileType(tempPath, *req.Name)
 
 	// 创建文件记录
+	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 触发后台存储上传
+	smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID)
+
+	exists := false
+	return &native.UploadSmallRespData{
+		FileId: newFileRecord.Id,
+		Name:   newFileRecord.Name,
+		Size:   newFileRecord.Size,
+		Hash:   newFileRecord.Hash,
+		Exists: &exists,
+	}, nil
+}
+
+// validateSmallFileContent 验证小文件内容hash和大小
+func validateSmallFileContent(content []byte, expectedHash string, expectedSize uint64) *models.Err {
+	hasher := blake3.New(32, nil)
+	hasher.Write(content)
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	if actualHash != expectedHash {
+		llog.L().Errorf("file hash mismatch: expected %s, got %s", expectedHash, actualHash)
+		return &models.Err{E: errors.New("file hash mismatch"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	if uint64(len(content)) != expectedSize {
+		llog.L().Errorf("file size mismatch: expected %d, got %d", expectedSize, len(content))
+		return &models.Err{
+			E: fmt.Errorf("file size mismatch: expected %d, got %d", expectedSize, len(content)),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+	return nil
+}
+
+// writeSmallFileTemp 将小文件内容写入临时文件
+func writeSmallFileTemp(blake3Hash, fileName string, content []byte) (string, *models.Err) {
+	if err := utils.CreateFileTempDir(blake3Hash, true); err != nil {
+		llog.L().Errorf("create temp dir failed: %v", err)
+		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+
+	tempPath := utils.GetFileTempPath(blake3Hash, fileName)
+	if err := os.WriteFile(tempPath, content, 0644); err != nil {
+		llog.L().Errorf("write temp file failed: %v", err)
+		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+	return tempPath, nil
+}
+
+// createSmallFileRecord 创建小文件的文件记录
+func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blake3Hash, tempPath, overwriteID string) (*native.FileORM, *models.Err) {
+	filetype, mime := GetFileType(tempPath, *req.Name)
+
 	newFileRecord := &native.FileORM{
 		Name:     req.Name,
 		ParentId: req.ParentId,
@@ -789,21 +823,23 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		Hash:     &blake3Hash,
 		Type:     &filetype,
 		Mime:     &mime,
-		IsReady:  utils.BoolPtr(false), // 文件创建时标记为未就绪
+		IsReady:  utils.BoolPtr(false),
 	}
 
-	// 处理文件记录（新建或覆盖）
-	newFileRecord, mErr = handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
+	newFileRecord, mErr := handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	// 创建文件标签
 	if newFileRecord.Id != nil {
 		parseAndCreateTags(*newFileRecord.Id, req.Tags)
 	}
 
-	// 创建上传记录并触发后台存储上传
+	return newFileRecord, nil
+}
+
+// smallFileUploadToProviders 创建上传记录并触发后台存储上传
+func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, parentFile *native.FileORM, tempPath, overwriteID string) {
 	uploadRecord := &native.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
@@ -821,15 +857,6 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	} else {
 		go storage.Dispatch(context.Background(), uploadRecord)
 	}
-
-	exists := false
-	return &native.UploadSmallRespData{
-		FileId: newFileRecord.Id,
-		Name:   newFileRecord.Name,
-		Size:   newFileRecord.Size,
-		Hash:   newFileRecord.Hash,
-		Exists: &exists,
-	}, nil
 }
 
 // ListUploadRecords 获取上传记录列表

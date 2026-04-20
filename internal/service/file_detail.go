@@ -164,6 +164,32 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 	return result
 }
 
+// GetFileInfo 获取文件基本信息（轻量接口，只返回id/name/parent_id/type/size）
+func GetFileInfo(ctx context.Context, req *native.GetFileInfoReq) (*native.GetFileInfoRespData, *models.Err) {
+	fileID := req.GetFileId()
+	if fileID == "" {
+		return nil, &models.Err{E: errors.New("file_id is required"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	file, err := db.GetFileByID(fileID)
+	if err != nil {
+		llog.L().Errorf("get file by id failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	resp := &native.GetFileInfoRespData{
+		Id:       file.Id,
+		Name:     file.Name,
+		ParentId: file.ParentId,
+		Size:     file.Size,
+	}
+	if file.Type != nil {
+		ft := native.FileType(*file.Type)
+		resp.Type = &ft
+	}
+	return resp, nil
+}
+
 // GetFileCacheStatus 查询文件缓存状态
 func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) (*native.GetFileCacheStatusResp, *models.Err) {
 	// 查询文件位置记录

@@ -124,6 +124,15 @@ func (s *FileServer) GetFileDetail(ctx context.Context, req *connect.Request[nat
 	return response.SuccessResp(data)
 }
 
+// GetFileInfo 获取文件基本信息
+func (s *FileServer) GetFileInfo(ctx context.Context, req *connect.Request[native.GetFileInfoReq]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.GetFileInfo(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}
+
 // GetFileCacheStatus 查询文件缓存状态
 func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *connect.Request[native.GetFileCacheStatusReq]) (*connect.Response[native.BaseResp], error) {
 	result, err := service.GetFileCacheStatus(ctx, req.Msg)

@@ -314,6 +314,87 @@ func getDeletedParentIDs(fileID string) ([]string, error) {
 	return parentIDs, nil
 }
 
+// batchDeleteFromProvider 从单个存储提供者批量删除文件位置
+// 返回：成功删除的 location ID 列表、删除失败的 location ID 列表、删除的总大小
+func batchDeleteFromProvider(
+	ctx context.Context,
+	providerID uint32,
+	locations []*native.FileLocationORM,
+) (deletedIDs []uint64, failedIDs []uint64, deletedSize uint64) {
+	st := storage.GetStorage(providerID)
+	if st == nil {
+		llog.L().Warnf("storage provider not found, id: %d", providerID)
+		for _, loc := range locations {
+			if loc.Id != nil {
+				failedIDs = append(failedIDs, *loc.Id)
+			}
+		}
+		return
+	}
+
+	batchDeleter, ok := st.(types.BatchDeleter)
+	if !ok {
+		llog.L().Warnf("provider %d does not support BatchDeleter, skipping", providerID)
+		for _, loc := range locations {
+			if loc.Id != nil {
+				failedIDs = append(failedIDs, *loc.Id)
+			}
+		}
+		return
+	}
+
+	results, err := batchDeleter.BatchDelete(ctx, locations)
+
+	// 全部成功
+	if results == nil && err == nil {
+		llog.L().Infof("batch deleted all %d files from provider %d", len(locations), providerID)
+		for _, loc := range locations {
+			if loc.Id != nil {
+				deletedIDs = append(deletedIDs, *loc.Id)
+			}
+			if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
+				deletedSize += *loc.ChunkSize
+			}
+		}
+		return
+	}
+
+	// 全部失败
+	if results == nil && err != nil {
+		llog.L().Errorf("batch delete all failed: %v, provider_id: %d", err, providerID)
+		for _, loc := range locations {
+			if loc.Id != nil {
+				failedIDs = append(failedIDs, *loc.Id)
+			}
+		}
+		return
+	}
+
+	// 部分成功
+	llog.L().Infof("batch delete partial success: %d/%d from provider %d",
+		countSuccess(results), len(results), providerID)
+	for i, result := range results {
+		if i >= len(locations) {
+			break
+		}
+		loc := locations[i]
+		if result.Success {
+			if loc.Id != nil {
+				deletedIDs = append(deletedIDs, *loc.Id)
+			}
+			if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
+				deletedSize += *loc.ChunkSize
+			}
+		} else {
+			if loc.Id != nil {
+				failedIDs = append(failedIDs, *loc.Id)
+			}
+			llog.L().Errorf("delete location %d failed: %v", *loc.Id, result.Error)
+		}
+	}
+	return
+}
+
 // deleteFilesFromProviders 从存储提供者批量删除文件（内部函数）
 // 按 provider_id 分组后批量删除，提高效率
 func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
@@ -361,97 +442,21 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	}
 	llog.L().Infof("delet files  from providers,provider len: %d", len(providerLocations))
 
-	// 4. 按 provider_id 批量删除文件，并跟踪删除结果
-	providerDeletedSizes := make(map[uint32]uint64) // providerID -> deletedSize
-	locationIDsToDelete := make([]uint64, 0)
-	locationIDsFailed := make([]uint64, 0) // 删除失败的 location ID
+	// 4. 按 provider_id 批量删除文件
+	providerDeletedSizes := make(map[uint32]uint64)
+	var allDeletedIDs, allFailedIDs []uint64
 
 	for providerID, locations := range providerLocations {
 		llog.L().Infof("delet files loop providerlocations,providerID: %d", providerID)
-		st := storage.GetStorage(providerID)
-		if st == nil {
-			llog.L().Warnf("storage provider not found, id: %d", providerID)
-			// 将所有 location 标记为删除失败
-			for _, loc := range locations {
-				if loc.Id != nil {
-					locationIDsFailed = append(locationIDsFailed, *loc.Id)
-				}
-			}
-			continue
-		}
-		llog.L().Infof("delet files  get storage success,name: %s", st.GetName())
-
-		// 尝试使用批量删除接口
-		if batchDeleter, ok := st.(types.BatchDeleter); ok {
-			llog.L().Infof("provider id:%d support batch delete", providerID)
-			results, err := batchDeleter.BatchDelete(ctx, locations)
-
-			// 处理返回结果
-			if results == nil && err == nil {
-				// 全部删除成功
-				llog.L().Infof("batch deleted all %d files from provider %d", len(locations), providerID)
-				var deletedSize uint64
-				for _, loc := range locations {
-					if loc.Id != nil {
-						locationIDsToDelete = append(locationIDsToDelete, *loc.Id)
-					}
-					if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
-						deletedSize += *loc.ChunkSize
-					}
-				}
-				providerDeletedSizes[providerID] = deletedSize
-			} else if results == nil && err != nil {
-				// 全部删除失败
-				llog.L().Errorf("batch delete all failed: %v, provider_id: %d", err, providerID)
-				for _, loc := range locations {
-					if loc.Id != nil {
-						locationIDsFailed = append(locationIDsFailed, *loc.Id)
-					}
-				}
-			} else {
-				// 部分成功，处理每条记录的状态
-				llog.L().Infof("batch delete partial success: %d/%d from provider %d",
-					countSuccess(results), len(results), providerID)
-
-				var deletedSize uint64
-				for i, result := range results {
-					if i >= len(locations) {
-						break
-					}
-					loc := locations[i]
-
-					if result.Success {
-						// 删除成功
-						if loc.Id != nil {
-							locationIDsToDelete = append(locationIDsToDelete, *loc.Id)
-						}
-						if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
-							deletedSize += *loc.ChunkSize
-						}
-					} else {
-						// 删除失败
-						if loc.Id != nil {
-							locationIDsFailed = append(locationIDsFailed, *loc.Id)
-						}
-						llog.L().Errorf("delete location %d failed: %v", *loc.Id, result.Error)
-					}
-				}
-				if deletedSize > 0 {
-					providerDeletedSizes[providerID] = deletedSize
-				}
-			}
-		} else {
-			// 不支持 BatchDeleter，跳过
-			llog.L().Warnf("provider %d does not support BatchDeleter, skipping", providerID)
-			for _, loc := range locations {
-				if loc.Id != nil {
-					locationIDsFailed = append(locationIDsFailed, *loc.Id)
-				}
-			}
+		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
+		allDeletedIDs = append(allDeletedIDs, deletedIDs...)
+		allFailedIDs = append(allFailedIDs, failedIDs...)
+		if deletedSize > 0 {
+			providerDeletedSizes[providerID] = deletedSize
 		}
 	}
 
-	// 5. 更新存储提供者的已使用容量（只更新成功删除的容量）
+	// 5. 更新存储提供者的已使用容量
 	for providerID, size := range providerDeletedSizes {
 		if err := db.DecrementUsedCapacity(providerID, size); err != nil {
 			llog.L().Errorf("decrement used capacity failed: %v, provider_id: %d", err, providerID)
@@ -459,18 +464,18 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	}
 
 	// 6. 批量删除成功删除的文件位置记录
-	if len(locationIDsToDelete) > 0 {
-		if err := db.DeleteFileLocations(locationIDsToDelete); err != nil {
+	if len(allDeletedIDs) > 0 {
+		if err := db.DeleteFileLocations(allDeletedIDs); err != nil {
 			llog.L().Errorf("batch delete file locations failed: %v", err)
 		}
 	}
 
 	// 7. 更新删除失败的文件位置记录状态
-	if len(locationIDsFailed) > 0 {
-		if err := db.UpdateFileLocationStatus(locationIDsFailed, int32(native.LocationStatus_PDELETED_FAILED)); err != nil {
+	if len(allFailedIDs) > 0 {
+		if err := db.UpdateFileLocationStatus(allFailedIDs, int32(native.LocationStatus_PDELETED_FAILED)); err != nil {
 			llog.L().Errorf("update file location status to DELETED_FAILED failed: %v", err)
 		} else {
-			llog.L().Warnf("marked %d file locations as DELETED_FAILED", len(locationIDsFailed))
+			llog.L().Warnf("marked %d file locations as DELETED_FAILED", len(allFailedIDs))
 		}
 	}
 }
@@ -591,51 +596,9 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	providerDeletedSizes := make(map[uint32]uint64)
 
 	for providerID, locations := range providerLocations {
-		st := storage.GetStorage(providerID)
-		if st == nil {
-			llog.L().Warnf("storage provider not found, id: %d", providerID)
-			continue
-		}
-
-		// 尝试使用批量删除接口
-		if batchDeleter, ok := st.(types.BatchDeleter); ok {
-			results, err := batchDeleter.BatchDelete(ctx, locations)
-
-			// 处理返回结果
-			if results == nil && err == nil {
-				// 全部删除成功
-				llog.L().Infof("batch deleted all %d history files from provider %d", len(locations), providerID)
-				var deletedSize uint64
-				for _, loc := range locations {
-					if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
-						deletedSize += *loc.ChunkSize
-					}
-				}
-				providerDeletedSizes[providerID] = deletedSize
-			} else if results == nil && err != nil {
-				// 全部删除失败
-				llog.L().Errorf("batch delete history files all failed: %v, provider_id: %d", err, providerID)
-			} else {
-				// 部分成功
-				var deletedSize uint64
-				for i, result := range results {
-					if i >= len(locations) {
-						break
-					}
-					loc := locations[i]
-
-					if result.Success {
-						if loc.ChunkSize != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
-							deletedSize += *loc.ChunkSize
-						}
-					} else {
-						llog.L().Errorf("delete history location %d failed: %v", *loc.Id, result.Error)
-					}
-				}
-				if deletedSize > 0 {
-					providerDeletedSizes[providerID] = deletedSize
-				}
-			}
+		_, _, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
+		if deletedSize > 0 {
+			providerDeletedSizes[providerID] = deletedSize
 		}
 	}
 

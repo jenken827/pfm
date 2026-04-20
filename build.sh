@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Build script for go-server-demo
-# Automatically generates version from datetime and commit hash
+# Build & Dev script for Personal File Manager (Go Server)
+# 所有常用命令的统一入口，避免重复执行错误命令
 
 set -e
 
@@ -9,19 +9,241 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Get current commit hash (first 8 characters)
-COMMIT_HASH=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "unknown")
+# ============================================================
+# 帮助信息
+# ============================================================
 
-# Get current datetime in format YYYYMMDDHHMMSS
-DATETIME=$(date +"%Y%m%d%H%M%S")
+show_help() {
+    cat << EOF
+用法: $0 [命令] [选项]
 
-# Build version string
-VERSION="${DATETIME}-${COMMIT_HASH}"
+命令:
+  build          编译 Go 服务器（自动注入版本号）
+  run            编译并运行服务器
+  proto          生成 protobuf 代码（Go + Dart）
+  proto-go       仅生成 Go protobuf 代码
+  proto-dart     仅生成 Dart protobuf 代码
+  test           运行所有测试
+  test-cover     运行测试并生成覆盖率报告
+  tidy           执行 go mod tidy
+  lint           运行 golangci-lint 代码检查
+  clean          清理构建产物
+  dev            以开发模式运行（不编译，直接 go run）
+  help           显示此帮助信息
 
-echo "Building with version: $VERSION"
+选项 (仅用于 build/run 命令):
+  -o <path>      指定输出文件路径（默认: ./pfm）
 
-# Build with version injected via ldflags
-go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o pfm .
+示例:
+  $0 build                   # 编译服务器
+  $0 build -o /usr/local/bin/pfm  # 编译到指定路径
+  $0 run                     # 编译并运行
+  $0 dev                     # 开发模式运行（不编译）
+  $0 proto                   # 生成所有 protobuf 代码
+  $0 proto-go                # 仅生成 Go protobuf 代码
+  $0 proto-dart              # 仅生成 Dart protobuf 代码
+  $0 test                    # 运行测试
+  $0 test-cover              # 运行测试并生成覆盖率报告
+  $0 tidy                    # 清理 Go 模块依赖
+  $0 lint                    # 代码检查
+  $0 clean                   # 清理构建产物
 
-echo "Build completed successfully!"
-echo "Version: $VERSION"
+注意:
+  - build 和 run 命令会自动从 git commit hash 和日期生成版本号
+  - proto 命令需要在 proto/ 目录下执行 buf generate
+  - 项目模块路径: jenken827.com/jenken827/pfm
+EOF
+}
+
+# ============================================================
+# 通用辅助
+# ============================================================
+
+# 获取版本号：日期 + commit hash
+get_version() {
+    local COMMIT_HASH=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "unknown")
+    local DATETIME=$(date +"%Y%m%d%H%M%S")
+    echo "${DATETIME}-${COMMIT_HASH}"
+}
+
+# 检查命令是否存在
+check_command() {
+    if ! command -v "$1" &> /dev/null; then
+        echo "❌ 错误: 命令 '$1' 未找到，请安装后重试"
+        exit 1
+    fi
+}
+
+# ============================================================
+# 命令实现
+# ============================================================
+
+# 编译 Go 服务器
+cmd_build() {
+    local OUTPUT="${1:-./pfm}"
+    local VERSION=$(get_version)
+
+    echo "🔨 编译 Go 服务器..."
+    echo "📌 版本: $VERSION"
+    echo "📌 输出: $OUTPUT"
+
+    check_command "go"
+    go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o "$OUTPUT" .
+
+    echo "✅ 编译完成！版本: $VERSION"
+}
+
+# 编译并运行
+cmd_run() {
+    local OUTPUT="${1:-./pfm}"
+    local VERSION=$(get_version)
+
+    echo "🔨 编译并运行 Go 服务器..."
+    echo "📌 版本: $VERSION"
+
+    check_command "go"
+    go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o "$OUTPUT" .
+    echo "🚀 启动服务器..."
+    "$OUTPUT" -d ./data
+}
+
+# 开发模式运行（不编译，直接 go run）
+cmd_dev() {
+    echo "🚀 开发模式运行..."
+    check_command "go"
+    go run . -d ./data
+}
+
+# 生成所有 protobuf 代码
+cmd_proto() {
+    echo "📦 生成所有 protobuf 代码..."
+    check_command "buf"
+    cmd_proto_go
+    cmd_proto_dart
+    echo "✅ 所有 protobuf 代码生成完成！"
+}
+
+# 仅生成 Go protobuf 代码
+cmd_proto_go() {
+    echo "📦 生成 Go protobuf 代码..."
+    check_command "buf"
+    check_command "protoc-gen-go"
+    check_command "protoc-gen-connect-go"
+    check_command "protoc-gen-gorm"
+
+    cd "$SCRIPT_DIR/proto"
+    buf generate
+    cd "$SCRIPT_DIR"
+
+    echo "✅ Go protobuf 代码生成完成！"
+}
+
+# 仅生成 Dart protobuf 代码
+cmd_proto_dart() {
+    echo "📦 生成 Dart protobuf 代码..."
+    check_command "buf"
+    # 跳过 protoc-gen-dart 检测（在 Windows 上会卡住）
+
+    cd "$SCRIPT_DIR/proto"
+    buf generate --template buf.gen.dart.yaml
+    cd "$SCRIPT_DIR"
+
+    echo "✅ Dart protobuf 代码生成完成！"
+}
+
+# 运行测试
+cmd_test() {
+    echo "🧪 运行测试..."
+    check_command "go"
+    go test ./...
+    echo "✅ 测试完成！"
+}
+
+# 运行测试并生成覆盖率报告
+cmd_test_cover() {
+    echo "🧪 运行测试并生成覆盖率报告..."
+    check_command "go"
+
+    go test -coverprofile=coverage.out ./...
+    go tool cover -func=coverage.out
+
+    echo ""
+    echo "📊 详细覆盖率报告: go tool cover -html=coverage.out"
+    echo "✅ 测试完成！"
+}
+
+# go mod tidy
+cmd_tidy() {
+    echo "🧹 清理 Go 模块依赖..."
+    check_command "go"
+    go mod tidy
+    echo "✅ 模块依赖清理完成！"
+}
+
+# 代码检查
+cmd_lint() {
+    echo "🔍 运行代码检查..."
+    check_command "golangci-lint"
+    golangci-lint run ./...
+    echo "✅ 代码检查完成！"
+}
+
+# 清理构建产物
+cmd_clean() {
+    echo "🧹 清理构建产物..."
+    rm -f ./pfm
+    rm -f ./coverage.out
+    echo "✅ 清理完成！"
+}
+
+# ============================================================
+# 主入口
+# ============================================================
+
+ACTION="${1:-help}"
+shift 2>/dev/null || true
+
+case "$ACTION" in
+    build)
+        cmd_build "$@"
+        ;;
+    run)
+        cmd_run "$@"
+        ;;
+    dev)
+        cmd_dev
+        ;;
+    proto)
+        cmd_proto
+        ;;
+    proto-go)
+        cmd_proto_go
+        ;;
+    proto-dart)
+        cmd_proto_dart
+        ;;
+    test)
+        cmd_test
+        ;;
+    test-cover)
+        cmd_test_cover
+        ;;
+    tidy)
+        cmd_tidy
+        ;;
+    lint)
+        cmd_lint
+        ;;
+    clean)
+        cmd_clean
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "❌ 错误: 未知命令 '$ACTION'"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

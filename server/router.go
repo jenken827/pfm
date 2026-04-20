@@ -24,6 +24,7 @@ func route(mux *http.ServeMux) {
 	fileRoute(mux)
 	uploadRoute(mux)
 	storageProviderRoute(mux)
+	backupRoute(mux)           // 备份服务路由
 	fileStreamRoute(mux)       // 文件流式传输路由
 	publicDownloadRoute(mux)   // 公共下载路由
 
@@ -93,6 +94,20 @@ func uploadRoute(mux *http.ServeMux) {
 	upload := &api.UploadServer{}
 	path, handler := nativeconnect.NewUploadServiceHandler(
 		upload,
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
+	)
+
+	mux.Handle(path, handler)
+
+	service := vanguard.NewService(path, handler)
+	vanguardServices = append(vanguardServices, service)
+}
+
+// 备份服务路由
+func backupRoute(mux *http.ServeMux) {
+	backup := &api.BackupServer{}
+	path, handler := nativeconnect.NewBackupServiceHandler(
+		backup,
 		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 

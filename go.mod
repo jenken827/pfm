@@ -8,6 +8,7 @@ require (
 	connectrpc.com/validate v0.6.0
 	connectrpc.com/vanguard v0.4.0
 	github.com/casdoor/casdoor-go-sdk v1.44.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-telegram/bot v1.20.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
@@ -15,7 +16,9 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/infobloxopen/atlas-app-toolkit/v2 v2.2.2
 	github.com/infobloxopen/protoc-gen-gorm v1.1.5
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.48.0
@@ -37,7 +40,6 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

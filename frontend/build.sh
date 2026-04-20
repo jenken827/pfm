@@ -219,7 +219,7 @@ generate_splash() {
 # 运行代码生成
 run_build_runner() {
     echo "🔨 运行代码生成..."
-    puro dart run build_runner build --delete-conflicting-outputs
+    puro flutter pub run build_runner build --delete-conflicting-outputs
     echo "✅ 代码生成完成"
 }
 

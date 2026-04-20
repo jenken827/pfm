@@ -48,18 +48,12 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 		fields = append(fields, "proxy")
 	}
 
-	// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
-	// 需要正确展开字段列表
 	if len(fields) == 0 {
 		_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Updates(ctx, provider)
 		return err
 	}
-	// 将剩余字段转换为 []interface{}
-	args := make([]any, len(fields)-1)
-	for i, f := range fields[1:] {
-		args[i] = f
-	}
-	_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Select(fields[0], args...).Updates(ctx, provider)
+	query, args := selectFields(fields)
+	_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Select(query, args...).Updates(ctx, provider)
 	return err
 }
 
@@ -212,4 +206,19 @@ func DecrementUsedCapacity(providerID uint32, size uint64) error {
 	}
 
 	return nil
+}
+
+// GetStorageProvidersByIDs 批量查询存储提供者
+func GetStorageProvidersByIDs(ids []uint32) ([]*native.StorageProviderORM, error) {
+	if len(ids) == 0 {
+		return []*native.StorageProviderORM{}, nil
+	}
+
+	ctx := context.Background()
+	providers, err := gorm.G[*native.StorageProviderORM](db).Where("id IN ?", ids).Find(ctx)
+	if err != nil {
+		llog.L().Errorf("query storage providers failed: %v", err)
+		return nil, err
+	}
+	return providers, nil
 }

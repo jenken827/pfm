@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package native;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "gorm/gorm.proto";
+import "native/common.proto";
+import "native/enum.proto";
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// BackupTask 备份任务
+message BackupTask {
+  option (gorm.opts).ormable = true;
+
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+
+  // 任务名称
+  optional string name = 4 [(gorm.field).tag = {
+    not_null: true
+    unique_index: "idx_bt_name"
+  }];
+
+  // 源路径（服务器本地文件系统路径）
+  optional string source_path = 5 [(gorm.field).tag = {
+    not_null: true
+  }];
+
+  // 目标目录ID（File表中类型为FOLDER的记录ID）
+  optional string target_dir_id = 6 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_bt_target"
+  }];
+
+  // 备份策略：SCHEDULED / WATCH
+  optional BackupStrategy strategy = 7 [(gorm.field).tag = {
+    not_null: true
+    default: "1"
+  }];
+
+  // cron 表达式（仅 SCHEDULED 策略使用）
+  optional string cron_expression = 8 [(gorm.field).tag = {default: "'0 0 * * *'"}];
+
+  // 是否启用
+  optional bool enabled = 9 [(gorm.field).tag = {
+    not_null: true
+    default: "true"
+  }];
+
+  // 过滤规则（兼容 .gitignore 语法）
+  optional string ignore_rules = 10 [(gorm.field).tag = {type: "text"}];
+
+  // 是否包含子目录
+  optional bool recursive = 11 [(gorm.field).tag = {
+    not_null: true
+    default: "true"
+  }];
+
+  // 上次执行时间
+  optional google.protobuf.Timestamp last_run_at = 12;
+
+  // 上次执行状态：IDLE / RUNNING / SUCCESS / FAILED
+  optional BackupRunStatus last_run_status = 13 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
+
+  // 上次执行信息
+  optional string last_run_message = 14;
+
+  // 备份文件数量统计
+  optional uint64 backed_up_count = 15 [(gorm.field).tag = {default: "0"}];
+
+  // 备份总大小统计
+  optional uint64 backed_up_size = 16 [(gorm.field).tag = {default: "0"}];
+}
+
+// BackupFileRecord 备份文件记录（用于增量判断）
+message BackupFileRecord {
+  option (gorm.opts).ormable = true;
+
+  optional uint64 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+
+  // 关联的备份任务ID
+  optional uint64 task_id = 4 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_bfr_task"
+  }];
+
+  // 源文件的相对路径
+  optional string relative_path = 5 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_bfr_rp"
+  }];
+
+  // 源文件的 blake3 hash
+  optional string file_hash = 6 [(gorm.field).tag = {
+    not_null: true
+    index: "idx_bfr_hash,length:10"
+  }];
+
+  // 源文件大小
+  optional uint64 file_size = 7 [(gorm.field).tag = {not_null: true}];
+
+  // 源文件修改时间（Unix 时间戳，秒）
+  optional int64 modified_at = 8 [(gorm.field).tag = {not_null: true}];
+
+  // 对应的 File 记录ID
+  optional string file_id = 9 [(gorm.field).tag = {
+    index: "idx_bfr_fid,length:15"
+  }];
+
+  // 备份状态
+  optional BackupFileStatus status = 10 [(gorm.field).tag = {
+    not_null: true
+    default: "1"
+  }];
+
+  // 错误信息
+  optional string message = 11;
+}
+
+// ============ RPC 请求/响应 ============
+
+// 创建备份任务
+message CreateBackupTaskReq {
+  optional string name = 1 [(buf.validate.field).required = true];
+  optional string source_path = 2 [(buf.validate.field).required = true];
+  optional string target_dir_id = 3 [(buf.validate.field).required = true];
+  optional BackupStrategy strategy = 4;
+  optional string cron_expression = 5;
+  optional string ignore_rules = 6;
+  optional bool recursive = 7;
+  optional bool enabled = 8;
+}
+
+// 更新备份任务
+message UpdateBackupTaskReq {
+  optional uint64 id = 1 [(buf.validate.field).required = true];
+  optional string name = 2;
+  optional string source_path = 3;
+  optional string target_dir_id = 4;
+  optional BackupStrategy strategy = 5;
+  optional string cron_expression = 6;
+  optional string ignore_rules = 7;
+  optional bool recursive = 8;
+  optional bool enabled = 9;
+}
+
+// 删除备份任务
+message DeleteBackupTaskReq {
+  repeated uint64 ids = 1 [(buf.validate.field).required = true];
+}
+
+// 获取备份任务列表
+message ListBackupTasksReq {
+  optional uint32 page = 1;
+  optional uint32 page_size = 2;
+  optional bool enabled = 3;
+}
+
+// 备份任务列表响应
+message ListBackupTasksRespData {
+  repeated BackupTask tasks = 1;
+  optional uint32 total = 2;
+}
+
+// 获取备份任务详情
+message GetBackupTaskReq {
+  optional uint64 id = 1 [(buf.validate.field).required = true];
+}
+
+// 备份任务详情响应
+message GetBackupTaskRespData {
+  optional BackupTask task = 1;
+  repeated BackupFileRecord recent_files = 2;
+}
+
+// 手动触发备份
+message TriggerBackupReq {
+  optional uint64 id = 1 [(buf.validate.field).required = true];
+}
+
+// 获取备份文件记录
+message ListBackupFilesReq {
+  optional uint64 task_id = 1 [(buf.validate.field).required = true];
+  optional uint32 page = 2;
+  optional uint32 page_size = 3;
+  optional BackupFileStatus status = 4;
+}
+
+// 备份文件列表响应
+message ListBackupFilesRespData {
+  repeated BackupFileRecord files = 1;
+  optional uint32 total = 2;
+}
+
+// BackupService 备份服务
+service BackupService {
+  // 创建备份任务
+  rpc CreateBackupTask(CreateBackupTaskReq) returns (BaseResp);
+  // 更新备份任务
+  rpc UpdateBackupTask(UpdateBackupTaskReq) returns (BaseResp);
+  // 删除备份任务
+  rpc DeleteBackupTask(DeleteBackupTaskReq) returns (BaseResp);
+  // 获取备份任务列表
+  rpc ListBackupTasks(ListBackupTasksReq) returns (BaseResp);
+  // 获取备份任务详情
+  rpc GetBackupTask(GetBackupTaskReq) returns (BaseResp);
+  // 手动触发一次备份
+  rpc TriggerBackup(TriggerBackupReq) returns (BaseResp);
+  // 获取备份文件记录
+  rpc ListBackupFiles(ListBackupFilesReq) returns (BaseResp);
+}

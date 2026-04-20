@@ -77,6 +77,11 @@ func AddStorage(sp *native.StorageProviderORM) {
 
 	// 异步创建驱动实例
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				llog.L().Errorf("AddStorage panicked, id: %d, recover: %v", *sp.Id, r)
+			}
+		}()
 		if err := createAndStoreDriver(sp); err != nil {
 			llog.L().Errorf("create storage driver failed, id: %d, err: %v", *sp.Id, err)
 			return
@@ -93,6 +98,11 @@ func UpdateStorage(sp *native.StorageProviderORM) {
 	// 如果启用则异步重新创建
 	if *sp.Enabled {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					llog.L().Errorf("UpdateStorage panicked, id: %d, recover: %v", *sp.Id, r)
+				}
+			}()
 			if err := createAndStoreDriver(sp); err != nil {
 				llog.L().Errorf("create storage driver failed, id: %d, err: %v", *sp.Id, err)
 				return

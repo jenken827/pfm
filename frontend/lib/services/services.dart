@@ -10,3 +10,4 @@ export 'workmanager_task.dart';
 export 'isolate.dart';
 export 'upload.dart';
 export 'download.dart';
+export 'client_backup_service.dart';

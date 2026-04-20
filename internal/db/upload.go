@@ -86,8 +86,6 @@ func CreateUploadRecord(record *native.UploadRecordORM) error {
 // UpdateUploadRecord 更新上传记录
 func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error {
 	ctx := context.Background()
-	// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
-	// 需要正确展开字段列表
 	if len(updateFields) == 0 {
 		if _, err := gorm.G[*native.UploadRecordORM](db).Where("id = ?", *r.Id).Updates(ctx, r); err != nil {
 			llog.L().Errorf("update upload record failed: %v", err)
@@ -95,12 +93,8 @@ func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error 
 		}
 		return nil
 	}
-	// 将剩余字段转换为 []interface{}
-	args := make([]any, len(updateFields)-1)
-	for i, f := range updateFields[1:] {
-		args[i] = f
-	}
-	if _, err := gorm.G[*native.UploadRecordORM](db).Where("id = ?", *r.Id).Select(updateFields[0], args...).Updates(ctx, r); err != nil {
+	query, args := selectFields(updateFields)
+	if _, err := gorm.G[*native.UploadRecordORM](db).Where("id = ?", *r.Id).Select(query, args...).Updates(ctx, r); err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return err
 	}
@@ -160,64 +154,4 @@ func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRec
 	return records, total, nil
 }
 
-// GetFileLocationsByFileHash 根据文件哈希查询文件位置记录
-func GetFileLocationsByFileHash(fileHash string) ([]*native.FileLocationORM, error) {
-	ctx := context.Background()
-	locations, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ?", fileHash).Order("provider_id").Find(ctx)
-	if err != nil {
-		llog.L().Errorf("query file locations failed: %v", err)
-		return nil, err
-	}
-	return locations, nil
-}
 
-// GetFileLocationByFileHashAndProvider 根据文件哈希和提供者查询
-func GetFileLocationByFileHashAndProvider(fileHash string, providerID uint32) (*native.FileLocationORM, error) {
-	ctx := context.Background()
-	location, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ? AND provider_id = ?", fileHash, providerID).First(ctx)
-	if err != nil {
-		llog.L().Errorf("query file location failed: %v", err)
-		return nil, err
-	}
-	return location, nil
-}
-
-// GetStorageProvidersByIDs 批量查询存储提供者
-func GetStorageProvidersByIDs(ids []uint32) ([]*native.StorageProviderORM, error) {
-	if len(ids) == 0 {
-		return []*native.StorageProviderORM{}, nil
-	}
-
-	ctx := context.Background()
-	providers, err := gorm.G[*native.StorageProviderORM](db).Where("id IN ?", ids).Find(ctx)
-	if err != nil {
-		llog.L().Errorf("query storage providers failed: %v", err)
-		return nil, err
-	}
-	return providers, nil
-}
-
-// DeleteFileLocation 删除文件位置记录
-func DeleteFileLocation(id uint64) error {
-	ctx := context.Background()
-	_, err := gorm.G[*native.FileLocationORM](db).Where("id = ?", id).Delete(ctx)
-	if err != nil {
-		llog.L().Errorf("delete file location failed, id: %d, err: %v", id, err)
-		return err
-	}
-	return nil
-}
-
-// DeleteFileLocations 批量删除文件位置记录
-func DeleteFileLocations(ids []uint64) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	ctx := context.Background()
-	_, err := gorm.G[*native.FileLocationORM](db).Where("id IN ?", ids).Delete(ctx)
-	if err != nil {
-		llog.L().Errorf("batch delete file locations failed, err: %v", err)
-		return err
-	}
-	return nil
-}
