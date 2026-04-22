@@ -978,6 +978,7 @@ class _FileView extends StatelessWidget {
 
   void _showCreateDirDialog(BuildContext context) {
     final nameController = TextEditingController();
+    final maxHistoriesController = TextEditingController();
     bool enableEncryption = false;
     List<int> selectedProviderIds = [];
 
@@ -1047,6 +1048,21 @@ class _FileView extends StatelessWidget {
                     setState(() => enableEncryption = value);
                   },
                 ),
+                const SizedBox(height: 16),
+                // 最大历史记录数
+                TextField(
+                  controller: maxHistoriesController,
+                  decoration: const InputDecoration(
+                    labelText: '最大历史记录数',
+                    hintText: '默认 0',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '覆盖文件时保留的历史版本数量，默认 0 表示不保留历史',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
                 if (enableEncryption) ...[const Divider()],
               ],
             ),
@@ -1059,6 +1075,17 @@ class _FileView extends StatelessWidget {
             FilledButton(
               onPressed: () {
                 if (nameController.text.isNotEmpty) {
+                  // 解析 maxHistories
+                  int? maxHistories;
+                  if (maxHistoriesController.text.isNotEmpty) {
+                    maxHistories = int.tryParse(maxHistoriesController.text);
+                    if (maxHistories == null || maxHistories < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('最大历史记录数必须是有效的非负整数')),
+                      );
+                      return;
+                    }
+                  }
                   context.read<FileBloc>().add(
                     FileCreateDirEvent(
                       name: nameController.text,
@@ -1066,6 +1093,7 @@ class _FileView extends StatelessWidget {
                       providerIds: selectedProviderIds.isEmpty
                           ? null
                           : selectedProviderIds,
+                      maxHistories: maxHistories,
                     ),
                   );
                   Navigator.pop(ctx);

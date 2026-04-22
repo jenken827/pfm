@@ -197,6 +197,7 @@ class FmRepository {
     required String parentId,
     required bool enableEncryption,
     List<int>? providerIds,
+    int? maxHistories,
   }) async {
     try {
       final req = CreateDirReq(
@@ -204,6 +205,7 @@ class FmRepository {
         parentId: parentId,
         enableEncryption: enableEncryption,
         providerIds: providerIds,
+        maxHistories: maxHistories,
       );
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateDir',
@@ -215,7 +217,7 @@ class FmRepository {
         data,
         CreateDirRespData(),
       );
-      
+
       return ApiResult(data: respData, success: true);
     } on DioException catch (e) {
       _logger.error('创建目录失败: ${e.message}');
@@ -232,12 +234,14 @@ class FmRepository {
     String? name,
     bool? enableEncryption,
     List<int>? providerIds,
+    int? maxHistories,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
       if (enableEncryption != null) req.enableEncryption = enableEncryption;
       if (providerIds != null) req.providerIds.addAll(providerIds);
+      if (maxHistories != null) req.maxHistories = maxHistories;
 
       final response = await _dio.post(
         '$_baseUrl/native.FileService/UpdateDir',

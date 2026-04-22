@@ -64,11 +64,13 @@ class FileCreateDirEvent extends FileEvent {
     required this.name,
     this.enableEncryption = false,
     this.providerIds,
+    this.maxHistories,
   });
 
   final String name;
   final bool enableEncryption;
   final List<int>? providerIds;
+  final int? maxHistories;
 }
 
 /// 删除文件事件

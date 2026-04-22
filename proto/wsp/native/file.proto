@@ -71,6 +71,11 @@ message File {
     not_null: true
     default: "false"
   }];
+  // 最大历史记录数（仅文件夹有效，0表示不保留历史）
+  optional uint32 max_histories = 14 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
 }
 
 // // FileHistory 文件历史版本信息
@@ -229,6 +234,8 @@ message CreateDirReq {
   optional bool enable_encryption = 3;
   // 绑定的存储提供者ID列表（可选，不传则使用默认绑定）
   repeated uint32 provider_ids = 4;
+  // 最大历史记录数（0表示不限制）
+  optional uint32 max_histories = 5;
 }
 
 // 创建目录响应数据
@@ -247,6 +254,8 @@ message UpdateDirReq {
   optional bool enable_encryption = 3;
   // 更新绑定的存储提供者ID列表
   repeated uint32 provider_ids = 4;
+  // 最大历史记录数（0表示不限制）
+  optional uint32 max_histories = 5;
 }
 
 // 删除文件请求

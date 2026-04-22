@@ -177,6 +177,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
       parentId: state.currentDirId,
       enableEncryption: event.enableEncryption,
       providerIds: event.providerIds,
+      maxHistories: event.maxHistories,
     );
 
     if (resp.success) {

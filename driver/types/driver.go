@@ -9,14 +9,14 @@ import (
 
 // StorageProviderFileInfo 存储提供商文件信息
 type StorageProviderFileInfo struct {
-	ID         string
-	Name       string
-	Path       string
-	ChunkSize  uint64 // 单位：字节 文件可能进行了加密操作，这个是加密后的大小
-	ChunkHash  string
-	Hash       string // 文件hash，如果触发了分片，记录在第一个分片上
-	Size       uint64 // 文件总大小，如果触发了分片，记录在第一个分片上
-	S3KeyFlag  string // 123pan 专用：用于标识文件在 S3 存储中的唯一标识
+	ID        string
+	Name      string
+	Path      string
+	ChunkSize uint64 // 单位：字节 文件可能进行了加密操作，这个是加密后的大小
+	ChunkHash string
+	Hash      string // 文件hash，如果触发了分片，记录在第一个分片上
+	Size      uint64 // 文件总大小，如果触发了分片，记录在第一个分片上
+	S3KeyFlag string // 123pan 专用：用于标识文件在 S3 存储中的唯一标识
 }
 
 // ReadSeekCloser 支持定位的 Reader（用于断点续传）
@@ -34,10 +34,9 @@ type StorageDriver interface {
 	// GetOrm 获取存储提供者ORM对象
 	GetOrm() *native.StorageProviderORM
 	// Upload 上传文件
-	// filePath: 本地文件路径
-	// fileName: 目标文件名
+	// record: 上传记录，包含文件路径、文件名、分片大小等信息
 	// encryptor: 加密器（可为nil，表示不加密）
-	Upload(ctx context.Context, filePath string, fileName string, encryptor Encryptor) ([]*StorageProviderFileInfo, error)
+	Upload(ctx context.Context, record *native.UploadRecordORM, encryptor Encryptor) ([]*StorageProviderFileInfo, error)
 	// Open 打开文件（支持多分片合并、断点续传）
 	// fileLocations: 该文件在当前存储提供者的所有分片（已按chunk_number排序）
 	// encryptor: 加密器（用于解密，如果存储提供者配置了加密）

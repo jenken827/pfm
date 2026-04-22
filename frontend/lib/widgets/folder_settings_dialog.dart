@@ -23,6 +23,7 @@ class FolderSettingsDialog extends StatefulWidget {
 
 class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   late TextEditingController _nameController;
+  late TextEditingController _maxHistoriesController;
   bool _enableEncryption = false;
   List<int> _selectedProviderIds = [];
   List<StorageProvider> _storageProviders = [];
@@ -33,7 +34,13 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.folder.name);
-    
+
+    // 初始化 maxHistories 配置
+    final maxHistories = widget.folder.maxHistories;
+    _maxHistoriesController = TextEditingController(
+      text: maxHistories != null && maxHistories > 0 ? maxHistories.toString() : '',
+    );
+
     // 初始化加密配置
     _enableEncryption = widget.folder.enableEncryption;
 
@@ -75,6 +82,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _maxHistoriesController.dispose();
     super.dispose();
   }
 
@@ -86,6 +94,18 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
       return;
     }
 
+    // 解析 maxHistories
+    int? maxHistories;
+    if (_maxHistoriesController.text.isNotEmpty) {
+      maxHistories = int.tryParse(_maxHistoriesController.text);
+      if (maxHistories == null || maxHistories < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('最大历史记录数必须是有效的非负整数')),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -95,6 +115,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
         name: _nameController.text,
         enableEncryption: _enableEncryption,
         providerIds: _selectedProviderIds,
+        maxHistories: maxHistories,
       );
 
       if (result.success) {
@@ -154,6 +175,26 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
                 onChanged: (value) {
                   setState(() => _enableEncryption = value);
                 },
+              ),
+              const SizedBox(height: 16),
+
+              // 最大历史记录数
+              TextField(
+                controller: _maxHistoriesController,
+                decoration: const InputDecoration(
+                  labelText: '最大历史记录数',
+                  hintText: '默认 0',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '覆盖文件时保留的历史版本数量，默认 0 表示不保留历史',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
               ),
               const SizedBox(height: 16),
 

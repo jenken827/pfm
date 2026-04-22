@@ -14,8 +14,10 @@ import (
 )
 
 // Upload 上传文件（本地存储始终不加密）
-func (l *LocalDriver) Upload(ctx context.Context, filePath string, fileName string, encryptor types.Encryptor) ([]*types.StorageProviderFileInfo, error) {
+func (l *LocalDriver) Upload(ctx context.Context, record *native.UploadRecordORM, encryptor types.Encryptor) ([]*types.StorageProviderFileInfo, error) {
 	rootDir := *l.Config.RootPath
+	filePath := *record.TempPath
+	fileName := *record.FileName
 
 	// 本地存储始终不加密，忽略encryptor参数
 	_ = encryptor

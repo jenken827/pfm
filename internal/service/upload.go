@@ -286,6 +286,38 @@ func handleOverwriteFile(
 	}
 
 	if oldFile != nil {
+		// 获取父文件夹的 max_histories 配置
+		parentID := fileRecord.ParentId
+		maxHistories := uint32(0)
+		if parentID != nil && *parentID != "" {
+			parentFolder, err := db.GetFileByID(*parentID)
+			if err == nil && parentFolder != nil && parentFolder.MaxHistories != nil {
+				maxHistories = *parentFolder.MaxHistories
+			}
+		}
+
+		// 获取旧文件的所有存储位置（旧文件在存储提供者上的位置）
+		oldLocations, err := db.GetFileLocationsByFileHash(*oldFile.Hash)
+		if err != nil {
+			llog.L().Errorf("get file locations failed: %v", err)
+		}
+
+		if maxHistories == 0 {
+			// max_histories 为 0：不创建历史，仅更新文件
+			if err := db.UpdateFileSimple(fileRecord); err != nil {
+				if cleanupPath != "" {
+					os.Remove(cleanupPath)
+				}
+				llog.L().Errorf("update file failed: %v", err)
+				return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+			}
+			llog.L().Infof("file updated without history, id: %s, old_hash: %s", *fileRecord.Id, *oldFile.Hash)
+			// 异步删除旧文件在存储提供者上的位置
+			go cleanOldFileLocations(oldLocations, oldFile.Hash)
+			return fileRecord, nil
+		}
+
+		// max_histories 不为 0：创建历史记录
 		if err := db.UpdateFileWithHistory(ctx, fileRecord, oldFile); err != nil {
 			if cleanupPath != "" {
 				os.Remove(cleanupPath)
@@ -294,6 +326,9 @@ func handleOverwriteFile(
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 		llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s", *fileRecord.Id, *oldFile.Hash, *fileRecord.Hash)
+
+		// 检查历史记录数是否超过限制，超过则异步清理旧历史
+		go cleanupOldHistories(*fileRecord.Id, maxHistories, oldLocations)
 		return fileRecord, nil
 	}
 
@@ -1064,4 +1099,93 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 	go storage.Dispatch(context.Background(), record)
 
 	return nil
+}
+
+// cleanOldFileLocations 异步删除旧文件在存储提供者上的位置
+func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string) {
+	if len(locations) == 0 {
+		return
+	}
+
+	ctx := context.Background()
+
+	// 按 provider_id 分组
+	providerLocations := make(map[uint32][]*native.FileLocationORM)
+	for _, loc := range locations {
+		if loc.ProviderId != nil {
+			providerID := *loc.ProviderId
+			providerLocations[providerID] = append(providerLocations[providerID], loc)
+		}
+	}
+
+	llog.L().Infof("cleaning old file locations from providers, count: %d", len(locations))
+
+	// 按 provider_id 批量删除文件
+	providerDeletedSizes := make(map[uint32]uint64)
+	var allDeletedIDs []uint64
+
+	for providerID, locs := range providerLocations {
+		deletedIDs, _, deletedSize := batchDeleteFromProvider(ctx, providerID, locs)
+		allDeletedIDs = append(allDeletedIDs, deletedIDs...)
+		if deletedSize > 0 {
+			providerDeletedSizes[providerID] = deletedSize
+		}
+	}
+
+	// 更新存储提供者的已使用容量
+	for providerID, size := range providerDeletedSizes {
+		if err := db.DecrementUsedCapacity(providerID, size); err != nil {
+			llog.L().Errorf("decrement used capacity failed: %v, provider_id: %d", err, providerID)
+		}
+	}
+
+	// 批量删除成功删除的文件位置记录
+	if len(allDeletedIDs) > 0 {
+		if err := db.DeleteFileLocations(allDeletedIDs); err != nil {
+			llog.L().Errorf("batch delete file locations failed: %v", err)
+		}
+	}
+
+	if oldHash != nil && *oldHash != "" {
+		llog.L().Infof("old file locations cleaned, hash: %s", *oldHash)
+	} else {
+		llog.L().Infof("old file locations cleaned")
+	}
+}
+
+// cleanupOldHistories 异步清理超出限制的历史记录
+func cleanupOldHistories(fileID string, maxHistories uint32, oldLocations []*native.FileLocationORM) {
+	// 获取该文件的历史记录
+	histories, err := db.GetFileHistoriesByFileID(fileID)
+	if err != nil {
+		llog.L().Errorf("get file histories failed: %v", err)
+		return
+	}
+
+	currentCount := uint32(len(histories))
+	if currentCount <= maxHistories {
+		llog.L().Infof("histories count %d <= max_histories %d, no cleanup needed", currentCount, maxHistories)
+		return
+	}
+
+	// 需要清理的数量
+	toDelete := currentCount - maxHistories
+	llog.L().Infof("need to cleanup %d histories, current: %d, max: %d", toDelete, currentCount, maxHistories)
+
+	// 历史记录已按 version_number DESC 排序，需要删除最早的（最后面的）
+	for i := uint32(0); i < toDelete; i++ {
+		history := histories[currentCount-1-i]
+		if history != nil && history.Id != nil {
+			if err := db.DeleteFileHistory(*history.Id); err != nil {
+				llog.L().Errorf("delete history failed: %v, id: %d", err, *history.Id)
+			} else {
+				llog.L().Infof("history deleted, id: %d", *history.Id)
+			}
+		}
+	}
+
+	llog.L().Infof("histories cleaned, file_id: %s, deleted: %d, remaining: %d", fileID, toDelete, maxHistories)
+
+	// 异步删除旧文件在存储提供者上的位置
+	go cleanOldFileLocations(oldLocations, nil)
 }

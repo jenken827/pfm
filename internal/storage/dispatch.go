@@ -391,7 +391,7 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 		return false, ""
 	}
 
-	err := uploadToProvider(ctx, sourcePath, fileName, tid, fl, fileEncrypt)
+	err := uploadToProvider(ctx, sourcePath, ur, tid, fl, fileEncrypt)
 	if err != nil {
 		llog.L().Errorf("upload to provider %d failed: %v", tid, err)
 		return true, ""
@@ -436,10 +436,11 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 
 // uploadToProvider 上传到单个提供者
 // sourcePath: 源文件路径（明文）
-// fileName: 目标文件名
 // providerID: 目标存储提供者ID
 // fileEncrypt: 文件是否启用加密（文件夹设置）
-func uploadToProvider(ctx context.Context, sourcePath string, fileName string, providerID uint32, fl *native.FileLocationORM, fileEncrypt bool) error {
+func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadRecordORM, providerID uint32, fl *native.FileLocationORM, fileEncrypt bool) error {
+	fileName := *ur.FileName
+
 	// 更新状态为上传中
 	fl.Status = utils.EnumPtr(native.LocationStatus_PUPLOADING)
 	db.UpdateFileLocation(fl, []string{"status"})
@@ -468,7 +469,7 @@ func uploadToProvider(ctx context.Context, sourcePath string, fileName string, p
 	}
 
 	// 执行上传
-	pinfo, err := st.Upload(ctx, sourcePath, fileName, encryptor)
+	pinfo, err := st.Upload(ctx, ur, encryptor)
 	if err != nil {
 		return failFileLocation(fl, err.Error())
 	}

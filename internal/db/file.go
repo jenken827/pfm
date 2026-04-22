@@ -339,6 +339,13 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 	return err
 }
 
+// UpdateFileSimple 简单更新文件（不创建历史）
+func UpdateFileSimple(file *native.FileORM) error {
+	ctx := context.Background()
+	_, err := gorm.G[*native.FileORM](db).Where("id=?", *file.Id).Select("hash", "size").Updates(ctx, file)
+	return err
+}
+
 // UpdateFileIsReady 更新文件is_ready状态
 // 通过parent_id和file_name定位文件，设置is_ready为true
 func UpdateFileIsReady(parentID, fileName string) error {
@@ -401,6 +408,15 @@ func DeleteFileHistoryByIDs(ids []uint64) error {
 	}
 
 	return db.Where("id IN ?", ids).Delete(&native.FileHistoryORM{}).Error
+}
+
+// DeleteFileHistory 删除单个历史记录
+func DeleteFileHistory(id uint64) error {
+	if id == 0 {
+		return nil
+	}
+
+	return db.Where("id = ?", id).Delete(&native.FileHistoryORM{}).Error
 }
 
 // DeleteFileLocationsByBlake3Hash 根据 blake3_hash 删除文件位置记录
