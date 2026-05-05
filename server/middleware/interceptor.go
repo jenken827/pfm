@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"runtime/debug"
+	"time"
 
 	"connectrpc.com/connect"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -20,6 +21,7 @@ func GInterceptor() connect.UnaryInterceptorFunc {
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (r connect.AnyResponse, e error) {
+			start := time.Now()
 			uuid := uuid.New().String()
 			llog.L().Infof("request received, uuid:%s, procedure:%s", uuid, req.Spec().Procedure)
 			defer func() {
@@ -31,7 +33,7 @@ func GInterceptor() connect.UnaryInterceptorFunc {
 						E: errors.New("internal server error")})
 
 				}
-				llog.L().Infof("request completed! uuid: %s", uuid)
+				llog.L().Infof("request completed! uuid: %s, procedure: %s, cost: %v", uuid, req.Spec().Procedure, time.Since(start))
 			}()
 			r, e = next(ctx, req)
 			if e != nil {

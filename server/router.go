@@ -19,6 +19,7 @@ import (
 var vanguardServices []*vanguard.Service = make([]*vanguard.Service, 0)
 
 func route(mux *http.ServeMux) {
+	healthRoute(mux)
 	telegramWebhookRoute(mux)
 
 	fileRoute(mux)
@@ -35,6 +36,15 @@ func route(mux *http.ServeMux) {
 	}
 	// Register transcoder to handle both Connect and RESTful requests
 	mux.Handle("/", transcoder)
+}
+
+// healthRoute 健康检查路由
+func healthRoute(mux *http.ServeMux) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
 }
 
 // fileStreamRoute 文件流式传输路由（预览/下载）

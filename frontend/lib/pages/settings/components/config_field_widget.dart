@@ -154,9 +154,9 @@ class _StringListFieldState extends State<_StringListField> {
     _items = List.from(widget.initialValue);
     _controllers = _items.map((e) => TextEditingController(text: e)).toList();
     _focusNodes = _items.map((_) => FocusNode()).toList();
-    // 如果没有初始项，添加一个空行
+    // 如果没有初始项，添加一个空行（不自动聚焦，避免切换类型时光标跳转）
     if (_controllers.isEmpty) {
-      _addRow();
+      _addRow(autoFocus: false);
     }
   }
 
@@ -171,18 +171,20 @@ class _StringListFieldState extends State<_StringListField> {
     super.dispose();
   }
 
-  void _addRow() {
+  void _addRow({bool autoFocus = true}) {
     setState(() {
       _items.add('');
       _controllers.add(TextEditingController());
       _focusNodes.add(FocusNode());
     });
     // 聚焦到新添加的行
-    Future.microtask(() {
-      if (_focusNodes.isNotEmpty) {
-        _focusNodes.last.requestFocus();
-      }
-    });
+    if (autoFocus) {
+      Future.microtask(() {
+        if (_focusNodes.isNotEmpty) {
+          _focusNodes.last.requestFocus();
+        }
+      });
+    }
   }
 
   void _removeRow(int index) {

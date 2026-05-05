@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -53,7 +54,7 @@ func Init() {
 		}
 	case "sqlite3":
 		{
-			db, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental&_time_format=sqlite",
+			db, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental&_time_format=sqlite&_busy_timeout=5000",
 				path.Join(globals.DataDir, cdb.Name))), gormConfig)
 		}
 	default:
@@ -83,18 +84,12 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 	return db.Transaction(fc)
 }
 
-// selectFields 将字段列表展开为 GORM Select 所需的参数格式
-// GORM 泛型 API 的 Select 签名为 Select(query string, args ...interface{})
-// 此函数将 ["field1", "field2", "field3"] 展开为 ("field1", "field2", "field3")
+// selectFields 将字段列表拼接为 GORM Select 所需的逗号分隔字符串
 func selectFields(fields []string) (string, []any) {
 	if len(fields) == 0 {
 		return "", nil
 	}
-	args := make([]any, len(fields)-1)
-	for i, f := range fields[1:] {
-		args[i] = f
-	}
-	return fields[0], args
+	return strings.Join(fields, ", "), nil
 }
 
 // 迁移数据库

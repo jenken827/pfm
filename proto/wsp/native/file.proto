@@ -196,7 +196,13 @@ message FileLocation {
     not_null: true
     default: "0"
   }];
+  // 仅123pan使用
   optional string s3_key_flag = 21;
+  // 仅Telegram使用
+  optional string channel_id = 22;
+  // 仅Telegram使用
+  optional int32 message_id = 23;
+
 }
 
 // 获取文件列表

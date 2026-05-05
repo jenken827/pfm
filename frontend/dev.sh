@@ -8,6 +8,9 @@ show_help() {
 用法: $0 [选项] [平台]
 
 选项:
+  get          获取 Flutter 依赖包
+  add          添加 Flutter 依赖包（puro flutter pub add）
+  run          运行 Flutter 应用（puro flutter run），可指定设备
   icon         执行 flutter_launcher_icons 图标生成
   splash       执行 flutter_native_splash 启动页生成
   build_runner 执行 build_runner 代码生成
@@ -26,6 +29,11 @@ show_help() {
   appbundle    构建 Android App Bundle
 
 示例:
+  $0 get                     # 获取依赖包
+  $0 add <package_name>      # 添加依赖包
+  $0 run                     # 运行应用（默认设备）
+  $0 run windows             # 运行应用（Windows设备）
+  $0 run chrome              # 运行应用（Chrome浏览器）
   $0 icon                    # 只生成应用图标
   $0 splash                  # 只生成启动页
   $0 build_runner            # 只运行代码生成
@@ -36,13 +44,14 @@ show_help() {
   $0 all                     # 执行所有任务（默认构建 Android APK）
   $0                         # 默认执行所有任务
 
-注意: 
+注意:
   - 只有在执行 'build' 或 'all' 命令时才会自动更新构建号
   - 如果不指定平台，默认构建 Android APK
+  - 'add' 命令支持添加多个包，如: $0 add dio hive
 EOF
 }
 
-//关于页面路径
+# 关于页面路径
 ABOUT_FILE="lib/pages/settings/about_page.dart"
 
 
@@ -205,14 +214,14 @@ restore_commit_hash_in_about() {
 # 生成应用图标
 generate_icons() {
     echo "🎨 生成应用图标..."
-    puro dart run flutter_launcher_icons
+    puro flutter pub run flutter_launcher_icons
     echo "✅ 应用图标生成完成"
 }
 
 # 生成启动页
 generate_splash() {
     echo "🌅 生成启动页..."
-    puro dart run flutter_native_splash:create
+    puro flutter pub run flutter_native_splash:create
     echo "✅ 启动页生成完成"
 }
 
@@ -486,6 +495,33 @@ ACTION="${1:-all}"
 PLATFORM="${2:-android}"  # 默认平台为 android
 
 case "$ACTION" in
+    get)
+        check_flutter_commands
+        puro flutter pub get
+        ;;
+
+    add)
+        check_flutter_commands
+        if [[ -z "$2" ]]; then
+            echo "❌ 错误: 请指定要添加的包名"
+            echo "用法: $0 add <package_name>"
+            exit 1
+        fi
+        echo "📦 添加依赖包: $2"
+        puro flutter pub add "$2"
+        ;;
+
+    run)
+        check_flutter_commands
+        if [[ -n "$2" ]]; then
+            echo "🚀 运行 Flutter 应用（设备: $2）..."
+            puro flutter run -d "$2"
+        else
+            echo "🚀 运行 Flutter 应用..."
+            puro flutter run
+        fi
+        ;;
+
     icon)
         check_flutter_commands
         puro flutter pub get

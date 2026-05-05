@@ -29,6 +29,7 @@ show_help() {
   lint           运行 golangci-lint 代码检查
   clean          清理构建产物
   dev            以开发模式运行（不编译，直接 go run）
+  flutter        执行 Flutter 开发任务（见 flutter help）
   help           显示此帮助信息
 
 选项 (仅用于 build/run 命令):
@@ -196,12 +197,28 @@ cmd_clean() {
     echo "✅ 清理完成！"
 }
 
+# Flutter 开发任务
+cmd_flutter() {
+    cd "$SCRIPT_DIR/frontend"
+    if [[ ! -f "dev.sh" ]]; then
+        echo "❌ 错误: frontend/dev.sh 不存在"
+        exit 1
+    fi
+
+    if [[ "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
+        bash dev.sh help
+    else
+        bash dev.sh "$@"
+    fi
+}
+
 # ============================================================
 # 主入口
 # ============================================================
 
 ACTION="${1:-help}"
 shift 2>/dev/null || true
+FLUTTER_ARGS="$@"
 
 case "$ACTION" in
     build)
@@ -236,6 +253,9 @@ case "$ACTION" in
         ;;
     clean)
         cmd_clean
+        ;;
+    flutter)
+        cmd_flutter $FLUTTER_ARGS
         ;;
     help|--help|-h)
         show_help

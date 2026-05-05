@@ -229,98 +229,6 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 	batchUploadFromSource(ctx, ur, needUploadProviders, tempFilePath)
 }
 
-// isLocalPath 判断路径是否为本地路径
-// func isLocalPath(path string) bool {
-// 	// 判断是否为本地文件路径
-// 	// 支持以下格式：
-// 	// - Unix路径: /path/to/file
-// 	// - Windows路径: C:\path\to\file, D:/path/to/file
-// 	// - 相对路径: ./path/to/file, path/to/file
-
-// 	if path == "" {
-// 		return false
-// 	}
-
-// 	// 检查是否包含 :// 协议标识符（排除 Windows 盘符如 C:）
-// 	// Windows 盘符格式: C:\path 或 C:/path
-// 	// URL 格式: http://, https://, ftp:// 等
-// 	if len(path) >= 2 {
-// 		// Windows 盘符检查：第二个字符是冒号且后面跟着反斜杠或斜杠
-// 		if path[1] == ':' && (len(path) < 3 || path[2] == '\\' || path[2] == '/') {
-// 			return true
-// 		}
-// 	}
-
-// 	// 检查是否包含协议标识符
-// 	for i := 0; i < len(path); i++ {
-// 		if path[i] == ':' {
-// 			// 如果冒号后面跟着 //，则是URL协议
-// 			if i+2 < len(path) && path[i+1] == '/' && path[i+2] == '/' {
-// 				return false
-// 			}
-// 		}
-// 	}
-
-// 	// 以 / 或 . 开头的路径视为本地路径
-// 	if path[0] == '/' || path[0] == '.' {
-// 		return true
-// 	}
-
-// 	// 其他情况，假设为本地路径（保守估计）
-// 	return true
-// }
-
-// triggerAsyncDownload 触发异步下载任务
-// func triggerAsyncDownload(ur *native.UploadRecordORM, downloadLink string, sourceLocation *native.FileLocationORM) error {
-// 	// 1. 创建文件临时目录
-// 	if err := utils.CreateFileTempDir(*ur.FileHash, false); err != nil {
-// 		llog.L().Errorf("create file temp dir failed: %v", err)
-// 		return err
-// 	}
-
-// 	// 2. 创建下载记录（只记录必要信息）
-// 	downloadRecord := &native.DownloadRecordORM{
-// 		Blake3Hash:       ur.FileHash,
-// 		SourceLocationId: sourceLocation.Id,
-// 		UploadRecordId:   ur.Id,
-// 		State:            (*int32)(native.DownloadRecordState_DOWNLOAD_PENDING.Enum()),
-// 	}
-
-// 	if err := db.CreateDownloadRecord(downloadRecord); err != nil {
-// 		llog.L().Errorf("create download record failed: %v", err)
-// 		return err
-// 	}
-
-// 	// 3. 调用 aria2 添加下载任务
-// 	if downloader.Aria2Downloader == nil {
-// 		llog.L().Errorf("aria2 downloader not initialized")
-// 		return fmt.Errorf("aria2 downloader not initialized")
-// 	}
-
-// 	// 下载到文件临时目录
-// 	downloadDir := utils.GetFileTempDir(*ur.FileHash)
-// 	gid, err := downloader.Aria2Downloader.AddURI([]string{downloadLink}, aria2.Option{
-// 		"dir": downloadDir,
-// 	})
-// 	if err != nil {
-// 		llog.L().Errorf("add aria2 download task failed: %v", err)
-// 		return err
-// 	}
-
-// 	// 4. 更新下载记录的 GID
-// 	downloadRecord.Gid = &gid
-// 	downloadRecord.State = (*int32)(native.DownloadRecordState_DOWNLOADING.Enum())
-// 	if err := db.UpdateDownloadRecord(downloadRecord, []string{"gid", "state"}); err != nil {
-// 		llog.L().Errorf("update download record gid failed: %v", err)
-// 		return err
-// 	}
-
-// 	llog.L().Infof("download task created, gid: %s, record_id: %d, hash: %s, dir: %s, waiting for aria2 callback", gid, *downloadRecord.Id, *ur.FileHash, downloadDir)
-
-// 	// 5. 返回成功，等待 aria2 下载完成回调
-// 	return nil
-// }
-
 // batchUploadFromSource 从源文件批量上传到多个目标提供者
 func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, sourcePath string) {
 	fileName, parentID, fileEncrypt := getUploadContext(ur)
@@ -565,6 +473,7 @@ func saveUploadChunks(fl *native.FileLocationORM, pinfo []*types.StorageProvider
 
 // updateFirstChunkLocation 更新第一个分片的 FileLocation 记录
 func updateFirstChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StorageProviderFileInfo, chunkTotal, chunkNumber uint32) {
+	updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
 	fl.ProviderFileId = &chunkInfo.ID
 	if chunkInfo.Path != "" {
 		fl.Path = &chunkInfo.Path
@@ -583,11 +492,16 @@ func updateFirstChunkLocation(fl *native.FileLocationORM, chunkInfo *types.Stora
 	}
 	if chunkInfo.S3KeyFlag != "" {
 		fl.S3KeyFlag = &chunkInfo.S3KeyFlag
-	}
-
-	updateFields := []string{"provider_file_id", "path", "hash", "status", "chunk_number", "chunk_total", "size", "chunk_size"}
-	if chunkInfo.S3KeyFlag != "" {
 		updateFields = append(updateFields, "s3_key_flag")
+
+	}
+	if chunkInfo.ChannelID != "" {
+		fl.ChannelId = &chunkInfo.ChannelID
+		updateFields = append(updateFields, "channel_id")
+	}
+	if chunkInfo.MessageID != 0 {
+		fl.MessageId = utils.Int32Ptr(int32(chunkInfo.MessageID))
+		updateFields = append(updateFields, "message_id")
 	}
 	if fl.Encrypted != nil {
 		updateFields = append(updateFields, "encrypted", "encryption_salt")
@@ -621,6 +535,13 @@ func createChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StoragePro
 	}
 	if chunkInfo.S3KeyFlag != "" {
 		newFl.S3KeyFlag = &chunkInfo.S3KeyFlag
+	}
+	if chunkInfo.ChannelID != "" {
+		newFl.ChannelId = &chunkInfo.ChannelID
+	}
+
+	if chunkInfo.MessageID != 0 {
+		newFl.MessageId = utils.Int32Ptr(int32(chunkInfo.MessageID))
 	}
 
 	return db.CreateFileLocation(newFl)

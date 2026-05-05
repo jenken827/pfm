@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -401,7 +400,7 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	if len(fileIDs) == 0 {
 		return
 	}
-	llog.L().Infof("delet files  from providers,id length: %d", len(fileIDs))
+	llog.L().Infof("delete files from providers, id length: %d", len(fileIDs))
 
 	// 1. 批量获取文件信息（包含软删除的记录，因为可能是回收站文件）
 	files, err := db.GetFilesByIDsUnscoped(fileIDs)
@@ -429,25 +428,25 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 			llog.L().Errorf("get file locations failed: %v, hash: %s", err, fileHash)
 			continue
 		}
-		llog.L().Debugf("success get fil locatione by hash: %s,locations len: %d", fileHash, len(locations))
+		llog.L().Debugf("success get file location by hash: %s, locations len: %d", fileHash, len(locations))
 
 		for _, loc := range locations {
 			if loc.ProviderId == nil {
-				llog.L().Debugf("location provider id is nil, locaiton id: %d", loc.Id)
+				llog.L().Debugf("location provider id is nil, location id: %d", loc.Id)
 				continue
 			}
 			providerID := *loc.ProviderId
 			providerLocations[providerID] = append(providerLocations[providerID], loc)
 		}
 	}
-	llog.L().Infof("delet files  from providers,provider len: %d", len(providerLocations))
+	llog.L().Infof("delete files from providers, provider len: %d", len(providerLocations))
 
 	// 4. 按 provider_id 批量删除文件
 	providerDeletedSizes := make(map[uint32]uint64)
 	var allDeletedIDs, allFailedIDs []uint64
 
 	for providerID, locations := range providerLocations {
-		llog.L().Infof("delet files loop providerlocations,providerID: %d", providerID)
+		llog.L().Infof("delete files loop providerlocations, providerID: %d", providerID)
 		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
 		allDeletedIDs = append(allDeletedIDs, deletedIDs...)
 		allFailedIDs = append(allFailedIDs, failedIDs...)
@@ -512,32 +511,7 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.L().Infof("permanently deleting %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	// 异步执行删除操作
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				llog.L().Errorf("delete files panic: %v", r)
-			}
-		}()
-
-		// 使用新的 context，因为原 context 可能在请求结束后失效
-		asyncCtx := context.Background()
-
-		// 1. 删除文件的历史记录和对应的存储提供者上的文件
-		deleteFileHistories(asyncCtx, allFileIDs)
-
-		// 2. 从存储提供者删除当前文件
-		deleteFilesFromProviders(asyncCtx, allFileIDs)
-
-		// 3. 永久删除数据库记录
-		if err := db.DeletePermanently(allFileIDs); err != nil {
-			llog.L().Errorf("delete permanently failed: %v", err)
-			return
-		}
-
-		llog.L().Infof("permanently deleted %d files", len(allFileIDs))
-	}()
-
+	permanentlyDeleteFilesAsync(allFileIDs, "permanently deleted")
 	return nil
 }
 
@@ -547,7 +521,7 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 		return
 	}
 	llog.L().Infof("delete file history ids length: %d", len(fileIDs))
-	// 1. 批量获取所有文件的历史记录
+	// 批量获取所有文件的历史记录
 	allHistories := make([]*native.FileHistoryORM, 0)
 	for _, fileID := range fileIDs {
 		histories, err := db.GetFileHistoryByFileID(fileID)
@@ -563,53 +537,10 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 		return
 	}
 
-	// 2. 收集所有历史记录的 hash
-	hashSet := make(map[string]bool)
-	for _, history := range allHistories {
-		if history.Hash != nil && *history.Hash != "" {
-			hashSet[*history.Hash] = true
-		}
-	}
+	// 从存储提供者删除历史文件并更新容量
+	deleteHistoryFromProviders(ctx, allHistories)
 
-	// 3. 根据 hash 批量获取文件位置记录
-	providerLocations := make(map[uint32][]*native.FileLocationORM)
-	for hash := range hashSet {
-		llog.L().Infof("delete history get locations by hash:%s", hash)
-		locations, err := db.GetFileLocationsByBlake3Hash(hash)
-		if err != nil {
-			llog.L().Errorf("get file locations by hash failed, hash: %s, err: %v", hash, err)
-			continue
-		}
-
-		for _, loc := range locations {
-			if loc.ProviderId == nil {
-				continue
-			}
-			providerID := *loc.ProviderId
-			providerLocations[providerID] = append(providerLocations[providerID], loc)
-		}
-	}
-
-	llog.L().Infof("delete history provider ids:%+v", maps.Keys(providerLocations))
-
-	// 4. 按 provider 批量删除历史文件
-	providerDeletedSizes := make(map[uint32]uint64)
-
-	for providerID, locations := range providerLocations {
-		_, _, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
-		if deletedSize > 0 {
-			providerDeletedSizes[providerID] = deletedSize
-		}
-	}
-
-	// 5. 更新存储提供者的已使用容量
-	for providerID, size := range providerDeletedSizes {
-		if err := db.DecrementUsedCapacity(providerID, size); err != nil {
-			llog.L().Errorf("decrement used capacity failed for history: %v, provider_id: %d", err, providerID)
-		}
-	}
-
-	// 6. 删除数据库中的历史记录
+	// 删除数据库中的历史记录
 	if err := db.DeleteFileHistoryByFileIDs(fileIDs); err != nil {
 		llog.L().Errorf("delete file histories failed: %v", err)
 	} else {
@@ -623,7 +554,7 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 		return nil
 	}
 
-	// 1. 获取所有历史记录
+	// 获取所有历史记录
 	var histories []*native.FileHistoryORM
 	for _, id := range ids {
 		history, err := db.GetFileHistoryByID(id)
@@ -638,7 +569,23 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 		return nil
 	}
 
-	// 2. 收集所有历史记录的 hash
+	// 从存储提供者删除历史文件并更新容量
+	deleteHistoryFromProviders(ctx, histories)
+
+	// 删除数据库中的历史记录
+	if err := db.DeleteFileHistoryByIDs(ids); err != nil {
+		llog.L().Errorf("delete file history failed, err: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	llog.L().Infof("deleted %d file history records", len(histories))
+	return nil
+}
+
+// deleteHistoryFromProviders 从存储提供者删除历史文件（公共逻辑）
+// 收集 hash -> 查询 FileLocation -> 按 provider 分组 -> 批量删除 -> 更新容量 -> 删除 FileLocation 记录
+func deleteHistoryFromProviders(ctx context.Context, histories []*native.FileHistoryORM) {
+	// 收集所有历史记录的 hash
 	hashSet := make(map[string]bool)
 	for _, history := range histories {
 		if history.Hash != nil && *history.Hash != "" {
@@ -646,7 +593,7 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 		}
 	}
 
-	// 3. 根据 hash 批量获取文件位置记录
+	// 根据 hash 批量获取文件位置记录，按 provider 分组
 	providerLocations := make(map[uint32][]*native.FileLocationORM)
 	for hash := range hashSet {
 		locations, err := db.GetFileLocationsByBlake3Hash(hash)
@@ -659,55 +606,55 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 			if loc.ProviderId == nil {
 				continue
 			}
-			providerID := *loc.ProviderId
-			providerLocations[providerID] = append(providerLocations[providerID], loc)
+			providerLocations[*loc.ProviderId] = append(providerLocations[*loc.ProviderId], loc)
 		}
 	}
 
-	// 4. 从各个存储提供者删除文件
+	// 按 provider 批量删除并记录容量变化
+	providerDeletedSizes := make(map[uint32]uint64)
 	for providerID, locations := range providerLocations {
-		storageInstance := storage.GetStorage(providerID)
-		if storageInstance == nil {
-			llog.L().Errorf("storage not found, provider_id: %d", providerID)
-			continue
+		_, _, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
+		if deletedSize > 0 {
+			providerDeletedSizes[providerID] = deletedSize
 		}
+	}
 
-		// 检查是否支持批量删除
-		if batchDeleter, ok := storageInstance.(types.BatchDeleter); ok {
-			results, err := batchDeleter.BatchDelete(ctx, locations)
-			if err != nil {
-				llog.L().Errorf("batch delete files from provider failed, provider_id: %d, err: %v", providerID, err)
-			} else {
-				// 部分成功，记录失败的记录
-				for _, result := range results {
-					if !result.Success {
-						llog.L().Errorf("delete file location %d failed: %v", result.ID, result.Error)
-					}
-				}
+	// 更新存储提供者的已使用容量
+	for providerID, size := range providerDeletedSizes {
+		if err := db.DecrementUsedCapacity(providerID, size); err != nil {
+			llog.L().Errorf("decrement used capacity failed: %v, provider_id: %d", err, providerID)
+		}
+	}
+
+	// 删除文件位置记录
+	for hash := range hashSet {
+		if err := db.DeleteFileLocationsByBlake3Hash(hash); err != nil {
+			llog.L().Errorf("delete file locations failed, hash: %s, err: %v", hash, err)
+		}
+	}
+}
+
+// permanentlyDeleteFilesAsync 异步永久删除文件（历史记录 + 存储提供者文件 + 数据库记录）
+func permanentlyDeleteFilesAsync(allFileIDs []string, logLabel string) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				llog.L().Errorf("delete files panic: %v", r)
 			}
-			llog.L().Infof("deleted %d history files from provider %d", len(locations), providerID)
-		} else {
-			llog.L().Warnf("storage provider %d does not support batch delete", providerID)
+		}()
+
+		asyncCtx := context.Background()
+
+		deleteFileHistories(asyncCtx, allFileIDs)
+		deleteFilesFromProviders(asyncCtx, allFileIDs)
+
+		if err := db.DeletePermanently(allFileIDs); err != nil {
+			llog.L().Errorf("delete permanently failed: %v", err)
+			return
 		}
-	}
 
-	// 5. 删除文件位置记录
-	for _, history := range histories {
-		if history.Hash != nil {
-			if err := db.DeleteFileLocationsByBlake3Hash(*history.Hash); err != nil {
-				llog.L().Errorf("delete file locations failed, hash: %s, err: %v", *history.Hash, err)
-			}
-		}
-	}
-
-	// 6. 删除历史记录
-	if err := db.DeleteFileHistoryByIDs(ids); err != nil {
-		llog.L().Errorf("delete file history failed, err: %v", err)
-		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	llog.L().Infof("deleted %d file history records", len(histories))
-	return nil
+		llog.L().Infof("%s %d files", logLabel, len(allFileIDs))
+	}()
 }
 
 // EmptyTrash 清空回收站
@@ -740,31 +687,7 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.L().Infof("emptying trash: %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	// 4. 异步执行删除操作
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				llog.L().Errorf("empty trash panic: %v", r)
-			}
-		}()
-
-		asyncCtx := context.Background()
-
-		// 删除文件的历史记录和对应的存储提供者上的文件
-		deleteFileHistories(asyncCtx, allFileIDs)
-
-		// 从存储提供者删除当前文件
-		deleteFilesFromProviders(asyncCtx, allFileIDs)
-
-		// 永久删除数据库记录（包括所有子文件）
-		if err := db.DeletePermanently(allFileIDs); err != nil {
-			llog.L().Errorf("delete permanently failed: %v", err)
-			return
-		}
-
-		llog.L().Infof("emptied trash, deleted %d files", len(allFileIDs))
-	}()
-
+	permanentlyDeleteFilesAsync(allFileIDs, "emptied trash, deleted")
 	return nil
 }
 

@@ -61,13 +61,6 @@ func (tb *TokenBucket) Allow() bool {
 	return false
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // EndpointRateLimiter tracks rate limits per endpoint
 type EndpointRateLimiter struct {
 	buckets map[string]*TokenBucket
@@ -96,18 +89,43 @@ func (erl *EndpointRateLimiter) Allow(endpoint string) bool {
 	return bucket.Allow()
 }
 
+// ipEntry holds per-IP rate limiter state with last access time
+type ipEntry struct {
+	endpointLimiter *EndpointRateLimiter
+	globalBucket    *TokenBucket
+	lastAccess      time.Time
+}
+
 // IPRateLimiter manages rate limiting per IP address
 type IPRateLimiter struct {
-	endpointLimiters map[string]*EndpointRateLimiter // per IP, per endpoint
-	globalBuckets    map[string]*TokenBucket         // per IP, global limit
-	mu               sync.RWMutex
+	entries map[string]*ipEntry // per IP
+	mu      sync.RWMutex
+	ttl     time.Duration
 }
 
 // NewIPRateLimiter creates a new IP-based rate limiter
 func NewIPRateLimiter() *IPRateLimiter {
-	return &IPRateLimiter{
-		endpointLimiters: make(map[string]*EndpointRateLimiter),
-		globalBuckets:    make(map[string]*TokenBucket),
+	irl := &IPRateLimiter{
+		entries: make(map[string]*ipEntry),
+		ttl:     10 * time.Minute,
+	}
+	go irl.cleanupLoop()
+	return irl
+}
+
+// cleanupLoop periodically removes stale IP entries
+func (irl *IPRateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		irl.mu.Lock()
+		now := time.Now()
+		for ip, entry := range irl.entries {
+			if now.Sub(entry.lastAccess) > irl.ttl {
+				delete(irl.entries, ip)
+			}
+		}
+		irl.mu.Unlock()
 	}
 }
 
@@ -115,28 +133,26 @@ func NewIPRateLimiter() *IPRateLimiter {
 // Returns false if either endpoint-specific or global rate limit is exceeded
 func (irl *IPRateLimiter) Allow(ip string, endpoint string) bool {
 	irl.mu.Lock()
-	defer irl.mu.Unlock()
+
+	entry, exists := irl.entries[ip]
+	if !exists {
+		entry = &ipEntry{
+			endpointLimiter: NewEndpointRateLimiter(),
+			globalBucket:    NewTokenBucket(100, 600*time.Millisecond),
+			lastAccess:      time.Now(),
+		}
+		irl.entries[ip] = entry
+	}
+	entry.lastAccess = time.Now()
+	irl.mu.Unlock()
 
 	// Check endpoint-specific rate limit (3 requests per second per endpoint)
-	endpointLimiter, exists := irl.endpointLimiters[ip]
-	if !exists {
-		endpointLimiter = NewEndpointRateLimiter()
-		irl.endpointLimiters[ip] = endpointLimiter
-	}
-
-	if !endpointLimiter.Allow(endpoint) {
+	if !entry.endpointLimiter.Allow(endpoint) {
 		return false
 	}
 
 	// Check global rate limit (100 requests per minute per IP)
-	globalBucket, exists := irl.globalBuckets[ip]
-	if !exists {
-		// Create new bucket: 100 tokens, refills 100 tokens per minute
-		globalBucket = NewTokenBucket(100, 600*time.Millisecond) // 100 tokens / 60 seconds = ~600ms per token
-		irl.globalBuckets[ip] = globalBucket
-	}
-
-	if !globalBucket.Allow() {
+	if !entry.globalBucket.Allow() {
 		return false
 	}
 

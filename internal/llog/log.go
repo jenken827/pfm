@@ -13,8 +13,8 @@ import (
 var logger *logrus.Logger
 
 // Init 初始化日志
-// 使用slog和lumberjack
-// slog是官方日志库，lumberjack控制日志文件的大小和数量
+// 使用logrus和lumberjack
+// lumberjack控制日志文件的大小和数量
 func Init() {
 	lc := config.GetConfig().Log
 

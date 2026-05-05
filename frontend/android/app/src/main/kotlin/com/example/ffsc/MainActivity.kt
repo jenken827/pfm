@@ -1,4 +1,4 @@
-package com.example.pfm
+package com.shifangyuan.pfm
 
 import io.flutter.embedding.android.FlutterActivity
 

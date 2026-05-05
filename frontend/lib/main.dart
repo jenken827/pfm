@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
@@ -16,7 +17,12 @@ void main() async {
   MediaKit.ensureInitialized();
 
   initTalkerLogger();
-  await Hive.initFlutter('pfm');
+  if (kReleaseMode) {
+    await Hive.initFlutter('pfm');
+  } else {
+    await Hive.initFlutter('pfm_dev');
+  }
+
   Hive.registerAdapters();
 
   final ls = await LocalStorage.instance();
