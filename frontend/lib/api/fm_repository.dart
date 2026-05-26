@@ -74,7 +74,9 @@ class FmRepository {
         },
         onError: (error, handler) {
           _logger.error(
-            'API Error: ${error.message} ${error.requestOptions.path}',
+            'API Error: ${error.message} ${error.requestOptions.path}\n'
+            'Status: ${error.response?.statusCode}\n'
+            'Response: ${error.response?.data}',
           );
           return handler.next(error);
         },
@@ -407,10 +409,17 @@ class FmRepository {
         if (statusCode == 403) {
           return '没有权限执行此操作';
         }
+        if (statusCode == 404) {
+          return '接口不存在，请检查服务器配置';
+        }
         if (statusCode != null && statusCode >= 500) {
           return '服务器错误，请稍后重试';
         }
-        return e.response?.data?['message'] ?? '请求失败';
+        final data = e.response?.data;
+        if (data is Map<String, dynamic>) {
+          return data['message']?.toString() ?? '请求失败';
+        }
+        return '请求失败 (${statusCode ?? "未知状态码"})';
       case DioExceptionType.cancel:
         return '请求已取消';
       case DioExceptionType.connectionError:
@@ -1180,9 +1189,7 @@ class FmRepository {
   }
 
   /// 获取文件标签
-  Future<ApiResult<List<String>>> getFileTags({
-    required String fileId,
-  }) async {
+  Future<ApiResult<List<String>>> getFileTags({required String fileId}) async {
     try {
       final req = GetFileTagsReq()..fileId = fileId;
 

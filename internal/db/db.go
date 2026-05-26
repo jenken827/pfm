@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"path"
-	"strings"
 
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -82,14 +81,6 @@ func GetDB() *gorm.DB {
 // Transaction 执行数据库事务
 func Transaction(fc func(tx *gorm.DB) error) error {
 	return db.Transaction(fc)
-}
-
-// selectFields 将字段列表拼接为 GORM Select 所需的逗号分隔字符串
-func selectFields(fields []string) (string, []any) {
-	if len(fields) == 0 {
-		return "", nil
-	}
-	return strings.Join(fields, ", "), nil
 }
 
 // 迁移数据库

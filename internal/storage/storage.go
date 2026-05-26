@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -19,7 +21,13 @@ func Init() {
 		panic(err)
 	}
 	for _, sp := range sps {
-		createAndStoreDriver(sp)
+		if err := createAndStoreDriver(sp); err != nil {
+			llog.L().Errorf("create storage driver failed, id: %d, name: %s, err: %v",
+				*sp.Id, *sp.Name, err)
+			// 继续初始化其他存储驱动，不中断启动
+			continue
+		}
+		llog.L().Infof("storage provider initialized, id: %d, name: %s", *sp.Id, *sp.Name)
 	}
 
 	// 启动时恢复未完成的上传任务
@@ -44,7 +52,7 @@ func createAndStoreDriver(sp *native.StorageProviderORM) error {
 	dc := types.GetDriverConstructor(native.StorageProviderType(*sp.ProviderType))
 	if dc == nil {
 		llog.L().Error("storage provider driver constructor is nil", *sp.ProviderType)
-		return nil
+		return fmt.Errorf("storage provider driver constructor is nil for type: %v", *sp.ProviderType)
 	}
 
 	ins, err := dc(sp)

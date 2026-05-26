@@ -139,10 +139,7 @@ class _StorageProviderView extends StatelessWidget {
     Map<String, dynamic> existingConfig = {};
     if (provider != null && provider.config.isNotEmpty) {
       try {
-        String configStr = provider.config;
-        configStr = configStr.replaceAll(r'\', r'\\');
-        configStr = configStr.replaceAll(r'\\\"', r'\"');
-        existingConfig = jsonDecode(configStr);
+        existingConfig = jsonDecode(provider.config);
       } catch (e) {
         debugPrint('Failed to parse config: $e');
       }
@@ -575,9 +572,7 @@ class _StorageProviderView extends StatelessWidget {
                             capacity: capacity,
                             fileSizeLimit: fileSizeLimit,
                             defaultBound: formData['default_bound'] as bool?,
-                            proxy: formData['proxy']?.isNotEmpty == true
-                                ? formData['proxy']
-                                : null,
+                            proxy: formData['proxy'] as String?,
                           ),
                   );
 

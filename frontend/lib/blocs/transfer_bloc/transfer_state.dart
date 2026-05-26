@@ -9,12 +9,14 @@ class TransferState extends Equatable {
   final List<UploadTaskRecord> uploadTasks;
   final List<DownloadTaskState> downloadTasks;
   final int fakeStatus;
+  final int completedUploadCountSnapshot;
 
   const TransferState({
     this.currentTab = TransferTab.upload,
     this.uploadTasks = const [],
     this.downloadTasks = const [],
     this.fakeStatus = 0,
+    this.completedUploadCountSnapshot = 0,
   });
 
   bool get isUpload => currentTab == TransferTab.upload;
@@ -38,6 +40,13 @@ class TransferState extends Equatable {
   /// 是否有活动的传输任务
   bool get hasActiveTransfers => uploadingCount > 0 || downloadingCount > 0;
 
+  /// 检测是否有新的上传任务完成
+  bool hasNewCompletedUploads(TransferState previous) {
+    final currentCompleted =
+        uploadTasks.where((t) => t.status == UploadStatus.COMPLETED).length;
+    return currentCompleted > previous.completedUploadCountSnapshot;
+  }
+
   /// 活动任务总数
   int get activeTransferCount => uploadingCount + downloadingCount;
 
@@ -46,12 +55,15 @@ class TransferState extends Equatable {
     List<UploadTaskRecord>? uploadTasks,
     List<DownloadTaskState>? downloadTasks,
     int? fakeStatus,
+    int? completedUploadCountSnapshot,
   }) {
     return TransferState(
       currentTab: currentTab ?? this.currentTab,
       uploadTasks: uploadTasks ?? this.uploadTasks,
       downloadTasks: downloadTasks ?? this.downloadTasks,
       fakeStatus: fakeStatus ?? this.fakeStatus,
+      completedUploadCountSnapshot:
+          completedUploadCountSnapshot ?? this.completedUploadCountSnapshot,
     );
   }
 
@@ -61,6 +73,7 @@ class TransferState extends Equatable {
     uploadTasks,
     downloadTasks,
     fakeStatus,
+    completedUploadCountSnapshot,
   ];
 }
 

@@ -66,9 +66,42 @@ func UpdateBackupTask(task *native.BackupTaskORM) error {
 		_, err := gorm.G[*native.BackupTaskORM](db).Where("id=?", id).Updates(ctx, task)
 		return err
 	}
-	query, args := selectFields(fields)
-	_, err := gorm.G[*native.BackupTaskORM](db).Where("id=?", id).Select(query, args...).Updates(ctx, task)
-	return err
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range fields {
+		switch field {
+		case "name":
+			updateMap["name"] = *task.Name
+		case "source_path":
+			updateMap["source_path"] = *task.SourcePath
+		case "target_dir_id":
+			updateMap["target_dir_id"] = *task.TargetDirId
+		case "strategy":
+			updateMap["strategy"] = *task.Strategy
+		case "cron_expression":
+			updateMap["cron_expression"] = *task.CronExpression
+		case "ignore_rules":
+			updateMap["ignore_rules"] = *task.IgnoreRules
+		case "recursive":
+			updateMap["recursive"] = *task.Recursive
+		case "enabled":
+			updateMap["enabled"] = *task.Enabled
+		case "last_run_at":
+			updateMap["last_run_at"] = *task.LastRunAt
+		case "last_run_status":
+			updateMap["last_run_status"] = *task.LastRunStatus
+		case "last_run_message":
+			updateMap["last_run_message"] = *task.LastRunMessage
+		case "backed_up_count":
+			updateMap["backed_up_count"] = *task.BackedUpCount
+		case "backed_up_size":
+			updateMap["backed_up_size"] = *task.BackedUpSize
+		}
+	}
+
+	result := db.WithContext(ctx).Model(&native.BackupTaskORM{}).Where("id = ?", id).Updates(updateMap)
+	return result.Error
 }
 
 // DeleteBackupTask 删除备份任务
@@ -217,9 +250,28 @@ func UpdateBackupFileRecord(record *native.BackupFileRecordORM) error {
 	if len(fields) == 0 {
 		return nil
 	}
-	query, args := selectFields(fields)
-	_, err := gorm.G[*native.BackupFileRecordORM](db).Where("id=?", id).Select(query, args...).Updates(ctx, record)
-	return err
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range fields {
+		switch field {
+		case "file_hash":
+			updateMap["file_hash"] = *record.FileHash
+		case "file_size":
+			updateMap["file_size"] = *record.FileSize
+		case "modified_at":
+			updateMap["modified_at"] = *record.ModifiedAt
+		case "file_id":
+			updateMap["file_id"] = *record.FileId
+		case "status":
+			updateMap["status"] = *record.Status
+		case "message":
+			updateMap["message"] = *record.Message
+		}
+	}
+
+	result := db.WithContext(ctx).Model(&native.BackupFileRecordORM{}).Where("id = ?", id).Updates(updateMap)
+	return result.Error
 }
 
 // GetBackupFileRecord 获取备份文件记录

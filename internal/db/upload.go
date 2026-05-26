@@ -93,10 +93,44 @@ func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error 
 		}
 		return nil
 	}
-	query, args := selectFields(updateFields)
-	if _, err := gorm.G[*native.UploadRecordORM](db).Where("id = ?", *r.Id).Select(query, args...).Updates(ctx, r); err != nil {
-		llog.L().Errorf("update upload record failed: %v", err)
-		return err
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range updateFields {
+		switch field {
+		case "status":
+			updateMap["status"] = *r.Status
+		case "message":
+			updateMap["message"] = *r.Message
+		case "file_hash":
+			updateMap["file_hash"] = *r.FileHash
+		case "file_name":
+			updateMap["file_name"] = *r.FileName
+		case "file_size":
+			updateMap["file_size"] = *r.FileSize
+		case "parent_id":
+			updateMap["parent_id"] = *r.ParentId
+		case "temp_path":
+			updateMap["temp_path"] = *r.TempPath
+		case "overwrite_id":
+			updateMap["overwrite_id"] = *r.OverwriteId
+		case "tags":
+			updateMap["tags"] = *r.Tags
+		case "target_provider_ids":
+			updateMap["target_provider_ids"] = *r.TargetProviderIds
+		case "task_type":
+			updateMap["task_type"] = *r.TaskType
+		case "chunk_size":
+			updateMap["chunk_size"] = *r.ChunkSize
+		case "chunk_total":
+			updateMap["chunk_total"] = *r.ChunkTotal
+		}
+	}
+
+	result := db.WithContext(ctx).Model(&native.UploadRecordORM{}).Where("id = ?", *r.Id).Updates(updateMap)
+	if result.Error != nil {
+		llog.L().Errorf("update upload record failed: %v", result.Error)
+		return result.Error
 	}
 	return nil
 }

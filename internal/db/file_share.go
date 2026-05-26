@@ -50,7 +50,33 @@ func GetFileSharesByFileID(fileID string) ([]*native.FileShareORM, error) {
 // UpdateFileShare 更新分享记录
 func UpdateFileShare(fs *native.FileShareORM, updateFields []string) error {
 	ctx := context.Background()
-	if err := GetDB().WithContext(ctx).Model(fs).Select(updateFields).Updates(fs).Error; err != nil {
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range updateFields {
+		switch field {
+		case "status":
+			updateMap["status"] = *fs.Status
+		case "expire_at":
+			updateMap["expire_at"] = *fs.ExpireAt
+		case "max_access_count":
+			updateMap["max_access_count"] = *fs.MaxAccessCount
+		case "never_expire":
+			updateMap["never_expire"] = *fs.NeverExpire
+		case "remark":
+			updateMap["remark"] = *fs.Remark
+		case "access_count":
+			updateMap["access_count"] = *fs.AccessCount
+		case "file_id":
+			updateMap["file_id"] = *fs.FileId
+		case "share_code":
+			updateMap["share_code"] = *fs.ShareCode
+		case "sign":
+			updateMap["sign"] = *fs.Sign
+		}
+	}
+
+	if err := GetDB().WithContext(ctx).Model(&native.FileShareORM{}).Where("id = ?", *fs.Id).Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("update file share failed: %v", err)
 		return err
 	}

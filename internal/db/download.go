@@ -50,7 +50,33 @@ func GetDownloadRecordByUploadID(uploadID uint32) (*native.DownloadRecordORM, er
 // UpdateDownloadRecord 更新下载记录
 func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) error {
 	ctx := context.Background()
-	if err := GetDB().WithContext(ctx).Model(dr).Select(updateFields).Updates(dr).Error; err != nil {
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range updateFields {
+		switch field {
+		case "state":
+			updateMap["state"] = *dr.State
+		case "error_message":
+			updateMap["error_message"] = *dr.ErrorMessage
+		case "file_path":
+			updateMap["file_path"] = *dr.FilePath
+		case "file_size":
+			updateMap["file_size"] = *dr.FileSize
+		case "gid":
+			updateMap["gid"] = *dr.Gid
+		case "blake3_hash":
+			updateMap["blake3_hash"] = *dr.Blake3Hash
+		case "source_location_id":
+			updateMap["source_location_id"] = *dr.SourceLocationId
+		case "upload_record_id":
+			updateMap["upload_record_id"] = *dr.UploadRecordId
+		case "callback_info":
+			updateMap["callback_info"] = *dr.CallbackInfo
+		}
+	}
+
+	if err := GetDB().WithContext(ctx).Model(&native.DownloadRecordORM{}).Where("id = ?", *dr.Id).Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("update download record failed: %v", err)
 		return err
 	}

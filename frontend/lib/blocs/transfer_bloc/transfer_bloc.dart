@@ -39,9 +39,17 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     await emit.forEach(
       _bgService.uploadTaskStream,
       onData: (tasks) {
+        final newCompletedCount =
+            tasks.where((t) => t.status == UploadStatus.COMPLETED).length;
+        final oldCompletedCount = state.completedUploadCountSnapshot;
+        final hasNewCompleted = newCompletedCount > oldCompletedCount;
+
         return state.copyWith(
           uploadTasks: tasks,
           fakeStatus: state.fakeStatus + 1,
+          // 只有当有新的上传完成时才更新快照
+          completedUploadCountSnapshot:
+              hasNewCompleted ? newCompletedCount : oldCompletedCount,
         );
       },
     );

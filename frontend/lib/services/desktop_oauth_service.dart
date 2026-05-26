@@ -80,7 +80,9 @@ class DesktopOAuthService {
 
     // 等待回调
     final code = await _startCallbackServer(_pkce.state);
-    getLogger().info('login callback code $code');
+    getLogger().info(
+      'login callback code $code,serverUrl: ${_config.serverUrl}',
+    );
 
     try {
       // 交换 access token

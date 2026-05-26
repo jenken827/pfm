@@ -48,13 +48,42 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 		fields = append(fields, "proxy")
 	}
 
+	llog.L().Infof("UpdateStorageProvider: id=%d, fields=%v, name=%v, proxy=%v", id, fields, provider.Name, provider.Proxy)
+
 	if len(fields) == 0 {
 		_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Updates(ctx, provider)
 		return err
 	}
-	query, args := selectFields(fields)
-	_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Select(query, args...).Updates(ctx, provider)
-	return err
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range fields {
+		switch field {
+		case "name":
+			updateMap["name"] = *provider.Name
+		case "description":
+			updateMap["description"] = *provider.Description
+		case "config":
+			updateMap["config"] = *provider.Config
+		case "enabled":
+			updateMap["enabled"] = *provider.Enabled
+		case "sort_order":
+			updateMap["sort_order"] = *provider.SortOrder
+		case "total_capacity":
+			updateMap["total_capacity"] = *provider.TotalCapacity
+		case "file_size_limit":
+			updateMap["file_size_limit"] = *provider.FileSizeLimit
+		case "default_bound":
+			updateMap["default_bound"] = *provider.DefaultBound
+		case "proxy":
+			updateMap["proxy"] = *provider.Proxy
+		}
+	}
+
+	llog.L().Infof("UpdateStorageProvider: id=%d, updateMap=%v", id, updateMap)
+	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).Where("id = ?", id).Updates(updateMap)
+	llog.L().Infof("UpdateStorageProvider: RowsAffected=%d, err=%v", result.RowsAffected, result.Error)
+	return result.Error
 }
 
 // DeleteStorageProvider 删除存储提供者

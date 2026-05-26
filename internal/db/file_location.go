@@ -39,7 +39,55 @@ func CreateFileLocation(fl *native.FileLocationORM) error {
 // UpdateFileLocation 更新文件位置记录
 func UpdateFileLocation(fl *native.FileLocationORM, updateFields []string) error {
 	ctx := context.Background()
-	if err := GetDB().WithContext(ctx).Model(fl).Select(updateFields).Updates(fl).Error; err != nil {
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range updateFields {
+		switch field {
+		case "status":
+			updateMap["status"] = *fl.Status
+		case "message":
+			updateMap["message"] = *fl.Message
+		case "progress":
+			updateMap["progress"] = *fl.Progress
+		case "provider_file_id":
+			updateMap["provider_file_id"] = *fl.ProviderFileId
+		case "path":
+			updateMap["path"] = *fl.Path
+		case "size":
+			updateMap["size"] = *fl.Size
+		case "hash":
+			updateMap["hash"] = *fl.Hash
+		case "blake3_hash":
+			updateMap["blake3_hash"] = *fl.Blake3Hash
+		case "provider_id":
+			updateMap["provider_id"] = *fl.ProviderId
+		case "channel_id":
+			updateMap["channel_id"] = *fl.ChannelId
+		case "chunk_number":
+			updateMap["chunk_number"] = *fl.ChunkNumber
+		case "chunk_size":
+			updateMap["chunk_size"] = *fl.ChunkSize
+		case "chunk_total":
+			updateMap["chunk_total"] = *fl.ChunkTotal
+		case "chunk_hash":
+			updateMap["chunk_hash"] = *fl.ChunkHash
+		case "encrypted":
+			updateMap["encrypted"] = *fl.Encrypted
+		case "encryption_salt":
+			updateMap["encryption_salt"] = *fl.EncryptionSalt
+		case "cache_status":
+			updateMap["cache_status"] = *fl.CacheStatus
+		case "expired_at":
+			updateMap["expired_at"] = *fl.ExpiredAt
+		case "message_id":
+			updateMap["message_id"] = *fl.MessageId
+		case "s3_key_flag":
+			updateMap["s3_key_flag"] = *fl.S3KeyFlag
+		}
+	}
+
+	if err := GetDB().WithContext(ctx).Model(&native.FileLocationORM{}).Where("id = ?", *fl.Id).Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("update file location failed: %v", err)
 		return err
 	}

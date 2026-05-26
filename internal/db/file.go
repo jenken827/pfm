@@ -256,9 +256,22 @@ func UpdateDir(orm *native.FileORM) error {
 		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
 		return err
 	}
-	query, args := selectFields(fields)
-	_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Select(query, args...).Updates(ctx, orm)
-	return err
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range fields {
+		switch field {
+		case "name":
+			updateMap["name"] = *orm.Name
+		case "enable_encryption":
+			updateMap["enable_encryption"] = *orm.EnableEncryption
+		case "bound_provider_ids":
+			updateMap["bound_provider_ids"] = *orm.BoundProviderIds
+		}
+	}
+
+	result := db.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *orm.Id).Updates(updateMap)
+	return result.Error
 }
 
 // RenameFiles 批量重命名文件
@@ -309,7 +322,35 @@ func RenameFiles(renames []*native.RenameObj) error {
 // UpdateFile 更新文件记录
 func UpdateFile(file *native.FileORM, updateFields []string) error {
 	ctx := context.Background()
-	if err := GetDB().WithContext(ctx).Model(file).Select(updateFields).Updates(file).Error; err != nil {
+
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := make(map[string]interface{})
+	for _, field := range updateFields {
+		switch field {
+		case "name":
+			updateMap["name"] = *file.Name
+		case "hash":
+			updateMap["hash"] = *file.Hash
+		case "size":
+			updateMap["size"] = *file.Size
+		case "mime":
+			updateMap["mime"] = *file.Mime
+		case "type":
+			updateMap["type"] = *file.Type
+		case "parent_id":
+			updateMap["parent_id"] = *file.ParentId
+		case "is_ready":
+			updateMap["is_ready"] = *file.IsReady
+		case "enable_encryption":
+			updateMap["enable_encryption"] = *file.EnableEncryption
+		case "bound_provider_ids":
+			updateMap["bound_provider_ids"] = *file.BoundProviderIds
+		case "max_histories":
+			updateMap["max_histories"] = *file.MaxHistories
+		}
+	}
+
+	if err := GetDB().WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
 		return err
 	}
 	return nil
@@ -319,8 +360,12 @@ func UpdateFile(file *native.FileORM, updateFields []string) error {
 func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *native.FileORM) error {
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		// Use Generics API inside the transaction
-		if _, err := gorm.G[*native.FileORM](tx).Where("id=?", *file.Id).Select("hash", "size").Updates(ctx, file); err != nil {
+		// 使用 map 进行更新，避免 GORM 的零值检查问题
+		updateMap := map[string]interface{}{
+			"hash": *file.Hash,
+			"size": *file.Size,
+		}
+		if err := tx.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
 			return err
 		}
 		history := &native.FileHistoryORM{
@@ -342,8 +387,13 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 // UpdateFileSimple 简单更新文件（不创建历史）
 func UpdateFileSimple(file *native.FileORM) error {
 	ctx := context.Background()
-	_, err := gorm.G[*native.FileORM](db).Where("id=?", *file.Id).Select("hash", "size").Updates(ctx, file)
-	return err
+	// 使用 map 进行更新，避免 GORM 的零值检查问题
+	updateMap := map[string]interface{}{
+		"hash": *file.Hash,
+		"size": *file.Size,
+	}
+	result := db.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap)
+	return result.Error
 }
 
 // UpdateFileIsReady 更新文件is_ready状态

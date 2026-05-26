@@ -30,44 +30,70 @@ class FilePage extends StatelessWidget {
       create: (context) => FileBloc(context.read<FmRepository>())
         ..add(FileListEvent(dirId: dirId))
         ..add(const FileLoadStorageProvidersEvent()),
-      child: const _FileView(),
+      child: _FileView(dirId: dirId),
     );
   }
 }
 
-class _FileView extends StatelessWidget {
-  const _FileView();
+class _FileView extends StatefulWidget {
+  const _FileView({required this.dirId});
+
+  final String dirId;
+
+  @override
+  State<_FileView> createState() => _FileViewState();
+}
+
+class _FileViewState extends State<_FileView> {
+  TransferState? _previousTransferState;
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<FileBloc, FileState>(
-      listener: (context, state) {
-        // 处理失败状态，显示错误提示
-        if (state.status == FileStateStatus.failure && state.msg.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.msg),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
+    return MultiBlocListener(
+      listeners: [
+        // 监听 TransferBloc 状态变化，检测上传完成
+        BlocListener<TransferBloc, TransferState>(
+          listenWhen: (previous, current) {
+            // 检测是否有新的上传任务完成
+            return current.hasNewCompletedUploads(previous);
+          },
+          listener: (context, state) {
+            // 上传完成后刷新文件列表
+            context.read<FileBloc>().add(
+              FileListEvent(dirId: widget.dirId),
+            );
+          },
+        ),
+      ],
+      child: BlocConsumer<FileBloc, FileState>(
+        listener: (context, state) {
+          // 处理失败状态，显示错误提示
+          if (state.status == FileStateStatus.failure && state.msg.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.msg),
+                backgroundColor: Theme.of(context).colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+        builder: (context, state) {
+          return Scaffold(
+            appBar: _buildAppBar(context, state),
+            body: Column(
+              children: [
+                // 面包屑导航
+                if (state.breadcrumbs.isNotEmpty)
+                  _buildBreadcrumbs(context, state),
+                // 文件列表
+                Expanded(child: _buildContent(context, state)),
+              ],
             ),
+            floatingActionButton: _buildFab(context, state),
           );
-        }
-      },
-      builder: (context, state) {
-        return Scaffold(
-          appBar: _buildAppBar(context, state),
-          body: Column(
-            children: [
-              // 面包屑导航
-              if (state.breadcrumbs.isNotEmpty)
-                _buildBreadcrumbs(context, state),
-              // 文件列表
-              Expanded(child: _buildContent(context, state)),
-            ],
-          ),
-          floatingActionButton: _buildFab(context, state),
-        );
-      },
+        },
+      ),
     );
   }
 
