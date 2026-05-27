@@ -1,12 +1,15 @@
 package api
 
 import (
+	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/sharelink"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
@@ -103,6 +106,23 @@ func PublicDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	// 7. 增加访问次数
 	go db.IncrementShareAccessCount(*fs.Id)
 
-	// 8. 流式传输文件（无需认证，不指定 provider）
-	streamFile(r.Context(), w, r, *fs.FileId, "attachment", nil)
+	// 8. 获取文件流
+	result, err := service.GetFileStream(r.Context(), *fs.FileId, nil)
+	if err != nil {
+		llog.L().Errorf("get file stream failed: %v", err)
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	defer result.Reader.Close()
+
+	// 9. 设置响应头
+	w.Header().Set("Content-Type", result.ContentType)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+result.FileName+`"`)
+	if result.FileSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(result.FileSize, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+
+	// 10. 流式传输
+	io.Copy(w, result.Reader)
 }

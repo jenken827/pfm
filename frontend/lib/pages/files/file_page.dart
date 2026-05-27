@@ -355,30 +355,47 @@ class _FileViewState extends State<_FileView> {
         }
         return false;
       },
-      child: GridView.builder(
-        padding: const EdgeInsets.all(8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          childAspectRatio: 0.8,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: state.files.length + (state.hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          // 显示加载更多指示器
-          if (index == state.files.length) {
-            return const Center(child: CircularProgressIndicator());
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 根据屏幕宽度动态计算列数
+          final width = constraints.maxWidth;
+          int crossAxisCount;
+          if (width > 1200) {
+            crossAxisCount = 8;
+          } else if (width > 900) {
+            crossAxisCount = 6;
+          } else if (width > 600) {
+            crossAxisCount = 5;
+          } else {
+            crossAxisCount = 4;
           }
 
-          final file = state.files[index];
-          final isSelected = state.selectedFiles.contains(file);
+          return GridView.builder(
+            padding: const EdgeInsets.all(8),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.85,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemCount: state.files.length + (state.hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              // 显示加载更多指示器
+              if (index == state.files.length) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          return _FileGridTile(
-            file: file,
-            isSelected: isSelected,
-            isSelectMode: state.isSelectMode,
-            onTap: () => _handleFileTap(context, file, state),
-            onLongPress: () => _handleFileLongPress(context, file),
+              final file = state.files[index];
+              final isSelected = state.selectedFiles.contains(file);
+
+              return _FileGridTile(
+                file: file,
+                isSelected: isSelected,
+                isSelectMode: state.isSelectMode,
+                onTap: () => _handleFileTap(context, file, state),
+                onLongPress: () => _handleFileLongPress(context, file),
+              );
+            },
           );
         },
       ),
@@ -1463,26 +1480,44 @@ class _FileGridTile extends StatelessWidget {
       child: Card(
         elevation: isSelected ? 2 : 0,
         color: isSelected ? colorScheme.primaryContainer : null,
+        clipBehavior: Clip.antiAlias,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                _buildIcon(),
-                if (isSelectMode)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Checkbox(
-                      value: isSelected,
-                      onChanged: (_) => onTap(),
+            // 图标/缩略图区域（占满上方空间）
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 图标或缩略图
+                  _buildIcon(),
+                  // 选择模式下的复选框
+                  if (isSelectMode)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.8),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: (_) => onTap(),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+            // 文件名区域
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: isSelected
+                  ? colorScheme.primaryContainer.withOpacity(0.5)
+                  : colorScheme.surfaceContainerHighest.withOpacity(0.3),
               child: Text(
                 file.name,
                 maxLines: 2,
@@ -1491,7 +1526,6 @@ class _FileGridTile extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -1506,11 +1540,13 @@ class _FileGridTile extends StatelessWidget {
 
     IconData icon;
     Color color;
+    double size = 48;
 
     switch (file.type) {
       case pbenum.FileType.FOLDER:
         icon = Icons.folder;
         color = Colors.amber;
+        size = 56;
         break;
       case pbenum.FileType.VIDEO:
         icon = Icons.video_file;
@@ -1533,7 +1569,7 @@ class _FileGridTile extends StatelessWidget {
         color = Colors.grey;
     }
 
-    return Icon(icon, color: color, size: 40);
+    return Icon(icon, color: color, size: size);
   }
 
   Widget _buildThumbnail() {
@@ -1546,19 +1582,26 @@ class _FileGridTile extends StatelessWidget {
       headers['Authorization'] = 'Bearer $token';
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey[100],
       child: Image.network(
         previewUrl,
         headers: headers,
         fit: BoxFit.cover,
-        width: 40,
-        height: 40,
-        errorBuilder: (_, _, _) =>
-            const Icon(Icons.image, color: Colors.green, size: 40),
+        errorBuilder: (_, _, _) => const Center(
+          child: Icon(Icons.broken_image, color: Colors.grey, size: 40),
+        ),
         loadingBuilder: (_, child, loadingProgress) {
           if (loadingProgress == null) return child;
-          return const Icon(Icons.image, color: Colors.green, size: 40);
+          return const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
         },
       ),
     );

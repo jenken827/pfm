@@ -49,7 +49,7 @@ func healthRoute(mux *http.ServeMux) {
 
 // fileStreamRoute 文件流式传输路由（预览/下载）
 func fileStreamRoute(mux *http.ServeMux) {
-	// 文件预览（直接在浏览器中打开）
+	// 文件预览（直接在浏览器中打开，支持缩略图）
 	mux.HandleFunc("/api/file/stream/preview", api.PreviewFileHandler)
 
 	// 文件下载（强制下载）

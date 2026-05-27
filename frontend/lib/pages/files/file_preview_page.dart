@@ -52,6 +52,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   late PageController _pageController;
   List<File>? _images;
   int _currentPage = 0;
+  bool _showOriginal = false; // 是否显示原图
 
   // 视频播放器
   Player? _videoPlayer;
@@ -103,7 +104,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   bool get _hasMultipleImages => _images != null && _images!.length > 1;
 
   /// 构建预览流URL
-  String _buildPreviewUrl(String fileId) {
+  String _buildPreviewUrl(String fileId, {bool original = false}) {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.fileServer ?? '';
 
@@ -115,7 +116,8 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       return url;
     }
 
-    final url = '$baseUrl/api/file/stream/preview?file_id=$fileId';
+    final originalParam = original ? '&original=true' : '';
+    final url = '$baseUrl/api/file/stream/preview?file_id=$fileId$originalParam';
     return url;
   }
 
@@ -146,6 +148,17 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+            ),
+          // 图片类型显示原图/缩略图切换按钮
+          if (_currentFile.type == FileType.IMAGE)
+            IconButton(
+              icon: Icon(_showOriginal ? Icons.image : Icons.hd),
+              tooltip: _showOriginal ? '查看缩略图' : '查看原图',
+              onPressed: () {
+                setState(() {
+                  _showOriginal = !_showOriginal;
+                });
+              },
             ),
           IconButton(
             icon: const Icon(Icons.info_outline),
@@ -282,31 +295,51 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     File file,
     Map<String, String> headers,
   ) {
-    final previewUrl = _buildPreviewUrl(file.id);
-    return Center(
-      child: InteractiveViewer(
-        minScale: 0.5,
-        maxScale: 4.0,
-        child: Image.network(
-          previewUrl,
-          headers: headers,
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                    : null,
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return _buildErrorWidget(context, '图片加载失败', error);
-          },
+    final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
+    return Stack(
+      children: [
+        Center(
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.network(
+              previewUrl,
+              headers: headers,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return _buildErrorWidget(context, '图片加载失败', error);
+              },
+            ),
+          ),
         ),
-      ),
+        // 左上角显示当前模式标签
+        Positioned(
+          top: 16,
+          left: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              _showOriginal ? '原图' : '缩略图',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

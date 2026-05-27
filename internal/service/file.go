@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -645,6 +647,9 @@ func permanentlyDeleteFilesAsync(allFileIDs []string, logLabel string) {
 
 		asyncCtx := context.Background()
 
+		// 删除缩略图缓存
+		deleteThumbnailsForFiles(allFileIDs)
+
 		deleteFileHistories(asyncCtx, allFileIDs)
 		deleteFilesFromProviders(asyncCtx, allFileIDs)
 
@@ -823,4 +828,25 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 // UpdateFileTags 更新文件标签
 func UpdateFileTags(ctx context.Context, req *native.UpdateFileTagsReq) *models.Err {
 	return UpdateFileTagsImpl(ctx, req)
+}
+
+// deleteThumbnailsForFiles 删除文件的缩略图缓存
+func deleteThumbnailsForFiles(fileIDs []string) {
+	cacheDir := "data/thumbnails"
+	generator := thumbnail.NewGenerator(cacheDir)
+
+	for _, fileID := range fileIDs {
+		file, err := db.GetFileByID(fileID)
+		if err != nil {
+			continue
+		}
+
+		if file.Hash != nil && *file.Hash != "" {
+			// 根据 hash 计算缩略图路径并删除
+			thumbnailPath := generator.GetCachePath(*file.Hash)
+			if err := os.Remove(thumbnailPath); err != nil && !os.IsNotExist(err) {
+				llog.L().Warnf("delete thumbnail failed: %s, err: %v", thumbnailPath, err)
+			}
+		}
+	}
 }
