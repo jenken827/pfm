@@ -401,8 +401,12 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 		}
 	}
 
+	hash := ""
+	if fl.Blake3Hash != nil {
+		hash = *fl.Blake3Hash
+	}
 	llog.L().Infof("upload completed, hash: %s, provider: %d, encrypted: %v, total chunks: %d, size: %d",
-		*fl.Blake3Hash, providerID, fl.Encrypted != nil, len(pinfo), totalUploadedSize)
+		hash, providerID, fl.Encrypted != nil, len(pinfo), totalUploadedSize)
 	return nil
 }
 
@@ -452,6 +456,12 @@ func saveUploadChunks(fl *native.FileLocationORM, pinfo []*types.StorageProvider
 	chunkTotal := uint32(len(pinfo))
 	var totalUploadedSize uint64
 
+	// 安全获取 hash
+	hash := ""
+	if fl.Blake3Hash != nil {
+		hash = *fl.Blake3Hash
+	}
+
 	for i, chunkInfo := range pinfo {
 		chunkNumber := uint32(i)
 
@@ -469,7 +479,7 @@ func saveUploadChunks(fl *native.FileLocationORM, pinfo []*types.StorageProvider
 		}
 
 		llog.L().Infof("chunk %d/%d uploaded, hash: %s, provider: %d, file_id: %s",
-			chunkNumber+1, chunkTotal, *fl.Blake3Hash, providerID, chunkInfo.ID)
+			chunkNumber+1, chunkTotal, hash, providerID, chunkInfo.ID)
 	}
 
 	return totalUploadedSize
@@ -559,7 +569,20 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileL
 		return location
 	}
 
-	// 不存在则创建
+	// 不存在则创建，但先检查存储提供者是否可用
+	st := GetStorage(providerID)
+	if st == nil {
+		llog.L().Warnf("storage provider not found, skip creating file location: provider=%d", providerID)
+		return nil
+	}
+
+	orm := st.GetOrm()
+	if orm == nil || !*orm.Enabled {
+		llog.L().Warnf("storage provider not enabled, skip creating file location: provider=%d", providerID)
+		return nil
+	}
+
+	// 创建文件位置记录
 	fl := &native.FileLocationORM{
 		ProviderId: &providerID,
 		Blake3Hash: &blake3Hash,
@@ -728,7 +751,7 @@ func generateThumbnailForUpload(ctx context.Context, ur *native.UploadRecordORM)
 		return
 	}
 
-	llog.L().Infof("thumbnail generated for file: %s, path: %s", fileName, thumbnailPath)
+	llog.L().Infof("thumbnail ready for file: %s, path: %s", fileName, thumbnailPath)
 }
 
 // getThumbnailCacheDir 获取缩略图缓存目录

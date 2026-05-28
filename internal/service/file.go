@@ -145,6 +145,7 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		Name:             req.Name,
 		EnableEncryption: req.EnableEncryption,
 	}
+	llog.L().Infof("update dir req:%+v", req)
 
 	// 如果提供了 provider_ids，更新绑定关系
 	if len(req.ProviderIds) > 0 {
@@ -156,6 +157,7 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 			llog.L().Errorf("query providers failed: %v", err)
 			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
+		llog.L().Infof("update dir providers:%+v", providers)
 
 		// 验证所有提供的ID都有效
 		if len(providers) != len(providerIds) {

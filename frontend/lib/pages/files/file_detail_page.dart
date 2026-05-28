@@ -830,6 +830,8 @@ class _FileDetailPageState extends State<FileDetailPage> {
         return Icons.cloud;
       case StorageProviderType.PAN123:
         return Icons.cloud;
+      case StorageProviderType.BAIDU_NETDISK:
+        return Icons.cloud_circle;
       default:
         return Icons.cloud;
     }

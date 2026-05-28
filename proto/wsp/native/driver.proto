@@ -29,5 +29,15 @@ message Pan123DriverConfig {
     optional string password = 2;
     optional string root_id = 3;
     optional string access_token = 4;
+}
 
+// 百度网盘驱动器配置
+message BaiduNetdiskDriverConfig {
+    optional string refresh_token = 1;
+    optional string access_token = 2;
+    optional string root_path = 3;
+    optional string upload_thread = 4;
+    optional int64 custom_upload_part_size = 5;
+    optional string client_id = 6;
+    optional string client_secret = 7;
 }

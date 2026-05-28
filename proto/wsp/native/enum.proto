@@ -13,6 +13,7 @@ enum StorageProviderType {
   DISCORD = 3;
   HUGGINGFACE = 4;
   PAN123 = 5;
+  BAIDU_NETDISK = 6;
 }
 
 // ConfigFieldType

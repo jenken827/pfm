@@ -68,6 +68,14 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
         setState(() {
           _storageProviders = result.data!.providers;
           _isLoadingProviders = false;
+
+          // 过滤掉已删除的存储提供者
+          final availableIds = _storageProviders
+              .map((p) => p.id.toInt())
+              .toSet();
+          _selectedProviderIds = _selectedProviderIds
+              .where((id) => availableIds.contains(id))
+              .toList();
         });
       }
     } catch (e) {
