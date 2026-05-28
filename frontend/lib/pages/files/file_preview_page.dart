@@ -116,9 +116,13 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       return url;
     }
 
-    final originalParam = original ? '&original=true' : '';
-    final url = '$baseUrl/api/file/stream/preview?file_id=$fileId$originalParam';
-    return url;
+    if (original) {
+      // 请求原图
+      return '$baseUrl/api/file/stream/preview?file_id=$fileId&original=true';
+    } else {
+      // 预览时使用大尺寸缩略图 (400)
+      return '$baseUrl/api/file/stream/preview?file_id=$fileId&size=large';
+    }
   }
 
   /// 获取认证请求头

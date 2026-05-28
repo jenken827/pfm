@@ -46,12 +46,15 @@ func Run() {
 	// Apply rate limiting middleware
 	handlerWithRateLimit := middleware.RateLimitHTTPMiddleware(handlerWithCors)
 
+	// Apply recover middleware (panic recovery)
+	handlerWithRecover := middleware.HTTPRecoverMiddleware(handlerWithRateLimit)
+
 	route(mux)
 
 	schema := config.GetConfig().Schema
 	s := &http.Server{
 		Addr:      fmt.Sprintf("%s:%d", schema.Addr, schema.Port),
-		Handler:   handlerWithRateLimit,
+		Handler:   handlerWithRecover,
 		Protocols: p,
 	}
 
@@ -66,6 +69,12 @@ func Run() {
 
 	// 使用单独协程启动服务
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				llog.L().Errorf("[SERVER PANIC] %v", r)
+				serverErr <- fmt.Errorf("server panic: %v", r)
+			}
+		}()
 		llog.L().Infof("Starting server on %s:%d", schema.Addr, schema.Port)
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err

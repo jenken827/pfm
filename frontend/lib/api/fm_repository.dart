@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
@@ -12,6 +12,7 @@ import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/provider.pb.dart';
 import '../proto/native/upload.pb.dart';
+import '../router/router.dart';
 import '../services/local_storage.dart';
 import '../services/logger.dart';
 import 'util.dart';
@@ -39,6 +40,14 @@ class FmRepository {
     final ls = GetIt.I.get<LocalStorage>();
     inst._init(ls.fileServer);
     return inst;
+  }
+
+  /// 处理 Token 失效
+  Future<void> _handleTokenInvalid() async {
+    _logger.error('Token invalid, clearing login info and redirecting to login');
+    final ls = GetIt.I.get<LocalStorage>();
+    await ls.clearLoginInfo();
+    approuter.go('/login');
   }
 
   void _init(String? baseUrl) {
@@ -158,6 +167,9 @@ class FmRepository {
         FileListRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取文件列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -184,6 +196,9 @@ class FmRepository {
         FolderListRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取文件夹列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -221,6 +236,9 @@ class FmRepository {
       );
 
       return ApiResult(data: respData, success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('创建目录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -253,6 +271,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('更新目录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -273,6 +294,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('删除文件失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -295,6 +319,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('重命名文件失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -318,6 +345,9 @@ class FmRepository {
         GetFileInfoRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取文件基本信息失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -341,6 +371,9 @@ class FmRepository {
         FileDetailRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取文件详情失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -459,6 +492,9 @@ class FmRepository {
         CreateShareLinkRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('创建分享链接失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -481,6 +517,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('取消分享链接失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -505,6 +544,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('从回收站恢复失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -527,6 +569,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('彻底删除失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -549,6 +594,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('清空回收站失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -572,6 +620,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('删除文件历史版本失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -600,6 +651,9 @@ class FmRepository {
         TrashListRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取回收站列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -629,6 +683,9 @@ class FmRepository {
         MoveFileRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('移动文件失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -654,6 +711,9 @@ class FmRepository {
         StorageProviderListRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取存储提供者列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -678,6 +738,9 @@ class FmRepository {
         GetStorageProviderTypesRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取存储提供者类型列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -724,6 +787,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('添加存储提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -766,6 +832,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('更新存储提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -788,6 +857,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('删除存储提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -836,6 +908,9 @@ class FmRepository {
       );
       _logger.info('小文件上传成功: ${respData.fileId}, exists=${respData.exists}');
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('小文件上传失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -877,6 +952,9 @@ class FmRepository {
       );
       _logger.info('初始化上传任务成功: ${respData.uploadId}');
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('初始化上传任务失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -915,6 +993,9 @@ class FmRepository {
       extractRespData<Empty>(data, Empty());
       _logger.info('上传分片成功: uploadId=$uploadId, chunkIndex=$chunkIndex');
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('上传分片失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -938,6 +1019,9 @@ class FmRepository {
       extractRespData<Empty>(data, Empty());
       _logger.info('完成上传成功: uploadId=$uploadId');
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('完成上传失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -961,6 +1045,9 @@ class FmRepository {
       extractRespData<Empty>(data, Empty());
       _logger.info('取消上传成功: $uploadId');
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('取消上传失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -993,6 +1080,9 @@ class FmRepository {
         ListUploadRecordsResp(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取上传记录列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1020,6 +1110,9 @@ class FmRepository {
         GetUploadRecordDetailResp(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取上传记录详情失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1051,6 +1144,9 @@ class FmRepository {
         GetFileCacheStatusResp(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('查询文件缓存状态失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1073,6 +1169,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('重试上传记录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1095,6 +1194,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('删除上传记录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1124,6 +1226,9 @@ class FmRepository {
       );
 
       return ApiResult(success: true, data: resp.providers);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取可用提供者失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1152,6 +1257,9 @@ class FmRepository {
       extractRespData<Empty>(data, Empty());
 
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('同步文件失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1179,6 +1287,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('更新文件标签失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1204,6 +1315,9 @@ class FmRepository {
         GetFileTagsRespData(),
       );
       return ApiResult(success: true, data: respData.tags);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取文件标签失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1245,6 +1359,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('创建备份任务失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1285,6 +1402,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('更新备份任务失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1307,6 +1427,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('删除备份任务失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1339,6 +1462,9 @@ class FmRepository {
         ListBackupTasksRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取备份任务列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1364,6 +1490,9 @@ class FmRepository {
         GetBackupTaskRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取备份任务详情失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1386,6 +1515,9 @@ class FmRepository {
       final data = response.data as Map<String, dynamic>;
       extractRespData<Empty>(data, Empty());
       return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('触发备份失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
@@ -1419,6 +1551,9 @@ class FmRepository {
         ListBackupFilesRespData(),
       );
       return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
       _logger.error('获取备份文件记录失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));

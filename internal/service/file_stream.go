@@ -13,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // FileStreamResult 文件流式传输结果
@@ -199,8 +200,9 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool)
 }
 
 // GetThumbnailPath 获取缩略图路径
+// size: 缩略图尺寸（200 或 400）
 // 返回缩略图路径和是否需要异步生成
-func GetThumbnailPath(fileID string) (thumbnailPath string, needGenerate bool, file *native.FileORM) {
+func GetThumbnailPath(fileID string, size thumbnail.ThumbnailSize) (thumbnailPath string, needGenerate bool, file *native.FileORM) {
 	// 1. 获取文件信息
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
@@ -220,7 +222,7 @@ func GetThumbnailPath(fileID string) (thumbnailPath string, needGenerate bool, f
 	// 4. 根据 hash 计算缩略图路径，检查是否存在
 	cacheDir := getThumbnailCacheDir()
 	generator := thumbnail.NewGenerator(cacheDir)
-	expectedPath := generator.GetCachePath(*file.Hash)
+	expectedPath := generator.GetCachePath(*file.Hash, size)
 
 	if _, err := os.Stat(expectedPath); err == nil {
 		// 缩略图存在
@@ -301,16 +303,16 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 		return
 	}
 
-	// 10. 生成缩略图
+	// 10. 生成所有尺寸的缩略图
 	cacheDir := getThumbnailCacheDir()
 	generator := thumbnail.NewGenerator(cacheDir)
-	thumbnailPath, err := generator.Generate(tempFile.Name(), *file.Hash)
+	thumbnailPaths, err := generator.GenerateAll(tempFile.Name(), *file.Hash)
 	if err != nil {
 		llog.L().Errorf("regenerate thumbnail failed: %v", err)
 		return
 	}
 
-	llog.L().Infof("thumbnail regenerated for file: %s, path: %s", *file.Name, thumbnailPath)
+	llog.L().Infof("thumbnails regenerated for file: %s, paths: %v", *file.Name, thumbnailPaths)
 }
 
 // CheckFileIsImage 检查文件是否是图片
@@ -356,7 +358,7 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 	// 检查是否实现了 PreDownloader 接口
 	if preDownloader, ok := sourceStorage.(types.PreDownloader); ok {
 		// 异步触发预下载（不阻塞当前请求）
-		go func() {
+		utils.Go(func() {
 			bgCtx := context.Background()
 			if err := preDownloader.PreDownload(bgCtx, sourceLocations); err != nil {
 				llog.L().Errorf("async pre-download failed: file_id=%s, provider=%d, err=%v",
@@ -365,7 +367,7 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 				llog.L().Infof("async pre-download completed: file_id=%s, provider=%d",
 					fileID, sourceProviderID)
 			}
-		}()
+		})
 	}
 
 	return map[string]any{

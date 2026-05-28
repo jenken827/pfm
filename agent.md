@@ -43,6 +43,9 @@
 - **鉴权**: RPC 默认走 `AuthInterceptor`，敏感接口需确保鉴权开启。
 - **REST 兼容**: 仅在 `.proto` 中声明 `google.api.http` 的方法支持 REST 路径。
 - **构建脚本**: 后端编译使用 `bash dev.sh build` (注入 Git 版本)，运行使用 `bash dev.sh run`。
+- **Panic 恢复**: 所有代码路径都有 recover 中间件覆盖。新增 goroutine 必须使用 `utils.Go()` 或添加 `defer recover`。
+- **缩略图**: 图片上传时自动生成缩略图，存储在 `data/thumbnails/` 目录。使用 `{hash}_200x200.jpg` 命名规则。
+- **Token 失效处理**: 前端捕获 `TokenInvalidException` 后自动清除登录信息并跳转登录页。
 
 ## 5. 方法索引与维护
 **此索引为强制维护项，每次任务完成后必须检查是否需要更新。**

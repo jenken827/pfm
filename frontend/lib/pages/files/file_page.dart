@@ -1575,7 +1575,8 @@ class _FileGridTile extends StatelessWidget {
   Widget _buildThumbnail() {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.fileServer ?? '';
-    final previewUrl = '$baseUrl/api/file/stream/preview?file_id=${file.id}';
+    // 网格视图使用小尺寸缩略图 (200)
+    final previewUrl = '$baseUrl/api/file/stream/preview?file_id=${file.id}&size=small';
     final token = ls.token?.accessToken;
     final headers = <String, String>{};
     if (token != null) {

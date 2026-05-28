@@ -67,6 +67,11 @@ func (h *httpCaller) setNotifier(ctx context.Context, u url.URL, notifier Notifi
 	}
 	h.wg.Add(1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[ARIA2 PANIC] close conn: %v", r)
+			}
+		}()
 		defer h.wg.Done()
 		defer conn.Close()
 		<-ctx.Done()
@@ -78,6 +83,11 @@ func (h *httpCaller) setNotifier(ctx context.Context, u url.URL, notifier Notifi
 	}()
 	h.wg.Add(1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[ARIA2 PANIC] read message: %v", r)
+			}
+		}()
 		defer h.wg.Done()
 		var request websocketResponse
 		var err error

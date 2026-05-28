@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -844,10 +843,9 @@ func deleteThumbnailsForFiles(fileIDs []string) {
 		}
 
 		if file.Hash != nil && *file.Hash != "" {
-			// 根据 hash 计算缩略图路径并删除
-			thumbnailPath := generator.GetCachePath(*file.Hash)
-			if err := os.Remove(thumbnailPath); err != nil && !os.IsNotExist(err) {
-				llog.L().Warnf("delete thumbnail failed: %s, err: %v", thumbnailPath, err)
+			// 删除所有尺寸的缩略图
+			if err := generator.DeleteAllThumbnails(*file.Hash); err != nil {
+				llog.L().Warnf("delete thumbnails failed: hash=%s, err=%v", *file.Hash, err)
 			}
 		}
 	}

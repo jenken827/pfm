@@ -45,45 +45,85 @@ func UpdateFileLocation(fl *native.FileLocationORM, updateFields []string) error
 	for _, field := range updateFields {
 		switch field {
 		case "status":
-			updateMap["status"] = *fl.Status
+			if fl.Status != nil {
+				updateMap["status"] = *fl.Status
+			}
 		case "message":
-			updateMap["message"] = *fl.Message
+			if fl.Message != nil {
+				updateMap["message"] = *fl.Message
+			}
 		case "progress":
-			updateMap["progress"] = *fl.Progress
+			if fl.Progress != nil {
+				updateMap["progress"] = *fl.Progress
+			}
 		case "provider_file_id":
-			updateMap["provider_file_id"] = *fl.ProviderFileId
+			if fl.ProviderFileId != nil {
+				updateMap["provider_file_id"] = *fl.ProviderFileId
+			}
 		case "path":
-			updateMap["path"] = *fl.Path
+			if fl.Path != nil {
+				updateMap["path"] = *fl.Path
+			}
 		case "size":
-			updateMap["size"] = *fl.Size
+			if fl.Size != nil {
+				updateMap["size"] = *fl.Size
+			}
 		case "hash":
-			updateMap["hash"] = *fl.Hash
+			if fl.Hash != nil {
+				updateMap["hash"] = *fl.Hash
+			}
 		case "blake3_hash":
-			updateMap["blake3_hash"] = *fl.Blake3Hash
+			if fl.Blake3Hash != nil {
+				updateMap["blake3_hash"] = *fl.Blake3Hash
+			}
 		case "provider_id":
-			updateMap["provider_id"] = *fl.ProviderId
+			if fl.ProviderId != nil {
+				updateMap["provider_id"] = *fl.ProviderId
+			}
 		case "channel_id":
-			updateMap["channel_id"] = *fl.ChannelId
+			if fl.ChannelId != nil {
+				updateMap["channel_id"] = *fl.ChannelId
+			}
 		case "chunk_number":
-			updateMap["chunk_number"] = *fl.ChunkNumber
+			if fl.ChunkNumber != nil {
+				updateMap["chunk_number"] = *fl.ChunkNumber
+			}
 		case "chunk_size":
-			updateMap["chunk_size"] = *fl.ChunkSize
+			if fl.ChunkSize != nil {
+				updateMap["chunk_size"] = *fl.ChunkSize
+			}
 		case "chunk_total":
-			updateMap["chunk_total"] = *fl.ChunkTotal
+			if fl.ChunkTotal != nil {
+				updateMap["chunk_total"] = *fl.ChunkTotal
+			}
 		case "chunk_hash":
-			updateMap["chunk_hash"] = *fl.ChunkHash
+			if fl.ChunkHash != nil {
+				updateMap["chunk_hash"] = *fl.ChunkHash
+			}
 		case "encrypted":
-			updateMap["encrypted"] = *fl.Encrypted
+			if fl.Encrypted != nil {
+				updateMap["encrypted"] = *fl.Encrypted
+			}
 		case "encryption_salt":
-			updateMap["encryption_salt"] = *fl.EncryptionSalt
+			if fl.EncryptionSalt != nil {
+				updateMap["encryption_salt"] = *fl.EncryptionSalt
+			}
 		case "cache_status":
-			updateMap["cache_status"] = *fl.CacheStatus
+			if fl.CacheStatus != nil {
+				updateMap["cache_status"] = *fl.CacheStatus
+			}
 		case "expired_at":
-			updateMap["expired_at"] = *fl.ExpiredAt
+			if fl.ExpiredAt != nil {
+				updateMap["expired_at"] = *fl.ExpiredAt
+			}
 		case "message_id":
-			updateMap["message_id"] = *fl.MessageId
+			if fl.MessageId != nil {
+				updateMap["message_id"] = *fl.MessageId
+			}
 		case "s3_key_flag":
-			updateMap["s3_key_flag"] = *fl.S3KeyFlag
+			if fl.S3KeyFlag != nil {
+				updateMap["s3_key_flag"] = *fl.S3KeyFlag
+			}
 		}
 	}
 

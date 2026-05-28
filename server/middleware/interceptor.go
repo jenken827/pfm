@@ -26,7 +26,7 @@ func GInterceptor() connect.UnaryInterceptorFunc {
 			llog.L().Infof("request received, uuid:%s, procedure:%s", uuid, req.Spec().Procedure)
 			defer func() {
 				if p := recover(); p != nil {
-					llog.L().Errorf("panic occurred: %v", p)
+					llog.L().Errorf("[CONNECT PANIC]: %v", p)
 					llog.L().Error(string(debug.Stack()))
 					r, e = response.ErrResp(&models.Err{
 						C: native.RespCode_INTERNAL_ERROR,

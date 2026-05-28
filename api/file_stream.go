@@ -10,6 +10,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
+	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/server/middleware"
 )
 
@@ -33,9 +34,21 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	original := r.URL.Query().Get("original") == "true"
 
-	// 3. 如果不是请求原图，尝试返回缩略图
+	// 3. 解析缩略图尺寸参数（默认 200）
+	thumbnailSize := thumbnail.ThumbnailSize{
+		Width:  thumbnail.ThumbnailSizeSmall,
+		Height: thumbnail.ThumbnailSizeSmall,
+	}
+	if sizeParam := r.URL.Query().Get("size"); sizeParam == "large" {
+		thumbnailSize = thumbnail.ThumbnailSize{
+			Width:  thumbnail.ThumbnailSizeLarge,
+			Height: thumbnail.ThumbnailSizeLarge,
+		}
+	}
+
+	// 4. 如果不是请求原图，尝试返回缩略图
 	if !original {
-		if serveThumbnail(w, r, fileID) {
+		if serveThumbnail(w, r, fileID, thumbnailSize) {
 			return
 		}
 	}
@@ -107,8 +120,8 @@ func DownloadFileHistoryHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveThumbnail 提供缩略图服务，返回是否成功
-func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string) bool {
-	thumbnailPath, needGenerate, file := service.GetThumbnailPath(fileID)
+func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string, size thumbnail.ThumbnailSize) bool {
+	thumbnailPath, needGenerate, file := service.GetThumbnailPath(fileID, size)
 
 	if thumbnailPath != "" {
 		// 缩略图存在，直接返回

@@ -10,10 +10,54 @@ class SettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ls = GetIt.I.get<LocalStorage>();
+    final casdoorConfig = ls.casdoorConfig;
+    final isLoggedIn = ls.isLoggedIn;
+
     return Scaffold(
       appBar: AppBar(title: const Text('设置'), centerTitle: true),
       body: ListView(
         children: [
+          // 服务器配置信息
+          _SectionHeader(title: '服务器配置'),
+          _SettingsTile(
+            icon: Icons.dns_outlined,
+            title: 'API Server',
+            subtitle: ls.fileServer ?? '未配置',
+            onTap: isLoggedIn ? null : () => _showServerConfigDialog(context),
+          ),
+          const Divider(height: 1),
+          _SettingsTile(
+            icon: Icons.key,
+            title: 'Casdoor',
+            subtitle: casdoorConfig?.serverUrl ?? '未配置',
+            onTap: isLoggedIn ? null : () => const LoginCasdoorConfigRoute().push(context),
+          ),
+          const Divider(height: 1),
+          _SettingsTile(
+            icon: Icons.person_outline,
+            title: '当前用户',
+            subtitle: ls.user?.name ?? '未登录',
+            onTap: null,
+          ),
+          if (isLoggedIn) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                '如需修改服务器配置，请先退出登录',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+          const Divider(height: 1),
+
+          const SizedBox(height: 16),
+
+          // 应用设置
+          _SectionHeader(title: '应用设置'),
           // 主题设置
           _SettingsTile(
             icon: Icons.palette_outlined,
@@ -78,6 +122,48 @@ class SettingPage extends StatelessWidget {
             subtitle: '清除登录信息',
             iconColor: Theme.of(context).colorScheme.error,
             onTap: () => _showLogoutDialog(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示设置文件服务器对话框
+  void _showServerConfigDialog(BuildContext context) {
+    final ls = GetIt.I.get<LocalStorage>();
+    final controller = TextEditingController(text: ls.fileServer ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('设置文件服务器'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '请输入服务器地址',
+            prefixIcon: Icon(Icons.link),
+          ),
+          autofocus: true,
+          keyboardType: TextInputType.url,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isNotEmpty) {
+                await ls.saveFileServer(url);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(
+                    ctx,
+                  ).showSnackBar(const SnackBar(content: Text('服务器地址已保存')));
+                }
+              }
+            },
+            child: const Text('保存'),
           ),
         ],
       ),
@@ -160,7 +246,7 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color? iconColor;
 
   @override
@@ -169,8 +255,29 @@ class _SettingsTile extends StatelessWidget {
       leading: Icon(icon, color: iconColor),
       title: Text(title),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: onTap != null ? const Icon(Icons.chevron_right) : null,
       onTap: onTap,
+    );
+  }
+}
+
+/// 分组标题组件
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

@@ -12,6 +12,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/sharelink"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // PublicDownloadHandler 公共下载接口（无需认证，签名验证）
@@ -52,10 +53,10 @@ func PublicDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	if fs.NeverExpire == nil || !*fs.NeverExpire {
 		if fs.ExpireAt != nil && fs.ExpireAt.Before(time.Now()) {
 			// 异步更新状态为过期
-			go func() {
+			utils.Go(func() {
 				expiredStatus := int32(native.ShareStatus_EXPIRED)
 				db.UpdateFileShare(&native.FileShareORM{Id: fs.Id, Status: &expiredStatus}, []string{"status"})
-			}()
+			})
 			http.Error(w, "share expired", http.StatusGone)
 			return
 		}
