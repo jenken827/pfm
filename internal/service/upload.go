@@ -161,6 +161,23 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 	}
 }
 
+// buildExistingEncryptMap 构建每个 provider 的加密状态映射
+// 取每个 provider 第一个已完成分片的 Encrypted 字段作为该 provider 的加密状态
+func buildExistingEncryptMap(locations []*native.FileLocationORM) map[uint32]bool {
+	result := make(map[uint32]bool)
+	for _, loc := range locations {
+		if loc.ProviderId == nil || loc.Status == nil || *loc.Status != int32(native.LocationStatus_PCOMPLETED) {
+			continue
+		}
+		pid := *loc.ProviderId
+		if _, exists := result[pid]; !exists {
+			encrypted := loc.Encrypted != nil && *loc.Encrypted
+			result[pid] = encrypted
+		}
+	}
+	return result
+}
+
 // handleInstantUpload 处理秒传逻辑
 // 返回值：handled 表示是否已处理，需要直接返回；fileToUse 表示应该使用的文件记录
 func handleInstantUpload(
@@ -190,6 +207,29 @@ func handleInstantUpload(
 
 	// ✅ 使用公共方法构建已存在的完整提供者映射（支持分片）
 	completeProviderMap := storage.BuildCompleteProviderMap(existingLocations)
+
+	// 检查目标目录的加密设置
+	var targetEncrypt bool
+	if parentID != nil && *parentID != "" {
+		if parentFolder, err := db.GetFileByID(*parentID); err == nil && parentFolder != nil && parentFolder.EnableEncryption != nil {
+			targetEncrypt = *parentFolder.EnableEncryption
+		}
+	}
+
+	// 检查已有副本的加密状态是否与目标目录匹配
+	// 如果不匹配，需要重新上传（不能复用加密状态不同的副本）
+	existingEncryptMap := buildExistingEncryptMap(existingLocations)
+	for pid, isComplete := range completeProviderMap {
+		if !isComplete {
+			continue
+		}
+		existingEncrypted := existingEncryptMap[pid]
+		if existingEncrypted != targetEncrypt {
+			llog.L().Infof("provider %d encryption mismatch: existing=%v, target=%v, need re-upload",
+				pid, existingEncrypted, targetEncrypt)
+			delete(completeProviderMap, pid)
+		}
+	}
 
 	// 计算需要同步到哪些新的存储提供者
 	var needSyncProviders []uint32

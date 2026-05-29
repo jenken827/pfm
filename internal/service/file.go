@@ -76,11 +76,21 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 	}
 	boundProviderIds := string(providerIdsJSON)
 
+	// 处理加密设置：如果前端未传递，则从父文件夹继承
+	enableEncryption := req.EnableEncryption
+	if enableEncryption == nil {
+		inherited, mErr := getInheritedEncryption(req.ParentId)
+		if mErr != nil {
+			return "", mErr
+		}
+		enableEncryption = &inherited
+	}
+
 	f := &native.FileORM{
 		Name:             req.Name,
 		ParentId:         req.ParentId,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
-		EnableEncryption: req.EnableEncryption,
+		EnableEncryption: enableEncryption,
 		BoundProviderIds: &boundProviderIds,
 	}
 	e := db.CreateFile(f)
@@ -135,6 +145,30 @@ func getInheritedProviderIds(parentID *string) ([]uint32, *models.Err) {
 	}
 	llog.L().Infof("using default bound providers: %v", providerIds)
 	return providerIds, nil
+}
+
+// getInheritedEncryption 获取继承的加密设置
+// 从父文件夹继承加密属性
+func getInheritedEncryption(parentID *string) (bool, *models.Err) {
+	// 如果没有父文件夹，默认不加密
+	if parentID == nil || *parentID == "" {
+		return false, nil
+	}
+
+	// 查询父文件夹
+	parentFile, err := db.GetFileByID(*parentID)
+	if err != nil {
+		llog.L().Warnf("get parent folder failed: %v, defaulting to no encryption", err)
+		return false, nil
+	}
+
+	// 如果父文件夹没有设置加密属性，默认不加密
+	if parentFile.EnableEncryption == nil {
+		return false, nil
+	}
+
+	llog.L().Infof("inherited encryption from parent: %v, parent_id: %s", *parentFile.EnableEncryption, *parentID)
+	return *parentFile.EnableEncryption, nil
 }
 
 // UpdateDir 更新文件夹
@@ -399,6 +433,7 @@ func batchDeleteFromProvider(
 
 // deleteFilesFromProviders 从存储提供者批量删除文件（内部函数）
 // 按 provider_id 分组后批量删除，提高效率
+// fileIDs: 当前正在删除的文件 ID 列表（用于引用检查，避免误删被其他文件共享的 file_location）
 func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	if len(fileIDs) == 0 {
 		return
@@ -423,7 +458,24 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 		}
 	}
 
-	// 3. 批量获取所有文件位置记录，按 provider_id 分组
+	// 3. 检查每个 hash 是否还有其他非删除文件引用
+	// 被其他文件引用的 hash 不应删除其 file_location 记录
+	hashesWithRefs := make(map[string]bool) // 仍有其他文件引用的 hash
+	for fileHash := range hashSet {
+		refCount, err := db.CountActiveFilesByHashExcludingIDs(fileHash, fileIDs)
+		if err != nil {
+			llog.L().Errorf("count active files by hash failed: %v, hash: %s", err, fileHash)
+			// 查询失败时保守处理，不删除该 hash 的 file_location
+			hashesWithRefs[fileHash] = true
+			continue
+		}
+		if refCount > 0 {
+			llog.L().Infof("hash %s still referenced by %d other files, skip file_location deletion", fileHash, refCount)
+			hashesWithRefs[fileHash] = true
+		}
+	}
+
+	// 4. 批量获取所有文件位置记录，按 provider_id 分组
 	providerLocations := make(map[uint32][]*native.FileLocationORM) // providerID -> locations
 	for fileHash := range hashSet {
 		locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
@@ -444,13 +496,27 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	}
 	llog.L().Infof("delete files from providers, provider len: %d", len(providerLocations))
 
-	// 4. 按 provider_id 批量删除文件
+	// 5. 按 provider_id 批量删除文件（跳过仍有其他文件引用的 hash）
 	providerDeletedSizes := make(map[uint32]uint64)
 	var allDeletedIDs, allFailedIDs []uint64
 
 	for providerID, locations := range providerLocations {
-		llog.L().Infof("delete files loop providerlocations, providerID: %d", providerID)
-		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locations)
+		// 过滤掉仍有其他文件引用的 location
+		var locationsToDelete []*native.FileLocationORM
+		for _, loc := range locations {
+			if loc.Blake3Hash != nil && hashesWithRefs[*loc.Blake3Hash] {
+				llog.L().Debugf("skip deleting location %d for hash %s (still referenced by other files)", loc.Id, *loc.Blake3Hash)
+				continue
+			}
+			locationsToDelete = append(locationsToDelete, loc)
+		}
+
+		if len(locationsToDelete) == 0 {
+			continue
+		}
+
+		llog.L().Infof("delete files loop providerlocations, providerID: %d, locations: %d", providerID, len(locationsToDelete))
+		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locationsToDelete)
 		allDeletedIDs = append(allDeletedIDs, deletedIDs...)
 		allFailedIDs = append(allFailedIDs, failedIDs...)
 		if deletedSize > 0 {
@@ -458,21 +524,21 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 		}
 	}
 
-	// 5. 更新存储提供者的已使用容量
+	// 6. 更新存储提供者的已使用容量
 	for providerID, size := range providerDeletedSizes {
 		if err := db.DecrementUsedCapacity(providerID, size); err != nil {
 			llog.L().Errorf("decrement used capacity failed: %v, provider_id: %d", err, providerID)
 		}
 	}
 
-	// 6. 批量删除成功删除的文件位置记录
+	// 7. 批量删除成功删除的文件位置记录
 	if len(allDeletedIDs) > 0 {
 		if err := db.DeleteFileLocations(allDeletedIDs); err != nil {
 			llog.L().Errorf("batch delete file locations failed: %v", err)
 		}
 	}
 
-	// 7. 更新删除失败的文件位置记录状态
+	// 8. 更新删除失败的文件位置记录状态
 	if len(allFailedIDs) > 0 {
 		if err := db.UpdateFileLocationStatus(allFailedIDs, int32(native.LocationStatus_PDELETED_FAILED)); err != nil {
 			llog.L().Errorf("update file location status to DELETED_FAILED failed: %v", err)

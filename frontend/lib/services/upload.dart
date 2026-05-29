@@ -11,6 +11,39 @@ import 'package:pfm/services/services.dart';
 // ignore: implementation_imports
 import 'package:blake3_dart/src/blake3_compact.dart';
 
+/// 带重试的异步操作执行器
+/// 对网络超时等瞬时错误进行指数退避重试
+Future<T> _retryOnTimeout<T>(
+  Future<T> Function() action, {
+  int maxRetries = 3,
+  String operationName = 'operation',
+}) async {
+  int attempt = 0;
+  while (true) {
+    try {
+      return await action();
+    } catch (e) {
+      attempt++;
+      // 仅对超时和连接错误重试
+      final isRetryable = e is TimeoutException ||
+          (e is io.SocketException) ||
+          (e.toString().contains('sendTimeout')) ||
+          (e.toString().contains('receiveTimeout')) ||
+          (e.toString().contains('connectionTimeout')) ||
+          (e.toString().contains('Connection refused'));
+      if (!isRetryable || attempt >= maxRetries) {
+        rethrow;
+      }
+      final delay = Duration(seconds: attempt * 2);
+      getLogger().warning(
+        '$operationName failed (attempt $attempt/$maxRetries), '
+        'retrying in ${delay.inSeconds}s: $e',
+      );
+      await Future.delayed(delay);
+    }
+  }
+}
+
 Future<void> uploadFile({
   required String taskId,
   required Sqlite3Storage storage,
@@ -48,17 +81,20 @@ Future<void> uploadFile({
       final file = io.File(task.filepath);
       final content = await file.readAsBytes();
       
-      final result = await fmRepo.uploadSmall(
-        name: task.filename,
-        parentId: task.parentId,
-        size: fileSize,
-        hash: task.fileHash!,
-        content: content,
-        overwrite: task.overwrite,
-        tags: task.tags,
-        onSendProgress: (sent, total) {
-          storage.updateUploadTask(task.id, uploadedBytes: sent);
-        },
+      final result = await _retryOnTimeout(
+        () => fmRepo.uploadSmall(
+          name: task.filename,
+          parentId: task.parentId,
+          size: fileSize,
+          hash: task.fileHash!,
+          content: content,
+          overwrite: task.overwrite,
+          tags: task.tags,
+          onSendProgress: (sent, total) {
+            storage.updateUploadTask(task.id, uploadedBytes: sent);
+          },
+        ),
+        operationName: 'uploadSmall(${task.filename})',
       );
 
       if (!result.success) {
@@ -90,13 +126,16 @@ Future<void> uploadFile({
     List<int> uploadedChunks = [];
     // 初始化上传
     if (task.uploadId == null || task.uploadId!.isEmpty) {
-      final result = await fmRepo.initUpload(
-        name: task.filename,
-        size: task.fileSize,
-        hash: task.fileHash!,
-        parentId: task.parentId,
-        overwrite: task.overwrite,
-        tags: task.tags,
+      final result = await _retryOnTimeout(
+        () => fmRepo.initUpload(
+          name: task.filename,
+          size: task.fileSize,
+          hash: task.fileHash!,
+          parentId: task.parentId,
+          overwrite: task.overwrite,
+          tags: task.tags,
+        ),
+        operationName: 'initUpload(${task.filename})',
       );
       if (!result.success) {
         await storage.updateUploadTask(
@@ -215,26 +254,29 @@ Future<void> uploadFile({
         int lastUploadedBytes = 0;
         int initUploadedBytes = realUploadedBytes;
         // 上传分片
-        final result = await fmRepo.uploadChunk(
-          uploadId: int.parse(task.uploadId!),
-          chunkIndex: chunkIndex,
-          chunkData: chunkData,
-          chunkHash: chunkHash,
-          onSendProgress: (sent, total) {
-            //sent是已发送的字节数，不是从上次调用到本次调用的字节数，不能直接累加，需要计算差值
-            // total是参数的总字节数，不是分片大小 total = chunkSize + otherParamsSize
-            final delta = sent - lastUploadedBytes; //两次调用之间的差值
-            lastUploadedBytes = sent;
-            deltaUploadedBytes += delta;
-            final cs = chunkIndex != totalChunks - 1
-                ? chunkSize
-                : task.fileSize - chunkSize * (totalChunks - 1);
-            if (sent < cs) {
-              realUploadedBytes = initUploadedBytes + sent;
-            } else if (realUploadedBytes < initUploadedBytes + cs) {
-              realUploadedBytes = initUploadedBytes + cs;
-            }
-          },
+        final result = await _retryOnTimeout(
+          () => fmRepo.uploadChunk(
+            uploadId: int.parse(task.uploadId!),
+            chunkIndex: chunkIndex,
+            chunkData: chunkData,
+            chunkHash: chunkHash,
+            onSendProgress: (sent, total) {
+              //sent是已发送的字节数，不是从上次调用到本次调用的字节数，不能直接累加，需要计算差值
+              // total是参数的总字节数，不是分片大小 total = chunkSize + otherParamsSize
+              final delta = sent - lastUploadedBytes; //两次调用之间的差值
+              lastUploadedBytes = sent;
+              deltaUploadedBytes += delta;
+              final cs = chunkIndex != totalChunks - 1
+                  ? chunkSize
+                  : task.fileSize - chunkSize * (totalChunks - 1);
+              if (sent < cs) {
+                realUploadedBytes = initUploadedBytes + sent;
+              } else if (realUploadedBytes < initUploadedBytes + cs) {
+                realUploadedBytes = initUploadedBytes + cs;
+              }
+            },
+          ),
+          operationName: 'uploadChunk(${task.filename}#$chunkIndex)',
         );
 
         if (!result.success) {
@@ -253,7 +295,10 @@ Future<void> uploadFile({
     }
 
     // 4. 完成上传
-    final result = await fmRepo.completeUpload(uploadId: int.parse(task.uploadId!));
+    final result = await _retryOnTimeout(
+      () => fmRepo.completeUpload(uploadId: int.parse(task.uploadId!)),
+      operationName: 'completeUpload(${task.filename})',
+    );
     if (!result.success) {
       await storage.updateUploadTask(
         task.id,

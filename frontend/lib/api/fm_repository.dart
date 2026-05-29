@@ -29,6 +29,7 @@ class ApiResult<T> {
 /// 文件管理器 Repository - 负责与后端 API 对接
 class FmRepository {
   late final Dio _dio;
+  late final Dio _uploadDio; // 上传专用 Dio，超时时间更长
   Talker get _logger => getLogger();
 
   String? _baseUrl;
@@ -62,35 +63,45 @@ class FmRepository {
       ),
     );
 
-    // 添加拦截器
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          // 动态获取认证 Token，确保登录后能使用最新 token
-          final ls = GetIt.I.get<LocalStorage>();
-          final token = ls.token;
-          if (token?.accessToken != null) {
-            options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
-          }
-          _logger.info('API Request: ${options.method} ${options.path}');
-          return handler.next(options);
-        },
-        onResponse: (response, handler) {
-          _logger.info(
-            'API Response: ${response.statusCode} ${response.requestOptions.path}',
-          );
-          return handler.next(response);
-        },
-        onError: (error, handler) {
-          _logger.error(
-            'API Error: ${error.message} ${error.requestOptions.path}\n'
-            'Status: ${error.response?.statusCode}\n'
-            'Response: ${error.response?.data}',
-          );
-          return handler.next(error);
-        },
+    // 上传专用 Dio：sendTimeout 更长，避免批量上传时超时
+    _uploadDio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 10),
+        sendTimeout: const Duration(minutes: 10),
+        contentType: 'application/json',
       ),
     );
+
+    // 添加拦截器
+    final authInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // 动态获取认证 Token，确保登录后能使用最新 token
+        final ls = GetIt.I.get<LocalStorage>();
+        final token = ls.token;
+        if (token?.accessToken != null) {
+          options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
+        }
+        _logger.info('API Request: ${options.method} ${options.path}');
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        _logger.info(
+          'API Response: ${response.statusCode} ${response.requestOptions.path}',
+        );
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        _logger.error(
+          'API Error: ${error.message} ${error.requestOptions.path}\n'
+          'Status: ${error.response?.statusCode}\n'
+          'Response: ${error.response?.data}',
+        );
+        return handler.next(error);
+      },
+    );
+    _dio.interceptors.add(authInterceptor);
+    _uploadDio.interceptors.add(authInterceptor);
   }
 
   /// 用于 isolate 中初始化，需要手动传入 token
@@ -105,29 +116,39 @@ class FmRepository {
       ),
     );
 
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (token?.accessToken != null) {
-            options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
-          }
-          _logger.info('API Request: ${options.method} ${options.path}');
-          return handler.next(options);
-        },
-        onResponse: (response, handler) {
-          _logger.info(
-            'API Response: ${response.statusCode} ${response.requestOptions.path}',
-          );
-          return handler.next(response);
-        },
-        onError: (error, handler) {
-          _logger.error(
-            'API Error: ${error.message} ${error.requestOptions.path}',
-          );
-          return handler.next(error);
-        },
+    // 上传专用 Dio：sendTimeout 更长，避免批量上传时超时
+    _uploadDio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 10),
+        sendTimeout: const Duration(minutes: 10),
+        contentType: 'application/json',
       ),
     );
+
+    final authInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (token?.accessToken != null) {
+          options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
+        }
+        _logger.info('API Request: ${options.method} ${options.path}');
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        _logger.info(
+          'API Response: ${response.statusCode} ${response.requestOptions.path}',
+        );
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        _logger.error(
+          'API Error: ${error.message} ${error.requestOptions.path}',
+        );
+        return handler.next(error);
+      },
+    );
+    _dio.interceptors.add(authInterceptor);
+    _uploadDio.interceptors.add(authInterceptor);
   }
 
   static FmRepository isolateInit(String baseUrl, CasdoorToken token) {
@@ -209,10 +230,11 @@ class FmRepository {
   }
 
   /// 创建目录
+  /// [enableEncryption] 加密设置，null 表示从父文件夹继承
   Future<ApiResult<CreateDirRespData>> createDir({
     required String name,
     required String parentId,
-    required bool enableEncryption,
+    bool? enableEncryption,
     List<int>? providerIds,
     int? maxHistories,
   }) async {
@@ -220,10 +242,13 @@ class FmRepository {
       final req = CreateDirReq(
         name: name,
         parentId: parentId,
-        enableEncryption: enableEncryption,
         providerIds: providerIds,
         maxHistories: maxHistories,
       );
+      // 只有明确设置了加密属性才传递
+      if (enableEncryption != null) {
+        req.enableEncryption = enableEncryption;
+      }
       final response = await _dio.post(
         '$_baseUrl/native.FileService/CreateDir',
         data: req.toProto3Json(),
@@ -895,7 +920,7 @@ class FmRepository {
         req.tags = tags;
       }
 
-      final response = await _dio.post(
+      final response = await _uploadDio.post(
         '$_baseUrl/native.UploadService/UploadSmall',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
@@ -940,7 +965,7 @@ class FmRepository {
       if (hash != null) req.hash = hash;
       if (tags != null && tags.isNotEmpty) req.tags = tags;
 
-      final response = await _dio.post(
+      final response = await _uploadDio.post(
         '$_baseUrl/native.UploadService/InitUpload',
         data: req.toProto3Json(),
       );
@@ -983,7 +1008,7 @@ class FmRepository {
         ..chunk = chunkData;
       if (chunkHash != null) req.chunkHash = chunkHash;
 
-      final response = await _dio.post(
+      final response = await _uploadDio.post(
         '$_baseUrl/native.UploadService/UploadChunk',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
@@ -1010,7 +1035,7 @@ class FmRepository {
     try {
       final req = CompleteUploadReq()..uploadId = uploadId;
 
-      final response = await _dio.post(
+      final response = await _uploadDio.post(
         '$_baseUrl/native.UploadService/CompleteUpload',
         data: req.toProto3Json(),
       );

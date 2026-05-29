@@ -477,3 +477,23 @@ func DeleteFileLocationsByBlake3Hash(hash string) error {
 
 	return db.Where("blake3_hash = ?", hash).Delete(&native.FileLocationORM{}).Error
 }
+
+// CountActiveFilesByHashExcludingIDs 统计引用指定 hash 的未删除文件数量（排除指定 ID）
+// 用于判断 file_location 记录是否可以安全删除
+func CountActiveFilesByHashExcludingIDs(hash string, excludeIDs []string) (int64, error) {
+	if hash == "" {
+		return 0, nil
+	}
+
+	ctx := context.Background()
+	var count int64
+	query := db.WithContext(ctx).Model(&native.FileORM{}).
+		Where("hash = ?", hash)
+	if len(excludeIDs) > 0 {
+		query = query.Where("id NOT IN ?", excludeIDs)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}

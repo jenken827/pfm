@@ -578,6 +578,9 @@ func createChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StoragePro
 		Status:         (*int32)(native.LocationStatus_PCOMPLETED.Enum()),
 		ChunkNumber:    &chunkNumber,
 		ChunkTotal:     &chunkTotal,
+		// 复制加密字段，确保分片的加密状态一致
+		Encrypted:      fl.Encrypted,
+		EncryptionSalt: fl.EncryptionSalt,
 	}
 
 	if chunkInfo.Path != "" {

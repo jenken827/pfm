@@ -57,11 +57,15 @@ class _FileViewState extends State<_FileView> {
             // 检测是否有新的上传任务完成
             return current.hasNewCompletedUploads(previous);
           },
-          listener: (context, state) {
-            // 上传完成后刷新文件列表
-            context.read<FileBloc>().add(
-              FileListEvent(dirId: widget.dirId),
+          listener: (context, transferState) {
+            // 只在上传完成的文件属于当前目录时才刷新
+            final currentDirId = context.read<FileBloc>().state.currentDirId;
+            final hasCompletedInCurrentDir = transferState.uploadTasks.any(
+              (t) => t.status == UploadStatus.COMPLETED && t.parentId == currentDirId,
             );
+            if (hasCompletedInCurrentDir) {
+              context.read<FileBloc>().add(const FileRefreshEvent());
+            }
           },
         ),
       ],
@@ -865,6 +869,7 @@ class _FileViewState extends State<_FileView> {
     final fmRepo = context.read<FmRepository>();
 
     // 1. 在服务器端创建对应的文件夹（带重试）
+    // 不传递 enableEncryption，让后端从父文件夹继承
     final createResult = await _createDirWithRetry(
       fmRepo: fmRepo,
       name: folderName,
@@ -929,10 +934,12 @@ class _FileViewState extends State<_FileView> {
   }
 
   /// 创建目录（带重试，处理频率限制）
+  /// [enableEncryption] 加密设置，null 表示从父文件夹继承
   Future<ApiResult<CreateDirRespData>> _createDirWithRetry({
     required FmRepository fmRepo,
     required String name,
     required String parentId,
+    bool? enableEncryption,
     int maxRetries = 3,
   }) async {
     int retryCount = 0;
@@ -941,7 +948,7 @@ class _FileViewState extends State<_FileView> {
       final result = await fmRepo.createDir(
         name: name,
         parentId: parentId,
-        enableEncryption: false,
+        enableEncryption: enableEncryption,
       );
 
       // 如果成功，直接返回
@@ -971,7 +978,7 @@ class _FileViewState extends State<_FileView> {
     return fmRepo.createDir(
       name: name,
       parentId: parentId,
-      enableEncryption: false,
+      enableEncryption: enableEncryption,
     );
   }
 
