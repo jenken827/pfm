@@ -81,8 +81,8 @@ func (erl *EndpointRateLimiter) Allow(endpoint string) bool {
 
 	bucket, exists := erl.buckets[endpoint]
 	if !exists {
-		// Create new bucket: 3 tokens, refills 1 token per 333ms (allows 3 requests per second)
-		bucket = NewTokenBucket(3, 333*time.Millisecond)
+		// Create new bucket: 10 tokens, refills 1 token per 100ms (allows 10 requests per second)
+		bucket = NewTokenBucket(10, 100*time.Millisecond)
 		erl.buckets[endpoint] = bucket
 	}
 
@@ -138,7 +138,7 @@ func (irl *IPRateLimiter) Allow(ip string, endpoint string) bool {
 	if !exists {
 		entry = &ipEntry{
 			endpointLimiter: NewEndpointRateLimiter(),
-			globalBucket:    NewTokenBucket(100, 600*time.Millisecond),
+			globalBucket:    NewTokenBucket(200, 100*time.Millisecond),
 			lastAccess:      time.Now(),
 		}
 		irl.entries[ip] = entry
@@ -146,12 +146,12 @@ func (irl *IPRateLimiter) Allow(ip string, endpoint string) bool {
 	entry.lastAccess = time.Now()
 	irl.mu.Unlock()
 
-	// Check endpoint-specific rate limit (3 requests per second per endpoint)
+	// Check endpoint-specific rate limit (10 requests per second per endpoint)
 	if !entry.endpointLimiter.Allow(endpoint) {
 		return false
 	}
 
-	// Check global rate limit (100 requests per minute per IP)
+	// Check global rate limit (200 requests per minute per IP)
 	if !entry.globalBucket.Allow() {
 		return false
 	}

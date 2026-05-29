@@ -85,7 +85,7 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 
 // 迁移数据库
 func autoMigrate() error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&native.FileORM{},
 		&native.FileTagORM{},
 		&native.FileShareORM{},
@@ -97,5 +97,28 @@ func autoMigrate() error {
 		&native.DownloadRecordORM{},
 		&native.BackupTaskORM{},
 		&native.BackupFileRecordORM{},
-	)
+	); err != nil {
+		return err
+	}
+
+	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
+	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
+	return migrateFilesUniqueIndex()
+}
+
+// migrateFilesUniqueIndex 将 files 表的 idx_f_npi 从普通唯一索引改为 partial 唯一索引
+func migrateFilesUniqueIndex() error {
+	// 删除旧的普通索引（如果存在）
+	// SQLite 不支持 DROP INDEX IF EXISTS 的 IF EXISTS 语法，先尝试删除
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_f_npi`).Error; err != nil {
+		llog.L().Warnf("drop old index idx_f_npi failed (may not exist): %v", err)
+	}
+
+	// 创建 partial unique index：只对未删除的记录生效
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_f_npi ON files (name, parent_id) WHERE deleted_at IS NULL`).Error; err != nil {
+		return fmt.Errorf("create partial unique index idx_f_npi failed: %w", err)
+	}
+
+	llog.L().Info("migrated files unique index to partial index (WHERE deleted_at IS NULL)")
+	return nil
 }

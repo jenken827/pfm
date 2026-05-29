@@ -26,16 +26,16 @@ message File {
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
   optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
-  // 文件名称，与父id组成唯一索引
+  // 文件名称，与父id组成唯一索引（通过 partial index 实现，排除软删除记录）
   optional string name = 5 [(gorm.field).tag = {
-    unique_index: "idx_f_npi,length:10"
     not_null: true
+    index: "idx_f_npi,length:10"
   }];
   // 父文件夹id
   optional string parent_id = 6 [(gorm.field).tag = {
-    unique_index: "idx_f_npi"
     not_null: true
     default: "0"
+    index: "idx_f_npi"
   }];
   // 文件大小，以字节为单位
   optional uint64 size = 7 [(gorm.field).tag = {
@@ -467,6 +467,10 @@ message CancelShareLinkReq {
 message RestoreFromTrashReq {
   // 文件ID列表
   repeated string ids = 1 [(buf.validate.field).required = true];
+  // 还原到的目标目录ID（可选，不填则还原到原位置）
+  // 对于单个文件：还原到目标目录
+  // 对于文件夹：还原到目标目录（文件夹内子文件保持原相对结构）
+  optional string target_parent_id = 2;
 }
 
 // 彻底删除文件请求（从回收站永久删除）
@@ -492,6 +496,25 @@ message TrashListRespData {
 message DeleteFileHistoryReq {
   // 历史版本ID列表
   repeated uint64 ids = 1 [(buf.validate.field).required = true];
+}
+
+// 搜索文件请求
+message SearchFilesReq {
+  // 搜索关键词（按文件名或标签模糊匹配）
+  optional string keyword = 1 [(buf.validate.field).required = true];
+  // 搜索类型：按文件名或按标签
+  optional SearchType search_type = 2;
+  // 偏移量，从0开始
+  optional uint32 offset = 3;
+  // 每页数量，默认50
+  optional uint32 page_size = 4;
+}
+
+// 搜索文件响应数据
+message SearchFilesRespData {
+  repeated File files = 1;
+  optional uint32 total = 2;
+  optional bool has_more = 3;
 }
 
 // 更新文件标签请求
@@ -578,4 +601,7 @@ service FileService {
 
   // 获取文件标签
   rpc GetFileTags(GetFileTagsReq) returns (BaseResp);
+
+  // 搜索文件（按文件名模糊匹配）
+  rpc SearchFiles(SearchFilesReq) returns (BaseResp);
 }

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/services/services.dart';
@@ -242,8 +243,37 @@ class FileBloc extends Bloc<FileEvent, FileState> {
 
   /// 搜索
   Future<void> _onSearch(FileSearchEvent event, Emitter<FileState> emit) async {
-    // TODO: 实现搜索功能
-    emit(state.copyWith(searchKeyword: event.keyword));
+    final keyword = event.keyword.trim();
+    if (keyword.isEmpty) {
+      // 清空搜索，恢复到当前目录的文件列表
+      emit(state.copyWith(searchKeyword: ''));
+      add(FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName));
+      return;
+    }
+
+    emit(state.copyWith(status: FileStateStatus.loading, searchKeyword: keyword));
+
+    final searchType = event.isTagSearch ? SearchType.TAG : SearchType.NAME;
+    final resp = await fmRepository.searchFiles(
+      keyword: keyword,
+      searchType: searchType,
+    );
+    if (!resp.success || resp.data == null) {
+      emit(state.copyWith(
+        status: FileStateStatus.failure,
+        msg: resp.message ?? '搜索失败',
+      ));
+      return;
+    }
+
+    final result = resp.data!;
+    emit(state.copyWith(
+      status: FileStateStatus.success,
+      files: result.files,
+      total: result.total,
+      hasMore: result.hasMore,
+      offset: result.files.length,
+    ));
   }
 
   /// 加载存储提供者列表

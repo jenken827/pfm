@@ -38,16 +38,16 @@ func TestEndpointRateLimiter(t *testing.T) {
 
 	endpoint := "/test/endpoint"
 
-	// First 3 requests should be allowed
-	for i := 0; i < 3; i++ {
+	// First 10 requests should be allowed
+	for i := 0; i < 10; i++ {
 		if !limiter.Allow(endpoint) {
 			t.Errorf("Request %d to endpoint should be allowed", i+1)
 		}
 	}
 
-	// 4th request should be denied
+	// 11th request should be denied
 	if limiter.Allow(endpoint) {
-		t.Error("4th request to same endpoint should be denied")
+		t.Error("11th request to same endpoint should be denied")
 	}
 
 	// Different endpoint should be allowed
@@ -63,16 +63,16 @@ func TestIPRateLimiter_EndpointLimit(t *testing.T) {
 	ip := "192.168.1.1"
 	endpoint := "/api/test"
 
-	// First 3 requests to same endpoint should be allowed
-	for i := 0; i < 3; i++ {
+	// First 10 requests to same endpoint should be allowed
+	for i := 0; i < 10; i++ {
 		if !limiter.Allow(ip, endpoint) {
 			t.Errorf("Request %d to endpoint should be allowed", i+1)
 		}
 	}
 
-	// 4th request to same endpoint should be denied
+	// 11th request to same endpoint should be denied
 	if limiter.Allow(ip, endpoint) {
-		t.Error("4th request to same endpoint should be denied")
+		t.Error("11th request to same endpoint should be denied")
 	}
 
 	// Request to different endpoint should still be allowed
@@ -83,24 +83,24 @@ func TestIPRateLimiter_EndpointLimit(t *testing.T) {
 }
 
 func TestIPRateLimiter_GlobalLimit(t *testing.T) {
-	// This test verifies the global limit of 100 requests per minute
+	// This test verifies the global limit of 200 requests per minute
 	// We'll use a shorter timeframe for testing purposes
 	limiter := NewIPRateLimiter()
 
 	ip := "192.168.1.100"
 
-	// Make 100 requests to different endpoints (to bypass endpoint limit)
-	for i := 0; i < 100; i++ {
+	// Make 200 requests to different endpoints (to bypass endpoint limit)
+	for i := 0; i < 200; i++ {
 		endpoint := "/api/endpoint/" + string(rune(i))
 		if !limiter.Allow(ip, endpoint) {
 			t.Errorf("Request %d should be allowed within global limit", i+1)
 		}
 	}
 
-	// 101st request should be denied due to global limit
+	// 201st request should be denied due to global limit
 	endpoint := "/api/final"
 	if limiter.Allow(ip, endpoint) {
-		t.Error("101st request should be denied due to global limit")
+		t.Error("201st request should be denied due to global limit")
 	}
 }
 
@@ -121,8 +121,8 @@ func TestRateLimitHTTPMiddleware(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	// Make 3 requests to same endpoint (should all succeed)
-	for i := 0; i < 3; i++ {
+	// Make 10 requests to same endpoint (should all succeed)
+	for i := 0; i < 10; i++ {
 		resp, err := http.Get(server.URL + "/api/test")
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -133,7 +133,7 @@ func TestRateLimitHTTPMiddleware(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	// 4th request should be rate limited
+	// 11th request should be rate limited
 	resp, err := http.Get(server.URL + "/api/test")
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
@@ -176,7 +176,7 @@ func TestConcurrentAccess(t *testing.T) {
 	t.Logf("Allowed %d out of 50 concurrent requests", allowedCount)
 
 	// Should have some rejections due to rate limiting
-	if allowedCount > 10 {
+	if allowedCount > 20 {
 		t.Error("Too many requests allowed - rate limiting may not be working correctly")
 	}
 }

@@ -98,9 +98,10 @@ class FileNavigateEvent extends FileEvent {
 
 /// 搜索事件
 class FileSearchEvent extends FileEvent {
-  const FileSearchEvent(this.keyword);
+  const FileSearchEvent(this.keyword, {this.isTagSearch = false});
 
   final String keyword;
+  final bool isTagSearch;
 }
 
 /// 加载存储提供者列表事件

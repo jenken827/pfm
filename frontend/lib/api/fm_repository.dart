@@ -161,6 +161,45 @@ class FmRepository {
     _baseUrl = baseUrl;
   }
 
+  // ==================== Search ====================
+
+  /// 搜索文件（按文件名模糊匹配）
+  Future<ApiResult<SearchFilesRespData>> searchFiles({
+    required String keyword,
+    int offset = 0,
+    int pageSize = 50,
+    SearchType searchType = SearchType.NAME,
+  }) async {
+    try {
+      final req = SearchFilesReq()
+        ..keyword = keyword
+        ..searchType = searchType;
+      if (offset > 0) req.offset = offset;
+      if (pageSize != 50) req.pageSize = pageSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/SearchFiles',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<SearchFilesRespData>(
+        data,
+        SearchFilesRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('搜索文件失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('搜索文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   // ==================== File Service ====================
 
   /// 获取文件列表

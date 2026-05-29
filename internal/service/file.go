@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -13,6 +16,8 @@ import (
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // GetFileList 获取文件列表
@@ -216,23 +221,30 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 	return nil
 }
 
-// DeleteFile 删除文件（移动到回收站）
-// 只软删除指定的文件，不递归删除子文件
-// 回收站中只显示被删除的文件夹本身，不显示子文件
+// DeleteFile 删除文件（软删除，移至回收站）
+// 删除文件夹时递归软删除所有子文件和子目录
 func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 	ids := req.Ids
 	if len(ids) == 0 {
 		return nil
 	}
 
-	// 只软删除指定的文件，不递归删除子文件
-	// 子文件会通过 parent_id 关联到已删除的文件夹
-	if err := db.DeleteFiles(ids); err != nil {
+	// 递归获取所有子文件和子文件夹的ID
+	allChildrenIDs, err := db.GetAllChildrenIDs(ids)
+	if err != nil {
+		llog.L().Errorf("get all children IDs failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 合并指定的文件ID和所有子文件ID
+	allIDs := append(ids, allChildrenIDs...)
+
+	if err := db.DeleteFiles(allIDs); err != nil {
 		llog.L().Errorf("DeleteFiles failed, err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("deleted %d files", len(ids))
+	llog.L().Infof("deleted %d files (including %d children)", len(allIDs), len(allChildrenIDs))
 	return nil
 }
 
@@ -282,72 +294,154 @@ func GetAvailableProvidersForSync(ctx context.Context, fileHash string) ([]*nati
 }
 
 // RestoreFromTrash 从回收站恢复文件
-// 恢复时需要递归恢复所有父级目录
+// 支持指定目标目录，自动处理同名冲突，文件夹递归还原子文件
 func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *models.Err {
 	if len(req.Ids) == 0 {
 		return nil
 	}
 
-	// 收集所有需要恢复的文件ID（包括父级目录）
-	allRestoreIDs := make([]string, 0)
-	allRestoreIDs = append(allRestoreIDs, req.Ids...)
-
-	// 递归恢复父级目录
-	for _, fileID := range req.Ids {
-		parentIDs, err := getDeletedParentIDs(fileID)
-		if err != nil {
-			llog.L().Errorf("get deleted parent IDs failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		allRestoreIDs = append(allRestoreIDs, parentIDs...)
+	targetParentID := ""
+	if req.TargetParentId != nil && *req.TargetParentId != "" {
+		targetParentID = *req.TargetParentId
 	}
 
-	llog.L().Infof("restoring %d files (including %d parents)", len(allRestoreIDs), len(allRestoreIDs)-len(req.Ids))
+	// 获取要恢复的文件（包含软删除的）
+	selectedFiles, err := db.GetFilesByIDsUnscoped(req.Ids)
+	if err != nil {
+		llog.L().Errorf("get files by IDs failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	if len(selectedFiles) == 0 {
+		return &models.Err{E: fmt.Errorf("no files found"), C: native.RespCode_PARAMS_ERROR}
+	}
 
-	if err := db.RestoreFromTrash(allRestoreIDs); err != nil {
+	// 收集所有需要恢复的文件ID
+	// selectedRestore: 用户选中的文件（可能改名/改父目录）
+	// childRestore: 文件夹下的子文件（只清 deleted_at，保持原 parent_id）
+	type restoreItem struct {
+		file        *native.FileORM
+		newParentID string // 空表示保持原 parent_id
+		newName     string // 空表示保持原名
+	}
+	selectedRestore := make([]restoreItem, 0, len(selectedFiles))
+	childIDs := make([]string, 0)
+
+	for _, file := range selectedFiles {
+		if file.Id == nil || file.DeletedAt == nil {
+			continue // 跳过未删除的文件
+		}
+
+		// 确定目标父目录
+		parentID := targetParentID
+		if parentID == "" {
+			// 未指定目标，使用原 parent_id
+			if file.ParentId != nil {
+				parentID = *file.ParentId
+			}
+		}
+
+		// 检查目标父目录是否存在且未被删除
+		if parentID != "" && parentID != "0" {
+			parentFile, err := db.GetFileByID(parentID)
+			if err != nil || parentFile == nil || parentFile.DeletedAt != nil {
+				// 父目录不存在或仍在回收站，无法还原
+				return &models.Err{
+					E: fmt.Errorf("target directory (id: %s) does not exist or is in trash, please specify a valid target", parentID),
+					C: native.RespCode_PARAMS_ERROR,
+				}
+			}
+		}
+
+		// 检查同名冲突并自动重命名
+		newName := ""
+		if file.Name != nil {
+			newName = resolveNameConflict(parentID, *file.Name)
+		}
+
+		selectedRestore = append(selectedRestore, restoreItem{
+			file:        file,
+			newParentID: parentID,
+			newName:     newName,
+		})
+
+		// 如果是文件夹，递归收集所有子文件
+		if file.Type != nil && *file.Type == int32(native.FileType_FOLDER) {
+			children, err := db.GetAllChildrenIDs([]string{*file.Id})
+			if err != nil {
+				llog.L().Errorf("get children IDs failed: %v", err)
+				return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+			}
+			childIDs = append(childIDs, children...)
+		}
+	}
+
+	// 在事务中执行恢复
+	err = db.Transaction(func(tx *gorm.DB) error {
+		ctx := context.Background()
+
+		// 1. 恢复用户选中的文件（可能改名/改父目录）
+		for _, item := range selectedRestore {
+			updates := map[string]interface{}{
+				"deleted_at": nil,
+			}
+			if item.newParentID != "" {
+				updates["parent_id"] = item.newParentID
+			}
+			if item.newName != "" {
+				updates["name"] = item.newName
+			}
+			if err := tx.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+				Where("id = ?", *item.file.Id).
+				Updates(updates).Error; err != nil {
+				return fmt.Errorf("restore file %s failed: %w", *item.file.Id, err)
+			}
+		}
+
+		// 2. 恢复子文件（只清 deleted_at，保持原 parent_id 和 name）
+		if len(childIDs) > 0 {
+			if err := tx.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+				Where("id IN ?", childIDs).
+				Update("deleted_at", nil).Error; err != nil {
+				return fmt.Errorf("restore children failed: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		llog.L().Errorf("restore from trash failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("restored %d files from trash", len(allRestoreIDs))
+	totalRestored := len(selectedRestore) + len(childIDs)
+	llog.L().Infof("restored %d files from trash (selected: %d, children: %d)", totalRestored, len(selectedRestore), len(childIDs))
 	return nil
 }
 
-// getDeletedParentIDs 获取所有被删除的父级目录ID
-func getDeletedParentIDs(fileID string) ([]string, error) {
-	parentIDs := make([]string, 0)
-	currentID := fileID
+// resolveNameConflict 检查目标目录中是否有同名文件，有则自动重命名
+// 返回新名称（冲突时），无冲突返回空字符串
+func resolveNameConflict(parentID, name string) string {
+	existing, err := db.GetFileByParentAndName(parentID, name)
+	if err != nil || existing == nil {
+		return "" // 无冲突
+	}
 
-	for {
-		// 获取当前文件信息
-		file, err := db.GetFileByID(currentID)
-		if err != nil {
-			break
-		}
+	// 解析文件名和扩展名
+	ext := filepath.Ext(name)
+	baseName := strings.TrimSuffix(name, ext)
 
-		// 检查 parent_id
-		if file.ParentId == nil || *file.ParentId == "" {
-			break
-		}
-
-		parentID := *file.ParentId
-
-		// 获取父文件信息
-		parentFile, err := db.GetFileByID(parentID)
-		if err != nil {
-			break
-		}
-
-		// 检查父文件是否被软删除
-		if parentFile.DeletedAt != nil {
-			parentIDs = append(parentIDs, parentID)
-			currentID = parentID
-		} else {
-			break
+	// 尝试 "name (1).ext", "name (2).ext", ...
+	for i := 1; i <= 999; i++ {
+		newName := fmt.Sprintf("%s (%d)%s", baseName, i, ext)
+		conflict, err := db.GetFileByParentAndName(parentID, newName)
+		if err != nil || conflict == nil {
+			return newName
 		}
 	}
 
-	return parentIDs, nil
+	// 极端情况：999 都冲突，用 UUID 后缀
+	return fmt.Sprintf("%s_%s%s", baseName, uuid.New().String()[:8], ext)
 }
 
 // batchDeleteFromProvider 从单个存储提供者批量删除文件位置
@@ -580,7 +674,7 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.L().Infof("permanently deleting %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	permanentlyDeleteFilesAsync(allFileIDs, "permanently deleted")
+	permanentlyDeleteFiles(allFileIDs, "permanently deleted")
 	return nil
 }
 
@@ -703,30 +797,22 @@ func deleteHistoryFromProviders(ctx context.Context, histories []*native.FileHis
 	}
 }
 
-// permanentlyDeleteFilesAsync 异步永久删除文件（历史记录 + 存储提供者文件 + 数据库记录）
-func permanentlyDeleteFilesAsync(allFileIDs []string, logLabel string) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				llog.L().Errorf("delete files panic: %v", r)
-			}
-		}()
+// permanentlyDeleteFiles 同步永久删除文件（历史记录 + 存储提供者文件 + 数据库记录）
+func permanentlyDeleteFiles(allFileIDs []string, logLabel string) {
+	ctx := context.Background()
 
-		asyncCtx := context.Background()
+	// 删除缩略图缓存
+	deleteThumbnailsForFiles(allFileIDs)
 
-		// 删除缩略图缓存
-		deleteThumbnailsForFiles(allFileIDs)
+	deleteFileHistories(ctx, allFileIDs)
+	deleteFilesFromProviders(ctx, allFileIDs)
 
-		deleteFileHistories(asyncCtx, allFileIDs)
-		deleteFilesFromProviders(asyncCtx, allFileIDs)
+	if err := db.DeletePermanently(allFileIDs); err != nil {
+		llog.L().Errorf("delete permanently failed: %v", err)
+		return
+	}
 
-		if err := db.DeletePermanently(allFileIDs); err != nil {
-			llog.L().Errorf("delete permanently failed: %v", err)
-			return
-		}
-
-		llog.L().Infof("%s %d files", logLabel, len(allFileIDs))
-	}()
+	llog.L().Infof("%s %d files", logLabel, len(allFileIDs))
 }
 
 // EmptyTrash 清空回收站
@@ -759,7 +845,7 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.L().Infof("emptying trash: %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	permanentlyDeleteFilesAsync(allFileIDs, "emptied trash, deleted")
+	permanentlyDeleteFiles(allFileIDs, "emptied trash, deleted")
 	return nil
 }
 
@@ -787,6 +873,43 @@ func GetTrashList(ctx context.Context) (*native.TrashListRespData, *models.Err) 
 		Files: items,
 		Total: &totalUint32,
 	}, nil
+}
+
+// SearchFiles 按文件名或标签搜索文件
+func SearchFiles(ctx context.Context, req *native.SearchFilesReq) ([]*native.FileORM, int64, bool, *models.Err) {
+	keyword := req.GetKeyword()
+	if keyword == "" {
+		return nil, 0, false, &models.Err{
+			E: errors.New("keyword is required"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	offset := req.GetOffset()
+	pageSize := req.GetPageSize()
+	if pageSize == 0 {
+		pageSize = 50
+	}
+
+	// 根据搜索类型选择查询方式
+	searchType := req.GetSearchType()
+	var files []*native.FileORM
+	var total int64
+	var hasMore bool
+	var err error
+
+	if searchType == native.SearchType_TAG {
+		files, total, hasMore, err = db.SearchFilesByTag(keyword, offset, pageSize)
+	} else {
+		files, total, hasMore, err = db.SearchFiles(keyword, offset, pageSize)
+	}
+
+	if err != nil {
+		llog.L().Errorf("SearchFiles failed, keyword: %s, type: %v, err: %v", keyword, searchType, err)
+		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return files, total, hasMore, nil
 }
 
 // SyncFileToProviders 同步文件到指定存储提供者

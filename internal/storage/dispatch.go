@@ -550,6 +550,10 @@ func updateFirstChunkLocation(fl *native.FileLocationORM, chunkInfo *types.Stora
 		fl.ChunkSize = &chunkInfo.ChunkSize
 		updateFields = append(updateFields, "chunk_size")
 	}
+	if chunkInfo.ChunkHash != "" {
+		fl.ChunkHash = &chunkInfo.ChunkHash
+		updateFields = append(updateFields, "chunk_hash")
+	}
 	if chunkInfo.S3KeyFlag != "" {
 		fl.S3KeyFlag = &chunkInfo.S3KeyFlag
 		updateFields = append(updateFields, "s3_key_flag")
@@ -594,6 +598,9 @@ func createChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StoragePro
 	}
 	if chunkInfo.ChunkSize > 0 {
 		newFl.ChunkSize = &chunkInfo.ChunkSize
+	}
+	if chunkInfo.ChunkHash != "" {
+		newFl.ChunkHash = &chunkInfo.ChunkHash
 	}
 	if chunkInfo.S3KeyFlag != "" {
 		newFl.S3KeyFlag = &chunkInfo.S3KeyFlag

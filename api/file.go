@@ -227,6 +227,29 @@ func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[nati
 	return response.SuccessResp(data)
 }
 
+// SearchFiles 搜索文件
+func (s *FileServer) SearchFiles(ctx context.Context, req *connect.Request[native.SearchFilesReq]) (*connect.Response[native.BaseResp], error) {
+	files, total, hasMore, mErr := service.SearchFiles(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	var result []*native.File
+	for _, f := range files {
+		pb, err := f.ToPB(ctx)
+		if err != nil {
+			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			continue
+		}
+		result = append(result, &pb)
+	}
+	tc := uint32(total)
+	return response.SuccessResp(&native.SearchFilesRespData{
+		Files:   result,
+		Total:   &tc,
+		HasMore: &hasMore,
+	})
+}
+
 // UpdateFileTags 更新文件标签
 func (s *FileServer) UpdateFileTags(ctx context.Context, req *connect.Request[native.UpdateFileTagsReq]) (*connect.Response[native.BaseResp], error) {
 	mErr := service.UpdateFileTags(ctx, req.Msg)

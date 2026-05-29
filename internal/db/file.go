@@ -218,6 +218,76 @@ func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, i
 	return files, total, hasMore, nil
 }
 
+// SearchFiles 按文件名搜索文件（排除已删除和文件夹）
+func SearchFiles(keyword string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+	var files []*native.FileORM
+	var total int64
+	ctx := context.Background()
+
+	if pageSize == 0 {
+		pageSize = 50
+	}
+
+	folderType := int32(native.FileType_FOLDER)
+	query := db.WithContext(ctx).
+		Where("name LIKE ? AND type != ?", "%"+keyword+"%", folderType)
+
+	// 获取总数
+	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	// 分页查询
+	if err := query.
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Order("name ASC").
+		Find(&files).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	hasMore := int64(offset)+int64(len(files)) < total
+	return files, total, hasMore, nil
+}
+
+// SearchFilesByTag 按标签搜索文件（排除已删除和文件夹）
+func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+	var files []*native.FileORM
+	var total int64
+	ctx := context.Background()
+
+	if pageSize == 0 {
+		pageSize = 50
+	}
+
+	folderType := int32(native.FileType_FOLDER)
+
+	// 子查询：匹配标签的文件ID
+	matchingFileIDs := db.WithContext(ctx).
+		Model(&native.FileTagORM{}).
+		Select("file_id").
+		Where("tag_name LIKE ?", "%"+keyword+"%")
+
+	// 查询匹配的文件（排除文件夹和已删除）
+	query := db.WithContext(ctx).
+		Where("id IN (?) AND type != ?", matchingFileIDs, folderType)
+
+	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	if err := query.
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Order("name ASC").
+		Find(&files).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	hasMore := int64(offset)+int64(len(files)) < total
+	return files, total, hasMore, nil
+}
+
 // GetFolderList 获取指定目录下的所有文件夹
 func GetFolderList(parentID string) ([]*native.FileORM, error) {
 	var folders []*native.FileORM

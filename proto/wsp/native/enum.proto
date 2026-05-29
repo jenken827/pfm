@@ -199,3 +199,12 @@ enum BackupFileStatus {
   // 注册后文件又变了，需重新备份
   BACKUP_FILE_STATUS_STALE = 6;
 }
+
+// SearchType 搜索类型
+enum SearchType {
+  SEARCH_TYPE_UNSPECIFIED = 0;
+  // 按文件名搜索
+  NAME = 1;
+  // 按标签搜索
+  TAG = 2;
+}

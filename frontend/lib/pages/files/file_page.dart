@@ -61,7 +61,9 @@ class _FileViewState extends State<_FileView> {
             // 只在上传完成的文件属于当前目录时才刷新
             final currentDirId = context.read<FileBloc>().state.currentDirId;
             final hasCompletedInCurrentDir = transferState.uploadTasks.any(
-              (t) => t.status == UploadStatus.COMPLETED && t.parentId == currentDirId,
+              (t) =>
+                  t.status == pbenum.UploadStatus.COMPLETED &&
+                  t.parentId == currentDirId,
             );
             if (hasCompletedInCurrentDir) {
               context.read<FileBloc>().add(const FileRefreshEvent());
@@ -998,6 +1000,14 @@ class _FileViewState extends State<_FileView> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.drive_file_move),
+              title: Text('移动已选 (${state.selectedFiles.length})'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showMoveDialog(context, state.selectedFiles.toList());
+              },
+            ),
+            ListTile(
               leading: Icon(
                 Icons.delete,
                 color: Theme.of(context).colorScheme.error,
@@ -1195,7 +1205,7 @@ class _FileViewState extends State<_FileView> {
     // 获取文件标签
     final fmRepo = context.read<FmRepository>();
     final tagsResult = await fmRepo.getFileTags(fileId: file.id);
-    
+
     List<String> currentTags = [];
     if (tagsResult.success && tagsResult.data != null) {
       currentTags = List<String>.from(tagsResult.data!);
@@ -1235,10 +1245,10 @@ class _FileViewState extends State<_FileView> {
               final newTags = input.isEmpty
                   ? <String>[]
                   : input
-                      .split(',')
-                      .map((tag) => tag.trim())
-                      .where((tag) => tag.isNotEmpty)
-                      .toList();
+                        .split(',')
+                        .map((tag) => tag.trim())
+                        .where((tag) => tag.isNotEmpty)
+                        .toList();
 
               // 更新文件标签
               final result = await fmRepo.updateFileTags(
@@ -1250,9 +1260,9 @@ class _FileViewState extends State<_FileView> {
                 if (result.success) {
                   // 成功更新后刷新文件列表
                   context.read<FileBloc>().add(const FileRefreshEvent());
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('标签更新成功')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('标签更新失败: ${result.message}')),
@@ -1511,7 +1521,8 @@ class _FileGridTile extends StatelessWidget {
                         child: Checkbox(
                           value: isSelected,
                           onChanged: (_) => onTap(),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -1583,7 +1594,8 @@ class _FileGridTile extends StatelessWidget {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.fileServer ?? '';
     // 网格视图使用小尺寸缩略图 (200)
-    final previewUrl = '$baseUrl/api/file/stream/preview?file_id=${file.id}&size=small';
+    final previewUrl =
+        '$baseUrl/api/file/stream/preview?file_id=${file.id}&size=small';
     final token = ls.token?.accessToken;
     final headers = <String, String>{};
     if (token != null) {
@@ -1619,12 +1631,24 @@ class _FileGridTile extends StatelessWidget {
 /// 文件搜索代理
 class _FileSearchDelegate extends SearchDelegate<String> {
   final FileBloc _bloc;
+  bool _isTagSearch = false;
 
   _FileSearchDelegate(this._bloc);
 
   @override
   List<Widget> buildActions(BuildContext context) {
     return [
+      IconButton(
+        icon: Icon(_isTagSearch ? Icons.label : Icons.search),
+        tooltip: _isTagSearch ? '切换为按文件名搜索' : '切换为按标签搜索',
+        onPressed: () {
+          _isTagSearch = !_isTagSearch;
+          // 如果已有搜索词，立即重新搜索
+          if (query.trim().isNotEmpty) {
+            _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));
+          }
+        },
+      ),
       IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
     ];
   }
@@ -1633,18 +1657,74 @@ class _FileSearchDelegate extends SearchDelegate<String> {
   Widget buildLeading(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.arrow_back),
-      onPressed: () => close(context, ''),
+      onPressed: () {
+        // 关闭搜索时清空搜索状态，恢复文件列表
+        _bloc.add(const FileSearchEvent(''));
+        close(context, '');
+      },
     );
   }
 
   @override
   Widget buildResults(BuildContext context) {
-    _bloc.add(FileSearchEvent(query));
-    return const Center(child: Text('搜索功能开发中'));
+    if (query.trim().isEmpty) {
+      return const Center(child: Text('请输入关键词搜索'));
+    }
+
+    _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));
+
+    return BlocBuilder<FileBloc, FileState>(
+      bloc: _bloc,
+      builder: (context, state) {
+        if (state.status == FileStateStatus.loading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (state.status == FileStateStatus.failure) {
+          return Center(child: Text('搜索失败: ${state.msg}'));
+        }
+        if (state.files.isEmpty) {
+          return const Center(child: Text('没有找到匹配的文件'));
+        }
+        return ListView.builder(
+          itemCount: state.files.length,
+          itemBuilder: (context, index) {
+            final file = state.files[index];
+            final fileName = file.hasName() ? file.name : '未知文件';
+            final fileSize = file.hasSize() ? file.size.toInt() : 0;
+            final fileId = file.hasId() ? file.id : '';
+
+            return ListTile(
+              leading: const Icon(Icons.insert_drive_file),
+              title: Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text(_formatFileSize(fileSize)),
+              onTap: () {
+                close(context, fileId);
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    return const Center(child: Text('输入关键词搜索'));
+    if (query.trim().isEmpty) {
+      return Center(
+        child: Text(_isTagSearch ? '输入标签关键词搜索' : '输入关键词搜索文件'),
+      );
+    }
+    return Center(
+      child: Text(_isTagSearch ? '按回车搜索标签' : '按回车搜索文件名'),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
