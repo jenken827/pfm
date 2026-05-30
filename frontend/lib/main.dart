@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
@@ -6,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/hive/hive.dart';
+import 'package:pfm/platform/platform.dart';
 import 'services/services.dart';
 import 'router/router.dart';
 import 'app.dart';
@@ -15,6 +18,11 @@ void main() async {
 
   // 初始化 MediaKit
   MediaKit.ensureInitialized();
+
+  // 桌面平台初始化托盘和窗口管理
+  if (_isDesktop()) {
+    await DesktopTray.init();
+  }
 
   initTalkerLogger();
   if (kReleaseMode) {
@@ -47,4 +55,9 @@ void main() async {
   final pfmr = FmRepository();
 
   runApp(App(fmRepository: pfmr));
+}
+
+/// 判断是否为桌面平台
+bool _isDesktop() {
+  return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 }
