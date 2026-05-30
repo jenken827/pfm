@@ -280,6 +280,19 @@ Future<void> uploadFile({
         );
 
         if (!result.success) {
+          // 后端异步处理窗口期：记录已被清理，视为已完成
+          if (result.message != null &&
+              result.message!.contains('record not found')) {
+            getLogger().info(
+              'Chunk $chunkIndex: record not found (already processing), treating as done',
+            );
+            await storage.updateUploadTask(
+              task.id,
+              status: UploadStatus.COMPLETED,
+              uploadedBytes: task.fileSize,
+            );
+            return;
+          }
           await storage.updateUploadTask(
             task.id,
             status: UploadStatus.FAILED,
@@ -300,6 +313,17 @@ Future<void> uploadFile({
       operationName: 'completeUpload(${task.filename})',
     );
     if (!result.success) {
+      // 后端异步处理窗口期：记录已被清理，视为已完成
+      if (result.message != null &&
+          result.message!.contains('record not found')) {
+        getLogger().info('CompleteUpload: record not found (already processing), treating as done');
+        await storage.updateUploadTask(
+          task.id,
+          status: UploadStatus.COMPLETED,
+          uploadedBytes: task.fileSize,
+        );
+        return;
+      }
       await storage.updateUploadTask(
         task.id,
         status: UploadStatus.FAILED,

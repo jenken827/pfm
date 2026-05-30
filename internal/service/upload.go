@@ -551,6 +551,12 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 
 	llog.L().Infof("upload chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 
+	// 检查上传是否已进入异步完成阶段（防止前端重试报错）
+	if uploadDone.IsDone(uploadID) {
+		llog.L().Infof("upload already processing/done, ignoring chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		return nil
+	}
+
 	// 并发控制：防止同时上传同一个分片
 	key := chunkUploadKey{
 		uploadID:   uint32(uploadID),
@@ -568,6 +574,10 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	// 获取上传记录
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, false)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(uploadID) {
+			llog.L().Infof("upload record cleaned up but marked done, ignoring chunk: upload_id=%d", uploadID)
+			return nil
+		}
 		llog.L().Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
@@ -632,8 +642,18 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 
 	llog.L().Infof("complete upload: %d", uploadID)
 
+	// 检查上传是否已进入异步完成阶段
+	if uploadDone.IsDone(uploadID) {
+		llog.L().Infof("upload already processing/done, skipping complete: %d", uploadID)
+		return nil
+	}
+
 	uploadRecord, chunks, err := db.GetUploadRecordByID(uploadID, true)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(uploadID) {
+			llog.L().Infof("upload record cleaned up but marked done: %d", uploadID)
+			return nil
+		}
 		llog.L().Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
@@ -660,6 +680,8 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 
 // processCompleteUpload 后台处理文件合并和上传
 func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM) {
+	// 标记上传已进入异步处理阶段，前端重试时可识别
+	uploadDone.MarkDone(*uploadRecord.Id)
 	llog.L().Infof("start processing complete upload: %d", *uploadRecord.Id)
 
 	// 1. 合并所有分片
@@ -747,6 +769,12 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 	uploadID := *req.UploadId
 
 	llog.L().Infof("cancel upload: %d", uploadID)
+
+	// 上传已完成/处理中，无需取消
+	if uploadDone.IsDone(uploadID) {
+		llog.L().Infof("upload already processing/done, ignoring cancel: %d", uploadID)
+		return nil
+	}
 
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, true)
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -1085,9 +1113,18 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 
 // DeleteUploadRecord 删除上传记录
 func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) *models.Err {
+	// 上传已完成/处理中，无需删除
+	if uploadDone.IsDone(*req.Id) {
+		llog.L().Infof("upload already processing/done, ignoring delete: %d", *req.Id)
+		return nil
+	}
+
 	// 查询上传记录
 	record, _, err := db.GetUploadRecordByID(*req.Id, false)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(*req.Id) {
+			return nil
+		}
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -1120,9 +1157,18 @@ func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) 
 
 // RetryUploadRecord 重试上传记录
 func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *models.Err {
+	// 上传已完成/处理中，无需重试
+	if uploadDone.IsDone(*req.Id) {
+		llog.L().Infof("upload already processing/done, ignoring retry: %d", *req.Id)
+		return nil
+	}
+
 	// 查询上传记录
 	record, _, err := db.GetUploadRecordByID(*req.Id, false)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(*req.Id) {
+			return nil
+		}
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 

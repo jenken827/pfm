@@ -35,7 +35,7 @@ func GetUploadRecordsByStatus(status []native.LocationStatus) ([]*native.UploadR
 func GetChunkRecord(uploadID uint32, chunkIndex uint32) (*native.UploadChunkRecordORM, error) {
 	ctx := context.Background()
 	chunk, err := gorm.G[*native.UploadChunkRecordORM](db).
-		Where("upload_id = ? AND `index` = ?", uploadID, chunkIndex).
+		Where(`upload_id = ? AND "index" = ?`, uploadID, chunkIndex).
 		First(ctx)
 	if err != nil {
 		return nil, err

@@ -228,6 +228,9 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 	}
 	defer os.Remove(tempFilePath) // 确保临时文件最终被删除
 
+	// 更新 upload record 的 TempPath，驱动从这里读取文件路径
+	ur.TempPath = &tempFilePath
+
 	llog.L().Infof("file downloaded and merged to: %s", tempFilePath)
 
 	// 5. 批量上传到所有目标提供者（并发）

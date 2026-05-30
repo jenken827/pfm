@@ -22,7 +22,7 @@ func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*casdoorsdk.Cla
 	at, _ := strings.CutPrefix(accessToken, "Bearer ")
 	claims, err := casdoorsdk.ParseJwtToken(at)
 	if err != nil {
-		llog.L().Errorf("token parse failed, token: %s, err: %v", accessToken, err)
+		llog.L().Errorf("token parse failed, err: %v", err)
 		return nil, errors.New("token parse failed")
 	}
 
