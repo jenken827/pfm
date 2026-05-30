@@ -46,6 +46,9 @@ app.*.map.json
 
 # Auto-generated file
 *.g.dart
+lib/l10n/app_localizations*.dart
+windows/flutter/generated_*
+macos/Flutter/GeneratedPluginRegistrant.swift
 
 
 # Editor config files

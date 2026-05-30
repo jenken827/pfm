@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
+import 'package:pfm/utils/platform.dart';
 
 /// 设置页面
 class SettingPage extends StatelessWidget {
@@ -102,6 +103,28 @@ class SettingPage extends StatelessWidget {
             onTap: () => const ClientBackupRoute().push(context),
           ),
           const Divider(height: 1),
+
+          // 相册备份（仅移动端）
+          if (isMobile()) ...[
+            _SettingsTile(
+              icon: Icons.photo_library_outlined,
+              title: '相册备份',
+              subtitle: '自动备份手机相册到服务器',
+              onTap: () => const AlbumBackupRoute().push(context),
+            ),
+            const Divider(height: 1),
+          ],
+
+          // 通讯录备份（仅移动端）
+          if (isMobile()) ...[
+            _SettingsTile(
+              icon: Icons.contacts_outlined,
+              title: '通讯录备份',
+              subtitle: '备份联系人为 vCard 格式',
+              onTap: () => const ContactBackupRoute().push(context),
+            ),
+            const Divider(height: 1),
+          ],
 
           // 关于
           _SettingsTile(

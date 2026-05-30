@@ -2,6 +2,23 @@
 
 set -e
 
+# ============================================================
+# 代理配置（如需代理，取消注释并修改）
+# ============================================================
+
+# HTTP 代理
+export HTTP_PROXY=http://127.0.0.1:10809
+export HTTPS_PROXY=http://127.0.0.1:10809
+export ALL_PROXY=socks5://127.0.0.1:10809
+
+# 如果环境变量中已设置代理，则使用之
+if [ -n "$HTTP_PROXY" ]; then
+    echo "📌 使用 HTTP 代理: $HTTP_PROXY"
+fi
+if [ -n "$HTTPS_PROXY" ]; then
+    echo "📌 使用 HTTPS 代理: $HTTPS_PROXY"
+fi
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -11,6 +28,7 @@ show_help() {
   get          获取 Flutter 依赖包
   add          添加 Flutter 依赖包（puro flutter pub add）
   run          运行 Flutter 应用（puro flutter run），可指定设备
+  clean        清理 Flutter 构建缓存
   icon         执行 flutter_launcher_icons 图标生成
   splash       执行 flutter_native_splash 启动页生成
   build_runner 执行 build_runner 代码生成
@@ -520,6 +538,13 @@ case "$ACTION" in
             echo "🚀 运行 Flutter 应用..."
             puro flutter run
         fi
+        ;;
+
+    clean)
+        check_flutter_commands
+        echo "🧹 清理 Flutter 构建缓存..."
+        puro flutter clean
+        echo "✅ Flutter 缓存清理完成"
         ;;
 
     icon)

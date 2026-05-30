@@ -1626,4 +1626,71 @@ class FmRepository {
       return ApiResult(success: false, message: e.toString());
     }
   }
+
+  /// 获取最近使用的文件
+  Future<ApiResult<GetRecentFilesRespData>> getRecentFiles({
+    int offset = 0,
+    int? pageSize,
+  }) async {
+    try {
+      final req = GetRecentFilesReq();
+      if (offset > 0) req.offset = offset;
+      if (pageSize != null) req.pageSize = pageSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetRecentFiles',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetRecentFilesRespData>(
+        data,
+        GetRecentFilesRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取最近使用文件失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取最近使用文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 按文件类型获取文件列表
+  Future<ApiResult<GetFilesByTypeRespData>> getFilesByType({
+    required FileType fileType,
+    int offset = 0,
+    int? pageSize,
+  }) async {
+    try {
+      final req = GetFilesByTypeReq()..fileType = fileType;
+      if (offset > 0) req.offset = offset;
+      if (pageSize != null) req.pageSize = pageSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetFilesByType',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetFilesByTypeRespData>(
+        data,
+        GetFilesByTypeRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('按类型获取文件失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('按类型获取文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
 }

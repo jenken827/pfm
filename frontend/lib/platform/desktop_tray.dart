@@ -33,6 +33,8 @@ class DesktopTray implements TrayListener {
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
+      // 阻止窗口关闭，改为隐藏到托盘
+      await windowManager.setPreventClose(true);
     });
 
     // 设置最小尺寸
@@ -42,12 +44,9 @@ class DesktopTray implements TrayListener {
   /// 初始化托盘图标
   Future<void> _initTray() async {
     // 根据平台选择图标格式
-    String iconPath;
-    if (Platform.isWindows) {
-      iconPath = 'assets/images/tray_icon.ico';
-    } else {
-      iconPath = 'assets/images/tray_icon.png';
-    }
+    final iconPath = Platform.isWindows
+        ? 'assets/images/tray_icon.ico'
+        : 'assets/images/logo.png';
 
     await trayManager.setIcon(iconPath);
 

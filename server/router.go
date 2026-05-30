@@ -14,6 +14,7 @@ import (
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/middleware"
+	"jenken827.com/jenken827/pfm/server/webdav"
 )
 
 var vanguardServices []*vanguard.Service = make([]*vanguard.Service, 0)
@@ -21,6 +22,7 @@ var vanguardServices []*vanguard.Service = make([]*vanguard.Service, 0)
 func route(mux *http.ServeMux) {
 	healthRoute(mux)
 	telegramWebhookRoute(mux)
+	webdavRoute(mux)
 
 	fileRoute(mux)
 	uploadRoute(mux)
@@ -146,6 +148,11 @@ func telegramWebhookRoute(mux *http.ServeMux) {
 			}
 			return true
 		})
-
 	})
+}
+
+// webdavRoute WebDAV 服务路由
+func webdavRoute(mux *http.ServeMux) {
+	webdavHandler := webdav.NewHandler("")
+	mux.Handle("/dav/", http.StripPrefix("/dav", webdavHandler))
 }

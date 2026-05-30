@@ -267,3 +267,49 @@ func (s *FileServer) GetFileTags(ctx context.Context, req *connect.Request[nativ
 	}
 	return response.SuccessResp(resp)
 }
+
+// GetRecentFiles 获取最近使用的文件
+func (s *FileServer) GetRecentFiles(ctx context.Context, req *connect.Request[native.GetRecentFilesReq]) (*connect.Response[native.BaseResp], error) {
+	files, total, hasMore, mErr := service.GetRecentFiles(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	var result []*native.File
+	for _, f := range files {
+		pb, err := f.ToPB(ctx)
+		if err != nil {
+			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			continue
+		}
+		result = append(result, &pb)
+	}
+	tc := uint32(total)
+	return response.SuccessResp(&native.GetRecentFilesRespData{
+		Files:   result,
+		Total:   &tc,
+		HasMore: &hasMore,
+	})
+}
+
+// GetFilesByType 按文件类型获取文件列表
+func (s *FileServer) GetFilesByType(ctx context.Context, req *connect.Request[native.GetFilesByTypeReq]) (*connect.Response[native.BaseResp], error) {
+	files, total, hasMore, mErr := service.GetFilesByType(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	var result []*native.File
+	for _, f := range files {
+		pb, err := f.ToPB(ctx)
+		if err != nil {
+			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			continue
+		}
+		result = append(result, &pb)
+	}
+	tc := uint32(total)
+	return response.SuccessResp(&native.GetFilesByTypeRespData{
+		Files:   result,
+		Total:   &tc,
+		HasMore: &hasMore,
+	})
+}

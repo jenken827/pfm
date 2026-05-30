@@ -1039,3 +1039,45 @@ func deleteThumbnailsForFiles(fileIDs []string) {
 		}
 	}
 }
+
+// GetRecentFiles 获取最近使用的文件
+func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*native.FileORM, int64, bool, *models.Err) {
+	offset := req.GetOffset()
+	pageSize := req.GetPageSize()
+	if pageSize == 0 {
+		pageSize = 20
+	}
+
+	files, total, hasMore, err := db.GetRecentFiles(offset, pageSize)
+	if err != nil {
+		llog.L().Errorf("GetRecentFiles failed, err: %v", err)
+		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return files, total, hasMore, nil
+}
+
+// GetFilesByType 按文件类型获取文件列表
+func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*native.FileORM, int64, bool, *models.Err) {
+	fileType := req.GetFileType()
+	offset := req.GetOffset()
+	pageSize := req.GetPageSize()
+	if pageSize == 0 {
+		pageSize = 50
+	}
+
+	files, total, hasMore, err := db.GetFilesByType(fileType, offset, pageSize)
+	if err != nil {
+		llog.L().Errorf("GetFilesByType failed, type: %v, err: %v", fileType, err)
+		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return files, total, hasMore, nil
+}
+
+// UpdateFileAccess 更新文件的最后访问时间
+func UpdateFileAccess(fileID string) {
+	if err := db.UpdateLastAccessedAt(fileID); err != nil {
+		llog.L().Warnf("UpdateLastAccessedAt failed, fileID: %s, err: %v", fileID, err)
+	}
+}

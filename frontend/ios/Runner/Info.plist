@@ -47,5 +47,11 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>PFM 需要访问您的相册以备份照片和视频</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>PFM 需要访问您的相册以保存备份的照片和视频</string>
+		<key>NSContactsUsageDescription</key>
+		<string>PFM 需要访问您的通讯录以备份联系人信息</string>
 	</dict>
 </plist>

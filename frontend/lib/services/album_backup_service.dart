@@ -1,0 +1,410 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:get_it/get_it.dart';
+import 'package:path/path.dart' as p;
+import 'package:pfm/models/models.dart';
+import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/services/services.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'package:talker_flutter/talker_flutter.dart';
+import 'package:uuid/uuid.dart';
+
+/// 相册自动备份配置
+class AlbumBackupConfig {
+  final bool enabled; // 是否开启自动备份
+  final bool wifiOnly; // 仅 WiFi 备份
+  final List<String> backupAlbumIds; // 备份的相册 ID 列表
+  final bool backupVideos; // 是否备份视频
+  final String targetParentId; // 服务器目标文件夹 ID
+
+  const AlbumBackupConfig({
+    this.enabled = false,
+    this.wifiOnly = true,
+    this.backupAlbumIds = const [],
+    this.backupVideos = false,
+    this.targetParentId = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'wifiOnly': wifiOnly,
+    'backupAlbumIds': backupAlbumIds,
+    'backupVideos': backupVideos,
+    'targetParentId': targetParentId,
+  };
+
+  factory AlbumBackupConfig.fromJson(Map<String, dynamic> json) {
+    return AlbumBackupConfig(
+      enabled: json['enabled'] ?? false,
+      wifiOnly: json['wifiOnly'] ?? true,
+      backupAlbumIds: List<String>.from(json['backupAlbumIds'] ?? []),
+      backupVideos: json['backupVideos'] ?? false,
+      targetParentId: json['targetParentId'] ?? '',
+    );
+  }
+
+  AlbumBackupConfig copyWith({
+    bool? enabled,
+    bool? wifiOnly,
+    List<String>? backupAlbumIds,
+    bool? backupVideos,
+    String? targetParentId,
+  }) {
+    return AlbumBackupConfig(
+      enabled: enabled ?? this.enabled,
+      wifiOnly: wifiOnly ?? this.wifiOnly,
+      backupAlbumIds: backupAlbumIds ?? this.backupAlbumIds,
+      backupVideos: backupVideos ?? this.backupVideos,
+      targetParentId: targetParentId ?? this.targetParentId,
+    );
+  }
+}
+
+/// 相册备份状态
+enum AlbumBackupStatus {
+  idle, // 空闲
+  scanning, // 扫描相册中
+  uploading, // 上传中
+  completed, // 完成
+  error, // 错误
+  noPermission, // 无权限
+  noNetwork, // 无网络
+  waitingForWifi, // 等待 WiFi
+}
+
+/// 相册备份结果
+class AlbumBackupResult {
+  final AlbumBackupStatus status;
+  final int totalPhotos; // 总照片数
+  final int newPhotos; // 新照片数
+  final int uploadedPhotos; // 已上传数
+  final int failedPhotos; // 失败数
+  final String? errorMessage;
+  final DateTime? lastBackupTime;
+
+  const AlbumBackupResult({
+    this.status = AlbumBackupStatus.idle,
+    this.totalPhotos = 0,
+    this.newPhotos = 0,
+    this.uploadedPhotos = 0,
+    this.failedPhotos = 0,
+    this.errorMessage,
+    this.lastBackupTime,
+  });
+}
+
+/// 相册自动备份服务
+///
+/// 功能：
+/// - 扫描设备相册，获取所有照片/视频
+/// - 对比本地记录，找出新增文件
+/// - 根据网络状态决定是否上传
+/// - 记录已备份文件，支持增量同步
+class AlbumBackupService {
+  static AlbumBackupService? _instance;
+
+  final Sqlite3Storage _storage;
+  final Connectivity _connectivity = Connectivity();
+  late final Talker _logger;
+
+  // 备份配置
+  AlbumBackupConfig _config = const AlbumBackupConfig();
+
+  // 备份状态
+  AlbumBackupStatus _status = AlbumBackupStatus.idle;
+  AlbumBackupResult _result = const AlbumBackupResult();
+
+  // 状态控制器
+  final _statusController = StreamController<AlbumBackupResult>.broadcast();
+  Stream<AlbumBackupResult> get statusStream => _statusController.stream;
+
+  // 是否正在备份
+  bool _isBackingUp = false;
+
+  AlbumBackupService._(this._storage) : _logger = getLogger();
+
+  /// 获取单例实例
+  static Future<AlbumBackupService> instance() async {
+    if (_instance != null) return _instance!;
+    final storage = await Sqlite3Storage.instance();
+    _instance = AlbumBackupService._(storage);
+    await _instance!._loadConfig();
+    return _instance!;
+  }
+
+  /// 加载备份配置
+  Future<void> _loadConfig() async {
+    final ls = GetIt.I.get<LocalStorage>();
+    final configJson = ls.settingsBox.get('albumBackupConfig');
+    if (configJson != null) {
+      _config = AlbumBackupConfig.fromJson(
+        Map<String, dynamic>.from(configJson),
+      );
+    }
+  }
+
+  /// 保存备份配置
+  Future<void> saveConfig(AlbumBackupConfig config) async {
+    _config = config;
+    final ls = GetIt.I.get<LocalStorage>();
+    await ls.settingsBox.put('albumBackupConfig', config.toJson());
+  }
+
+  /// 获取当前配置
+  AlbumBackupConfig get config => _config;
+
+  /// 获取当前状态
+  AlbumBackupStatus get status => _status;
+
+  /// 获取当前结果
+  AlbumBackupResult get result => _result;
+
+  /// 检查并请求相册权限
+  Future<bool> requestPermission() async {
+    final permission = await PhotoManager.requestPermissionExtend();
+    if (permission.isAuth) {
+      return true;
+    }
+
+    _updateStatus(
+      status: AlbumBackupStatus.noPermission,
+      errorMessage: '需要相册访问权限才能备份照片',
+    );
+    return false;
+  }
+
+  /// 获取所有相册列表
+  Future<List<AssetPathEntity>> getAlbums() async {
+    final hasPermission = await requestPermission();
+    if (!hasPermission) return [];
+
+    return await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      hasAll: true,
+    );
+  }
+
+  /// 检查网络状态
+  Future<bool> _checkNetwork() async {
+    final connectivityResult = await _connectivity.checkConnectivity();
+
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      _updateStatus(status: AlbumBackupStatus.noNetwork, errorMessage: '无网络连接');
+      return false;
+    }
+
+    if (_config.wifiOnly &&
+        !connectivityResult.contains(ConnectivityResult.wifi)) {
+      _updateStatus(
+        status: AlbumBackupStatus.waitingForWifi,
+        errorMessage: '等待 WiFi 连接',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  /// 执行备份
+  Future<AlbumBackupResult> startBackup() async {
+    if (_isBackingUp) {
+      _logger.info('Backup already in progress');
+      return _result;
+    }
+
+    _isBackingUp = true;
+
+    try {
+      // 检查配置
+      if (!_config.enabled) {
+        _updateStatus(status: AlbumBackupStatus.idle, errorMessage: '自动备份未启用');
+        return _result;
+      }
+
+      // 检查权限
+      final hasPermission = await requestPermission();
+      if (!hasPermission) return _result;
+
+      // 检查网络
+      final hasNetwork = await _checkNetwork();
+      if (!hasNetwork) return _result;
+
+      // 开始扫描
+      _updateStatus(status: AlbumBackupStatus.scanning);
+
+      // 获取要备份的照片
+      final photos = await _getPhotosToBackup();
+      _logger.info('Found ${photos.length} photos to backup');
+
+      if (photos.isEmpty) {
+        _updateStatus(
+          status: AlbumBackupStatus.completed,
+          totalPhotos: 0,
+          newPhotos: 0,
+        );
+        return _result;
+      }
+
+      // 开始上传
+      _updateStatus(
+        status: AlbumBackupStatus.uploading,
+        totalPhotos: photos.length,
+        newPhotos: photos.length,
+      );
+
+      int uploaded = 0;
+      int failed = 0;
+
+      for (final photo in photos) {
+        try {
+          await _backupPhoto(photo);
+          uploaded++;
+          _updateStatus(uploadedPhotos: uploaded);
+        } catch (e) {
+          _logger.error('Failed to backup photo: ${photo.id}', e);
+          failed++;
+          _updateStatus(failedPhotos: failed);
+        }
+      }
+
+      // 完成
+      _updateStatus(
+        status: AlbumBackupStatus.completed,
+        uploadedPhotos: uploaded,
+        failedPhotos: failed,
+        lastBackupTime: DateTime.now(),
+      );
+
+      return _result;
+    } catch (e) {
+      _logger.error('Backup failed', e);
+      _updateStatus(
+        status: AlbumBackupStatus.error,
+        errorMessage: e.toString(),
+      );
+      return _result;
+    } finally {
+      _isBackingUp = false;
+    }
+  }
+
+  /// 获取需要备份的照片列表
+  Future<List<AssetEntity>> _getPhotosToBackup() async {
+    // 确定要查询的相册
+    List<AssetPathEntity> albums;
+    if (_config.backupAlbumIds.isEmpty) {
+      // 备份所有相册
+      albums = await PhotoManager.getAssetPathList(
+        type: _config.backupVideos ? RequestType.image : RequestType.image,
+        hasAll: true,
+      );
+    } else {
+      // 备份指定相册
+      albums = [];
+      for (final albumId in _config.backupAlbumIds) {
+        final allAlbums = await PhotoManager.getAssetPathList(
+          type: RequestType.image,
+          hasAll: true,
+        );
+        final album = allAlbums.where((a) => a.id == albumId).firstOrNull;
+        if (album != null) {
+          albums.add(album);
+        }
+      }
+    }
+
+    if (albums.isEmpty) return [];
+
+    // 获取所有照片
+    final allPhotos = <AssetEntity>[];
+    for (final album in albums) {
+      final photos = await album.getAssetListRange(
+        start: 0,
+        end: await album.assetCountAsync,
+      );
+      allPhotos.addAll(photos);
+    }
+
+    // 过滤已备份的照片
+    final photosToBackup = <AssetEntity>[];
+    for (final photo in allPhotos) {
+      final isBackedUp = await _isPhotoBackedUp(photo.id);
+      if (!isBackedUp) {
+        photosToBackup.add(photo);
+      }
+    }
+
+    return photosToBackup;
+  }
+
+  /// 检查照片是否已备份
+  Future<bool> _isPhotoBackedUp(String assetId) async {
+    final db = await _storage.getDatabasePath();
+    // 使用 Sqlite3Storage 的方法查询
+    final tasks = await _storage.getAllUploadTasksAsync();
+    // 简单检查：如果存在以 assetId 为文件名的任务且已完成，则认为已备份
+    return tasks.any(
+      (t) => t.filename == assetId && t.status == UploadStatus.COMPLETED,
+    );
+  }
+
+  /// 备份单张照片
+  Future<void> _backupPhoto(AssetEntity photo) async {
+    // 获取文件
+    final file = await photo.originFile;
+    if (file == null) {
+      throw Exception('Cannot get file for photo: ${photo.id}');
+    }
+
+    // 获取文件信息
+    final fileName = p.basename(file.path);
+    final fileSize = await file.length();
+
+    // 创建上传任务
+    final task = UploadTaskRecord(
+      id: const Uuid().v4(),
+      filename: fileName,
+      filepath: file.path,
+      fileSize: fileSize,
+      parentId: _config.targetParentId,
+      status: UploadStatus.PENDING,
+      createdAt: DateTime.now(),
+    );
+
+    // 保存到数据库
+    await _storage.addUploadTask(task);
+
+    // 调度上传任务
+    final bgService = GetIt.I.get<BackgroundService>();
+    await bgService.scheduleNewUploadTask(task);
+  }
+
+  /// 更新状态
+  void _updateStatus({
+    AlbumBackupStatus? status,
+    int? totalPhotos,
+    int? newPhotos,
+    int? uploadedPhotos,
+    int? failedPhotos,
+    String? errorMessage,
+    DateTime? lastBackupTime,
+  }) {
+    _result = AlbumBackupResult(
+      status: status ?? _result.status,
+      totalPhotos: totalPhotos ?? _result.totalPhotos,
+      newPhotos: newPhotos ?? _result.newPhotos,
+      uploadedPhotos: uploadedPhotos ?? _result.uploadedPhotos,
+      failedPhotos: failedPhotos ?? _result.failedPhotos,
+      errorMessage: errorMessage ?? _result.errorMessage,
+      lastBackupTime: lastBackupTime ?? _result.lastBackupTime,
+    );
+    _statusController.add(_result);
+  }
+
+  /// 清理资源
+  void dispose() {
+    _statusController.close();
+  }
+}

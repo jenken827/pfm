@@ -5,6 +5,8 @@ import '../pages/settings/theme_setting_page.dart';
 import '../pages/settings/storage_provider_setting_page.dart';
 import '../pages/settings/server_backup_page.dart';
 import '../pages/settings/client_backup_page.dart';
+import '../pages/settings/album_backup_page.dart';
+import '../pages/settings/contact_backup_page.dart';
 
 part 'settings_route.g.dart';
 
@@ -16,6 +18,8 @@ part 'settings_route.g.dart';
     TypedGoRoute<StorageProviderSettingRoute>(path: 'storage-provider'),
     TypedGoRoute<ServerBackupRoute>(path: 'server-backup'),
     TypedGoRoute<ClientBackupRoute>(path: 'client-backup'),
+    TypedGoRoute<AlbumBackupRoute>(path: 'album-backup'),
+    TypedGoRoute<ContactBackupRoute>(path: 'contact-backup'),
   ],
 )
 @immutable
@@ -66,5 +70,25 @@ class ClientBackupRoute extends GoRouteData with $ClientBackupRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const ClientBackupPage();
+  }
+}
+
+/// 相册备份路由
+class AlbumBackupRoute extends GoRouteData with $AlbumBackupRoute {
+  const AlbumBackupRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const AlbumBackupPage();
+  }
+}
+
+/// 通讯录备份路由
+class ContactBackupRoute extends GoRouteData with $ContactBackupRoute {
+  const ContactBackupRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const ContactBackupPage();
   }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
@@ -566,4 +567,77 @@ func CountActiveFilesByHashExcludingIDs(hash string, excludeIDs []string) (int64
 		return 0, err
 	}
 	return count, nil
+}
+
+// GetRecentFiles 获取最近使用的文件（排除已删除和文件夹）
+func GetRecentFiles(offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+	var files []*native.FileORM
+	var total int64
+	ctx := context.Background()
+
+	if pageSize == 0 {
+		pageSize = 20
+	}
+
+	folderType := int32(native.FileType_FOLDER)
+	query := db.WithContext(ctx).
+		Where("type != ? AND last_accessed_at IS NOT NULL", folderType)
+
+	// 获取总数
+	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	// 分页查询，按 last_accessed_at 降序
+	if err := query.
+		Order("last_accessed_at DESC").
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Find(&files).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	hasMore := int64(offset)+int64(len(files)) < total
+	return files, total, hasMore, nil
+}
+
+// GetFilesByType 按文件类型获取文件列表（排除已删除）
+func GetFilesByType(fileType native.FileType, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+	var files []*native.FileORM
+	var total int64
+	ctx := context.Background()
+
+	if pageSize == 0 {
+		pageSize = 50
+	}
+
+	typeVal := int32(fileType)
+	query := db.WithContext(ctx).
+		Where("type = ?", typeVal)
+
+	// 获取总数
+	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	// 分页查询，按 created_at 降序
+	if err := query.
+		Order("created_at DESC").
+		Offset(int(offset)).
+		Limit(int(pageSize)).
+		Find(&files).Error; err != nil {
+		return nil, 0, false, err
+	}
+
+	hasMore := int64(offset)+int64(len(files)) < total
+	return files, total, hasMore, nil
+}
+
+// UpdateLastAccessedAt 更新文件的最后访问时间
+func UpdateLastAccessedAt(fileID string) error {
+	ctx := context.Background()
+	return db.WithContext(ctx).
+		Model(&native.FileORM{}).
+		Where("id = ?", fileID).
+		Update("last_accessed_at", time.Now()).Error
 }

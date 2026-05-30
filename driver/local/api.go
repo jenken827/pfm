@@ -5,13 +5,86 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
+
+// getUploadDir 获取上传目录（年/月/数字子目录结构）
+// 逻辑：优先使用年月目录，文件数达到 MaxFilesPerDir 时创建数字子文件夹
+func (l *LocalDriver) getUploadDir(rootDir string) (string, error) {
+	now := time.Now()
+	yearMonthDir := filepath.Join(rootDir, now.Format("2006"), now.Format("01"))
+
+	// 确保年月目录存在
+	if err := os.MkdirAll(yearMonthDir, 0755); err != nil {
+		return "", fmt.Errorf("create year-month directory failed: %w", err)
+	}
+
+	// 读取年月目录下所有条目
+	entries, err := os.ReadDir(yearMonthDir)
+	if err != nil {
+		return "", fmt.Errorf("read year-month directory failed: %w", err)
+	}
+
+	// 统计直接文件数和最大数字子目录名
+	directFileCount := 0
+	maxSubDirNum := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// 检查是否为数字命名的子目录
+			if n, err := strconv.Atoi(entry.Name()); err == nil && n > maxSubDirNum {
+				maxSubDirNum = n
+			}
+		} else {
+			directFileCount++
+		}
+	}
+
+	// 情况1：没有数字子目录，且直接文件数未满 → 直接用年月目录
+	if maxSubDirNum == 0 && directFileCount < types.MaxFilesPerDir {
+		return yearMonthDir, nil
+	}
+
+	// 情况2：没有数字子目录但文件已满 → 创建 1/
+	if maxSubDirNum == 0 {
+		subDir := filepath.Join(yearMonthDir, "1")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			return "", fmt.Errorf("create subdirectory 1 failed: %w", err)
+		}
+		return subDir, nil
+	}
+
+	// 情况3：有数字子目录 → 检查最大子目录的文件数
+	maxSubDir := filepath.Join(yearMonthDir, strconv.Itoa(maxSubDirNum))
+	subEntries, err := os.ReadDir(maxSubDir)
+	if err != nil {
+		return "", fmt.Errorf("read subdirectory %d failed: %w", maxSubDirNum, err)
+	}
+
+	subFileCount := 0
+	for _, entry := range subEntries {
+		if !entry.IsDir() {
+			subFileCount++
+		}
+	}
+
+	if subFileCount < types.MaxFilesPerDir {
+		// 最大子目录未满，继续使用
+		return maxSubDir, nil
+	}
+
+	// 最大子目录已满，创建新的
+	newSubDir := filepath.Join(yearMonthDir, strconv.Itoa(maxSubDirNum+1))
+	if err := os.MkdirAll(newSubDir, 0755); err != nil {
+		return "", fmt.Errorf("create subdirectory %d failed: %w", maxSubDirNum+1, err)
+	}
+	return newSubDir, nil
+}
 
 // Upload 上传文件（本地存储始终不加密）
 func (l *LocalDriver) Upload(ctx context.Context, record *native.UploadRecordORM, encryptor types.Encryptor) ([]*types.StorageProviderFileInfo, error) {
@@ -22,19 +95,18 @@ func (l *LocalDriver) Upload(ctx context.Context, record *native.UploadRecordORM
 	// 本地存储始终不加密，忽略encryptor参数
 	_ = encryptor
 
-	// 1. 按年/月创建目录结构
-	now := time.Now()
-	yearMonthDir := path.Join(rootDir, now.Format("2006"), now.Format("01"))
-	if err := os.MkdirAll(yearMonthDir, 0755); err != nil {
-		llog.L().Errorf("create directory failed: %v", err)
-		return nil, fmt.Errorf("create directory failed: %w", err)
+	// 1. 获取上传目录（年/月/数字子目录结构）
+	uploadDir, err := l.getUploadDir(rootDir)
+	if err != nil {
+		llog.L().Errorf("get upload directory failed: %v", err)
+		return nil, fmt.Errorf("get upload directory failed: %w", err)
 	}
 
 	// 2. 使用公共方法生成唯一文件名
 	finalFileName := types.GetUniqueFileName(fileName)
 
 	// 目标文件路径
-	targetPath := path.Join(yearMonthDir, finalFileName)
+	targetPath := filepath.Join(uploadDir, finalFileName)
 
 	// 3. 打开源文件
 	srcFile, err := os.Open(filePath)

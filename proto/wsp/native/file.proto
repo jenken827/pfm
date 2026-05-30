@@ -76,6 +76,10 @@ message File {
     not_null: true
     default: "0"
   }];
+  // 最后访问时间（用于"最近使用"功能）
+  optional google.protobuf.Timestamp last_accessed_at = 15 [(gorm.field).tag = {
+    index: "idx_f_laa"
+  }];
 }
 
 // // FileHistory 文件历史版本信息
@@ -537,6 +541,38 @@ message GetFileTagsRespData {
   repeated string tags = 1;
 }
 
+// 获取最近使用的文件请求
+message GetRecentFilesReq {
+  // 每页数量，默认20
+  optional uint32 page_size = 1;
+  // 偏移量，从0开始
+  optional uint32 offset = 2;
+}
+
+// 获取最近使用的文件响应数据
+message GetRecentFilesRespData {
+  repeated File files = 1;
+  optional uint32 total = 2;
+  optional bool has_more = 3;
+}
+
+// 按文件类型获取文件列表请求
+message GetFilesByTypeReq {
+  // 文件类型
+  optional FileType file_type = 1 [(buf.validate.field).required = true];
+  // 每页数量，默认50
+  optional uint32 page_size = 2;
+  // 偏移量，从0开始
+  optional uint32 offset = 3;
+}
+
+// 按文件类型获取文件列表响应数据
+message GetFilesByTypeRespData {
+  repeated File files = 1;
+  optional uint32 total = 2;
+  optional bool has_more = 3;
+}
+
 // 文件服务
 service FileService {
   // 获取文件列表
@@ -604,4 +640,10 @@ service FileService {
 
   // 搜索文件（按文件名模糊匹配）
   rpc SearchFiles(SearchFilesReq) returns (BaseResp);
+
+  // 获取最近使用的文件
+  rpc GetRecentFiles(GetRecentFilesReq) returns (BaseResp);
+
+  // 按文件类型获取文件列表
+  rpc GetFilesByType(GetFilesByTypeReq) returns (BaseResp);
 }

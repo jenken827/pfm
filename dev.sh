@@ -10,6 +10,23 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # ============================================================
+# 代理配置（如需代理，取消注释并修改）
+# ============================================================
+
+# HTTP 代理
+export HTTP_PROXY=http://127.0.0.1:10809
+export HTTPS_PROXY=http://127.0.0.1:10809
+export ALL_PROXY=socks5://127.0.0.1:10809
+
+# 如果环境变量中已设置代理，则使用之
+if [ -n "$HTTP_PROXY" ]; then
+    echo "📌 使用 HTTP 代理: $HTTP_PROXY"
+fi
+if [ -n "$HTTPS_PROXY" ]; then
+    echo "📌 使用 HTTPS 代理: $HTTPS_PROXY"
+fi
+
+# ============================================================
 # 帮助信息
 # ============================================================
 
@@ -28,8 +45,8 @@ show_help() {
   tidy           执行 go mod tidy
   lint           运行 golangci-lint 代码检查
   clean          清理构建产物
-  dev            以开发模式运行（不编译，直接 go run）
   flutter        执行 Flutter 开发任务（见 flutter help）
+  flutter-clean  清理 Flutter 构建缓存
   help           显示此帮助信息
 
 选项 (仅用于 build/run 命令):
@@ -48,11 +65,13 @@ show_help() {
   $0 tidy                    # 清理 Go 模块依赖
   $0 lint                    # 代码检查
   $0 clean                   # 清理构建产物
+  $0 flutter-clean           # 清理 Flutter 构建缓存
 
 注意:
   - build 和 run 命令会自动从 git commit hash 和日期生成版本号
   - proto 命令需要在 proto/ 目录下执行 buf generate
   - 项目模块路径: jenken827.com/jenken827/pfm
+  - 如需代理，设置 HTTP_PROXY/HTTPS_PROXY 环境变量或取消脚本顶部注释
 EOF
 }
 
@@ -197,6 +216,15 @@ cmd_clean() {
     echo "✅ 清理完成！"
 }
 
+# Flutter 清理构建缓存
+cmd_flutter_clean() {
+    echo "🧹 清理 Flutter 构建缓存..."
+    check_command "puro"
+    cd "$SCRIPT_DIR/frontend"
+    puro flutter clean
+    echo "✅ Flutter 缓存清理完成！"
+}
+
 # Flutter 开发任务
 cmd_flutter() {
     cd "$SCRIPT_DIR/frontend"
@@ -204,6 +232,9 @@ cmd_flutter() {
         echo "❌ 错误: frontend/dev.sh 不存在"
         exit 1
     fi
+
+    # 确保代理环境变量传递给子进程
+    export HTTP_PROXY HTTPS_PROXY ALL_PROXY
 
     if [[ "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
         bash dev.sh help
@@ -253,6 +284,9 @@ case "$ACTION" in
         ;;
     clean)
         cmd_clean
+        ;;
+    flutter-clean)
+        cmd_flutter_clean
         ;;
     flutter)
         cmd_flutter $FLUTTER_ARGS

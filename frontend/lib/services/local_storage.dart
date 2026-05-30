@@ -4,6 +4,7 @@ import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_ce_flutter/adapters.dart';
+import 'package:pfm/services/album_backup_service.dart';
 import '../models/models.dart';
 
 class LocalStorage {
@@ -139,6 +140,22 @@ class LocalStorage {
   /// 保存服务器 URL
   Future<void> saveFileServer(String url) async {
     await _box.put(_fileServerKey, url);
+  }
+
+  /// 获取相册备份配置
+  AlbumBackupConfig? get albumBackupConfig {
+    final configJson = _settingsBox.get('albumBackupConfig');
+    if (configJson != null) {
+      return AlbumBackupConfig.fromJson(
+        Map<String, dynamic>.from(configJson),
+      );
+    }
+    return null;
+  }
+
+  /// 保存相册备份配置
+  Future<void> saveAlbumBackupConfig(AlbumBackupConfig config) async {
+    await _settingsBox.put('albumBackupConfig', config.toJson());
   }
 
   /// 清除登录信息（退出登录）
