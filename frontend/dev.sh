@@ -407,11 +407,8 @@ build_android_apk() {
     local VERSION="$2"
     local BUILD_NUMBER="$3"
     
-    # 构建输出文件名
-    local OUTPUT_NAME="${APP_NAME}_${VERSION}_${BUILD_NUMBER}.apk"
-    
     echo "📦 构建 Android APK..."
-    echo "目标输出文件名: $OUTPUT_NAME"
+    echo "版本信息: ${VERSION}_${BUILD_NUMBER}"
     
     # 确保 sqlite3 原生库已下载
     ensure_sqlite3_libs
@@ -424,30 +421,37 @@ build_android_apk() {
         puro flutter build apk --release --split-per-abi --no-tree-shake-icons
     fi
     
-    # 查找生成的APK文件
-    local DEFAULT_APK="build/app/outputs/flutter-apk/app-release.apk"
+    # 查找所有生成的APK文件（split-per-abi 会生成多个）
+    local APK_DIR="build/app/outputs/flutter-apk"
+    local found=0
     
-    if [[ -n "$DEFAULT_APK" && -f "$DEFAULT_APK" ]]; then
-        echo "✅ Flutter构建完成，找到默认输出文件: $(basename "$DEFAULT_APK")"
+    for apk in "$APK_DIR"/app-*-release.apk; do
+        [ -f "$apk" ] || continue
+        found=1
         
-        # 重命名文件
-        local OUTPUT_PATH="build/app/outputs/flutter-apk/$OUTPUT_NAME"
-        cp "$DEFAULT_APK" "$OUTPUT_PATH"
+        # 提取 ABI 后缀，如 arm64-v8a, armeabi-v7a, x86_64
+        local basename=$(basename "$apk")
+        local abi=$(echo "$basename" | sed -E 's/app-(.+)-release\.apk/\1/')
         
-        if [[ -f "$OUTPUT_PATH" ]]; then
-            echo "✅ 文件已重命名为: $OUTPUT_NAME"
-            echo "📁 文件位置: $OUTPUT_PATH"
-            echo "📊 文件大小: $(du -h "$OUTPUT_PATH" | cut -f1)"
-        else
-            echo "❌ 文件重命名失败"
-            echo "📁 原始文件位置: $DEFAULT_APK"
+        # 构建新文件名
+        local new_name="${APP_NAME}_${VERSION}_${BUILD_NUMBER}_${abi}.apk"
+        local new_path="$APK_DIR/$new_name"
+        
+        cp "$apk" "$new_path"
+        
+        if [[ -f "$new_path" ]]; then
+            echo "✅ $new_name ($(du -h "$new_path" | cut -f1))"
         fi
-    else
+    done
+    
+    if [[ $found -eq 0 ]]; then
         echo "❌ Flutter构建失败，未找到输出文件"
         echo "🔍 搜索其他可能的输出位置..."
         find build/ -name "*.apk" 2>/dev/null | head -5
         exit 1
     fi
+    
+    echo "📁 文件位置: $APK_DIR"
 }
 
 # 构建 Android App Bundle

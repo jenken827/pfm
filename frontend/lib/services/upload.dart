@@ -71,7 +71,7 @@ Future<void> uploadFile({
     await storage.updateUploadTask(task.id, status: UploadStatus.UPLOADING);
 
     // 检查文件大小，决定使用小文件上传还是分片上传
-    const smallFileThreshold = 10 * 1024 * 1024; // 10MB
+    const smallFileThreshold = 5 * 1024 * 1024; // 5MB（降低阈值减少并发内存占用）
     final fileSize = task.fileSize;
 
     if (fileSize <= smallFileThreshold) {
@@ -91,7 +91,9 @@ Future<void> uploadFile({
           overwrite: task.overwrite,
           tags: task.tags,
           onSendProgress: (sent, total) {
-            storage.updateUploadTask(task.id, uploadedBytes: sent);
+            // 限制进度不超过文件大小（HTTP 开销可能导致超出）
+            final capped = sent > fileSize ? fileSize : sent;
+            storage.updateUploadTask(task.id, uploadedBytes: capped);
           },
         ),
         operationName: 'uploadSmall(${task.filename})',

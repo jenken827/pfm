@@ -440,13 +440,14 @@ class BackgroundService {
     await _storage.updateUploadTask(taskId, status: UploadStatus.PAUSED);
   }
 
-  /// 恢复上传任务
+  /// 恢复上传任务（只重置状态，由 _timerHandler 调度，不超出并发限制）
   Future<void> resumeUpload(String taskId) async {
     _logger.info('Resuming upload task: $taskId');
-
-    final task = await _storage.getUploadTaskAsync(taskId);
-    if (task == null) return;
-    await scheduleUpload(taskId, true);
+    await _storage.resumeUploadTasks(taskId);
+    // 确保 timer 运行，由 timer 调度 pending 任务
+    _syncTimer ??= Timer.periodic(Duration(seconds: 3), (timer) async {
+      await _timerHandler(timer);
+    });
   }
 
   /// 清理已完成的任务
@@ -475,7 +476,7 @@ class BackgroundService {
     await scheduleDownload(taskId, true);
   }
 
-  /// 重试下载任务（将失败任务重置为待调度状态）
+  /// 重试下载任务（只重置状态，由 _timerHandler 调度，不超出并发限制）
   Future<void> retryDownload(String taskId) async {
     _logger.info('Retrying download task: $taskId');
     await _storage.updateDownloadTask(
@@ -484,7 +485,10 @@ class BackgroundService {
       errorMessage: null,
       downloadedBytes: 0,
     );
-    await scheduleDownload(taskId, true);
+    // 确保 timer 运行，由 timer 调度 pending 任务
+    _syncTimer ??= Timer.periodic(Duration(seconds: 3), (timer) async {
+      await _timerHandler(timer);
+    });
   }
 
   void close() {

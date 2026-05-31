@@ -92,8 +92,8 @@ class _TransferPageState extends State<TransferPage>
             ],
           ),
           body: BlocBuilder<TransferBloc, TransferState>(
-            // buildWhen: (previous, current) =>
-            //     previous.currentTab != current.currentTab,
+            buildWhen: (previous, current) =>
+                previous.currentTab != current.currentTab,
             builder: (context, state) {
               return TabBarView(
                 controller: _tabController,

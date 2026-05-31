@@ -33,10 +33,12 @@ class _UploadRecordListState extends State<UploadRecordList> {
   Future<void> _loadRecords() async {
     if (_isLoading) return;
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final repository = context.read<FmRepository>();
@@ -45,13 +47,13 @@ class _UploadRecordListState extends State<UploadRecordList> {
         pageSize: _pageSize,
       );
 
+      if (!mounted) return;
+
       if (result.success) {
         setState(() {
-          // 只显示进行中和失败的记录，过滤已成功的
           _records = result.data!.records
               .where((r) => r.status != LocationStatus.PCOMPLETED)
               .toList();
-          // _total = result.data!.total.toInt();
           _isLoading = false;
         });
       } else {
@@ -61,6 +63,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
