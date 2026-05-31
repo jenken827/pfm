@@ -27,6 +27,14 @@ class CasdoorToken {
       expiresIn = map['expires_in'],
       refreshToken = map['refresh_token'],
       scope = map['scope'];
+
+  Map<String, dynamic> toJson() => {
+    'access_token': accessToken,
+    'token_type': tokenType,
+    'expires_in': expiresIn,
+    'refresh_token': refreshToken,
+    'scope': scope,
+  };
 }
 
 class User {

@@ -25,6 +25,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferCancelEvent>(_onCancel);
     on<TransferRemoveEvent>(_onRemove);
     on<TransferAddUploadEvent>(_onAddUpload);
+    on<TransferAddBatchUploadEvent>(_onAddBatchUpload);
     on<TransferAddDownloadEvent>(_onAddDownload);
     on<TransferTabChangedEvent>(_onTabChanged);
     on<TransferRetryEvent>(_onRetry);
@@ -239,6 +240,47 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } catch (e) {
       getLogger().error('Start upload failed: $e');
+    }
+  }
+
+  Future<void> _onAddBatchUpload(
+    TransferAddBatchUploadEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    try {
+      final records = <UploadTaskRecord>[];
+
+      for (final filePath in event.files) {
+        final file = File(filePath);
+        if (!await file.exists()) {
+          getLogger().warning('文件不存在，跳过：$filePath');
+          continue;
+        }
+
+        final stat = await file.stat();
+        records.add(UploadTaskRecord(
+          id: Uuid().v8(),
+          filepath: filePath,
+          filename: basename(filePath),
+          fileSize: stat.size,
+          parentId: event.parentId,
+          status: UploadStatus.PENDING,
+          tags: event.tags,
+          overwrite: event.overwrite,
+        ));
+      }
+
+      if (records.isEmpty) return;
+
+      // 批量写入数据库，只调度第一个任务
+      await _bgService.addUploadTasksBatch(records);
+      await _bgService.scheduleFirstPendingUpload();
+
+      getLogger().info(
+        'Batch added ${records.length} upload tasks',
+      );
+    } catch (e) {
+      getLogger().error('Batch upload failed: $e');
     }
   }
 

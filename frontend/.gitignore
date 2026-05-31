@@ -59,3 +59,6 @@ linux/flutter/generated_*
 
 # DataStructure and api defination，stored in server repository
 lib/proto/
+# Android build artifacts
+/android/build/
+/android/gradle.properties

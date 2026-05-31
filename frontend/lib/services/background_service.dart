@@ -43,6 +43,9 @@ class BackgroundService {
   /// 最多5个进程
   static const int _maxIsolateCount = 5;
 
+  /// 移动端 WorkManager 并发数
+  static const int _maxWorkManagerConcurrency = 3;
+
   final Map<String, IsolateInfo> _uploadIsolates = {};
 
   final Map<String, IsolateInfo> _downloadIsolates = {};
@@ -69,7 +72,7 @@ class BackgroundService {
     final storage = await Sqlite3Storage.instance();
     _instance = BackgroundService._(storage);
 
-    _instance!._syncTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
+    _instance!._syncTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
       await _instance!._timerHandler(timer);
     });
 
@@ -91,6 +94,41 @@ class BackgroundService {
 
     _uploadTaskController.add(uploadTasks);
     _downloadTaskController.add(downloadTasks);
+
+    // 移动端并发调度：最多 _maxWorkManagerConcurrency 个任务同时处理
+    if (isWorkManagerSupported) {
+      final uploadingCount = activeUploads
+          .where((t) => t.status == UploadStatus.UPLOADING || t.status == UploadStatus.HASHING)
+          .length;
+      final pending = activeUploads
+          .where((t) => t.status == UploadStatus.PENDING)
+          .toList();
+
+      final canSchedule = _maxWorkManagerConcurrency - uploadingCount;
+      if (canSchedule > 0 && pending.isNotEmpty) {
+        final toSchedule = pending.take(canSchedule).toList();
+        for (final task in toSchedule) {
+          getLogger().info('Scheduling upload: ${task.id} ($uploadingCount/${_maxWorkManagerConcurrency} active)');
+          await _scheduleWithWorkManager(task.id, TaskType.upload);
+        }
+      }
+
+      final downloadingCount = activeDownloads
+          .where((t) => t.status == DownloadStatus.downloading)
+          .length;
+      final pendingDownloads = activeDownloads
+          .where((t) => t.status == DownloadStatus.pending)
+          .toList();
+
+      final canScheduleDownload = _maxWorkManagerConcurrency - downloadingCount;
+      if (canScheduleDownload > 0 && pendingDownloads.isNotEmpty) {
+        final toSchedule = pendingDownloads.take(canScheduleDownload).toList();
+        for (final task in toSchedule) {
+          getLogger().info('Scheduling download: ${task.id} ($downloadingCount/${_maxWorkManagerConcurrency} active)');
+          await _scheduleWithWorkManager(task.id, TaskType.download);
+        }
+      }
+    }
 
     if (activeUploads.isEmpty && activeDownloads.isEmpty) {
       getLogger().debug(
@@ -143,6 +181,25 @@ class BackgroundService {
     task.status = UploadStatus.PENDING;
     await _storage.addUploadTask(task);
     await scheduleUpload(task.id, true);
+  }
+
+  /// 批量新增上传任务（仅写入数据库，不逐个调度 WorkManager）
+  /// 调用方应最后调用 scheduleFirstPendingUpload() 触发处理
+  Future<void> addUploadTasksBatch(List<UploadTaskRecord> tasks) async {
+    for (final task in tasks) {
+      task.status = UploadStatus.PENDING;
+      await _storage.addUploadTask(task);
+    }
+    _logger.info('Batch added ${tasks.length} upload tasks to database');
+  }
+
+  /// 调度待处理的上传任务（用于批量添加后触发处理）
+  Future<void> scheduleFirstPendingUpload() async {
+    final task = await _storage.getNextPendingUploadTaskAsync();
+    if (task != null) {
+      _logger.info('Scheduling first pending upload: ${task.id}');
+      await scheduleUpload(task.id, true);
+    }
   }
 
   // 恢复上传任务
@@ -299,10 +356,13 @@ class BackgroundService {
       dbPath: dbPath,
     );
 
+    final inputData = params.toJson();
+    _logger.info('WorkManager inputData: $inputData');
+
     await Workmanager().registerOneOffTask(
       taskId,
       taskId,
-      inputData: params.toJson(),
+      inputData: inputData,
       constraints: Constraints(networkType: NetworkType.connected),
     );
 

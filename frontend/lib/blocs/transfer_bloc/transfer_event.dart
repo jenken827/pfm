@@ -34,6 +34,19 @@ class TransferAddUploadEvent extends TransferEvent {
   final bool overwrite;
 }
 
+// 批量新增上传任务（只创建记录，不逐个调度 WorkManager）
+class TransferAddBatchUploadEvent extends TransferEvent {
+  TransferAddBatchUploadEvent(this.files, this.parentId, {
+    this.tags,
+    this.overwrite = false,
+  });
+
+  final List<String> files;
+  final String parentId;
+  final String? tags;
+  final bool overwrite;
+}
+
 /// 暂停上传，如果不传taskId，则暂停所有
 class TransferPauseEvent extends TransferEvent {
   TransferPauseEvent(this.taskId);

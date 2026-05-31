@@ -163,4 +163,20 @@ class LocalStorage {
     await _box.delete(_userKey);
     await _box.delete(_tokenKey);
   }
+
+  /// 获取通讯录备份配置
+  ContactBackupConfig? get contactBackupConfig {
+    final configJson = _settingsBox.get('contactBackupConfig');
+    if (configJson != null) {
+      return ContactBackupConfig.fromJson(
+        Map<String, dynamic>.from(configJson),
+      );
+    }
+    return null;
+  }
+
+  /// 保存通讯录备份配置
+  Future<void> saveContactBackupConfig(ContactBackupConfig config) async {
+    await _settingsBox.put('contactBackupConfig', config.toJson());
+  }
 }

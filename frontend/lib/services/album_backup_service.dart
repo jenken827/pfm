@@ -254,20 +254,29 @@ class AlbumBackupService {
         newPhotos: photos.length,
       );
 
-      int uploaded = 0;
+      // 批量创建上传任务记录（不逐个调度 WorkManager，避免 OOM）
+      final bgService = GetIt.I.get<BackgroundService>();
+      final tasks = <UploadTaskRecord>[];
       int failed = 0;
 
       for (final photo in photos) {
         try {
-          await _backupPhoto(photo);
-          uploaded++;
-          _updateStatus(uploadedPhotos: uploaded);
+          final task = await _createUploadTask(photo);
+          tasks.add(task);
         } catch (e) {
-          _logger.error('Failed to backup photo: ${photo.id}', e);
+          _logger.error('Failed to create task for photo: ${photo.id}', e);
           failed++;
-          _updateStatus(failedPhotos: failed);
         }
       }
+
+      // 批量写入数据库
+      await bgService.addUploadTasksBatch(tasks);
+      _logger.info('Batch created ${tasks.length} upload tasks');
+
+      // 调度任务（timer 会自动维持 3 并发）
+      await bgService.scheduleFirstPendingUpload();
+
+      final uploaded = tasks.length;
 
       // 完成
       _updateStatus(
@@ -297,7 +306,7 @@ class AlbumBackupService {
     if (_config.backupAlbumIds.isEmpty) {
       // 备份所有相册
       albums = await PhotoManager.getAssetPathList(
-        type: _config.backupVideos ? RequestType.image : RequestType.image,
+        type: _config.backupVideos ? RequestType.common : RequestType.image,
         hasAll: true,
       );
     } else {
@@ -327,31 +336,22 @@ class AlbumBackupService {
       allPhotos.addAll(photos);
     }
 
-    // 过滤已备份的照片
-    final photosToBackup = <AssetEntity>[];
-    for (final photo in allPhotos) {
-      final isBackedUp = await _isPhotoBackedUp(photo.id);
-      if (!isBackedUp) {
-        photosToBackup.add(photo);
-      }
-    }
+    // 过滤已备份的照片（一次加载所有任务，避免 O(n²) 查询）
+    final allTasks = await _storage.getAllUploadTasksAsync();
+    final completedFileNames = allTasks
+        .where((t) => t.status == UploadStatus.COMPLETED)
+        .map((t) => t.filename)
+        .toSet();
+
+    final photosToBackup = allPhotos
+        .where((photo) => !completedFileNames.contains(photo.id))
+        .toList();
 
     return photosToBackup;
   }
 
-  /// 检查照片是否已备份
-  Future<bool> _isPhotoBackedUp(String assetId) async {
-    final db = await _storage.getDatabasePath();
-    // 使用 Sqlite3Storage 的方法查询
-    final tasks = await _storage.getAllUploadTasksAsync();
-    // 简单检查：如果存在以 assetId 为文件名的任务且已完成，则认为已备份
-    return tasks.any(
-      (t) => t.filename == assetId && t.status == UploadStatus.COMPLETED,
-    );
-  }
-
-  /// 备份单张照片
-  Future<void> _backupPhoto(AssetEntity photo) async {
+  /// 创建上传任务记录（不调度）
+  Future<UploadTaskRecord> _createUploadTask(AssetEntity photo) async {
     // 获取文件
     final file = await photo.originFile;
     if (file == null) {
@@ -363,7 +363,7 @@ class AlbumBackupService {
     final fileSize = await file.length();
 
     // 创建上传任务
-    final task = UploadTaskRecord(
+    return UploadTaskRecord(
       id: const Uuid().v4(),
       filename: fileName,
       filepath: file.path,
@@ -372,13 +372,6 @@ class AlbumBackupService {
       status: UploadStatus.PENDING,
       createdAt: DateTime.now(),
     );
-
-    // 保存到数据库
-    await _storage.addUploadTask(task);
-
-    // 调度上传任务
-    final bgService = GetIt.I.get<BackgroundService>();
-    await bgService.scheduleNewUploadTask(task);
   }
 
   /// 更新状态

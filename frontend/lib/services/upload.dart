@@ -218,11 +218,11 @@ Future<void> uploadFile({
       );
 
       raf = await file.open();
-      syncTimer = Timer.periodic(Duration(seconds: 1), (t) {
+      syncTimer = Timer.periodic(Duration(seconds: 3), (t) {
         // 定期更新速度
         storage.updateUploadTask(
           task.id,
-          speed: deltaUploadedBytes,
+          speed: deltaUploadedBytes ~/ 3,
           uploadedBytes: max(realUploadedBytes, uploadedBytes),
         );
         deltaUploadedBytes = 0;

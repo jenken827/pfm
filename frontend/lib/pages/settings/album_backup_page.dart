@@ -152,7 +152,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
                   : _config.targetParentId,
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: _config.enabled ? _selectTargetFolder : null,
+            onTap: _selectTargetFolder,
           ),
 
           const Divider(),

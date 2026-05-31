@@ -811,17 +811,21 @@ class _FileViewState extends State<_FileView> {
             ? null
             : tagsController.text.trim();
 
-        for (final file in result.files) {
-          if (file.path != null) {
-            GetIt.I.get<TransferBloc>().add(
-              TransferAddUploadEvent(
-                file.path!,
-                parentId,
-                tags: tags,
-                overwrite: overwrite,
-              ),
-            );
-          }
+        // 收集所有文件路径，批量提交
+        final filePaths = result.files
+            .where((file) => file.path != null)
+            .map((file) => file.path!)
+            .toList();
+
+        if (filePaths.isNotEmpty) {
+          GetIt.I.get<TransferBloc>().add(
+            TransferAddBatchUploadEvent(
+              filePaths,
+              parentId,
+              tags: tags,
+              overwrite: overwrite,
+            ),
+          );
         }
       }
     } catch (e) {
@@ -934,7 +938,7 @@ class _FileViewState extends State<_FileView> {
 
     final newDirId = respData.id;
 
-    // 3. 遍历本地文件夹
+    // 3. 遍历本地文件夹，收集所有文件
     final dir = Directory(folderPath);
     List<FileSystemEntity> entities;
 
@@ -944,38 +948,46 @@ class _FileViewState extends State<_FileView> {
       throw Exception('读取目录失败: $e');
     }
 
+    // 收集本目录下的文件路径
+    final filePaths = <String>[];
+    // 子目录列表
+    final subDirs = <String>[];
+
     for (final entity in entities) {
-      if (!context.mounted) return;
-
-      // 使用更可靠的方式判断文件类型
       final type = FileSystemEntity.typeSync(entity.path);
-
       if (type == FileSystemEntityType.directory) {
-        // 添加延迟以避免触发频率限制（每个端点限制 3 次/秒）
-        await Future.delayed(const Duration(milliseconds: 350));
+        subDirs.add(entity.path);
+      } else if (type == FileSystemEntityType.file) {
+        filePaths.add(entity.path);
+      }
+    }
 
-        // 检查 context 是否仍然有效
-        if (!context.mounted) return;
-
-        // 递归处理子目录
-        await _uploadFolder(
-          context: context,
-          folderPath: entity.path,
-          parentDirId: newDirId,
+    // 批量提交本目录的文件
+    if (filePaths.isNotEmpty) {
+      GetIt.I.get<TransferBloc>().add(
+        TransferAddBatchUploadEvent(
+          filePaths,
+          newDirId,
           tags: tags,
           overwrite: overwrite,
-        );
-      } else if (type == FileSystemEntityType.file) {
-        // 添加文件上传任务
-        GetIt.I.get<TransferBloc>().add(
-          TransferAddUploadEvent(
-            entity.path,
-            newDirId,
-            tags: tags,
-            overwrite: overwrite,
-          ),
-        );
-      }
+        ),
+      );
+    }
+
+    // 递归处理子目录
+    for (final subDir in subDirs) {
+      if (!context.mounted) return;
+
+      // 添加延迟以避免触发频率限制（每个端点限制 3 次/秒）
+      await Future.delayed(const Duration(milliseconds: 350));
+
+      await _uploadFolder(
+        context: context,
+        folderPath: subDir,
+        parentDirId: newDirId,
+        tags: tags,
+        overwrite: overwrite,
+      );
     }
   }
 

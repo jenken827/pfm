@@ -14,7 +14,6 @@ class ContactBackupPage extends StatefulWidget {
 class _ContactBackupPageState extends State<ContactBackupPage> {
   late ContactBackupService _backupService;
   ContactBackupResult _result = const ContactBackupResult();
-  String _targetParentId = '';
   bool _isLoading = true;
 
   @override
@@ -38,7 +37,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Future<void> _startBackup() async {
-    await _backupService.startBackup(targetParentId: _targetParentId);
+    await _backupService.startBackup();
   }
 
   Future<void> _selectTargetFolder() async {
@@ -49,7 +48,8 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
       ),
     );
     if (result != null) {
-      setState(() => _targetParentId = result.id);
+      await _backupService.setTargetFolder(result.id, result.name);
+      setState(() {});
     }
   }
 
@@ -107,9 +107,9 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           ListTile(
             title: const Text('备份到'),
             subtitle: Text(
-              _targetParentId.isEmpty
+              _backupService.config.targetFolderName.isEmpty
                   ? '未设置（将备份到根目录）'
-                  : _targetParentId,
+                  : _backupService.config.targetFolderName,
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _selectTargetFolder,
@@ -171,6 +171,11 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
         statusColor = Colors.green;
         statusText = '备份完成';
         statusIcon = Icons.check_circle;
+        break;
+      case ContactBackupStatus.skipped:
+        statusColor = Colors.green;
+        statusText = '联系人无变动，已跳过';
+        statusIcon = Icons.check_circle_outline;
         break;
       case ContactBackupStatus.error:
         statusColor = Colors.red;
@@ -280,6 +285,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
             const Text('• vCard 是通用的联系人格式，可导入到任何设备'),
             const Text('• 备份文件将上传到您选择的服务器文件夹'),
             const Text('• 包含：姓名、电话、邮箱、公司、备注等信息'),
+            const Text('• 联系人无变动时会自动跳过上传'),
           ],
         ),
       ),

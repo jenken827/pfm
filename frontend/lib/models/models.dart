@@ -3,3 +3,4 @@ export 'casdoor.dart';
 export 'upload_task_record.dart';
 export 'download_task_record.dart';
 export 'client_backup_config.dart';
+export 'contact_backup_config.dart';

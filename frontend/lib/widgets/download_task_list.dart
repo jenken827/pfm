@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:open_file/open_file.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/utils/format.dart';
 
@@ -110,40 +114,47 @@ class _DownloadTaskItem extends StatelessWidget {
                 // 操作菜单
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 20),
-                  onSelected: (value) {
-                    final bloc = context.read<TransferBloc>();
-                    switch (value) {
-                      case 'pause':
-                        bloc.add(TransferPauseEvent(task.taskId));
-                        break;
-                      case 'resume':
-                        bloc.add(TransferResumeEvent(task.taskId));
-                        break;
-                      case 'retry':
-                        bloc.add(TransferRetryEvent(task.taskId));
-                        break;
-                      case 'cancel':
-                        bloc.add(TransferCancelEvent(task.taskId));
-                        break;
-                      case 'remove':
-                        bloc.add(TransferRemoveEvent(task.taskId));
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    if (task.isDownloading)
-                      const PopupMenuItem(value: 'pause', child: Text('暂停')),
-                    if (task.isPaused)
-                      const PopupMenuItem(value: 'resume', child: Text('继续')),
-                    if (task.isFailed || task.isPreDownload)
-                      const PopupMenuItem(value: 'retry', child: Text('重试')),
-                    if (task.isDownloading || task.isPaused)
-                      const PopupMenuItem(value: 'cancel', child: Text('取消')),
-                    const PopupMenuItem(value: 'remove', child: Text('移除')),
-                  ],
+                  onSelected: (value) => _handleMenuAction(context, value),
+                  itemBuilder: (context) => _buildMenuItems(),
                 ),
               ],
             ),
+            // 下载路径（已完成时显示）
+            if (task.isCompleted && task.localPath != null) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => _copyPath(context),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.folder_outlined,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          task.localPath!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.copy,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             // 进度条
             if (task.isDownloading || task.isPaused) ...[
               const SizedBox(height: 12),
@@ -189,6 +200,109 @@ class _DownloadTaskItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  List<PopupMenuItem<String>> _buildMenuItems() {
+    return [
+      if (task.isDownloading)
+        const PopupMenuItem(value: 'pause', child: Text('暂停')),
+      if (task.isPaused)
+        const PopupMenuItem(value: 'resume', child: Text('继续')),
+      if (task.isFailed || task.isPreDownload)
+        const PopupMenuItem(value: 'retry', child: Text('重试')),
+      if (task.isDownloading || task.isPaused)
+        const PopupMenuItem(value: 'cancel', child: Text('取消')),
+      if (task.isCompleted && task.localPath != null) ...[
+        const PopupMenuItem(value: 'open', child: Text('打开文件')),
+        const PopupMenuItem(value: 'folder', child: Text('打开所在目录')),
+      ],
+      const PopupMenuItem(value: 'remove', child: Text('移除')),
+    ];
+  }
+
+  void _handleMenuAction(BuildContext context, String value) {
+    final bloc = context.read<TransferBloc>();
+    switch (value) {
+      case 'pause':
+        bloc.add(TransferPauseEvent(task.taskId));
+        break;
+      case 'resume':
+        bloc.add(TransferResumeEvent(task.taskId));
+        break;
+      case 'retry':
+        bloc.add(TransferRetryEvent(task.taskId));
+        break;
+      case 'cancel':
+        bloc.add(TransferCancelEvent(task.taskId));
+        break;
+      case 'remove':
+        bloc.add(TransferRemoveEvent(task.taskId));
+        break;
+      case 'open':
+        _openFile(context);
+        break;
+      case 'folder':
+        _openFolder(context);
+        break;
+    }
+  }
+
+  Future<void> _openFile(BuildContext context) async {
+    if (task.localPath == null) return;
+    
+    final file = File(task.localPath!);
+    if (!await file.exists()) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件不存在')),
+        );
+      }
+      return;
+    }
+
+    final result = await OpenFile.open(task.localPath!);
+    if (result.type != ResultType.done && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('无法打开文件: ${result.message}')),
+      );
+    }
+  }
+
+  Future<void> _openFolder(BuildContext context) async {
+    if (task.localPath == null) return;
+    
+    final file = File(task.localPath!);
+    if (!await file.exists()) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件不存在')),
+        );
+      }
+      return;
+    }
+
+    // Android: 使用 open_file 打开文件管理器并定位到文件
+    // iOS: 不支持直接打开目录，只能打开文件
+    if (Platform.isAndroid) {
+      final result = await OpenFile.open(task.localPath!);
+      if (result.type != ResultType.done && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法打开目录: ${result.message}')),
+        );
+      }
+    } else {
+      // iOS 不支持打开目录，复制路径提示用户
+      _copyPath(context);
+    }
+  }
+
+  void _copyPath(BuildContext context) {
+    if (task.localPath == null) return;
+    
+    Clipboard.setData(ClipboardData(text: task.localPath!));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('路径已复制')),
     );
   }
 

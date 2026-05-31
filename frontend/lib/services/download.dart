@@ -183,10 +183,10 @@ Future<void> _downloadSingleThread({
     // 设置 Range 从断点开始
     final rangeHeaders = {...headers, 'Range': 'bytes=$downloadedBytes-'};
 
-    syncTimer = Timer.periodic(Duration(seconds: 1), (t) {
+    syncTimer = Timer.periodic(Duration(seconds: 3), (t) {
       storage.updateDownloadTask(
         task.id,
-        speed: deltaBytes,
+        speed: deltaBytes ~/ 3,
         downloadedBytes: downloadedBytes,
       );
       deltaBytes = 0;
@@ -270,10 +270,10 @@ Future<void> _downloadMultiThread({
       return;
     }
 
-    syncTimer = Timer.periodic(Duration(seconds: 1), (t) {
+    syncTimer = Timer.periodic(Duration(seconds: 3), (t) {
       storage.updateDownloadTask(
         task.id,
-        speed: deltaBytes,
+        speed: deltaBytes ~/ 3,
         downloadedBytes: downloadedBytes,
       );
       deltaBytes = 0;

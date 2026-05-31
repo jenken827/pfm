@@ -30,7 +30,7 @@ class WmTaskParam {
       taskId: json['taskId'] as String,
       taskType: json['taskType'] == 0 ? TaskType.upload : TaskType.download,
       baseUrl: json['baseUrl'] as String,
-      token: jsonDecode(json['token']) as CasdoorToken,
+      token: CasdoorToken.fromMap(jsonDecode(json['token'])),
       dbPath: json['dbPath'] as String,
     );
   }
@@ -40,7 +40,7 @@ class WmTaskParam {
       'taskId': taskId,
       'taskType': taskType.index,
       'baseUrl': baseUrl,
-      'token': jsonEncode(token),
+      'token': jsonEncode(token.toJson()),
       'dbPath': dbPath,
     };
   }
@@ -57,32 +57,61 @@ void callbackDispatcher() {
   // 仅在移动平台执行
   if (kIsWeb) return;
 
+  // ignore: avoid_print
+  print('[WorkManager] callbackDispatcher called!');
+
   Workmanager().executeTask((taskName, inputData) async {
+    // ignore: avoid_print
+    print('[WorkManager] executeTask called: taskName=$taskName, inputData=$inputData');
+
     if (inputData == null) {
+      // ignore: avoid_print
+      print('[WorkManager] inputData is null, returning true');
       return Future.value(true);
     }
-    final params = WmTaskParam.fromJson(inputData);
 
-    // 预先初始化后台 Logger 单例
-    initTalkerLogger();
+    try {
+      final params = WmTaskParam.fromJson(inputData);
+      // ignore: avoid_print
+      print('[WorkManager] Parsed params: taskId=${params.taskId}, taskType=${params.taskType}, baseUrl=${params.baseUrl}');
 
-    // 初始化存储
-    final storage = await Sqlite3Storage.initForIsolate(params.dbPath);
+      // 预先初始化后台 Logger 单例
+      initTalkerLogger();
 
-    if (params.taskType == TaskType.upload) {
-      final fmRepo = FmRepository.isolateInit(params.baseUrl, params.token);
-      await uploadFile(taskId: params.taskId, storage: storage, fmRepo: fmRepo);
-    } else if (params.taskType == TaskType.download) {
-      final task = await storage.getDownloadTaskAsync(params.taskId);
-      if (task != null) {
-        await downloadFile(
-          taskId: params.taskId,
-          storage: storage,
-          baseUrl: params.baseUrl,
-          token: params.token,
-        );
+      // 初始化存储
+      // ignore: avoid_print
+      print('[WorkManager] Initializing storage with dbPath: ${params.dbPath}');
+      final storage = await Sqlite3Storage.initForIsolate(params.dbPath);
+      // ignore: avoid_print
+      print('[WorkManager] Storage initialized');
+
+      if (params.taskType == TaskType.upload) {
+        // ignore: avoid_print
+        print('[WorkManager] Starting upload task: ${params.taskId}');
+        final fmRepo = FmRepository.isolateInit(params.baseUrl, params.token);
+        // ignore: avoid_print
+        print('[WorkManager] FmRepository initialized, starting uploadFile');
+        await uploadFile(taskId: params.taskId, storage: storage, fmRepo: fmRepo);
+        // ignore: avoid_print
+        print('[WorkManager] uploadFile completed for task: ${params.taskId}');
+      } else if (params.taskType == TaskType.download) {
+        final task = await storage.getDownloadTaskAsync(params.taskId);
+        if (task != null) {
+          await downloadFile(
+            taskId: params.taskId,
+            storage: storage,
+            baseUrl: params.baseUrl,
+            token: params.token,
+          );
+        }
       }
+      return Future.value(true);
+    } catch (e, stackTrace) {
+      // ignore: avoid_print
+      print('[WorkManager] Error in executeTask: $e');
+      // ignore: avoid_print
+      print('[WorkManager] Stack trace: $stackTrace');
+      return Future.value(false);
     }
-    return Future.value(true);
   });
 }
