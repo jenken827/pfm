@@ -49,6 +49,8 @@ app.*.map.json
 lib/l10n/app_localizations*.dart
 windows/flutter/generated_*
 macos/Flutter/GeneratedPluginRegistrant.swift
+linux/flutter/generated_*
+.sqlite3-cache
 
 
 # Editor config files

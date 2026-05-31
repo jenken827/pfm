@@ -42,14 +42,14 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Future<void> _selectTargetFolder() async {
-    final result = await Navigator.push<String>(
+    final result = await Navigator.push<FolderPickResult>(
       context,
       MaterialPageRoute(
         builder: (context) => const FolderPickerPage(),
       ),
     );
     if (result != null) {
-      setState(() => _targetParentId = result);
+      setState(() => _targetParentId = result.id);
     }
   }
 

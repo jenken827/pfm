@@ -331,3 +331,54 @@ func httpStatusFromError(err error) int {
 		return http.StatusInternalServerError
 	}
 }
+
+// RawFilePreviewHandler 原始文件预览（用于 Flyfish Viewer）
+// 返回完整文件二进制，带鉴权，支持 CORS
+// 支持两种鉴权方式：Authorization header 或 token query 参数
+func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. 验证认证（支持 header 和 query 参数）
+	token := r.URL.Query().Get("token")
+	if token != "" {
+		// 通过 query 参数传 token（用于浏览器直接访问）
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
+	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	ctx := r.Context()
+	llog.L().Infof("raw file preview request from user: %s", claims.User.Name)
+
+	// 2. 获取参数
+	fileID := r.URL.Query().Get("file_id")
+	if fileID == "" {
+		http.Error(w, "file_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// 3. CORS 头（允许 file-viewer iframe 访问）
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// 4. 获取文件流
+	result, err := service.GetFileStream(ctx, fileID, nil)
+	if err != nil {
+		llog.L().Errorf("get file stream failed: %v", err)
+		http.Error(w, err.Error(), httpStatusFromError(err))
+		return
+	}
+
+	// 4.1 更新文件访问时间
+	go service.UpdateFileAccess(fileID)
+
+	defer result.Reader.Close()
+
+	// 5. 流式传输（inline，浏览器直接显示）
+	streamResponse(w, r, result, "inline")
+}

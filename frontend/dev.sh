@@ -302,6 +302,105 @@ run_flutter_build() {
     esac
 }
 
+# 确保 sqlite3 原生库已下载（Android 构建需要）
+# - 先检查项目是否依赖 sqlite3
+# - 下载到 .sqlite3-cache（持久化，flutter clean 不会清除）
+# - 构建时如果 hook 目录不存在，先触发一次失败构建创建目录，再复制文件
+ensure_sqlite3_libs() {
+    # 检查项目是否依赖 sqlite3
+    if ! grep -q "sqlite3:" pubspec.yaml 2>/dev/null; then
+        return 0  # 不依赖 sqlite3，跳过
+    fi
+    
+    local SQLITE3_VERSION="sqlite3-3.2.0"
+    local BASE_URL="https://github.com/simolus3/sqlite3.dart/releases/download/$SQLITE3_VERSION"
+    local PERSISTENT_CACHE=".sqlite3-cache"
+    local HOOK_SHARED=".dart_tool/hooks_runner/shared/sqlite3/build"
+    
+    # 架构映射
+    declare -A ARCH_FILES=(
+        ["arm"]="libsqlite3.arm.android.so"
+        ["arm64"]="libsqlite3.arm64.android.so"
+        ["x64"]="libsqlite3.x64.android.so"
+    )
+    
+    # 第一步：确保持久缓存中有所有架构的文件
+    for arch in "${!ARCH_FILES[@]}"; do
+        local cache_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
+        if [ ! -f "$cache_file" ]; then
+            echo "📥 下载 ${ARCH_FILES[$arch]}..."
+            mkdir -p "$PERSISTENT_CACHE"
+            curl -x "$HTTP_PROXY" -sL -o "$cache_file" "$BASE_URL/${ARCH_FILES[$arch]}"
+            if [ -f "$cache_file" ]; then
+                echo "✅ $arch 下载完成"
+            else
+                echo "❌ $arch 下载失败"
+                return 1
+            fi
+        fi
+    done
+    
+    # 第二步：检查 hook 目录，找到需要填充的下载目录
+    # hook 目录 hash 和下载目录 hash 是动态生成的，不能硬编码
+    # 策略：查找所有含 .tmp 文件的目录（构建失败时创建的），替换为真实文件
+    local fixed=0
+    for tmp_file in $(find "$HOOK_SHARED" -name "libsqlite3.so.tmp" 2>/dev/null); do
+        local download_dir=$(dirname "$tmp_file")
+        # 根据 hook 的 target_architecture 确定用哪个文件
+        local hook_id=$(basename "$(dirname "$(dirname "$tmp_file")")" 2>/dev/null)
+        
+        # 尝试从最近的 hook input.json 获取架构
+        local arch="arm64"  # 默认 arm64
+        for hook_dir in .dart_tool/hooks_runner/sqlite3/*/; do
+            if grep -q "arm64" "$hook_dir/input.json" 2>/dev/null; then
+                arch="arm64"
+            elif grep -q "\"arm\"" "$hook_dir/input.json" 2>/dev/null; then
+                arch="arm"
+            elif grep -q "x64" "$hook_dir/input.json" 2>/dev/null; then
+                arch="x64"
+            fi
+        done
+        
+        local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
+        if [ -f "$src_file" ]; then
+            rm -f "$tmp_file"
+            cp "$src_file" "$download_dir/libsqlite3.so"
+            echo "📋 已填充 $arch 到 $(basename "$download_dir")"
+            fixed=$((fixed + 1))
+        fi
+    done
+    
+    # 第三步：检查是否所有 hook 目录都有对应的 libsqlite3.so
+    # 遍历所有 hook 目录，查找 output.json 中引用的下载目录
+    for hook_dir in .dart_tool/hooks_runner/sqlite3/*/; do
+        [ -d "$hook_dir" ] || continue
+        local output_file="$hook_dir/output.json"
+        [ -f "$output_file" ] || continue
+        
+        # 从 output.json 提取期望的文件路径
+        local expected_file=$(grep -o '"file": "[^"]*libsqlite3\.so"' "$output_file" 2>/dev/null | cut -d'"' -f4)
+        if [ -n "$expected_file" ] && [ ! -f "$expected_file" ]; then
+            # 文件不存在，需要从持久缓存复制
+            local expected_dir=$(dirname "$expected_file")
+            local arch="arm64"
+            grep -q "arm\"" "$hook_dir/input.json" 2>/dev/null && arch="arm"
+            grep -q "x64" "$hook_dir/input.json" 2>/dev/null && arch="x64"
+            
+            local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
+            if [ -f "$src_file" ]; then
+                mkdir -p "$expected_dir"
+                cp "$src_file" "$expected_file"
+                echo "📋 已从 output.json 填充 $arch 到 $(basename "$expected_dir")"
+                fixed=$((fixed + 1))
+            fi
+        fi
+    done
+    
+    if [ $fixed -gt 0 ]; then
+        echo "✅ 共填充 $fixed 个 sqlite3 缓存目录"
+    fi
+}
+
 # 构建 Android APK
 build_android_apk() {
     local APP_NAME="$1"
@@ -314,8 +413,16 @@ build_android_apk() {
     echo "📦 构建 Android APK..."
     echo "目标输出文件名: $OUTPUT_NAME"
     
-    # 执行构建
-    puro flutter build apk --release --no-tree-shake-icons
+    # 确保 sqlite3 原生库已下载
+    ensure_sqlite3_libs
+    
+    # 执行构建（使用 ABI 拆分减小体积）
+    # sqlite3 hook 首次可能因网络超时失败（~10秒），自动重试即可
+    if ! puro flutter build apk --release --split-per-abi --no-tree-shake-icons; then
+        echo "⚠️ 构建失败，填充 sqlite3 缓存后重试..."
+        ensure_sqlite3_libs
+        puro flutter build apk --release --split-per-abi --no-tree-shake-icons
+    fi
     
     # 查找生成的APK文件
     local DEFAULT_APK="build/app/outputs/flutter-apk/app-release.apk"
@@ -354,6 +461,9 @@ build_android_appbundle() {
     
     echo "📦 构建 Android App Bundle..."
     echo "目标输出文件名: $OUTPUT_NAME"
+    
+    # 确保 sqlite3 原生库已下载
+    ensure_sqlite3_libs
     
     # 执行构建
     puro flutter build appbundle --release --no-tree-shake-icons

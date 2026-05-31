@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/pages/files/file_preview_page.dart';
+import 'package:pfm/pages/files/flyfish_viewer_page.dart';
+import 'package:pfm/router/router.dart';
+import 'package:pfm/services/local_storage.dart';
 
 /// 首页 - 最近使用 + 分类浏览
 class HomeIndexPage extends StatefulWidget {
@@ -373,14 +379,81 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
                       );
                     }
                     final file = _files[index];
-                    return ListTile(
-                      leading: Icon(_getFileIcon(file.type.value)),
-                      title: Text(file.name),
-                      subtitle: Text(_formatSize(file.size.toInt())),
-                    );
+                    return _buildFileTile(context, file);
                   },
                 ),
     );
+  }
+
+  Widget _buildFileTile(BuildContext context, File file) {
+    final isImage = file.type.value == 2;
+    final isVideo = file.type.value == 3;
+
+    return ListTile(
+      leading: isImage
+          ? _buildImageThumbnail(file)
+          : Icon(_getFileIcon(file.type.value)),
+      title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(_formatSize(file.size.toInt())),
+      onTap: () => _handleFileTap(context, file),
+      onLongPress: () => _handleFileLongPress(context, file),
+    );
+  }
+
+  Widget _buildImageThumbnail(File file) {
+    final ls = GetIt.I.get<LocalStorage>();
+    final baseUrl = ls.fileServer ?? '';
+    final previewUrl = '$baseUrl/api/file/stream/preview?file_id=${file.id}&size=small';
+    final token = ls.token?.accessToken;
+    final headers = <String, String>{};
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.network(
+        previewUrl,
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        headers: headers,
+        errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 40),
+      ),
+    );
+  }
+
+  void _handleFileTap(BuildContext context, File file) {
+    if (file.type.value == 2) {
+      // 图片：传递所有图片列表支持左右滑动
+      final images = _files.where((f) => f.type.value == 2).toList();
+      final index = images.indexWhere((f) => f.id == file.id);
+      context.push(
+        FilePreviewRoute().location,
+        extra: PreviewArgs(
+          file: file,
+          images: images,
+          initialIndex: index >= 0 ? index : 0,
+        ),
+      );
+    } else if (file.type.value == 3 || file.type.value == 4) {
+      // 视频/音频：使用原生播放器预览
+      context.push(FilePreviewRoute().location, extra: file);
+    } else if (file.type.value == 5 || file.type.value == 6) {
+      // 文档/压缩包：使用 Flyfish Viewer
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FlyfishViewerPage(file: file),
+        ),
+      );
+    } else {
+      // 其他类型：跳转到详情页
+      context.push(FileDetailRoute().location, extra: file);
+    }
+  }
+
+  void _handleFileLongPress(BuildContext context, File file) {
+    context.push(FileDetailRoute().location, extra: file);
   }
 
   IconData _getFileIcon(int type) {

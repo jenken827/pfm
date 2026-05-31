@@ -13,6 +13,7 @@ import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
+import 'package:pfm/pages/files/flyfish_viewer_page.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/utils/utils.dart';
@@ -46,6 +47,24 @@ class _FileView extends StatefulWidget {
 
 class _FileViewState extends State<_FileView> {
   TransferState? _previousTransferState;
+  final ScrollController _scrollController = ScrollController();
+  double _savedScrollOffset = 0;
+  bool _shouldRestoreScroll = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 保存滚动位置并刷新
+  void _saveScrollAndRefresh() {
+    if (_scrollController.hasClients) {
+      _savedScrollOffset = _scrollController.offset;
+    }
+    _shouldRestoreScroll = true;
+    context.read<FileBloc>().add(const FileRefreshEvent());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +85,7 @@ class _FileViewState extends State<_FileView> {
                   t.parentId == currentDirId,
             );
             if (hasCompletedInCurrentDir) {
-              context.read<FileBloc>().add(const FileRefreshEvent());
+              _saveScrollAndRefresh();
             }
           },
         ),
@@ -82,6 +101,21 @@ class _FileViewState extends State<_FileView> {
                 behavior: SnackBarBehavior.floating,
               ),
             );
+          }
+          // 加载完成后恢复滚动位置
+          if (_shouldRestoreScroll &&
+              state.status == FileStateStatus.success) {
+            _shouldRestoreScroll = false;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                _scrollController.jumpTo(
+                  _savedScrollOffset.clamp(
+                    0.0,
+                    _scrollController.position.maxScrollExtent,
+                  ),
+                );
+              }
+            });
           }
         },
         builder: (context, state) {
@@ -131,7 +165,7 @@ class _FileViewState extends State<_FileView> {
         IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: () =>
-              context.read<FileBloc>().add(const FileRefreshEvent()),
+              _saveScrollAndRefresh(),
         ),
         // 搜索按钮
         IconButton(
@@ -209,7 +243,7 @@ class _FileViewState extends State<_FileView> {
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () =>
-                  context.read<FileBloc>().add(const FileRefreshEvent()),
+                  _saveScrollAndRefresh(),
               icon: const Icon(Icons.refresh),
               label: const Text('重试'),
             ),
@@ -324,6 +358,7 @@ class _FileViewState extends State<_FileView> {
         return false;
       },
       child: ListView.builder(
+        controller: _scrollController,
         itemCount: state.files.length + (state.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           // 显示加载更多指示器
@@ -431,27 +466,36 @@ class _FileViewState extends State<_FileView> {
       if (file.type == pbenum.FileType.FOLDER) {
         context.read<FileBloc>().add(FileNavigateEvent(file.id, file.name));
       } else {
-        // 文件则根据类型跳转：预览页或详情页
-        if (_isPreviewable(file)) {
-          // 图片类型传递图片列表和当前索引，支持左右滑动
-          if (file.type == pbenum.FileType.IMAGE) {
-            final images = state.files
-                .where((f) => f.type == pbenum.FileType.IMAGE)
-                .toList();
-            final index = images.indexWhere((f) => f.id == file.id);
-            context.push(
-              FilePreviewRoute().location,
-              extra: PreviewArgs(
-                file: file,
-                images: images,
-                initialIndex: index >= 0 ? index : 0,
-              ),
-            );
-          } else {
-            context.push(FilePreviewRoute().location, extra: file);
-          }
+        // 文件则根据类型跳转
+        if (file.type == pbenum.FileType.IMAGE) {
+          // 图片：传递图片列表支持左右滑动
+          final images = state.files
+              .where((f) => f.type == pbenum.FileType.IMAGE)
+              .toList();
+          final index = images.indexWhere((f) => f.id == file.id);
+          context.push(
+            FilePreviewRoute().location,
+            extra: PreviewArgs(
+              file: file,
+              images: images,
+              initialIndex: index >= 0 ? index : 0,
+            ),
+          );
+        } else if (file.type == pbenum.FileType.VIDEO ||
+            file.type == pbenum.FileType.AUDIO) {
+          // 视频/音频：使用原生播放器预览
+          context.push(FilePreviewRoute().location, extra: file);
+        } else if (file.type == pbenum.FileType.DOCUMENT ||
+            file.type == pbenum.FileType.ARCHIVE) {
+          // 文档/压缩包：使用 Flyfish Viewer
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FlyfishViewerPage(file: file),
+            ),
+          );
         } else {
-          // 跳转到详情页
+          // 其他类型：跳转到详情页
           context.push(FileDetailRoute().location, extra: file);
         }
       }
@@ -1259,7 +1303,7 @@ class _FileViewState extends State<_FileView> {
               if (context.mounted) {
                 if (result.success) {
                   // 成功更新后刷新文件列表
-                  context.read<FileBloc>().add(const FileRefreshEvent());
+                  _saveScrollAndRefresh();
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
@@ -1286,7 +1330,7 @@ class _FileViewState extends State<_FileView> {
         folder: folder,
         onUpdate: () {
           // 刷新文件列表
-          context.read<FileBloc>().add(const FileRefreshEvent());
+          _saveScrollAndRefresh();
         },
       ),
     );
@@ -1358,7 +1402,7 @@ class _FileViewState extends State<_FileView> {
           );
         }
         // 刷新文件列表
-        context.read<FileBloc>().add(const FileRefreshEvent());
+        _saveScrollAndRefresh();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1643,6 +1687,8 @@ class _FileSearchDelegate extends SearchDelegate<String> {
         tooltip: _isTagSearch ? '切换为按文件名搜索' : '切换为按标签搜索',
         onPressed: () {
           _isTagSearch = !_isTagSearch;
+          // 触发 UI 重建
+          showResults(context);
           // 如果已有搜索词，立即重新搜索
           if (query.trim().isNotEmpty) {
             _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));

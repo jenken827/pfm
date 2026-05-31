@@ -23,6 +23,7 @@ func route(mux *http.ServeMux) {
 	healthRoute(mux)
 	telegramWebhookRoute(mux)
 	webdavRoute(mux)
+	fileViewerRoute(mux)
 
 	fileRoute(mux)
 	uploadRoute(mux)
@@ -62,11 +63,26 @@ func fileStreamRoute(mux *http.ServeMux) {
 
 	// 文件历史版本下载
 	mux.HandleFunc("/api/file/history/download", api.DownloadFileHistoryHandler)
+
+	// 原始文件预览（用于 Flyfish Viewer）
+	// 支持两种路径：
+	//   /api/file/preview/raw?file_id=xxx&token=yyy
+	//   /api/file/preview/raw/filename.pdf?file_id=xxx&token=yyy（带文件名，便于 viewer 识别格式）
+	mux.HandleFunc("/api/file/preview/raw", api.RawFilePreviewHandler)
+	mux.HandleFunc("/api/file/preview/raw/", api.RawFilePreviewHandler)
 }
 
 // publicDownloadRoute 公共下载路由（无需认证，签名验证）
 func publicDownloadRoute(mux *http.ServeMux) {
 	mux.HandleFunc("/s/", api.PublicDownloadHandler)
+}
+
+// fileViewerRoute Flyfish Viewer 静态文件路由
+func fileViewerRoute(mux *http.ServeMux) {
+	// 从配置或默认路径加载 file-viewer 静态文件
+	viewerDir := "file-viewer"
+	fs := http.FileServer(http.Dir(viewerDir))
+	mux.Handle("/file-viewer/", http.StripPrefix("/file-viewer/", fs))
 }
 
 // FileRoute 文件服务

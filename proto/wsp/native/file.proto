@@ -49,7 +49,7 @@ message File {
     index: "idx_f_hash,length:10"
   }];
   // 文件类型
-  optional FileType type = 9 [(gorm.field).tag = {not_null: true}];
+  optional FileType type = 9 [(gorm.field).tag = {not_null: true, index: "idx_f_type"}];
   // 文件mime类型
   optional string mime = 10 [(gorm.field).tag = {
     not_null: true

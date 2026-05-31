@@ -61,14 +61,14 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Future<void> _selectTargetFolder() async {
-    final result = await Navigator.push<String>(
+    final result = await Navigator.push<FolderPickResult>(
       context,
       MaterialPageRoute(
         builder: (context) => const FolderPickerPage(),
       ),
     );
     if (result != null) {
-      await _saveConfig(_config.copyWith(targetParentId: result));
+      await _saveConfig(_config.copyWith(targetParentId: result.id));
     }
   }
 

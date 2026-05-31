@@ -288,10 +288,21 @@ class BackgroundService {
     String taskId,
     TaskType taskType,
   ) async {
+    final ls = GetIt.I.get<LocalStorage>();
+    final dbPath = await _storage.getDatabasePath();
+
+    final params = WmTaskParam(
+      taskId: taskId,
+      taskType: taskType,
+      baseUrl: ls.fileServer!,
+      token: ls.token!,
+      dbPath: dbPath,
+    );
+
     await Workmanager().registerOneOffTask(
       taskId,
       taskId,
-      inputData: {'taskId': taskId, 'taskType': taskType.index},
+      inputData: params.toJson(),
       constraints: Constraints(networkType: NetworkType.connected),
     );
 
