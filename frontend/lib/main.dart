@@ -25,6 +25,10 @@ void main() async {
   }
 
   await initTalkerLogger();
+  
+  // 初始化前台服务（Android 保活）
+  await ForegroundServiceManager.init();
+  
   if (kReleaseMode) {
     await Hive.initFlutter('pfm');
   } else {

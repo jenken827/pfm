@@ -214,6 +214,8 @@ class BackgroundService {
 
   /// 直接在主 Isolate 执行上传（I/O 密集型，不阻塞 UI）
   Future<void> _runUpload(String taskId) async {
+    // 有任务开始，启动前台服务保活
+    _updateForegroundNotification();
     try {
       final fmRepo = FmRepository();
       await uploadFile(
@@ -225,14 +227,23 @@ class BackgroundService {
       );
     } catch (e, s) {
       _logger.error('Upload failed: $taskId', e, s);
+      // 异常时确保状态更新为 FAILED，避免卡在 UPLOADING
+      try {
+        await _storage.updateUploadTask(taskId,
+          status: UploadStatus.FAILED,
+          errorMessage: e.toString(),
+        );
+      } catch (_) {}
     } finally {
       _runningUploads.remove(taskId);
+      _updateForegroundNotification();
       await notifyUploadTasksChanged();
     }
   }
 
   /// 直接在主 Isolate 执行下载
   Future<void> _runDownload(String taskId) async {
+    _updateForegroundNotification();
     try {
       final ls = GetIt.I.get<LocalStorage>();
       await downloadFile(
@@ -243,9 +254,33 @@ class BackgroundService {
       );
     } catch (e, s) {
       _logger.error('Download failed: $taskId', e, s);
+      // 异常时确保状态更新为 FAILED
+      try {
+        await _storage.updateDownloadTask(taskId,
+          status: DownloadStatus.failed,
+          errorMessage: e.toString(),
+        );
+      } catch (_) {}
     } finally {
       _runningDownloads.remove(taskId);
+      _updateForegroundNotification();
       await notifyDownloadTasksChanged();
+    }
+  }
+
+  /// 更新前台服务通知，无任务时停止服务
+  void _updateForegroundNotification() {
+    final total = _runningUploads.length + _runningDownloads.length;
+    if (total > 0) {
+      ForegroundServiceManager.start();
+      ForegroundServiceManager.updateNotification(
+        uploading: _runningUploads.length,
+        downloading: _runningDownloads.length,
+        completed: _completedCount,
+        total: _pendingCount + _completedCount + _failedCount,
+      );
+    } else {
+      ForegroundServiceManager.stop();
     }
   }
 

@@ -34,13 +34,18 @@ class _FileLogWriter {
   void write(String message) {
     if (_sink == null) return;
 
-    final timestamp = DateTime.now().toString().substring(11, 23);
-    _sink!.writeln('$timestamp $message');
-    _currentSize += message.length + 1;
+    try {
+      final timestamp = DateTime.now().toString().substring(11, 23);
+      _sink!.writeln('$timestamp $message');
+      _currentSize += message.length + 1;
 
-    // 轮转文件
-    if (_currentSize >= _maxFileSize) {
-      _rotateFiles();
+      // 轮转文件
+      if (_currentSize >= _maxFileSize) {
+        _rotateFiles();
+      }
+    } catch (e) {
+      // sink 已关闭或异常，重置
+      _sink = null;
     }
   }
 
