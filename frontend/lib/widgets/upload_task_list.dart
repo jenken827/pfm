@@ -117,6 +117,9 @@ class UploadTaskList extends StatelessWidget {
                 case 'resume_all':
                   bloc.add(TransferResumeEvent(null));
                   break;
+                case 'retry_all':
+                  bloc.add(TransferRetryAllFailedEvent());
+                  break;
                 case 'clear_completed':
                   bloc.add(TransferClearCompletedEvent());
                   break;
@@ -138,6 +141,15 @@ class UploadTaskList extends StatelessWidget {
                   child: ListTile(
                     leading: Icon(Icons.play_arrow),
                     title: Text('全部继续'),
+                    dense: true,
+                  ),
+                ),
+              if (failedCount > 0)
+                const PopupMenuItem(
+                  value: 'retry_all',
+                  child: ListTile(
+                    leading: Icon(Icons.refresh),
+                    title: Text('重试失败'),
                     dense: true,
                   ),
                 ),

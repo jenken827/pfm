@@ -418,8 +418,28 @@ build_android_apk() {
     
     # 执行构建（使用 ABI 拆分减小体积）
     # sqlite3 hook 首次可能因网络超时失败（~10秒），自动重试即可
+    # 设置代理环境变量（确保 Dart hook 进程能继承）
+    export http_proxy="$HTTP_PROXY"
+    export https_proxy="$HTTPS_PROXY"
+    export HTTP_PROXY="$HTTP_PROXY"
+    export HTTPS_PROXY="$HTTPS_PROXY"
+
+    # 预先运行 pub get 创建 hook 目录
+    puro flutter pub get
+
+    # 强制刷新 sqlite3 缓存（删除旧的 download-* 目录，重新填充）
+    local HOOK_SHARED=".dart_tool/hooks_runner/shared/sqlite3/build"
+    if [ -d "$HOOK_SHARED" ]; then
+        rm -rf "$HOOK_SHARED"/download-* 2>/dev/null
+    fi
+    ensure_sqlite3_libs
+
     if ! puro flutter build apk --release --split-per-abi --no-tree-shake-icons; then
-        echo "⚠️ 构建失败，填充 sqlite3 缓存后重试..."
+        echo "⚠️ 构建失败，再次填充 sqlite3 缓存后重试..."
+        # 再次清理并填充
+        if [ -d "$HOOK_SHARED" ]; then
+            rm -rf "$HOOK_SHARED"/download-* 2>/dev/null
+        fi
         ensure_sqlite3_libs
         puro flutter build apk --release --split-per-abi --no-tree-shake-icons
     fi

@@ -199,4 +199,24 @@ class LocalStorage {
   Future<void> saveSmallFileThreshold(int size) async {
     await _settingsBox.put('smallFileThreshold', size);
   }
+
+  /// 上传并发数，默认 3
+  int get uploadConcurrency {
+    return _settingsBox.get('uploadConcurrency', defaultValue: 3);
+  }
+
+  /// 保存上传并发数
+  Future<void> saveUploadConcurrency(int count) async {
+    await _settingsBox.put('uploadConcurrency', count);
+  }
+
+  /// 下载并发数，默认 3
+  int get downloadConcurrency {
+    return _settingsBox.get('downloadConcurrency', defaultValue: 3);
+  }
+
+  /// 保存下载并发数
+  Future<void> saveDownloadConcurrency(int count) async {
+    await _settingsBox.put('downloadConcurrency', count);
+  }
 }

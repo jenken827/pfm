@@ -102,3 +102,6 @@ class TransferRetryEvent extends TransferEvent {
   TransferRetryEvent(this.taskId);
   final String taskId;
 }
+
+// 重试所有失败的上传任务
+class TransferRetryAllFailedEvent extends TransferEvent {}

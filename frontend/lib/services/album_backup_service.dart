@@ -260,10 +260,13 @@ class AlbumBackupService {
         newPhotos: photos.length,
       );
 
-      // 批量创建上传任务记录（不逐个调度 WorkManager，避免 OOM）
+      // 边写边传：每攒够一批就写库并调度上传，不等全部扫描完
       final bgService = GetIt.I.get<BackgroundService>();
-      final tasks = <UploadTaskRecord>[];
+      const batchSize = 50;
+      var batch = <UploadTaskRecord>[];
       int failed = 0;
+      int created = 0;
+      bool uploadStarted = false;
 
       for (int i = 0; i < photos.length; i++) {
         final photo = photos[i];
@@ -279,7 +282,7 @@ class AlbumBackupService {
           final fileName = photo.title ?? p.basename(file.path);
           final fileSize = await file.length();
 
-          tasks.add(UploadTaskRecord(
+          batch.add(UploadTaskRecord(
             id: const Uuid().v4(),
             filename: fileName,
             filepath: file.path,
@@ -290,10 +293,19 @@ class AlbumBackupService {
             createdAt: DateTime.now(),
           ));
 
-          // 每 50 个更新一次进度，让出主线程保持 UI 响应
-          if (i % 50 == 0) {
-            _updateStatus(uploadedPhotos: i);
-            await Future.delayed(Duration.zero);
+          // 每 batchSize 个写一次库并调度上传
+          if (batch.length >= batchSize) {
+            await bgService.addUploadTasksBatch(batch);
+            created += batch.length;
+            _logger.info('Batch wrote ${batch.length} tasks (total: $created)');
+            if (!uploadStarted) {
+              await bgService.scheduleFirstPendingUpload();
+              uploadStarted = true;
+              _logger.info('Upload started after first batch');
+            }
+            _updateStatus(uploadedPhotos: created);
+            batch = [];
+            await Future.delayed(Duration.zero); // 让出主线程
           }
         } catch (e) {
           _logger.error('Failed to create task for photo: ${photo.id}', e);
@@ -301,21 +313,24 @@ class AlbumBackupService {
         }
       }
 
-      _updateStatus(uploadedPhotos: photos.length);
+      // 写入剩余的
+      if (batch.isNotEmpty) {
+        await bgService.addUploadTasksBatch(batch);
+        created += batch.length;
+        _logger.info('Final batch wrote ${batch.length} tasks (total: $created)');
+      }
 
-      // 批量写入数据库
-      await bgService.addUploadTasksBatch(tasks);
-      _logger.info('Batch created ${tasks.length} upload tasks');
+      // 确保上传已启动
+      if (!uploadStarted && created > 0) {
+        await bgService.scheduleFirstPendingUpload();
+      }
 
-      // 调度任务（timer 会自动维持 3 并发）
-      await bgService.scheduleFirstPendingUpload();
-
-      final uploaded = tasks.length;
+      _updateStatus(uploadedPhotos: created);
 
       // 完成
       _updateStatus(
         status: AlbumBackupStatus.completed,
-        uploadedPhotos: uploaded,
+        uploadedPhotos: created,
         failedPhotos: failed,
         lastBackupTime: DateTime.now(),
       );

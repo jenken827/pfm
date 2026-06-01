@@ -148,38 +148,74 @@ class Sqlite3Storage {
     CREATE INDEX IF NOT EXISTS idx_bfr_hash ON backup_file_records (file_hash);
   ''';
 
-  /// 获取所有任务（异步）
-  Future<List<UploadTaskRecord>> getAllUploadTasksAsync() async {
+  /// 获取所有任务（异步）- 限制数量避免内存溢出
+  Future<List<UploadTaskRecord>> getAllUploadTasksAsync({int limit = 100}) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       orderBy: 'created_at DESC',
+      limit: limit,
     );
     return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
   }
 
-  /// 获取待处理的上传任务（异步）
-  Future<List<UploadTaskRecord>> getPendingUploadTasksAsync() async {
+  /// 按状态获取上传任务（分页）
+  Future<List<UploadTaskRecord>> getUploadTasksByStatus(
+    UploadStatus status, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       where: 'status = ?',
-      whereArgs: [UploadStatus.PENDING.value],
-      orderBy: 'created_at ASC',
+      whereArgs: [status.value],
+      orderBy: 'created_at DESC',
+      limit: limit,
+      offset: offset,
     );
     return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
   }
 
-  /// 获取暂停的上传任务
-  Future<List<UploadTaskRecord>> getPausedUploadTasksAsync() async {
-    final List<Map<String, dynamic>> maps = await _database!.query(
-      uploadTaskTableName,
-      where: 'status = ?',
-      whereArgs: [UploadStatus.PAUSED.value],
-      orderBy: 'created_at ASC',
-    );
-    return maps.map((map) => UploadTaskRecord.fromJson(map)).toList();
+  /// 统计各状态的任务数量
+  Future<Map<UploadStatus, int>> countUploadTasksByStatus() async {
+    final result = <UploadStatus, int>{};
+    for (final status in UploadStatus.values) {
+      final count = await _database!.rawQuery(
+        'SELECT COUNT(*) as cnt FROM $uploadTaskTableName WHERE status = ?',
+        [status.value],
+      );
+      result[status] = count.first['cnt'] as int;
+    }
+    return result;
   }
 
-  /// 获取下一个待处理的上传任务（异步）
+  /// 获取活跃任务数量（PENDING + UPLOADING + HASHING）
+  Future<int> countActiveUploadTasks() async {
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $uploadTaskTableName WHERE status IN (?, ?, ?)',
+      [UploadStatus.PENDING.value, UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
+    );
+    return result.first['cnt'] as int;
+  }
+
+  /// 获取待处理任务数量
+  Future<int> countPendingUploadTasks() async {
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $uploadTaskTableName WHERE status = ?',
+      [UploadStatus.PENDING.value],
+    );
+    return result.first['cnt'] as int;
+  }
+
+  /// 获取正在上传的任务数量
+  Future<int> countUploadingTasks() async {
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $uploadTaskTableName WHERE status IN (?, ?)',
+      [UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
+    );
+    return result.first['cnt'] as int;
+  }
+
+  /// 获取下一个待处理的任务
   Future<UploadTaskRecord?> getNextPendingUploadTaskAsync() async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
@@ -207,8 +243,6 @@ class Sqlite3Storage {
   /// 新增上传任务
   Future<void> addUploadTask(UploadTaskRecord task) async {
     getLogger().info('add new task  $task');
-    final mp = task.toJson();
-    getLogger().info('add new task json $mp');
     await _withRetry(
       () => _database!.insert(
         uploadTaskTableName,
@@ -325,7 +359,7 @@ class Sqlite3Storage {
     String where;
     List<dynamic> whereArgs;
     if (taskId == null) {
-      final tasks = await getPausedUploadTasksAsync();
+      final tasks = await getUploadTasksByStatus(UploadStatus.PAUSED);
       taskIds = tasks.map((t) => t.id).toList();
       where = 'status=?';
       whereArgs = [UploadStatus.PAUSED.value];
@@ -368,13 +402,32 @@ class Sqlite3Storage {
 
   // ========== 下载任务 CRUD ==========
 
-  /// 获取所有下载任务
-  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync() async {
+  /// 获取所有下载任务 - 限制数量避免内存溢出
+  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync({int limit = 100}) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       downloadTaskTableName,
       orderBy: 'created_at DESC',
+      limit: limit,
     );
     return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
+  }
+
+  /// 获取活跃下载任务数量
+  Future<int> countActiveDownloadTasks() async {
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $downloadTaskTableName WHERE status IN (?, ?)',
+      [DownloadStatus.pending.index, DownloadStatus.downloading.index],
+    );
+    return result.first['cnt'] as int;
+  }
+
+  /// 获取正在下载的任务数量
+  Future<int> countDownloadingTasks() async {
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $downloadTaskTableName WHERE status = ?',
+      [DownloadStatus.downloading.index],
+    );
+    return result.first['cnt'] as int;
   }
 
   /// 获取指定下载任务
@@ -490,6 +543,23 @@ class Sqlite3Storage {
       where: 'status = ?',
       whereArgs: [DownloadStatus.paused.index],
       orderBy: 'created_at ASC',
+    );
+    return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
+  }
+
+  /// 按状态获取下载任务（分页）
+  Future<List<DownloadTaskRecord>> getDownloadTasksByStatus(
+    DownloadStatus status, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final List<Map<String, dynamic>> maps = await _database!.query(
+      downloadTaskTableName,
+      where: 'status = ?',
+      whereArgs: [status.index],
+      orderBy: 'created_at DESC',
+      limit: limit,
+      offset: offset,
     );
     return maps.map((map) => DownloadTaskRecord.fromJson(map)).toList();
   }

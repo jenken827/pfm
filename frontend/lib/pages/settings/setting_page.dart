@@ -135,6 +135,15 @@ class SettingPage extends StatelessWidget {
           ),
           const Divider(height: 1),
 
+          // 导出日志
+          _SettingsTile(
+            icon: Icons.bug_report_outlined,
+            title: '导出日志',
+            subtitle: '导出日志文件用于问题分析',
+            onTap: () => _exportLogs(context),
+          ),
+          const Divider(height: 1),
+
           // 关于
           _SettingsTile(
             icon: Icons.info_outline,
@@ -272,34 +281,62 @@ class SettingPage extends StatelessWidget {
     final thresholdController = TextEditingController(
       text: (ls.smallFileThreshold ~/ (1024 * 1024)).toString(),
     );
+    final uploadConcurrencyController = TextEditingController(
+      text: ls.uploadConcurrency.toString(),
+    );
+    final downloadConcurrencyController = TextEditingController(
+      text: ls.downloadConcurrency.toString(),
+    );
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('上传设置'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: chunkSizeController,
-              decoration: const InputDecoration(
-                labelText: '分片大小 (KB)',
-                hintText: '建议 1024-4096（1-4MB）',
-                helperText: '网络不好时建议调小',
+        title: const Text('传输设置'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: chunkSizeController,
+                decoration: const InputDecoration(
+                  labelText: '分片大小 (KB)',
+                  hintText: '建议 1024-4096（1-4MB）',
+                  helperText: '网络不好时建议调小',
+                ),
+                keyboardType: TextInputType.number,
               ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: thresholdController,
-              decoration: const InputDecoration(
-                labelText: '小文件阈值 (MB)',
-                hintText: '低于此大小一次性上传',
-                helperText: '超过此大小使用分片上传',
+              const SizedBox(height: 16),
+              TextField(
+                controller: thresholdController,
+                decoration: const InputDecoration(
+                  labelText: '小文件阈值 (MB)',
+                  hintText: '低于此大小一次性上传',
+                  helperText: '超过此大小使用分片上传',
+                ),
+                keyboardType: TextInputType.number,
               ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: uploadConcurrencyController,
+                decoration: const InputDecoration(
+                  labelText: '上传并发数',
+                  hintText: '建议 1-5',
+                  helperText: '同时上传的任务数量',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: downloadConcurrencyController,
+                decoration: const InputDecoration(
+                  labelText: '下载并发数',
+                  hintText: '建议 1-5',
+                  helperText: '同时下载的任务数量',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -310,12 +347,16 @@ class SettingPage extends StatelessWidget {
             onPressed: () async {
               final chunkKB = int.tryParse(chunkSizeController.text) ?? 2048;
               final thresholdMB = int.tryParse(thresholdController.text) ?? 5;
+              final uploadCon = int.tryParse(uploadConcurrencyController.text) ?? 3;
+              final downloadCon = int.tryParse(downloadConcurrencyController.text) ?? 3;
               await ls.saveUploadChunkSize(chunkKB * 1024);
               await ls.saveSmallFileThreshold(thresholdMB * 1024 * 1024);
+              await ls.saveUploadConcurrency(uploadCon.clamp(1, 10));
+              await ls.saveDownloadConcurrency(downloadCon.clamp(1, 10));
               if (ctx.mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('上传设置已保存')),
+                  const SnackBar(content: Text('传输设置已保存')),
                 );
               }
             },
@@ -324,6 +365,56 @@ class SettingPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _exportLogs(BuildContext context) async {
+    try {
+      final files = await getLogFiles();
+      if (files.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('暂无日志文件')),
+          );
+        }
+        return;
+      }
+
+      // 显示日志文件信息
+      final totalSize = files.fold<int>(0, (sum, f) => sum + f.lengthSync());
+      final sizeStr = totalSize > 1024 * 1024
+          ? '${(totalSize / (1024 * 1024)).toStringAsFixed(1)} MB'
+          : '${(totalSize / 1024).toStringAsFixed(1)} KB';
+
+      if (context.mounted) {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('导出日志'),
+            content: Text('找到 ${files.length} 个日志文件，共 $sizeStr\n\n是否导出？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('导出'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirm == true) {
+          await shareLogFiles();
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
   }
 }
 

@@ -29,6 +29,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferAddDownloadEvent>(_onAddDownload);
     on<TransferTabChangedEvent>(_onTabChanged);
     on<TransferRetryEvent>(_onRetry);
+    on<TransferRetryAllFailedEvent>(_onRetryAllFailed);
   }
 
   final BackgroundService _bgService;
@@ -333,6 +334,18 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
   void _onRetry(TransferRetryEvent event, Emitter<TransferState> emit) {
     _bgService.retryDownload(event.taskId);
+  }
+
+  Future<void> _onRetryAllFailed(
+    TransferRetryAllFailedEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    final failedTasks = state.uploadTasks
+        .where((t) => t.status == UploadStatus.FAILED)
+        .toList();
+    for (final task in failedTasks) {
+      await _bgService.resumeUpload(task.id);
+    }
   }
 
   /// DownloadTaskRecord -> DownloadTaskState 转换
