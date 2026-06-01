@@ -36,6 +36,8 @@ class IsolateConfig {
   final String dbPath;
   final String id;
   final TaskType taskType;
+  final int chunkSize;
+  final int smallFileThreshold;
 
   IsolateConfig({
     required this.id,
@@ -44,6 +46,8 @@ class IsolateConfig {
     required this.token,
     required this.dbPath,
     required this.taskType,
+    this.chunkSize = 2 * 1024 * 1024,
+    this.smallFileThreshold = 5 * 1024 * 1024,
   });
 }
 
@@ -109,7 +113,13 @@ void isolateEntryPoint(IsolateConfig config) async {
       );
       // 判断任务类型，执行对应的方法
       if (msg.taskType == TaskType.upload) {
-        await uploadFile(taskId: msg.taskId, storage: storage, fmRepo: fmRepo);
+        await uploadFile(
+          taskId: msg.taskId,
+          storage: storage,
+          fmRepo: fmRepo,
+          chunkSize: config.chunkSize,
+          smallFileThreshold: config.smallFileThreshold,
+        );
       } else if (msg.taskType == TaskType.download) {
         await downloadFile(
           taskId: msg.taskId,

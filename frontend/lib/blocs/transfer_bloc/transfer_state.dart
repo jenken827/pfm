@@ -37,6 +37,14 @@ class TransferState extends Equatable {
   int get failedUploadCount =>
       uploadTasks.where((t) => t.status == UploadStatus.FAILED).length;
 
+  /// 等待中的上传任务数
+  int get pendingUploadCount =>
+      uploadTasks.where((t) => t.status == UploadStatus.PENDING).length;
+
+  /// 已暂停的上传任务数
+  int get pausedUploadCount =>
+      uploadTasks.where((t) => t.status == UploadStatus.PAUSED).length;
+
   /// 是否有活动的传输任务
   bool get hasActiveTransfers => uploadingCount > 0 || downloadingCount > 0;
 

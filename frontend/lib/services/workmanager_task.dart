@@ -16,6 +16,8 @@ class WmTaskParam {
   final String baseUrl; //服务器地址
   final CasdoorToken token; //令牌
   final String dbPath; //数据库路径
+  final int chunkSize; //分片大小（字节）
+  final int smallFileThreshold; //小文件阈值（字节）
 
   WmTaskParam({
     required this.taskId,
@@ -23,6 +25,8 @@ class WmTaskParam {
     required this.baseUrl,
     required this.token,
     required this.dbPath,
+    this.chunkSize = 2 * 1024 * 1024, // 默认 2MB
+    this.smallFileThreshold = 5 * 1024 * 1024, // 默认 5MB
   });
 
   static WmTaskParam fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,8 @@ class WmTaskParam {
       baseUrl: json['baseUrl'] as String,
       token: CasdoorToken.fromMap(jsonDecode(json['token'])),
       dbPath: json['dbPath'] as String,
+      chunkSize: json['chunkSize'] as int? ?? 2 * 1024 * 1024,
+      smallFileThreshold: json['smallFileThreshold'] as int? ?? 5 * 1024 * 1024,
     );
   }
 
@@ -42,6 +48,8 @@ class WmTaskParam {
       'baseUrl': baseUrl,
       'token': jsonEncode(token.toJson()),
       'dbPath': dbPath,
+      'chunkSize': chunkSize,
+      'smallFileThreshold': smallFileThreshold,
     };
   }
 }
@@ -91,7 +99,13 @@ void callbackDispatcher() {
         final fmRepo = FmRepository.isolateInit(params.baseUrl, params.token);
         // ignore: avoid_print
         print('[WorkManager] FmRepository initialized, starting uploadFile');
-        await uploadFile(taskId: params.taskId, storage: storage, fmRepo: fmRepo);
+        await uploadFile(
+          taskId: params.taskId,
+          storage: storage,
+          fmRepo: fmRepo,
+          chunkSize: params.chunkSize,
+          smallFileThreshold: params.smallFileThreshold,
+        );
         // ignore: avoid_print
         print('[WorkManager] uploadFile completed for task: ${params.taskId}');
       } else if (params.taskType == TaskType.download) {

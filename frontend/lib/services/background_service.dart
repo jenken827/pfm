@@ -326,6 +326,8 @@ class BackgroundService {
         token: ls.token!,
         dbPath: dbPath,
         taskType: taskType,
+        chunkSize: ls.uploadChunkSize,
+        smallFileThreshold: ls.smallFileThreshold,
       ),
     );
 
@@ -340,7 +342,7 @@ class BackgroundService {
   }
 
   /// 使用 WorkManager 调度任务（移动平台）
-  /// workmanager任务只需要注册一次，后续由系统管理，即使后面应用关闭，系统也会自动调度，不需要重复注册
+  /// 使用 WorkManager 调度任务（移动平台）
   Future<void> _scheduleWithWorkManager(
     String taskId,
     TaskType taskType,
@@ -354,6 +356,8 @@ class BackgroundService {
       baseUrl: ls.fileServer!,
       token: ls.token!,
       dbPath: dbPath,
+      chunkSize: ls.uploadChunkSize,
+      smallFileThreshold: ls.smallFileThreshold,
     );
 
     final inputData = params.toJson();

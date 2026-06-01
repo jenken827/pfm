@@ -91,6 +91,8 @@ message InitUploadReq {
   optional bool overwrite = 5;
   // 文件标签（逗号分隔）
   optional string tags = 6;
+  // 客户端指定的分片大小（字节），0 或不传则使用服务端默认值
+  optional uint64 chunk_size = 7;
 }
 
 // 初始化上传响应

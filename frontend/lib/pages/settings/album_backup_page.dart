@@ -68,7 +68,10 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
       ),
     );
     if (result != null) {
-      await _saveConfig(_config.copyWith(targetParentId: result.id));
+      await _saveConfig(_config.copyWith(
+        targetParentId: result.id,
+        targetFolderName: result.name,
+      ));
     }
   }
 
@@ -149,7 +152,9 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
             subtitle: Text(
               _config.targetParentId.isEmpty
                   ? '未设置（将备份到根目录）'
-                  : _config.targetParentId,
+                  : _config.targetFolderName.isEmpty
+                      ? _config.targetParentId
+                      : _config.targetFolderName,
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _selectTargetFolder,

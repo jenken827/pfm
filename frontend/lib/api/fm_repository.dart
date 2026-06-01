@@ -1003,6 +1003,9 @@ class FmRepository {
       if (parentId != null) req.parentId = parentId;
       if (hash != null) req.hash = hash;
       if (tags != null && tags.isNotEmpty) req.tags = tags;
+      if (chunkSize != null && chunkSize > 0) {
+        req.chunkSize = Int64(chunkSize);
+      }
 
       final response = await _uploadDio.post(
         '$_baseUrl/native.UploadService/InitUpload',

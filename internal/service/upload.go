@@ -488,8 +488,11 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFil
 		return nil, mErr
 	}
 
-	// 计算分片大小和总数
+	// 计算分片大小和总数（优先使用客户端指定的分片大小）
 	chunkSize := uint64(DefaultChunkSize)
+	if req.ChunkSize != nil && *req.ChunkSize > 0 {
+		chunkSize = *req.ChunkSize
+	}
 	chunkTotal := uint32((*req.Size + chunkSize - 1) / chunkSize)
 	if chunkTotal == 0 {
 		chunkTotal = 1

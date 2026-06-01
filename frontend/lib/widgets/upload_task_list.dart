@@ -71,7 +71,11 @@ class UploadTaskList extends StatelessWidget {
   }
 
   Widget _buildActionBar(BuildContext context, TransferState state) {
-    final uploadingCount = state.uploadingCount;
+    // 真正在上传中的数量（不含 PENDING）
+    final activeCount = state.uploadTasks
+        .where((t) => t.status == UploadStatus.UPLOADING || t.status == UploadStatus.HASHING)
+        .length;
+    final pendingCount = state.pendingUploadCount;
     final completedCount = state.completedUploadCount;
     final failedCount = state.failedUploadCount;
 
@@ -87,40 +91,67 @@ class UploadTaskList extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // 状态统计
-          if (uploadingCount > 0)
+          // 状态统计（紧凑显示）
+          if (activeCount > 0)
             _buildStatusChip(
               context,
-              '上传中 $uploadingCount',
+              '上传中 $activeCount',
               Theme.of(context).colorScheme.primary,
             ),
+          if (pendingCount > 0)
+            _buildStatusChip(context, '等待中 $pendingCount', Colors.grey),
+          if (failedCount > 0)
+            _buildStatusChip(context, '失败 $failedCount', Colors.red),
           if (completedCount > 0)
             _buildStatusChip(context, '已完成 $completedCount', Colors.green),
-          if (failedCount > 0)
-            _buildStatusChip(
-              context,
-              '失败 $failedCount',
-              Theme.of(context).colorScheme.error,
-            ),
           const Spacer(),
-          // 操作按钮
-          if (uploadingCount > 0) ...[
-            TextButton.icon(
-              onPressed: () =>
-                  context.read<TransferBloc>().add(TransferPauseEvent(null)),
-              icon: const Icon(Icons.pause, size: 18),
-              label: const Text('全部暂停'),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (completedCount > 0 || failedCount > 0)
-            TextButton.icon(
-              onPressed: () => context.read<TransferBloc>().add(
-                TransferClearCompletedEvent(),
-              ),
-              icon: const Icon(Icons.clear_all, size: 18),
-              label: const Text('清除已完成'),
-            ),
+          // 操作菜单
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20),
+            onSelected: (value) {
+              final bloc = context.read<TransferBloc>();
+              switch (value) {
+                case 'pause_all':
+                  bloc.add(TransferPauseEvent(null));
+                  break;
+                case 'resume_all':
+                  bloc.add(TransferResumeEvent(null));
+                  break;
+                case 'clear_completed':
+                  bloc.add(TransferClearCompletedEvent());
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              if (activeCount > 0)
+                const PopupMenuItem(
+                  value: 'pause_all',
+                  child: ListTile(
+                    leading: Icon(Icons.pause),
+                    title: Text('全部暂停'),
+                    dense: true,
+                  ),
+                ),
+              if (pendingCount > 0 || state.pausedUploadCount > 0)
+                const PopupMenuItem(
+                  value: 'resume_all',
+                  child: ListTile(
+                    leading: Icon(Icons.play_arrow),
+                    title: Text('全部继续'),
+                    dense: true,
+                  ),
+                ),
+              if (completedCount > 0 || failedCount > 0)
+                const PopupMenuItem(
+                  value: 'clear_completed',
+                  child: ListTile(
+                    leading: Icon(Icons.clear_all),
+                    title: Text('清除已完成'),
+                    dense: true,
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -128,16 +159,16 @@ class UploadTaskList extends StatelessWidget {
 
   Widget _buildStatusChip(BuildContext context, String label, Color color) {
     return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 11,
           color: color,
           fontWeight: FontWeight.w500,
         ),

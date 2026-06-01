@@ -18,6 +18,7 @@ class AlbumBackupConfig {
   final List<String> backupAlbumIds; // 备份的相册 ID 列表
   final bool backupVideos; // 是否备份视频
   final String targetParentId; // 服务器目标文件夹 ID
+  final String targetFolderName; // 目标文件夹名称（显示用）
 
   const AlbumBackupConfig({
     this.enabled = false,
@@ -25,6 +26,7 @@ class AlbumBackupConfig {
     this.backupAlbumIds = const [],
     this.backupVideos = false,
     this.targetParentId = '',
+    this.targetFolderName = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -33,6 +35,7 @@ class AlbumBackupConfig {
     'backupAlbumIds': backupAlbumIds,
     'backupVideos': backupVideos,
     'targetParentId': targetParentId,
+    'targetFolderName': targetFolderName,
   };
 
   factory AlbumBackupConfig.fromJson(Map<String, dynamic> json) {
@@ -42,6 +45,7 @@ class AlbumBackupConfig {
       backupAlbumIds: List<String>.from(json['backupAlbumIds'] ?? []),
       backupVideos: json['backupVideos'] ?? false,
       targetParentId: json['targetParentId'] ?? '',
+      targetFolderName: json['targetFolderName'] ?? '',
     );
   }
 
@@ -51,6 +55,7 @@ class AlbumBackupConfig {
     List<String>? backupAlbumIds,
     bool? backupVideos,
     String? targetParentId,
+    String? targetFolderName,
   }) {
     return AlbumBackupConfig(
       enabled: enabled ?? this.enabled,
@@ -58,6 +63,7 @@ class AlbumBackupConfig {
       backupAlbumIds: backupAlbumIds ?? this.backupAlbumIds,
       backupVideos: backupVideos ?? this.backupVideos,
       targetParentId: targetParentId ?? this.targetParentId,
+      targetFolderName: targetFolderName ?? this.targetFolderName,
     );
   }
 }
@@ -259,15 +265,43 @@ class AlbumBackupService {
       final tasks = <UploadTaskRecord>[];
       int failed = 0;
 
-      for (final photo in photos) {
+      for (int i = 0; i < photos.length; i++) {
+        final photo = photos[i];
         try {
-          final task = await _createUploadTask(photo);
-          tasks.add(task);
+          // 获取文件路径（必须调用 originFile）
+          final file = await photo.originFile;
+          if (file == null) {
+            _logger.warning('Cannot get file for photo: ${photo.id}');
+            failed++;
+            continue;
+          }
+
+          final fileName = photo.title ?? p.basename(file.path);
+          final fileSize = await file.length();
+
+          tasks.add(UploadTaskRecord(
+            id: const Uuid().v4(),
+            filename: fileName,
+            filepath: file.path,
+            fileSize: fileSize,
+            parentId: _config.targetParentId,
+            status: UploadStatus.PENDING,
+            tags: photo.id,  // 存储资产 ID
+            createdAt: DateTime.now(),
+          ));
+
+          // 每 50 个更新一次进度，让出主线程保持 UI 响应
+          if (i % 50 == 0) {
+            _updateStatus(uploadedPhotos: i);
+            await Future.delayed(Duration.zero);
+          }
         } catch (e) {
           _logger.error('Failed to create task for photo: ${photo.id}', e);
           failed++;
         }
       }
+
+      _updateStatus(uploadedPhotos: photos.length);
 
       // 批量写入数据库
       await bgService.addUploadTasksBatch(tasks);
@@ -336,15 +370,15 @@ class AlbumBackupService {
       allPhotos.addAll(photos);
     }
 
-    // 过滤已备份的照片（一次加载所有任务，避免 O(n²) 查询）
+    // 过滤已备份的照片（用 tags 字段存储资产 ID 来判断）
     final allTasks = await _storage.getAllUploadTasksAsync();
-    final completedFileNames = allTasks
-        .where((t) => t.status == UploadStatus.COMPLETED)
-        .map((t) => t.filename)
+    final backedUpAssetIds = allTasks
+        .where((t) => t.status == UploadStatus.COMPLETED && t.tags != null)
+        .map((t) => t.tags!)
         .toSet();
 
     final photosToBackup = allPhotos
-        .where((photo) => !completedFileNames.contains(photo.id))
+        .where((photo) => !backedUpAssetIds.contains(photo.id))
         .toList();
 
     return photosToBackup;
@@ -362,7 +396,7 @@ class AlbumBackupService {
     final fileName = p.basename(file.path);
     final fileSize = await file.length();
 
-    // 创建上传任务
+    // 创建上传任务（tags 存储资产 ID 用于去重）
     return UploadTaskRecord(
       id: const Uuid().v4(),
       filename: fileName,
@@ -370,6 +404,7 @@ class AlbumBackupService {
       fileSize: fileSize,
       parentId: _config.targetParentId,
       status: UploadStatus.PENDING,
+      tags: photo.id,  // 存储资产 ID
       createdAt: DateTime.now(),
     );
   }

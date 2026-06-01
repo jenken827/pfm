@@ -126,6 +126,15 @@ class SettingPage extends StatelessWidget {
             const Divider(height: 1),
           ],
 
+          // 上传设置
+          _SettingsTile(
+            icon: Icons.tune_outlined,
+            title: '上传设置',
+            subtitle: '分片大小和并发数',
+            onTap: () => _showUploadSettingsDialog(context),
+          ),
+          const Divider(height: 1),
+
           // 关于
           _SettingsTile(
             icon: Icons.info_outline,
@@ -249,6 +258,68 @@ class SettingPage extends StatelessWidget {
               }
             },
             child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUploadSettingsDialog(BuildContext context) {
+    final ls = GetIt.I.get<LocalStorage>();
+    final chunkSizeController = TextEditingController(
+      text: (ls.uploadChunkSize ~/ 1024).toString(),
+    );
+    final thresholdController = TextEditingController(
+      text: (ls.smallFileThreshold ~/ (1024 * 1024)).toString(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('上传设置'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: chunkSizeController,
+              decoration: const InputDecoration(
+                labelText: '分片大小 (KB)',
+                hintText: '建议 1024-4096（1-4MB）',
+                helperText: '网络不好时建议调小',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: thresholdController,
+              decoration: const InputDecoration(
+                labelText: '小文件阈值 (MB)',
+                hintText: '低于此大小一次性上传',
+                helperText: '超过此大小使用分片上传',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final chunkKB = int.tryParse(chunkSizeController.text) ?? 2048;
+              final thresholdMB = int.tryParse(thresholdController.text) ?? 5;
+              await ls.saveUploadChunkSize(chunkKB * 1024);
+              await ls.saveSmallFileThreshold(thresholdMB * 1024 * 1024);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('上传设置已保存')),
+                );
+              }
+            },
+            child: const Text('保存'),
           ),
         ],
       ),

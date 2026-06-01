@@ -48,6 +48,8 @@ Future<void> uploadFile({
   required String taskId,
   required Sqlite3Storage storage,
   required FmRepository fmRepo,
+  int chunkSize = 2 * 1024 * 1024,
+  int smallFileThreshold = 5 * 1024 * 1024,
 }) async {
   final l = getLogger();
   // 获取任务记录
@@ -70,8 +72,6 @@ Future<void> uploadFile({
     // 更新状态为上传中
     await storage.updateUploadTask(task.id, status: UploadStatus.UPLOADING);
 
-    // 检查文件大小，决定使用小文件上传还是分片上传
-    const smallFileThreshold = 5 * 1024 * 1024; // 5MB（降低阈值减少并发内存占用）
     final fileSize = task.fileSize;
 
     if (fileSize <= smallFileThreshold) {
@@ -134,6 +134,7 @@ Future<void> uploadFile({
           size: task.fileSize,
           hash: task.fileHash!,
           parentId: task.parentId,
+          chunkSize: chunkSize,
           overwrite: task.overwrite,
           tags: task.tags,
         ),
@@ -150,15 +151,9 @@ Future<void> uploadFile({
       }
       final data = result.data!;
 
-      final uploadId = data.uploadId.toString();
-      l.info(
-        'InitUpload result: uploadId=$uploadId, '
-        'chunkTotal=${data.chunkTotal}, chunkSize=${data.chunkSize}, '
-        'exists=${data.exists}, uploadedChunks=${data.uploadedChunks}',
-      );
-
-      // 检查是否秒传（exists 表示文件已存在）
+      // 先检查是否秒传（exists 表示文件已存在，此时 uploadId 为 null）
       if (data.exists) {
+        l.info('File uploaded instantly (instant upload)');
         await storage.updateUploadTask(
           task.id,
           status: UploadStatus.COMPLETED,
@@ -166,6 +161,14 @@ Future<void> uploadFile({
         );
         return;
       }
+
+      final uploadId = data.uploadId.toString();
+      l.info(
+        'InitUpload result: uploadId=$uploadId, '
+        'chunkTotal=${data.chunkTotal}, chunkSize=${data.chunkSize}, '
+        'uploadedChunks=${data.uploadedChunks}',
+      );
+
       task.uploadId = uploadId;
       task.chunkTotal = data.chunkTotal;
       task.chunkSize = data.chunkSize.toInt();
@@ -185,7 +188,7 @@ Future<void> uploadFile({
     // 单线程顺序上传分片
     final file = io.File(task.filepath);
     final totalChunks = task.chunkTotal;
-    final chunkSize = task.chunkSize;
+    final serverChunkSize = task.chunkSize;
     final bitmap = uploadedChunks;
 
     // 已上传字节数（从task中恢复）
@@ -208,8 +211,8 @@ Future<void> uploadFile({
       } else {
         // 根据已上传的分片计算实际上传的字节数
         realUploadedBytes += i == totalChunks - 1
-            ? task.fileSize - chunkSize * (totalChunks - 1)
-            : chunkSize;
+            ? task.fileSize - serverChunkSize * (totalChunks - 1)
+            : serverChunkSize;
       }
     }
 
@@ -241,10 +244,10 @@ Future<void> uploadFile({
         }
 
         // 读取分片数据
-        final offset = chunkIndex * chunkSize;
+        final offset = chunkIndex * serverChunkSize;
         final remainingBytes = task.fileSize - offset;
-        final currentChunkSize = remainingBytes > chunkSize
-            ? chunkSize
+        final currentChunkSize = remainingBytes > serverChunkSize
+            ? serverChunkSize
             : remainingBytes;
 
         await raf.setPosition(offset);
@@ -269,8 +272,8 @@ Future<void> uploadFile({
               lastUploadedBytes = sent;
               deltaUploadedBytes += delta;
               final cs = chunkIndex != totalChunks - 1
-                  ? chunkSize
-                  : task.fileSize - chunkSize * (totalChunks - 1);
+                  ? serverChunkSize
+                  : task.fileSize - serverChunkSize * (totalChunks - 1);
               if (sent < cs) {
                 realUploadedBytes = initUploadedBytes + sent;
               } else if (realUploadedBytes < initUploadedBytes + cs) {

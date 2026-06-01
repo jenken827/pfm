@@ -179,4 +179,24 @@ class LocalStorage {
   Future<void> saveContactBackupConfig(ContactBackupConfig config) async {
     await _settingsBox.put('contactBackupConfig', config.toJson());
   }
+
+  /// 上传分片大小（字节），默认 2MB
+  int get uploadChunkSize {
+    return _settingsBox.get('uploadChunkSize', defaultValue: 2 * 1024 * 1024);
+  }
+
+  /// 保存上传分片大小
+  Future<void> saveUploadChunkSize(int size) async {
+    await _settingsBox.put('uploadChunkSize', size);
+  }
+
+  /// 小文件上传阈值（字节），默认 5MB
+  int get smallFileThreshold {
+    return _settingsBox.get('smallFileThreshold', defaultValue: 5 * 1024 * 1024);
+  }
+
+  /// 保存小文件上传阈值
+  Future<void> saveSmallFileThreshold(int size) async {
+    await _settingsBox.put('smallFileThreshold', size);
+  }
 }

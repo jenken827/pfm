@@ -340,21 +340,25 @@ ensure_sqlite3_libs() {
         fi
     done
     
-    # 第二步：检查 hook 目录，找到需要填充的下载目录
-    # hook 目录 hash 和下载目录 hash 是动态生成的，不能硬编码
-    # 策略：查找所有含 .tmp 文件的目录（构建失败时创建的），替换为真实文件
+    # 第二步：填充所有 download-* 目录（不管有没有 .tmp 文件）
+    # hook 目录 hash 每次都变，策略：给所有 download-* 目录都复制
     local fixed=0
-    for tmp_file in $(find "$HOOK_SHARED" -name "libsqlite3.so.tmp" 2>/dev/null); do
-        local download_dir=$(dirname "$tmp_file")
-        # 根据 hook 的 target_architecture 确定用哪个文件
-        local hook_id=$(basename "$(dirname "$(dirname "$tmp_file")")" 2>/dev/null)
+    for download_dir in "$HOOK_SHARED"/download-*/; do
+        [ -d "$download_dir" ] || continue
         
-        # 尝试从最近的 hook input.json 获取架构
-        local arch="arm64"  # 默认 arm64
+        # 如果已有 libsqlite3.so 且大小正常，跳过
+        if [ -f "$download_dir/libsqlite3.so" ] && [ -s "$download_dir/libsqlite3.so" ]; then
+            continue
+        fi
+        
+        # 删除可能的 .tmp 文件
+        rm -f "$download_dir"/*.tmp 2>/dev/null
+        
+        # 默认用 arm64（最常见），检查 input.json 确定架构
+        local arch="arm64"
         for hook_dir in .dart_tool/hooks_runner/sqlite3/*/; do
-            if grep -q "arm64" "$hook_dir/input.json" 2>/dev/null; then
-                arch="arm64"
-            elif grep -q "\"arm\"" "$hook_dir/input.json" 2>/dev/null; then
+            [ -d "$hook_dir" ] || continue
+            if grep -q "\"arm\"" "$hook_dir/input.json" 2>/dev/null; then
                 arch="arm"
             elif grep -q "x64" "$hook_dir/input.json" 2>/dev/null; then
                 arch="x64"
@@ -363,7 +367,6 @@ ensure_sqlite3_libs() {
         
         local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
         if [ -f "$src_file" ]; then
-            rm -f "$tmp_file"
             cp "$src_file" "$download_dir/libsqlite3.so"
             echo "📋 已填充 $arch 到 $(basename "$download_dir")"
             fixed=$((fixed + 1))
@@ -684,9 +687,12 @@ case "$ACTION" in
         update_build_number
         replace_commit_hash_in_about
         puro flutter pub get
+        # 构建失败也要恢复文件，用 trap 确保清理
+        trap 'restore_build_number; restore_commit_hash_in_about' EXIT
         run_flutter_build "$PLATFORM"
         restore_build_number
         restore_commit_hash_in_about
+        trap - EXIT
         ;;
 
     all|"")
@@ -697,9 +703,12 @@ case "$ACTION" in
         generate_icons
         generate_splash
         run_build_runner
+        # 构建失败也要恢复文件，用 trap 确保清理
+        trap 'restore_build_number; restore_commit_hash_in_about' EXIT
         run_flutter_build "$PLATFORM"
         restore_build_number
         restore_commit_hash_in_about
+        trap - EXIT
         echo "✅ 所有构建任务已完成！"
         ;;
 
