@@ -271,21 +271,42 @@ class AlbumBackupService {
       for (int i = 0; i < photos.length; i++) {
         final photo = photos[i];
         try {
-          // 获取文件路径（必须调用 originFile）
-          final file = await photo.originFile;
-          if (file == null) {
-            _logger.warning('Cannot get file for photo: ${photo.id}');
-            failed++;
-            continue;
+          // 优先用 relativePath + title 构造路径（避免慢速 originFile 调用）
+          String filePath;
+          int fileSize;
+          
+          if (photo.relativePath != null && photo.title != null) {
+            filePath = '${photo.relativePath}${photo.title}';
+            // 尝试用 File 获取大小，失败则用 originFile
+            try {
+              fileSize = await File(filePath).length();
+            } catch (_) {
+              final file = await photo.originFile;
+              if (file == null) {
+                _logger.warning('Cannot get file for photo: ${photo.id}');
+                failed++;
+                continue;
+              }
+              filePath = file.path;
+              fileSize = await file.length();
+            }
+          } else {
+            final file = await photo.originFile;
+            if (file == null) {
+              _logger.warning('Cannot get file for photo: ${photo.id}');
+              failed++;
+              continue;
+            }
+            filePath = file.path;
+            fileSize = await file.length();
           }
 
-          final fileName = photo.title ?? p.basename(file.path);
-          final fileSize = await file.length();
+          final fileName = photo.title ?? p.basename(filePath);
 
           batch.add(UploadTaskRecord(
             id: const Uuid().v4(),
             filename: fileName,
-            filepath: file.path,
+            filepath: filePath,
             fileSize: fileSize,
             parentId: _config.targetParentId,
             status: UploadStatus.PENDING,

@@ -38,6 +38,7 @@ class IsolateConfig {
   final TaskType taskType;
   final int chunkSize;
   final int smallFileThreshold;
+  final String logDir; // 日志目录路径（主 Isolate 传入，避免 platform channel）
 
   IsolateConfig({
     required this.id,
@@ -46,6 +47,7 @@ class IsolateConfig {
     required this.token,
     required this.dbPath,
     required this.taskType,
+    required this.logDir,
     this.chunkSize = 2 * 1024 * 1024,
     this.smallFileThreshold = 5 * 1024 * 1024,
   });
@@ -81,8 +83,8 @@ void handleCommandsToIsolate(dynamic message, SendPort sendPort) {}
 /// Isolate 入口点（桌面平台）
 @pragma('vm:entry-point')
 void isolateEntryPoint(IsolateConfig config) async {
-  // 预先初始化后台 Logger 单例
-  initTalkerLogger();
+  // 预先初始化后台 Logger 单例（传入 logDir 避免 platform channel）
+  initTalkerLogger(isBackground: true, logDirPath: config.logDir);
 
   final sendPort = config.sendPort;
   // 初始化存储

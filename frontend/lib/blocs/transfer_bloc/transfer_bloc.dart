@@ -52,6 +52,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
           // 只有当有新的上传完成时才更新快照
           completedUploadCountSnapshot:
               hasNewCompleted ? newCompletedCount : oldCompletedCount,
+          // 从数据库获取真实计数
+          dbUploadingCount: _bgService.uploadingCount,
+          dbPendingCount: _bgService.pendingCount,
+          dbCompletedCount: _bgService.completedCount,
+          dbFailedCount: _bgService.failedCount,
+          dbDownloadingCount: _bgService.downloadingCount,
         );
       },
     );

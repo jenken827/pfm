@@ -72,12 +72,10 @@ class UploadTaskList extends StatelessWidget {
 
   Widget _buildActionBar(BuildContext context, TransferState state) {
     // 真正在上传中的数量（不含 PENDING）
-    final activeCount = state.uploadTasks
-        .where((t) => t.status == UploadStatus.UPLOADING || t.status == UploadStatus.HASHING)
-        .length;
-    final pendingCount = state.pendingUploadCount;
-    final completedCount = state.completedUploadCount;
-    final failedCount = state.failedUploadCount;
+    final activeCount = state.dbUploadingCount;
+    final pendingCount = state.dbPendingCount;
+    final completedCount = state.dbCompletedCount;
+    final failedCount = state.dbFailedCount;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

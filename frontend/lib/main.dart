@@ -24,7 +24,7 @@ void main() async {
     await DesktopTray.init();
   }
 
-  initTalkerLogger();
+  await initTalkerLogger();
   if (kReleaseMode) {
     await Hive.initFlutter('pfm');
   } else {

@@ -10,6 +10,12 @@ class TransferState extends Equatable {
   final List<DownloadTaskState> downloadTasks;
   final int fakeStatus;
   final int completedUploadCountSnapshot;
+  // 从数据库获取的真实计数（不受 100 条限制）
+  final int dbUploadingCount;
+  final int dbPendingCount;
+  final int dbCompletedCount;
+  final int dbFailedCount;
+  final int dbDownloadingCount;
 
   const TransferState({
     this.currentTab = TransferTab.upload,
@@ -17,6 +23,11 @@ class TransferState extends Equatable {
     this.downloadTasks = const [],
     this.fakeStatus = 0,
     this.completedUploadCountSnapshot = 0,
+    this.dbUploadingCount = 0,
+    this.dbPendingCount = 0,
+    this.dbCompletedCount = 0,
+    this.dbFailedCount = 0,
+    this.dbDownloadingCount = 0,
   });
 
   bool get isUpload => currentTab == TransferTab.upload;
@@ -64,6 +75,11 @@ class TransferState extends Equatable {
     List<DownloadTaskState>? downloadTasks,
     int? fakeStatus,
     int? completedUploadCountSnapshot,
+    int? dbUploadingCount,
+    int? dbPendingCount,
+    int? dbCompletedCount,
+    int? dbFailedCount,
+    int? dbDownloadingCount,
   }) {
     return TransferState(
       currentTab: currentTab ?? this.currentTab,
@@ -72,6 +88,11 @@ class TransferState extends Equatable {
       fakeStatus: fakeStatus ?? this.fakeStatus,
       completedUploadCountSnapshot:
           completedUploadCountSnapshot ?? this.completedUploadCountSnapshot,
+      dbUploadingCount: dbUploadingCount ?? this.dbUploadingCount,
+      dbPendingCount: dbPendingCount ?? this.dbPendingCount,
+      dbCompletedCount: dbCompletedCount ?? this.dbCompletedCount,
+      dbFailedCount: dbFailedCount ?? this.dbFailedCount,
+      dbDownloadingCount: dbDownloadingCount ?? this.dbDownloadingCount,
     );
   }
 
@@ -82,6 +103,11 @@ class TransferState extends Equatable {
     downloadTasks,
     fakeStatus,
     completedUploadCountSnapshot,
+    dbUploadingCount,
+    dbPendingCount,
+    dbCompletedCount,
+    dbFailedCount,
+    dbDownloadingCount,
   ];
 }
 

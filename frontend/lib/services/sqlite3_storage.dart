@@ -188,6 +188,25 @@ class Sqlite3Storage {
     return result;
   }
 
+  /// 一次查询获取所有状态计数（减少锁竞争）
+  Future<Map<String, int>> countAllUploadTasks() async {
+    final result = await _database!.rawQuery(
+      '''SELECT 
+        SUM(CASE WHEN status IN (${UploadStatus.UPLOADING.value}, ${UploadStatus.HASHING.value}) THEN 1 ELSE 0 END) as uploading,
+        SUM(CASE WHEN status = ${UploadStatus.PENDING.value} THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = ${UploadStatus.COMPLETED.value} THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = ${UploadStatus.FAILED.value} THEN 1 ELSE 0 END) as failed
+      FROM $uploadTaskTableName''',
+    );
+    final row = result.first;
+    return {
+      'uploading': (row['uploading'] as int?) ?? 0,
+      'pending': (row['pending'] as int?) ?? 0,
+      'completed': (row['completed'] as int?) ?? 0,
+      'failed': (row['failed'] as int?) ?? 0,
+    };
+  }
+
   /// 获取活跃任务数量（PENDING + UPLOADING + HASHING）
   Future<int> countActiveUploadTasks() async {
     final result = await _database!.rawQuery(
@@ -213,6 +232,15 @@ class Sqlite3Storage {
       [UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
     );
     return result.first['cnt'] as int;
+  }
+
+  /// 重置卡在 UPLOADING/HASHING 状态的任务为 PENDING（app 崩溃/中断导致）
+  Future<int> resetStuckUploadTasks() async {
+    final result = await _database!.rawUpdate(
+      'UPDATE $uploadTaskTableName SET status = ?, upload_id = NULL WHERE status IN (?, ?)',
+      [UploadStatus.PENDING.value, UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
+    );
+    return result;
   }
 
   /// 获取下一个待处理的任务
@@ -251,6 +279,27 @@ class Sqlite3Storage {
       ),
     );
     getLogger().debug('Saved task: ${task.id}, status: ${task.status}');
+  }
+
+  /// 批量插入上传任务（每 5 条 yield 一次让出事件循环）
+  Future<void> addUploadTasksBatch(List<UploadTaskRecord> tasks) async {
+    if (tasks.isEmpty) return;
+
+    for (int i = 0; i < tasks.length; i++) {
+      try {
+        await _database!.insert(
+          uploadTaskTableName,
+          tasks[i].toJson(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } catch (e) {
+        getLogger().error('Failed to insert task: ${tasks[i].id}', e);
+      }
+      // 每 5 条让出事件循环，允许 timer 和上传任务执行
+      if (i % 5 == 4) {
+        await Future.delayed(Duration.zero);
+      }
+    }
   }
 
   /// 更新上传任务

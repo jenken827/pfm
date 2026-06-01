@@ -90,10 +90,16 @@ class _FileLogObserver extends TalkerObserver {
   }
 }
 
-Future<void> initTalkerLogger({bool isBackground = false}) async {
+Future<void> initTalkerLogger({bool isBackground = false, String? logDirPath}) async {
   // 初始化日志目录
-  final appDir = await getApplicationDocumentsDirectory();
-  _logDir = Directory('${appDir.path}/logs');
+  Directory logDir;
+  if (logDirPath != null) {
+    logDir = Directory(logDirPath);
+  } else {
+    final appDir = await getApplicationDocumentsDirectory();
+    logDir = Directory('${appDir.path}/logs');
+  }
+  _logDir = logDir;
   if (!await _logDir!.exists()) {
     await _logDir!.create(recursive: true);
   }

@@ -3,6 +3,8 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pfm/api/api.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/services/services.dart';
@@ -55,9 +57,31 @@ class BackgroundService {
     return ls.downloadConcurrency;
   }
 
+  /// 公开的计数 getter（供 UI 使用）
+  /// uploadingCount 用 _runningUploads.length，避免统计到旧的卡住任务
+  int get uploadingCount => _runningUploads.length;
+  int get pendingCount => _pendingCount;
+  int get completedCount => _completedCount;
+  int get failedCount => _failedCount;
+  int get downloadingCount => _runningDownloads.length;
+
   /// 已调度但尚未开始执行的任务 ID（防止重复调度）
-  final Set<String> _scheduledUploadIds = {};
-  final Set<String> _scheduledDownloadIds = {};
+  final Map<String, DateTime> _scheduledUploadIds = {};
+  final Map<String, DateTime> _scheduledDownloadIds = {};
+
+  /// 当前正在执行的任务 ID（用于并发控制）
+  final Set<String> _runningUploads = {};
+  final Set<String> _runningDownloads = {};
+
+  /// timer 是否正在执行（防止重入）
+  bool _timerRunning = false;
+
+  /// 上传/下载任务计数（从数据库获取，用于 UI 状态统计）
+  int _uploadingCount = 0;
+  int _pendingCount = 0;
+  int _completedCount = 0;
+  int _failedCount = 0;
+  int _downloadingCount = 0;
 
   final Map<String, IsolateInfo> _uploadIsolates = {};
 
@@ -85,6 +109,9 @@ class BackgroundService {
     final storage = await Sqlite3Storage.instance();
     _instance = BackgroundService._(storage);
 
+    // 启动时重置卡在 UPLOADING/HASHING 状态的旧任务为 PENDING
+    await _instance!._resetStuckTasks();
+
     _instance!._syncTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
       await _instance!._timerHandler(timer);
     });
@@ -92,93 +119,83 @@ class BackgroundService {
     return _instance!;
   }
 
+  /// 重置卡在 UPLOADING/HASHING 状态的旧任务（app 崩溃/中断导致）
+  Future<void> _resetStuckTasks() async {
+    final stuckCount = await storage.resetStuckUploadTasks();
+    if (stuckCount > 0) {
+      _logger.info('Reset $stuckCount stuck UPLOADING tasks to PENDING');
+    }
+  }
+
   Future<void> _timerHandler(Timer timer) async {
-    // 使用计数方法，不加载全部任务到内存
-    final uploadingCount = await storage.countUploadingTasks();
-    final pendingCount = await storage.countPendingUploadTasks();
-    final downloadingCount = await storage.countDownloadingTasks();
-    final activeDownloadCount = await storage.countActiveDownloadTasks();
+    // 防止重入：上一次还没执行完就跳过
+    if (_timerRunning) {
+      _logger.debug('Timer: skipped (previous still running)');
+      return;
+    }
+    _timerRunning = true;
+    try {
+      await _timerHandlerInner(timer);
+    } finally {
+      _timerRunning = false;
+    }
+  }
+
+  Future<void> _timerHandlerInner(Timer timer) async {
+    // 一次查询获取所有计数（减少数据库锁竞争）
+    final counts = await storage.countAllUploadTasks();
+    final uploadingCount = counts['uploading'] ?? 0;
+    final pendingCount = counts['pending'] ?? 0;
+    final completedCount = counts['completed'] ?? 0;
+    final failedCount = counts['failed'] ?? 0;
+
+    // 更新计数缓存
+    _uploadingCount = uploadingCount;
+    _pendingCount = pendingCount;
+    _completedCount = completedCount;
+    _failedCount = failedCount;
+
+    // 清理已完成的运行任务（_runUpload/_runDownload 的 finally 块会 remove）
 
     _logger.info(
       'Timer: uploading=$uploadingCount, pending=$pendingCount, '
-      'downloading=$downloadingCount, scheduled=${_scheduledUploadIds.length}/${_scheduledDownloadIds.length}',
+      'downloading=$downloadingCount, running=${_runningUploads.length}/${_runningDownloads.length}',
     );
 
-    // 移动端并发调度：只加载需要调度的 pending 任务
-    if (isWorkManagerSupported) {
-      // 上传调度
-      final canScheduleUpload = _maxUploadConcurrency - uploadingCount - _scheduledUploadIds.length;
-      _logger.info('Timer: canScheduleUpload=$canScheduleUpload (max=${_maxUploadConcurrency}, uploading=$uploadingCount, scheduled=${_scheduledUploadIds.length})');
+    // 上传调度（直接在主 Isolate 运行，上传是 I/O 密集型不阻塞 UI）
+    {
+      final canScheduleUpload = _maxUploadConcurrency - _runningUploads.length;
+      _logger.info('Timer: canScheduleUpload=$canScheduleUpload (max=${_maxUploadConcurrency}, running=${_runningUploads.length})');
 
       if (canScheduleUpload > 0 && pendingCount > 0) {
-        // 只加载需要调度的任务（排除已调度的）
         final pendingTasks = await storage.getUploadTasksByStatus(
           UploadStatus.PENDING,
           limit: canScheduleUpload,
         );
-        final toSchedule = pendingTasks
-            .where((t) => !_scheduledUploadIds.contains(t.id))
-            .take(canScheduleUpload)
-            .toList();
 
-        _logger.info('Timer: found ${pendingTasks.length} pending tasks, ${toSchedule.length} to schedule');
+        _logger.info('Timer: found ${pendingTasks.length} pending tasks to schedule');
 
-        for (final task in toSchedule) {
-          _logger.info('Timer: scheduling upload ${task.id} (${task.filename})');
-          _scheduledUploadIds.add(task.id);
-          try {
-            await _scheduleWithWorkManager(task.id, TaskType.upload);
-            _logger.info('Timer: successfully scheduled ${task.id}');
-          } catch (e) {
-            _logger.error('Timer: failed to schedule ${task.id}: $e');
-            _scheduledUploadIds.remove(task.id);
-          }
+        for (final task in pendingTasks.take(canScheduleUpload)) {
+          _logger.info('Timer: starting upload ${task.id} (${task.filename})');
+          _runningUploads.add(task.id);
+          _runUpload(task.id); // fire-and-forget, finally 块会清理
         }
       }
-
-      // 清理已开始执行或已结束的调度记录
-      _scheduledUploadIds.removeWhere((id) {
-        // 检查任务是否还在 pending 状态
-        return !_scheduledUploadIds.contains(id); // 简化：如果不在已调度列表中就清理
-      });
-      // 更准确的清理：查询已调度任务的当前状态
-      final scheduledToRemove = <String>[];
-      for (final id in _scheduledUploadIds) {
-        final task = await storage.getUploadTaskAsync(id);
-        if (task == null || task.status != UploadStatus.PENDING) {
-          scheduledToRemove.add(id);
-        }
-      }
-      _scheduledUploadIds.removeAll(scheduledToRemove);
 
       // 下载调度
-      final canScheduleDownload = _maxDownloadConcurrency - downloadingCount - _scheduledDownloadIds.length;
-      if (canScheduleDownload > 0 && activeDownloadCount > downloadingCount) {
+      final canScheduleDownload = _maxDownloadConcurrency - _runningDownloads.length;
+      if (canScheduleDownload > 0 && downloadingCount > 0) {
         final pendingDownloads = await storage.getDownloadTasksByStatus(
           DownloadStatus.pending,
           limit: canScheduleDownload,
         );
-        final toSchedule = pendingDownloads
-            .where((t) => !_scheduledDownloadIds.contains(t.id))
-            .take(canScheduleDownload)
-            .toList();
 
-        for (final task in toSchedule) {
-          getLogger().info('Scheduling download: ${task.id} ($downloadingCount/${_maxDownloadConcurrency} active)');
-          _scheduledDownloadIds.add(task.id);
-          await _scheduleWithWorkManager(task.id, TaskType.download);
+        for (final task in pendingDownloads.take(canScheduleDownload)) {
+          _logger.info('Timer: starting download ${task.id}');
+          _runningDownloads.add(task.id);
+          _runDownload(task.id); // fire-and-forget
         }
       }
-
-      // 清理已开始执行或已结束的下载调度记录
-      final downloadToRemove = <String>[];
-      for (final id in _scheduledDownloadIds) {
-        final task = await storage.getDownloadTaskAsync(id);
-        if (task == null || task.status != DownloadStatus.pending) {
-          downloadToRemove.add(id);
-        }
-      }
-      _scheduledDownloadIds.removeAll(downloadToRemove);
     }
 
     // 定期通知 UI 更新（使用分页加载的任务）
@@ -187,10 +204,48 @@ class BackgroundService {
     _uploadTaskController.add(recentUploads);
     _downloadTaskController.add(recentDownloads);
 
-    if (uploadingCount == 0 && pendingCount == 0 && downloadingCount == 0) {
+    if (uploadingCount == 0 && pendingCount == 0 && downloadingCount == 0 &&
+        _runningUploads.isEmpty && _runningDownloads.isEmpty) {
       getLogger().debug('timer: no active tasks, stopping timer');
       timer.cancel();
       _syncTimer = null;
+    }
+  }
+
+  /// 直接在主 Isolate 执行上传（I/O 密集型，不阻塞 UI）
+  Future<void> _runUpload(String taskId) async {
+    try {
+      final fmRepo = FmRepository();
+      await uploadFile(
+        taskId: taskId,
+        storage: _storage,
+        fmRepo: fmRepo,
+        chunkSize: GetIt.I.get<LocalStorage>().uploadChunkSize,
+        smallFileThreshold: GetIt.I.get<LocalStorage>().smallFileThreshold,
+      );
+    } catch (e, s) {
+      _logger.error('Upload failed: $taskId', e, s);
+    } finally {
+      _runningUploads.remove(taskId);
+      await notifyUploadTasksChanged();
+    }
+  }
+
+  /// 直接在主 Isolate 执行下载
+  Future<void> _runDownload(String taskId) async {
+    try {
+      final ls = GetIt.I.get<LocalStorage>();
+      await downloadFile(
+        taskId: taskId,
+        storage: _storage,
+        baseUrl: ls.fileServer!,
+        token: ls.token!,
+      );
+    } catch (e, s) {
+      _logger.error('Download failed: $taskId', e, s);
+    } finally {
+      _runningDownloads.remove(taskId);
+      await notifyDownloadTasksChanged();
     }
   }
 
@@ -238,13 +293,18 @@ class BackgroundService {
     await scheduleUpload(task.id, true);
   }
 
-  /// 批量新增上传任务（仅写入数据库，不逐个调度 WorkManager）
+  /// 批量新增上传任务（真正的批量 INSERT，在事务中执行）
   /// 调用方应最后调用 scheduleFirstPendingUpload() 触发处理
   Future<void> addUploadTasksBatch(List<UploadTaskRecord> tasks) async {
+    if (tasks.isEmpty) return;
+
+    // 确保所有任务状态为 PENDING
     for (final task in tasks) {
       task.status = UploadStatus.PENDING;
-      await _storage.addUploadTask(task);
     }
+
+    // 在单个事务中批量插入，比逐条 INSERT 快几十倍
+    await _storage.addUploadTasksBatch(tasks);
     _logger.info('Batch added ${tasks.length} upload tasks to database');
   }
 
@@ -284,16 +344,8 @@ class BackgroundService {
   /// isNew 表示是否为新的调度，针对移动平台，如果任务已经注册过了，应用再次启动初始化时，不用再注册一次
   /// 其它情况，比如新增任务，或者之前用户暂停了，恢复任务，都需要重新注册一次
   Future<void> scheduleUpload(String taskId, bool isNew) async {
-    _logger.info('Scheduling upload task: $taskId');
-    _syncTimer ??= Timer.periodic(Duration(seconds: 1), (timer) async {
-      await _timerHandler(timer);
-    });
-
-    if (isWorkManagerSupported && isNew) {
-      await _scheduleWithWorkManager(taskId, TaskType.upload);
-    } else if (isDesktopPlatform) {
-      await _scheduleWithIsolate(taskId, TaskType.upload);
-    }
+    _logger.info('scheduleUpload: $taskId');
+    _ensureTimerRunning();
   }
 
   /// 新增下载任务
@@ -315,16 +367,8 @@ class BackgroundService {
 
   /// 调度下载任务
   Future<void> scheduleDownload(String taskId, bool isNew) async {
-    _logger.info('Scheduling download task: $taskId');
-    _syncTimer ??= Timer.periodic(Duration(seconds: 1), (timer) async {
-      await _timerHandler(timer);
-    });
-
-    if (isWorkManagerSupported && isNew) {
-      await _scheduleWithWorkManager(taskId, TaskType.download);
-    } else if (isDesktopPlatform) {
-      await _scheduleWithIsolate(taskId, TaskType.download);
-    }
+    _logger.info('scheduleDownload: $taskId');
+    _ensureTimerRunning();
   }
 
   /// 使用 Isolate 调度任务（桌面平台）
@@ -380,6 +424,10 @@ class BackgroundService {
     // 获取服务器配置
     final ls = GetIt.I.get<LocalStorage>();
 
+    // 获取日志目录路径
+    final appDir = await getApplicationDocumentsDirectory();
+    final logDirPath = '${appDir.path}/logs';
+
     final id = Uuid().v8();
 
     // 启动 Isolate
@@ -392,6 +440,7 @@ class BackgroundService {
         token: ls.token!,
         dbPath: dbPath,
         taskType: taskType,
+        logDir: logDirPath,
         chunkSize: ls.uploadChunkSize,
         smallFileThreshold: ls.smallFileThreshold,
       ),
