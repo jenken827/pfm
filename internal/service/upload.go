@@ -1190,6 +1190,42 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 	return nil
 }
 
+// RetryAllFailedUploadRecords 重试所有失败的上传记录
+func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
+	// 查询所有失败的上传记录
+	records, err := db.GetUploadRecordsByStatus([]native.LocationStatus{native.LocationStatus_PFAILED})
+	if err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	if len(records) == 0 {
+		return nil
+	}
+
+	// 逐个重试
+	for _, record := range records {
+		if uploadDone.IsDone(*record.Id) {
+			continue
+		}
+
+		// 重置状态为等待中
+		pendingStatus := int32(native.LocationStatus_PPENDING)
+		record.Status = &pendingStatus
+
+		// 更新数据库
+		if err := db.UpdateUploadRecord(record, []string{"status"}); err != nil {
+			llog.L().Errorf("RetryAllFailedUploadRecords: update record %d failed: %v", *record.Id, err)
+			continue
+		}
+
+		// 重新分发上传任务
+		go storage.Dispatch(context.Background(), record)
+	}
+
+	llog.L().Infof("RetryAllFailedUploadRecords: retried %d records", len(records))
+	return nil
+}
+
 // cleanOldFileLocations 异步删除旧文件在存储提供者上的位置
 func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string) {
 	if len(locations) == 0 {

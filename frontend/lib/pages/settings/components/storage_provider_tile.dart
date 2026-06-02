@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/utils/format.dart';
 
@@ -58,6 +59,7 @@ class StorageProviderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
     return InkWell(
@@ -97,7 +99,7 @@ class StorageProviderTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          provider.enabled ? '已启用' : '已禁用',
+                          provider.enabled ? al.common_enabled : al.common_disabled,
                           style: TextStyle(
                             fontSize: 11,
                             color: provider.enabled
@@ -117,11 +119,11 @@ class StorageProviderTile extends StatelessWidget {
                           }
                         },
                         itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('编辑')),
+                          PopupMenuItem(value: 'edit', child: Text(al.common_edit)),
                           PopupMenuItem(
                             value: 'delete',
                             child: Text(
-                              '删除',
+                              al.common_delete,
                               style: TextStyle(color: theme.colorScheme.error),
                             ),
                           ),
@@ -169,7 +171,7 @@ class StorageProviderTile extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '已用 ${(_capacityPercent * 100).toStringAsFixed(1)}%',
+                          al.storageProvider_usedPercent((_capacityPercent * 100).toStringAsFixed(1)),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: _capacityPercent > 0.9
                                 ? theme.colorScheme.error

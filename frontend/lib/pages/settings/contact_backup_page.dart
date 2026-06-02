@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/contact_backup_service.dart';
 import 'package:pfm/utils/platform.dart';
@@ -55,11 +56,12 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     // 桌面端显示"仅移动端可用"提示
     if (isDesktop()) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('通讯录备份'),
+          title: Text(al.contactBackup_title),
           centerTitle: true,
         ),
         body: Center(
@@ -69,12 +71,12 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               Icon(Icons.phone_android, size: 64, color: Colors.grey[400]),
               const SizedBox(height: 16),
               Text(
-                '通讯录备份仅在移动端可用',
+                al.contactBackup_mobileOnly,
                 style: TextStyle(fontSize: 18, color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
               Text(
-                '请在 Android 或 iOS 设备上使用此功能',
+                al.contactBackup_mobileOnlyDesc,
                 style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               ),
             ],
@@ -85,14 +87,14 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('通讯录备份')),
+        appBar: AppBar(title: Text(al.contactBackup_title)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('通讯录备份'),
+        title: Text(al.contactBackup_title),
         centerTitle: true,
       ),
       body: ListView(
@@ -105,10 +107,10 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
           // 目标文件夹
           ListTile(
-            title: const Text('备份到'),
+            title: Text(al.contactBackup_backupTo),
             subtitle: Text(
               _backupService.config.targetFolderName.isEmpty
-                  ? '未设置（将备份到根目录）'
+                  ? al.contactBackup_notSetRoot
                   : _backupService.config.targetFolderName,
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -127,7 +129,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                   ? null
                   : _startBackup,
               icon: const Icon(Icons.backup),
-              label: const Text('立即备份通讯录'),
+              label: Text(al.contactBackup_backupNow),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -142,6 +144,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildStatusCard() {
+    final al = AppLocalizations.of(context)!;
     Color statusColor;
     String statusText;
     IconData statusIcon;
@@ -149,42 +152,42 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
     switch (_result.status) {
       case ContactBackupStatus.idle:
         statusColor = Colors.grey;
-        statusText = '就绪';
+        statusText = al.contactBackup_statusReady;
         statusIcon = Icons.contacts_outlined;
         break;
       case ContactBackupStatus.loading:
         statusColor = Colors.blue;
-        statusText = '加载联系人中...';
+        statusText = al.contactBackup_statusLoading;
         statusIcon = Icons.hourglass_empty;
         break;
       case ContactBackupStatus.exporting:
         statusColor = Colors.blue;
-        statusText = '导出中 ${_result.exportedContacts}/${_result.totalContacts}';
+        statusText = al.contactBackup_statusExporting(_result.exportedContacts, _result.totalContacts);
         statusIcon = Icons.import_export;
         break;
       case ContactBackupStatus.uploading:
         statusColor = Colors.orange;
-        statusText = '上传中...';
+        statusText = al.contactBackup_statusUploading;
         statusIcon = Icons.cloud_upload;
         break;
       case ContactBackupStatus.completed:
         statusColor = Colors.green;
-        statusText = '备份完成';
+        statusText = al.contactBackup_statusCompleted;
         statusIcon = Icons.check_circle;
         break;
       case ContactBackupStatus.skipped:
         statusColor = Colors.green;
-        statusText = '联系人无变动，已跳过';
+        statusText = al.contactBackup_statusSkipped;
         statusIcon = Icons.check_circle_outline;
         break;
       case ContactBackupStatus.error:
         statusColor = Colors.red;
-        statusText = '备份失败';
+        statusText = al.contactBackup_statusFailed;
         statusIcon = Icons.error_outline;
         break;
       case ContactBackupStatus.noPermission:
         statusColor = Colors.red;
-        statusText = '需要通讯录权限';
+        statusText = al.contactBackup_needPermission;
         statusIcon = Icons.lock_outline;
         break;
     }
@@ -224,7 +227,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                       if (_result.totalContacts > 0) ...[
                         const SizedBox(height: 4),
                         Text(
-                          '共 ${_result.totalContacts} 个联系人',
+                          al.contactBackup_totalContacts(_result.totalContacts),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -249,7 +252,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
             if (_result.lastBackupTime != null) ...[
               const SizedBox(height: 8),
               Text(
-                '上次备份: ${_result.lastBackupTime}',
+                al.contactBackup_lastBackup(_result.lastBackupTime!.toString()),
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
             ],
@@ -260,6 +263,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildInfoCard() {
+    final al = AppLocalizations.of(context)!;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
@@ -272,7 +276,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                 Icon(Icons.info_outline, color: Colors.blue[700]),
                 const SizedBox(width: 8),
                 Text(
-                  '备份说明',
+                  al.contactBackup_instructions,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.blue[700],
@@ -281,11 +285,11 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('• 备份将导出所有联系人为 vCard (.vcf) 格式'),
-            const Text('• vCard 是通用的联系人格式，可导入到任何设备'),
-            const Text('• 备份文件将上传到您选择的服务器文件夹'),
-            const Text('• 包含：姓名、电话、邮箱、公司、备注等信息'),
-            const Text('• 联系人无变动时会自动跳过上传'),
+            Text(al.contactBackup_instr1),
+            Text(al.contactBackup_instr2),
+            Text(al.contactBackup_instr3),
+            Text(al.contactBackup_instr4),
+            Text(al.contactBackup_instr5),
           ],
         ),
       ),
@@ -293,6 +297,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildFormatInfo() {
+    final al = AppLocalizations.of(context)!;
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -305,7 +310,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                 Icon(Icons.description_outlined, color: Colors.grey[700]),
                 const SizedBox(width: 8),
                 Text(
-                  '如何恢复联系人',
+                  al.contactBackup_howToRestore,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.grey[700],
@@ -314,12 +319,12 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('1. 从服务器下载 .vcf 备份文件'),
-            const Text('2. 在手机上打开该文件'),
-            const Text('3. 系统会自动提示导入联系人'),
+            Text(al.contactBackup_restoreStep1),
+            Text(al.contactBackup_restoreStep2),
+            Text(al.contactBackup_restoreStep3),
             const SizedBox(height: 8),
             Text(
-              '支持 Android、iOS、Outlook、Google Contacts 等',
+              al.contactRestore_supportedPlatforms,
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],

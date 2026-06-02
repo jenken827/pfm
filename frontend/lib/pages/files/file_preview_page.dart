@@ -15,6 +15,7 @@ import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/utils/file_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 
 /// 预览页面参数
 class PreviewArgs {
@@ -137,6 +138,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentFile.name),
@@ -157,7 +159,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           if (_currentFile.type == FileType.IMAGE)
             IconButton(
               icon: Icon(_showOriginal ? Icons.image : Icons.hd),
-              tooltip: _showOriginal ? '查看缩略图' : '查看原图',
+              tooltip: _showOriginal ? al.preview_viewThumbnail : al.preview_viewOriginal,
               onPressed: () {
                 setState(() {
                   _showOriginal = !_showOriginal;
@@ -178,17 +180,17 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             icon: const Icon(Icons.more_vert),
             onSelected: (value) => _handleMenuAction(context, value),
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'share',
-                child: ListTile(leading: Icon(Icons.share), title: Text('分享')),
+                child: ListTile(leading: const Icon(Icons.share), title: Text(al.preview_share)),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'rename',
-                child: ListTile(leading: Icon(Icons.edit), title: Text('重命名')),
+                child: ListTile(leading: const Icon(Icons.edit), title: Text(al.preview_rename)),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
-                child: ListTile(leading: Icon(Icons.delete), title: Text('删除')),
+                child: ListTile(leading: const Icon(Icons.delete), title: Text(al.preview_delete)),
               ),
             ],
           ),
@@ -299,6 +301,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     File file,
     Map<String, String> headers,
   ) {
+    final al = AppLocalizations.of(context)!;
     final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
     return Stack(
       children: [
@@ -322,7 +325,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                 );
               },
               errorBuilder: (context, error, stackTrace) {
-                return _buildErrorWidget(context, '图片加载失败', error);
+                return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
               },
             ),
           ),
@@ -338,7 +341,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
-              _showOriginal ? '原图' : '缩略图',
+              _showOriginal ? al.preview_original : al.preview_thumbnail,
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
@@ -348,6 +351,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildVideoPreview(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (!_isVideoInitialized || _videoController == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -414,7 +418,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 0.5, child: Text('0.5x')),
                   const PopupMenuItem(value: 0.75, child: Text('0.75x')),
-                  const PopupMenuItem(value: 1.0, child: Text('1.0x (正常)')),
+                  PopupMenuItem(value: 1.0, child: Text(al.preview_normalSpeed)),
                   const PopupMenuItem(value: 1.25, child: Text('1.25x')),
                   const PopupMenuItem(value: 1.5, child: Text('1.5x')),
                   const PopupMenuItem(value: 2.0, child: Text('2.0x')),
@@ -460,6 +464,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildAudioPreview(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -478,7 +483,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('音频播放', style: Theme.of(context).textTheme.titleLarge),
+          Text(al.preview_audioPlay, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
             _currentFile.name,
@@ -491,11 +496,11 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           FilledButton.icon(
             onPressed: () => _openInExternalPlayer(context),
             icon: const Icon(Icons.open_in_new),
-            label: const Text('使用外部播放器打开'),
+            label: Text(al.preview_openExternalPlayer),
           ),
           const SizedBox(height: 8),
           Text(
-            '音频播放功能开发中，暂可使用外部播放器打开',
+            al.preview_audioPlayHint,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -511,6 +516,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildUnsupportedPreview(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -521,12 +527,12 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             color: Theme.of(context).colorScheme.error,
           ),
           const SizedBox(height: 16),
-          Text('暂不支持此文件类型预览', style: Theme.of(context).textTheme.titleMedium),
+          Text(al.preview_unsupportedType, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () => _downloadFile(context),
             icon: const Icon(Icons.download),
-            label: const Text('下载文件'),
+            label: Text(al.preview_downloadFile),
           ),
         ],
       ),
@@ -538,6 +544,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     String message,
     dynamic error,
   ) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -560,7 +567,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => _downloadFile(context),
-            child: const Text('下载文件'),
+            child: Text(al.preview_downloadFile),
           ),
         ],
       ),
@@ -568,6 +575,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   void _downloadFile(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     try {
       final downloadDir = await getDownloadsDirectory();
 
@@ -592,18 +600,19 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('已添加到下载队列: $fileName')));
+        ).showSnackBar(SnackBar(content: Text(al.preview_downloadQueued(fileName))));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('${al.preview_downloadFailed}: $e')));
       }
     }
   }
 
   Future<void> _openInExternalPlayer(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final previewUrl = _buildPreviewUrl(_currentFile.id);
     final uri = Uri.parse(previewUrl);
 
@@ -614,14 +623,14 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('无法打开外部播放器')));
+          ).showSnackBar(SnackBar(content: Text(al.preview_cannotOpenPlayer)));
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('打开外部播放器失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('${al.preview_openPlayerFailed}: $e')));
       }
     }
   }
@@ -641,6 +650,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Future<void> _shareFile(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     try {
       final repo = FmRepository();
       final result = await repo.createShareLink(
@@ -656,45 +666,46 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('分享链接已复制到剪贴板')));
+          ).showSnackBar(SnackBar(content: Text(al.preview_shareLinkCopied)));
         }
       } else if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? '创建分享链接失败')));
+        ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_createShareLinkFailed)));
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('${al.preview_shareFailed}: $e')));
       }
     }
   }
 
   Future<void> _renameFile(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: _currentFile.name);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('重命名'),
+        title: Text(al.preview_rename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: '文件名',
-            hintText: '请输入新文件名',
+          decoration: InputDecoration(
+            labelText: al.preview_fileName,
+            hintText: al.preview_enterNewFilename,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('确定'),
+            child: Text(al.common_confirm),
           ),
         ],
       ),
@@ -710,19 +721,19 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         if (result.success && mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('重命名成功')));
+          ).showSnackBar(SnackBar(content: Text(al.preview_renameSuccess)));
           // 返回上一页刷新列表
           context.pop();
         } else if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(result.message ?? '重命名失败')));
+          ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_renameFailed)));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('重命名失败: $e')));
+          ).showSnackBar(SnackBar(content: Text('${al.preview_renameFailed}: $e')));
         }
       }
     }
@@ -730,22 +741,23 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Future<void> _deleteFile(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 "${_currentFile.name}" 吗？'),
+        title: Text(al.preview_confirmDeleteTitle),
+        content: Text(al.preview_confirmDeleteMsg(_currentFile.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('删除'),
+            child: Text(al.preview_delete),
           ),
         ],
       ),
@@ -759,19 +771,19 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         if (result.success && mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('删除成功')));
+          ).showSnackBar(SnackBar(content: Text(al.preview_deleteSuccess)));
           // 返回上一页刷新列表
           context.pop();
         } else if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
+          ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_deleteFailed)));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+          ).showSnackBar(SnackBar(content: Text('${al.preview_deleteFailed}: $e')));
         }
       }
     }

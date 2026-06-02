@@ -346,12 +346,14 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferRetryAllFailedEvent event,
     Emitter<TransferState> emit,
   ) async {
-    final failedTasks = state.uploadTasks
-        .where((t) => t.status == UploadStatus.FAILED)
-        .toList();
-    for (final task in failedTasks) {
-      await _bgService.resumeUpload(task.id);
+    // 直接查库获取全部失败任务，不受内存中 100 条限制
+    final taskIds = await _bgService.storage.retryFailedUploadTasks();
+    for (final taskId in taskIds) {
+      await _bgService.scheduleUpload(taskId, true);
     }
+    // 刷新列表
+    final tasks = await _bgService.storage.getAllUploadTasksAsync();
+    emit(state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1));
   }
 
   /// DownloadTaskRecord -> DownloadTaskState 转换

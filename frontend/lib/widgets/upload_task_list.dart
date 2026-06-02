@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/utils/format.dart';
@@ -42,6 +43,7 @@ class UploadTaskList extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -53,14 +55,14 @@ class UploadTaskList extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无上传任务',
+            al.uploadTask_noTasks,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            '在文件页面选择文件开始上传',
+            al.uploadTask_noTasksHint,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -71,6 +73,7 @@ class UploadTaskList extends StatelessWidget {
   }
 
   Widget _buildActionBar(BuildContext context, TransferState state) {
+    final al = AppLocalizations.of(context)!;
     // 真正在上传中的数量（不含 PENDING）
     final activeCount = state.dbUploadingCount;
     final pendingCount = state.dbPendingCount;
@@ -93,15 +96,15 @@ class UploadTaskList extends StatelessWidget {
           if (activeCount > 0)
             _buildStatusChip(
               context,
-              '上传中 $activeCount',
+              al.uploadTask_uploading(activeCount),
               Theme.of(context).colorScheme.primary,
             ),
           if (pendingCount > 0)
-            _buildStatusChip(context, '等待中 $pendingCount', Colors.grey),
+            _buildStatusChip(context, al.uploadTask_waiting(pendingCount), Colors.grey),
           if (failedCount > 0)
-            _buildStatusChip(context, '失败 $failedCount', Colors.red),
+            _buildStatusChip(context, al.uploadTask_failed(failedCount), Colors.red),
           if (completedCount > 0)
-            _buildStatusChip(context, '已完成 $completedCount', Colors.green),
+            _buildStatusChip(context, al.uploadTask_completed(completedCount), Colors.green),
           const Spacer(),
           // 操作菜单
           PopupMenuButton<String>(
@@ -125,38 +128,38 @@ class UploadTaskList extends StatelessWidget {
             },
             itemBuilder: (context) => [
               if (activeCount > 0)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'pause_all',
                   child: ListTile(
-                    leading: Icon(Icons.pause),
-                    title: Text('全部暂停'),
+                    leading: const Icon(Icons.pause),
+                    title: Text(al.uploadTask_pauseAll),
                     dense: true,
                   ),
                 ),
               if (pendingCount > 0 || state.pausedUploadCount > 0)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'resume_all',
                   child: ListTile(
-                    leading: Icon(Icons.play_arrow),
-                    title: Text('全部继续'),
+                    leading: const Icon(Icons.play_arrow),
+                    title: Text(al.uploadTask_resumeAll),
                     dense: true,
                   ),
                 ),
               if (failedCount > 0)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'retry_all',
                   child: ListTile(
-                    leading: Icon(Icons.refresh),
-                    title: Text('重试失败'),
+                    leading: const Icon(Icons.refresh),
+                    title: Text(al.uploadTask_retryFailed),
                     dense: true,
                   ),
                 ),
               if (completedCount > 0 || failedCount > 0)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'clear_completed',
                   child: ListTile(
-                    leading: Icon(Icons.clear_all),
-                    title: Text('清除已完成'),
+                    leading: const Icon(Icons.clear_all),
+                    title: Text(al.uploadTask_clearCompleted),
                     dense: true,
                   ),
                 ),
@@ -195,6 +198,7 @@ class _UploadTaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
@@ -251,7 +255,7 @@ class _UploadTaskItem extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '正在计算文件指纹...',
+                    al.uploadTask_computingHash,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -294,14 +298,14 @@ class _UploadTaskItem extends StatelessWidget {
                   child: Row(
                     children: [
                       Text(
-                        '已上传: ${_formatBytes(task.uploadedBytes)}',
+                        al.uploadTask_uploaded(_formatBytes(task.uploadedBytes)),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const Spacer(),
                       Text(
-                        '总计: ${_formatBytes(task.fileSize)}',
+                        al.uploadTask_total(_formatBytes(task.fileSize)),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -379,40 +383,41 @@ class _UploadTaskItem extends StatelessWidget {
   }
 
   Widget _buildStatusChip(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     String label;
     Color color;
 
     switch (task.status) {
       case UploadStatus.PENDING:
-        label = '等待中';
+        label = al.uploadTask_statusWaiting;
         color = Colors.grey;
         break;
       case UploadStatus.UPLOADING:
-        label = '上传中';
+        label = al.uploadTask_statusUploading;
         color = Theme.of(context).colorScheme.primary;
         break;
       case UploadStatus.COMPLETED:
-        label = '已完成';
+        label = al.uploadTask_statusCompleted;
         color = Colors.green;
         break;
       case UploadStatus.PAUSED:
-        label = '已暂停';
+        label = al.uploadTask_statusPaused;
         color = Colors.orange;
         break;
       case UploadStatus.CANCELED:
-        label = '已取消';
+        label = al.uploadTask_statusCanceled;
         color = Colors.grey;
         break;
       case UploadStatus.FAILED:
-        label = '失败';
+        label = al.uploadTask_statusFailed;
         color = Theme.of(context).colorScheme.error;
         break;
       case UploadStatus.HASHING:
-        label = '计算指纹中';
+        label = al.uploadTask_statusHashing;
         color = Colors.grey;
         break;
       default:
-        label = '未知';
+        label = al.common_unknown;
         color = Colors.grey;
         break;
     }
@@ -437,6 +442,7 @@ class _UploadTaskItem extends StatelessWidget {
   }
 
   Widget _buildActions(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 20),
       onSelected: (value) {
@@ -462,24 +468,24 @@ class _UploadTaskItem extends StatelessWidget {
       itemBuilder: (context) {
         if (task.isActive) {
           return [
-            const PopupMenuItem(value: 'pause', child: Text('暂停')),
-            const PopupMenuItem(value: 'cancel', child: Text('取消')),
-            const PopupMenuItem(value: 'remove', child: Text('移除')),
+            PopupMenuItem(value: 'pause', child: Text(al.uploadTask_pause)),
+            PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else if (task.status == UploadStatus.PAUSED) {
           return [
-            const PopupMenuItem(value: 'resume', child: Text('继续')),
-            const PopupMenuItem(value: 'cancel', child: Text('取消')),
-            const PopupMenuItem(value: 'remove', child: Text('移除')),
+            PopupMenuItem(value: 'resume', child: Text(al.uploadTask_resume)),
+            PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else if (task.status == UploadStatus.FAILED) {
           return [
-            const PopupMenuItem(value: 'retry', child: Text('重试')),
-            const PopupMenuItem(value: 'cancel', child: Text('取消')),
-            const PopupMenuItem(value: 'remove', child: Text('移除')),
+            PopupMenuItem(value: 'retry', child: Text(al.uploadTask_retry)),
+            PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else {
-          return [const PopupMenuItem(value: 'remove', child: Text('移除'))];
+          return [PopupMenuItem(value: 'remove', child: Text(al.common_remove))];
         }
       },
     );

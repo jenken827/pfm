@@ -4,7 +4,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -401,6 +401,55 @@ class Sqlite3Storage {
       ),
     );
   }
+
+  /// 重试所有失败的上传任务：将 FAILED 状态改为 PENDING，返回任务 ID 列表
+  /// 同时将对应的相册备份记录状态重置为 PENDING
+  Future<List<String>> retryFailedUploadTasks() async {
+    final tasks = await getUploadTasksByStatus(UploadStatus.FAILED);
+    final taskIds = tasks.map((t) => t.id).toList();
+    if (taskIds.isNotEmpty) {
+      await _withRetry(
+        () => _database!.update(
+          uploadTaskTableName,
+          {'status': UploadStatus.PENDING.value, 'error_message': null},
+          where: 'status = ?',
+          whereArgs: [UploadStatus.FAILED.value],
+        ),
+      );
+
+      // 同步重置相册备份记录状态（通过 tags 字段关联 asset ID）
+      for (final task in tasks) {
+        if (task.tags != null && task.tags!.isNotEmpty) {
+          final record = await getBackupFileRecord(
+            albumBackupConfigId,
+            task.tags!,
+          );
+          if (record != null &&
+              record['status'] as int == BackupFileStatus.failed.index) {
+            await updateBackupFileRecord(
+              record['id'] as String,
+              {'status': BackupFileStatus.pending.index, 'message': null},
+            );
+          }
+        }
+      }
+    }
+    return taskIds;
+  }
+
+  /// 获取相册备份已完成的 asset ID 集合（从 backup_file_records 表）
+  Future<Set<String>> getCompletedAlbumBackupAssetIds() async {
+    final maps = await _database!.query(
+      backupFileTableName,
+      columns: ['relative_path'],
+      where: 'config_id = ? AND status = ?',
+      whereArgs: [albumBackupConfigId, BackupFileStatus.completed.index],
+    );
+    return maps.map((m) => m['relative_path'] as String).toSet();
+  }
+
+  /// 相册备份配置 ID 常量
+  static const String albumBackupConfigId = 'album_backup';
 
   // 恢复任务
   Future<List<String>> resumeUploadTasks(String? taskId) async {

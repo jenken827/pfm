@@ -52,6 +52,18 @@ void main() async {
   // 根据登录状态设置初始路由
   if (ls.isLoggedIn) {
     approuter.go(HomeRoute().location);
+
+    // 延迟触发相册自动备份（不阻塞启动）
+    if (Platform.isAndroid || Platform.isIOS) {
+      Future.delayed(const Duration(seconds: 3), () async {
+        try {
+          final albumBackup = await AlbumBackupService.instance();
+          await albumBackup.autoTrigger();
+        } catch (e) {
+          getLogger().warning('Album auto-trigger failed: $e');
+        }
+      });
+    }
   } else {
     approuter.go(LoginRoute().location);
   }

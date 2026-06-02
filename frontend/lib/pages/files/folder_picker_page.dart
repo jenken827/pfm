@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -128,15 +129,18 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 确认选择当前文件夹
   void _confirmSelection() {
-    final name = _breadcrumbs.isEmpty ? '根目录' : _breadcrumbs.last.name;
+    final al = AppLocalizations.of(context)!;
+    final name = _breadcrumbs.isEmpty ? al.folderPicker_root : _breadcrumbs.last.name;
     Navigator.of(context).pop(FolderPickResult(id: _currentFolderId, name: name));
   }
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('选择目标文件夹'),
+        title: Text(al.folderPicker_selectTarget),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -147,7 +151,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
             IconButton(
               icon: const Icon(Icons.arrow_upward),
               onPressed: _goBack,
-              tooltip: '返回上级',
+              tooltip: al.folderPicker_goBack,
             ),
         ],
       ),
@@ -168,6 +172,8 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建面包屑导航
   Widget _buildBreadcrumbs() {
+    final al = AppLocalizations.of(context)!;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: SingleChildScrollView(
@@ -177,11 +183,11 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
             // 根目录
             InkWell(
               onTap: () => _navigateToBreadcrumb(-1),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  '根目录',
-                  style: TextStyle(fontWeight: FontWeight.w500),
+                  al.folderPicker_root,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
             ),
@@ -226,6 +232,8 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建文件夹列表
   Widget _buildFolderList() {
+    final al = AppLocalizations.of(context)!;
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -246,7 +254,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
             ElevatedButton.icon(
               onPressed: _loadFolders,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(al.common_retry),
             ),
           ],
         ),
@@ -254,7 +262,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
     }
 
     if (_folders.isEmpty) {
-      return const Center(child: Text('当前目录无子文件夹'));
+      return Center(child: Text(al.folderPicker_noSubfolders));
     }
 
     return ListView.builder(
@@ -284,6 +292,9 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建底部操作栏
   Widget _buildBottomBar() {
+    final al = AppLocalizations.of(context)!;
+    final path = _currentFolderId.isEmpty ? al.folderPicker_root : (_breadcrumbs.isNotEmpty ? _breadcrumbs.last.name : al.folderPicker_root);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -301,14 +312,14 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
           children: [
             Expanded(
               child: Text(
-                '当前位置：${_currentFolderId.isEmpty ? '根目录' : (_breadcrumbs.isNotEmpty ? _breadcrumbs.last.name : '根目录')}',
+                al.folderPicker_currentLocation(path),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
             FilledButton.icon(
               onPressed: _confirmSelection,
               icon: const Icon(Icons.check),
-              label: const Text('选择此处'),
+              label: Text(al.folderPicker_selectHere),
             ),
           ],
         ),

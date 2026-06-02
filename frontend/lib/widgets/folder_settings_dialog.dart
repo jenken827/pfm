@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 
@@ -95,9 +96,10 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   }
 
   Future<void> _updateFolder() async {
+    final al = AppLocalizations.of(context)!;
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('文件夹名称不能为空')),
+        SnackBar(content: Text(al.folderSettings_nameEmpty)),
       );
       return;
     }
@@ -108,7 +110,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
       maxHistories = int.tryParse(_maxHistoriesController.text);
       if (maxHistories == null || maxHistories < 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('最大历史记录数必须是有效的非负整数')),
+          SnackBar(content: Text(al.folderSettings_maxHistoryInvalid)),
         );
         return;
       }
@@ -130,21 +132,21 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件夹设置已更新')),
+            SnackBar(content: Text(al.folderSettings_updated)),
           );
           widget.onUpdate?.call();
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('更新失败: ${result.message}')),
+            SnackBar(content: Text('${al.folderSettings_updateFailed}: ${result.message}')),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新失败: $e')),
+          SnackBar(content: Text('${al.folderSettings_updateFailed}: $e')),
         );
       }
     } finally {
@@ -156,8 +158,9 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
 
 @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('文件夹设置'),
+      title: Text(al.folderSettings_title),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -168,8 +171,8 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
               // 文件夹名称
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: '文件夹名称',
+                decoration: InputDecoration(
+                  labelText: al.folderSettings_folderName,
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -177,8 +180,8 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
 
               // 加密配置
               SwitchListTile(
-                title: const Text('启用加密'),
-                subtitle: const Text('文件夹内的文件将使用加密存储'),
+                title: Text(al.folderSettings_enableEncryption),
+                subtitle: Text(al.folderSettings_encryptionHint),
                 value: _enableEncryption,
                 onChanged: (value) {
                   setState(() => _enableEncryption = value);
@@ -189,16 +192,16 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
               // 最大历史记录数
               TextField(
                 controller: _maxHistoriesController,
-                decoration: const InputDecoration(
-                  labelText: '最大历史记录数',
-                  hintText: '默认 0',
+                decoration: InputDecoration(
+                  labelText: al.folderSettings_maxHistory,
+                  hintText: al.folderSettings_maxHistoryHint,
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 8),
-              const Text(
-                '覆盖文件时保留的历史版本数量，默认 0 表示不保留历史',
+              Text(
+                al.folderSettings_maxHistoryDesc,
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
@@ -207,8 +210,8 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
               const SizedBox(height: 16),
 
               // 绑定的存储提供者
-              const Text(
-                '绑定的存储提供者',
+              Text(
+                al.folderSettings_boundProviders,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -219,7 +222,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
               if (_isLoadingProviders)
                 const Center(child: CircularProgressIndicator())
               else if (_storageProviders.isEmpty)
-                const Text('暂无可用存储提供者')
+                Text(al.folderSettings_noProviders)
               else
                 Column(
                   children: _storageProviders.map((provider) {
@@ -249,7 +252,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(al.common_cancel),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _updateFolder,
@@ -259,7 +262,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('保存'),
+              : Text(al.common_save),
         ),
       ],
     );

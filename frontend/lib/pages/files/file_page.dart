@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
 import 'package:pfm/router/files_route.dart';
@@ -138,6 +139,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, FileState state) {
+    final al = AppLocalizations.of(context)!;
     // 如果在多选模式，显示不同的 AppBar
     if (state.isSelectMode) {
       return AppBar(
@@ -146,7 +148,7 @@ class _FileViewState extends State<_FileView> {
           onPressed: () =>
               context.read<FileBloc>().add(const FileSelectModeEvent()),
         ),
-        title: Text('已选择 ${state.selectedFiles.length} 项'),
+        title: Text(al.file_selectedCount(state.selectedFiles.length)),
         actions: [
           IconButton(
             icon: const Icon(Icons.select_all),
@@ -158,7 +160,7 @@ class _FileViewState extends State<_FileView> {
     }
 
     return AppBar(
-      title: Text(state.currentDirName.isEmpty ? '文件' : state.currentDirName),
+      title: Text(state.currentDirName.isEmpty ? al.nav_files : state.currentDirName),
       centerTitle: true,
       actions: [
         // 刷新按钮
@@ -184,28 +186,28 @@ class _FileViewState extends State<_FileView> {
                 children: [
                   Icon(state.isGridView ? Icons.view_list : Icons.grid_view),
                   const SizedBox(width: 8),
-                  Text(state.isGridView ? '列表视图' : '网格视图'),
+                  Text(state.isGridView ? al.file_listView : al.file_gridView),
                 ],
               ),
             ),
             // 回收站
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'trash',
               child: Row(
                 children: [
-                  Icon(Icons.delete_outline),
-                  SizedBox(width: 8),
-                  Text('回收站'),
+                  const Icon(Icons.delete_outline),
+                  const SizedBox(width: 8),
+                  Text(al.file_recycleBin),
                 ],
               ),
             ),
             const PopupMenuDivider(),
             // 排序选项
-            const PopupMenuItem(value: 'sort_name', child: Text('按名称排序')),
-            const PopupMenuItem(value: 'sort_size', child: Text('按大小排序')),
-            const PopupMenuItem(value: 'sort_type', child: Text('按类型排序')),
-            const PopupMenuItem(value: 'sort_modified', child: Text('按修改时间排序')),
-            const PopupMenuItem(value: 'sort_created', child: Text('按创建时间排序')),
+            PopupMenuItem(value: 'sort_name', child: Text(al.file_sortByName)),
+            PopupMenuItem(value: 'sort_size', child: Text(al.file_sortBySize)),
+            PopupMenuItem(value: 'sort_type', child: Text(al.file_sortByType)),
+            PopupMenuItem(value: 'sort_modified', child: Text(al.file_sortByModified)),
+            PopupMenuItem(value: 'sort_created', child: Text(al.file_sortByCreated)),
           ],
         ),
       ],
@@ -213,15 +215,16 @@ class _FileViewState extends State<_FileView> {
   }
 
   Widget _buildContent(BuildContext context, FileState state) {
+    final al = AppLocalizations.of(context)!;
     // 处理加载状态（首次加载）
     if (state.status == FileStateStatus.loading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('加载中...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(al.file_loading),
           ],
         ),
       );
@@ -239,13 +242,13 @@ class _FileViewState extends State<_FileView> {
               color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 16),
-            const Text('加载失败'),
+            Text(al.file_loadFailed),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () =>
                   _saveScrollAndRefresh(),
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(al.file_retry),
             ),
           ],
         ),
@@ -264,10 +267,10 @@ class _FileViewState extends State<_FileView> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
-            Text('空文件夹', style: Theme.of(context).textTheme.titleMedium),
+            Text(al.file_emptyFolder, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
-              '点击下方按钮上传文件或创建文件夹',
+              al.file_emptyFolderHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -444,11 +447,12 @@ class _FileViewState extends State<_FileView> {
   }
 
   Widget? _buildFab(BuildContext context, FileState state) {
+    final al = AppLocalizations.of(context)!;
     if (state.isSelectMode) {
       return FloatingActionButton.extended(
         onPressed: () => _showBatchActionMenu(context, state),
         icon: const Icon(Icons.more_horiz),
-        label: Text('批量操作 (${state.selectedFiles.length})'),
+        label: Text(al.file_batchOperations(state.selectedFiles.length)),
       );
     }
 
@@ -555,6 +559,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showFileMenu(BuildContext context, File file) {
+    final al = AppLocalizations.of(context)!;
     final isFolder = file.type == pbenum.FileType.FOLDER;
 
     showModalBottomSheet(
@@ -566,7 +571,7 @@ class _FileViewState extends State<_FileView> {
             // 查看详情
             ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('查看详情'),
+              title: Text(al.file_viewDetail),
               onTap: () {
                 Navigator.pop(ctx);
                 context.push(FileDetailRoute().location, extra: file);
@@ -576,7 +581,7 @@ class _FileViewState extends State<_FileView> {
             if (!isFolder)
               ListTile(
                 leading: const Icon(Icons.download),
-                title: const Text('下载'),
+                title: Text(al.file_download),
                 onTap: () async {
                   Navigator.pop(ctx);
                   await _downloadFile(context, file);
@@ -585,7 +590,7 @@ class _FileViewState extends State<_FileView> {
             // 重命名
             ListTile(
               leading: const Icon(Icons.edit),
-              title: const Text('重命名'),
+              title: Text(al.file_rename),
               onTap: () {
                 Navigator.pop(ctx);
                 _showRenameDialog(context, file);
@@ -595,7 +600,7 @@ class _FileViewState extends State<_FileView> {
             if (!isFolder)
               ListTile(
                 leading: const Icon(Icons.link),
-                title: const Text('复制链接'),
+                title: Text(al.file_copyLink),
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
@@ -608,7 +613,7 @@ class _FileViewState extends State<_FileView> {
                       await Clipboard.setData(ClipboardData(text: url));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('链接已复制到剪贴板')),
+                          SnackBar(content: Text(al.file_linkCopied)),
                         );
                       }
                     } else {
@@ -616,7 +621,7 @@ class _FileViewState extends State<_FileView> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              '创建链接失败: ${result.message ?? "未知错误"}',
+                              '${al.file_createLinkFailed}: ${result.message ?? "未知错误"}',
                             ),
                           ),
                         );
@@ -626,7 +631,7 @@ class _FileViewState extends State<_FileView> {
                     if (context.mounted) {
                       ScaffoldMessenger.of(
                         context,
-                      ).showSnackBar(SnackBar(content: Text('获取链接失败: $e')));
+                      ).showSnackBar(SnackBar(content: Text('${al.file_getLinkFailed}: $e')));
                     }
                   }
                 },
@@ -634,7 +639,7 @@ class _FileViewState extends State<_FileView> {
             // 移动
             ListTile(
               leading: const Icon(Icons.drive_file_move),
-              title: const Text('移动'),
+              title: Text(al.file_move),
               onTap: () async {
                 Navigator.pop(ctx);
                 await _showMoveDialog(context, [file]);
@@ -644,7 +649,7 @@ class _FileViewState extends State<_FileView> {
             if (!isFolder)
               ListTile(
                 leading: const Icon(Icons.label),
-                title: const Text('修改标签'),
+                title: Text(al.file_editTags),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showTagsDialog(context, file);
@@ -654,7 +659,7 @@ class _FileViewState extends State<_FileView> {
             if (isFolder)
               ListTile(
                 leading: const Icon(Icons.settings),
-                title: const Text('设置'),
+                title: Text(al.file_settings),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showFolderSettings(context, file);
@@ -667,7 +672,7 @@ class _FileViewState extends State<_FileView> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                '删除',
+                al.file_delete,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
@@ -683,6 +688,7 @@ class _FileViewState extends State<_FileView> {
 
   /// 下载文件
   Future<void> _downloadFile(BuildContext context, File file) async {
+    final al = AppLocalizations.of(context)!;
     try {
       final downloadDir = await getDownloadsDirectory();
       if (downloadDir == null) return;
@@ -701,17 +707,18 @@ class _FileViewState extends State<_FileView> {
       );
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('已开始下载: $fileName')));
+      ).showSnackBar(SnackBar(content: Text(al.file_downloadStarted(fileName))));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('${al.file_downloadFailed}: $e')));
       }
     }
   }
 
   void _showFabMenu(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -720,7 +727,7 @@ class _FileViewState extends State<_FileView> {
           children: [
             ListTile(
               leading: const Icon(Icons.create_new_folder),
-              title: const Text('新建文件夹'),
+              title: Text(al.file_newFolder),
               onTap: () {
                 Navigator.pop(ctx);
                 _showCreateDirDialog(context);
@@ -728,7 +735,7 @@ class _FileViewState extends State<_FileView> {
             ),
             ListTile(
               leading: const Icon(Icons.upload_file),
-              title: const Text('上传文件'),
+              title: Text(al.file_uploadFile),
               onTap: () {
                 Navigator.pop(ctx);
                 _pickAndUploadFiles(context);
@@ -736,7 +743,7 @@ class _FileViewState extends State<_FileView> {
             ),
             ListTile(
               leading: const Icon(Icons.folder),
-              title: const Text('上传文件夹'),
+              title: Text(al.file_uploadFolder),
               onTap: () {
                 Navigator.pop(ctx);
                 _pickAndUploadFolder(context);
@@ -750,6 +757,7 @@ class _FileViewState extends State<_FileView> {
 
   /// 选择并上传文件
   Future<void> _pickAndUploadFiles(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final tagsController = TextEditingController();
     bool overwrite = false;
 
@@ -758,22 +766,22 @@ class _FileViewState extends State<_FileView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          title: const Text('上传文件'),
+          title: Text(al.file_uploadFileTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: tagsController,
-                decoration: const InputDecoration(
-                  labelText: '文件标签',
-                  hintText: '可选，多个标签用逗号分隔',
-                  prefixIcon: Icon(Icons.label_outline),
+                decoration: InputDecoration(
+                  labelText: al.file_fileTag,
+                  hintText: al.file_fileTagHint,
+                  prefixIcon: const Icon(Icons.label_outline),
                 ),
               ),
               const SizedBox(height: 16),
               SwitchListTile(
-                title: const Text('覆盖同名文件'),
-                subtitle: const Text('如果存在同名文件则覆盖'),
+                title: Text(al.file_overwriteSameName),
+                subtitle: Text(al.file_overwriteHint),
                 value: overwrite,
                 onChanged: (value) {
                   setState(() => overwrite = value);
@@ -784,11 +792,11 @@ class _FileViewState extends State<_FileView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
+              child: Text(al.common_cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('选择文件'),
+              child: Text(al.file_selectFile),
             ),
           ],
         ),
@@ -832,7 +840,7 @@ class _FileViewState extends State<_FileView> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('选择文件失败: $e'),
+            content: Text('${al.file_selectFileFailed}: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -842,6 +850,7 @@ class _FileViewState extends State<_FileView> {
 
   /// 选择并上传文件夹
   Future<void> _pickAndUploadFolder(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     try {
       final result = await FilePicker.platform.getDirectoryPath();
 
@@ -870,8 +879,8 @@ class _FileViewState extends State<_FileView> {
             Navigator.of(context, rootNavigator: true).pop();
 
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('文件夹上传任务已添加'),
+              SnackBar(
+                content: Text(al.file_folderUploadAdded),
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -883,7 +892,7 @@ class _FileViewState extends State<_FileView> {
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('上传文件夹失败: $e'),
+                content: Text('${al.file_uploadFolderFailed}: $e'),
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
             );
@@ -894,7 +903,7 @@ class _FileViewState extends State<_FileView> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('选择文件夹失败: $e'),
+            content: Text('${al.file_selectFolderFailed}: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -1041,6 +1050,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showBatchActionMenu(BuildContext context, FileState state) {
+    final al = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -1049,7 +1059,7 @@ class _FileViewState extends State<_FileView> {
           children: [
             ListTile(
               leading: const Icon(Icons.select_all),
-              title: const Text('全选'),
+              title: Text(al.file_selectAll),
               onTap: () {
                 Navigator.pop(ctx);
                 context.read<FileBloc>().add(const FileSelectAllEvent());
@@ -1057,7 +1067,7 @@ class _FileViewState extends State<_FileView> {
             ),
             ListTile(
               leading: const Icon(Icons.drive_file_move),
-              title: Text('移动已选 (${state.selectedFiles.length})'),
+              title: Text(al.file_moveSelected(state.selectedFiles.length)),
               onTap: () {
                 Navigator.pop(ctx);
                 _showMoveDialog(context, state.selectedFiles.toList());
@@ -1069,7 +1079,7 @@ class _FileViewState extends State<_FileView> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                '删除已选 (${state.selectedFiles.length})',
+                al.file_deleteSelected(state.selectedFiles.length),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
@@ -1080,7 +1090,7 @@ class _FileViewState extends State<_FileView> {
             ),
             ListTile(
               leading: const Icon(Icons.close),
-              title: const Text('取消选择'),
+              title: Text(al.file_deselect),
               onTap: () {
                 Navigator.pop(ctx);
                 context.read<FileBloc>().add(const FileSelectModeEvent());
@@ -1093,6 +1103,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showCreateDirDialog(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final nameController = TextEditingController();
     final maxHistoriesController = TextEditingController();
     bool enableEncryption = false;
@@ -1111,7 +1122,7 @@ class _FileViewState extends State<_FileView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (builderctx, setState) => AlertDialog(
-          title: const Text('新建文件夹'),
+          title: Text(al.file_newFolder),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1119,9 +1130,9 @@ class _FileViewState extends State<_FileView> {
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: '文件夹名称',
-                    hintText: '请输入文件夹名称',
+                  decoration: InputDecoration(
+                    labelText: al.file_folderName,
+                    hintText: al.file_folderNameHint,
                   ),
                   autofocus: true,
                 ),
@@ -1129,14 +1140,14 @@ class _FileViewState extends State<_FileView> {
                 // 存储提供者选择
                 if (providers.isNotEmpty) ...[
                   Text(
-                    '绑定存储提供者',
+                    al.file_bindStorageProvider,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
                   ...providers.map(
                     (provider) => CheckboxListTile(
                       title: Text(provider.name),
-                      subtitle: Text(provider.enabled ? '已启用' : '已禁用'),
+                      subtitle: Text(provider.enabled ? al.common_enabled : al.common_disabled),
                       value: selectedProviderIds.contains(provider.id),
                       enabled: provider.enabled,
                       onChanged: (checked) {
@@ -1157,8 +1168,8 @@ class _FileViewState extends State<_FileView> {
                 ],
                 // 加密选项
                 SwitchListTile(
-                  title: const Text('启用加密'),
-                  subtitle: const Text('对文件夹内容进行加密存储'),
+                  title: Text(al.file_enableEncryption),
+                  subtitle: Text(al.file_encryptionHint),
                   value: enableEncryption,
                   onChanged: (value) {
                     setState(() => enableEncryption = value);
@@ -1168,16 +1179,16 @@ class _FileViewState extends State<_FileView> {
                 // 最大历史记录数
                 TextField(
                   controller: maxHistoriesController,
-                  decoration: const InputDecoration(
-                    labelText: '最大历史记录数',
-                    hintText: '默认 0',
+                  decoration: InputDecoration(
+                    labelText: al.file_maxHistoryCount,
+                    hintText: al.file_maxHistoryHint,
                   ),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  '覆盖文件时保留的历史版本数量，默认 0 表示不保留历史',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                Text(
+                  al.file_maxHistoryDesc,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 if (enableEncryption) ...[const Divider()],
               ],
@@ -1186,7 +1197,7 @@ class _FileViewState extends State<_FileView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(al.common_cancel),
             ),
             FilledButton(
               onPressed: () {
@@ -1197,7 +1208,7 @@ class _FileViewState extends State<_FileView> {
                     maxHistories = int.tryParse(maxHistoriesController.text);
                     if (maxHistories == null || maxHistories < 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('最大历史记录数必须是有效的非负整数')),
+                        SnackBar(content: Text(al.file_maxHistoryInvalid)),
                       );
                       return;
                     }
@@ -1215,7 +1226,7 @@ class _FileViewState extends State<_FileView> {
                   Navigator.pop(ctx);
                 }
               },
-              child: const Text('创建'),
+              child: Text(al.common_create),
             ),
           ],
         ),
@@ -1224,20 +1235,21 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showRenameDialog(BuildContext context, File file) {
+    final al = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: file.name);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名'),
+        title: Text(al.file_rename),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: '请输入新名称'),
+          decoration: InputDecoration(hintText: al.file_enterNewName),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -1248,7 +1260,7 @@ class _FileViewState extends State<_FileView> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('确定'),
+            child: Text(al.common_confirm),
           ),
         ],
       ),
@@ -1258,6 +1270,7 @@ class _FileViewState extends State<_FileView> {
   /// 显示修改标签对话框
   /// 注意：现在使用专门的 GetFileTags API 获取标签，提高了性能
   void _showTagsDialog(BuildContext context, File file) async {
+    final al = AppLocalizations.of(context)!;
     // 获取文件标签
     final fmRepo = context.read<FmRepository>();
     final tagsResult = await fmRepo.getFileTags(fileId: file.id);
@@ -1269,7 +1282,7 @@ class _FileViewState extends State<_FileView> {
       // 如果获取标签失败，显示错误信息
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('获取文件标签失败: ${tagsResult.message}')),
+          SnackBar(content: Text('${al.file_tagsLoadFailed}: ${tagsResult.message}')),
         );
       }
       return;
@@ -1280,19 +1293,19 @@ class _FileViewState extends State<_FileView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('修改标签'),
+        title: Text(al.file_editTags),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: '输入标签，用逗号分隔',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: al.file_tagInputHint,
+            border: const OutlineInputBorder(),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () async {
@@ -1318,17 +1331,17 @@ class _FileViewState extends State<_FileView> {
                   _saveScrollAndRefresh();
                   ScaffoldMessenger.of(
                     context,
-                  ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
+                  ).showSnackBar(SnackBar(content: Text(al.file_tagUpdateSuccess)));
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('标签更新失败: ${result.message}')),
+                    SnackBar(content: Text('${al.file_tagUpdateFailed}: ${result.message}')),
                   );
                 }
               }
 
               Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(al.common_save),
           ),
         ],
       ),
@@ -1349,15 +1362,16 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showDeleteConfirm(BuildContext context, List<String> ids) {
+    final al = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 ${ids.length} 个文件吗？文件将移至回收站。'),
+        title: Text(al.file_confirmDelete),
+        content: Text(al.file_confirmDeleteMsg(ids.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -1367,7 +1381,7 @@ class _FileViewState extends State<_FileView> {
               context.read<FileBloc>().add(FileDeleteEvent(ids));
               Navigator.pop(ctx);
             },
-            child: const Text('删除'),
+            child: Text(al.file_delete),
           ),
         ],
       ),
@@ -1376,6 +1390,7 @@ class _FileViewState extends State<_FileView> {
 
   /// 显示移动文件对话框
   Future<void> _showMoveDialog(BuildContext context, List<File> files) async {
+    final al = AppLocalizations.of(context)!;
     // 要排除的文件夹ID（不能移动到自己或子文件夹）
     final fileIds = files.map((f) => f.id).toList();
 
@@ -1404,11 +1419,11 @@ class _FileViewState extends State<_FileView> {
         if (failedIds.isEmpty) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('成功移动 $successCount 个文件')));
+          ).showSnackBar(SnackBar(content: Text(al.file_moveSuccess(successCount))));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('成功移动 $successCount 个文件，失败 ${failedIds.length} 个'),
+              content: Text(al.file_movePartialSuccess(successCount, failedIds.length)),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
@@ -1418,7 +1433,7 @@ class _FileViewState extends State<_FileView> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('移动失败: ${moveResult.message ?? "未知错误"}'),
+            content: Text('${al.file_moveFailed}: ${moveResult.message ?? "未知错误"}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -1693,10 +1708,11 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   List<Widget> buildActions(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return [
       IconButton(
         icon: Icon(_isTagSearch ? Icons.label : Icons.search),
-        tooltip: _isTagSearch ? '切换为按文件名搜索' : '切换为按标签搜索',
+        tooltip: _isTagSearch ? al.file_searchToggleFilename : al.file_searchToggleTag,
         onPressed: () {
           _isTagSearch = !_isTagSearch;
           // 触发 UI 重建
@@ -1725,8 +1741,9 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   Widget buildResults(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (query.trim().isEmpty) {
-      return const Center(child: Text('请输入关键词搜索'));
+      return Center(child: Text(al.file_enterKeyword));
     }
 
     _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));
@@ -1738,16 +1755,16 @@ class _FileSearchDelegate extends SearchDelegate<String> {
           return const Center(child: CircularProgressIndicator());
         }
         if (state.status == FileStateStatus.failure) {
-          return Center(child: Text('搜索失败: ${state.msg}'));
+          return Center(child: Text('${al.file_searchFailed}: ${state.msg}'));
         }
         if (state.files.isEmpty) {
-          return const Center(child: Text('没有找到匹配的文件'));
+          return Center(child: Text(al.file_noMatchingFiles));
         }
         return ListView.builder(
           itemCount: state.files.length,
           itemBuilder: (context, index) {
             final file = state.files[index];
-            final fileName = file.hasName() ? file.name : '未知文件';
+            final fileName = file.hasName() ? file.name : al.file_unknownFile;
             final fileSize = file.hasSize() ? file.size.toInt() : 0;
             final fileId = file.hasId() ? file.id : '';
 
@@ -1767,13 +1784,14 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (query.trim().isEmpty) {
       return Center(
-        child: Text(_isTagSearch ? '输入标签关键词搜索' : '输入关键词搜索文件'),
+        child: Text(_isTagSearch ? al.file_searchTagHint : al.file_searchFilenameHint),
       );
     }
     return Center(
-      child: Text(_isTagSearch ? '按回车搜索标签' : '按回车搜索文件名'),
+      child: Text(_isTagSearch ? al.file_searchTagEnter : al.file_searchFilenameEnter),
     );
   }
 

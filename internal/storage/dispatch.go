@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"jenken827.com/jenken827/pfm/driver/types"
+	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
@@ -21,8 +22,10 @@ import (
 )
 
 const (
-	// MaxConcurrentUploads 最大并发上传数
-	MaxConcurrentUploads = 10
+	// DefaultMaxConcurrentUploads 默认全局最大并发上传数
+	DefaultMaxConcurrentUploads = 10
+	// DefaultProviderConcurrentUploads 默认单个存储提供者最大并发上传数
+	DefaultProviderConcurrentUploads = 3
 )
 
 // uploadKey 并发控制键
@@ -31,14 +34,57 @@ type uploadKey struct {
 	providerID uint32
 }
 
-// dispatcher 分发器
-type dispatcher struct {
-	processing sync.Map      // map[uploadKey]chan struct{}
-	semaphore  chan struct{} // 并发控制信号量
+// providerSemaphore 存储提供者信号量
+type providerSemaphore struct {
+	semaphore chan struct{}
 }
 
-var globalDispatcher = &dispatcher{
-	semaphore: make(chan struct{}, MaxConcurrentUploads),
+// dispatcher 分发器
+type dispatcher struct {
+	processing          sync.Map // map[uploadKey]chan struct{}
+	globalSemaphore     chan struct{}
+	providerSemaphores  sync.Map // map[uint32]*providerSemaphore
+	providerConcurrence sync.Map // map[uint32]int 存储提供者配置的并发数
+}
+
+var globalDispatcher = &dispatcher{}
+
+func init() {
+	// 初始化全局信号量，后续会被 config 覆盖
+	maxConcurrent := DefaultMaxConcurrentUploads
+	if cfg := config.GetConfig(); cfg != nil && cfg.Upload.MaxConcurrentUploads > 0 {
+		maxConcurrent = cfg.Upload.MaxConcurrentUploads
+	}
+	globalDispatcher.globalSemaphore = make(chan struct{}, maxConcurrent)
+}
+
+// getProviderSemaphore 获取存储提供者的信号量
+func getProviderSemaphore(providerID uint32) chan struct{} {
+	if v, ok := globalDispatcher.providerSemaphores.Load(providerID); ok {
+		return v.(*providerSemaphore).semaphore
+	}
+
+	// 从数据库读取配置
+	concurrent := DefaultProviderConcurrentUploads
+	if provider, err := db.GetProviderByID(providerID); err == nil && provider != nil {
+		if provider.MaxConcurrentUploads != nil && *provider.MaxConcurrentUploads > 0 {
+			concurrent = int(*provider.MaxConcurrentUploads)
+		}
+	}
+
+	sem := make(chan struct{}, concurrent)
+	if actual, loaded := globalDispatcher.providerSemaphores.LoadOrStore(providerID, &providerSemaphore{semaphore: sem}); loaded {
+		return actual.(*providerSemaphore).semaphore
+	}
+	globalDispatcher.providerConcurrence.Store(providerID, concurrent)
+	llog.L().Infof("Created semaphore for provider %d with concurrency %d", providerID, concurrent)
+	return sem
+}
+
+// refreshProviderSemaphore 刷新存储提供者的信号量（配置变更时调用）
+func RefreshProviderSemaphore(providerID uint32) {
+	globalDispatcher.providerSemaphores.Delete(providerID)
+	globalDispatcher.providerConcurrence.Delete(providerID)
 }
 
 // Dispatch 分发处理（文件上传完成后调用）
@@ -247,11 +293,17 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 	var errorMu sync.Mutex
 
 	for _, targetID := range targetProviderIds {
-		globalDispatcher.semaphore <- struct{}{}
+		// 获取全局信号量
+		globalDispatcher.globalSemaphore <- struct{}{}
+		// 获取存储提供者信号量
+		providerSem := getProviderSemaphore(targetID)
+		providerSem <- struct{}{}
+
 		wg.Add(1)
-		go func(tid uint32) {
+		go func(tid uint32, pSem chan struct{}) {
 			defer wg.Done()
-			defer func() { <-globalDispatcher.semaphore }()
+			defer func() { <-pSem }()                  // 释放提供者信号量
+			defer func() { <-globalDispatcher.globalSemaphore }() // 释放全局信号量
 
 			if failed, errMsg := uploadToProviderAsync(ctx, ur, sourcePath, fileName, parentID, fileEncrypt, tid); failed {
 				failedCount++
@@ -261,7 +313,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 					errorMu.Unlock()
 				}
 			}
-		}(targetID)
+		}(targetID, providerSem)
 	}
 
 	wg.Wait()

@@ -13,6 +13,14 @@ type Config struct {
 	Aria2     Aria2Config `json:"aria2" yaml:"aria2"`
 	// 分享链接签名密钥，用于生成和验证分享链接的签名
 	SignToken string `json:"sign_token" yaml:"sign_token"`
+	// 上传配置
+	Upload UploadConfig `json:"upload" yaml:"upload"`
+}
+
+// UploadConfig 上传配置
+type UploadConfig struct {
+	// 全局最大并发上传数（所有存储提供者共享），默认 10
+	MaxConcurrentUploads int `json:"max_concurrent_uploads" yaml:"max_concurrent_uploads"`
 }
 
 // Schema http server config

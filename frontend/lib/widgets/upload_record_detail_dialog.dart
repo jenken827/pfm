@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/upload.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/utils/format.dart';
@@ -29,6 +30,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   Future<void> _loadDetail() async {
+    final al = AppLocalizations.of(context)!;
     try {
       final repository = context.read<FmRepository>();
       final result = await repository.getUploadRecordDetail(widget.uploadId);
@@ -41,7 +43,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
         });
       } else {
         setState(() {
-          _errorMessage = result.message ?? '未知错误';
+          _errorMessage = result.message ?? al.uploadRecord_unknownError;
           _isLoading = false;
         });
       }
@@ -54,17 +56,18 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   String _getStatusText(LocationStatus status) {
+    final al = AppLocalizations.of(context)!;
     switch (status) {
       case LocationStatus.PPENDING:
-        return '等待中';
+        return al.uploadRecord_statusWaiting;
       case LocationStatus.PUPLOADING:
-        return '上传中';
+        return al.uploadRecord_statusUploading;
       case LocationStatus.PCOMPLETED:
-        return '已完成';
+        return al.uploadRecord_statusCompleted;
       case LocationStatus.PFAILED:
-        return '失败';
+        return al.uploadRecord_statusFailed;
       default:
-        return '未知';
+        return al.uploadRecord_statusUnknown;
     }
   }
 
@@ -84,15 +87,16 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   String _getCacheStatusText(CacheStatus status) {
+    final al = AppLocalizations.of(context)!;
     switch (status) {
       case CacheStatus.UNCACHED:
-        return '未缓存';
+        return al.uploadRecord_cacheNotCached;
       case CacheStatus.CACHING:
-        return '缓存中';
+        return al.uploadRecord_cacheCaching;
       case CacheStatus.CACHED:
-        return '已缓存';
+        return al.uploadRecord_cacheCached;
       default:
-        return '未知';
+        return al.uploadRecord_statusUnknown;
     }
   }
 

@@ -4,7 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:pfm/api/api.dart';
-import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 
 // 直接导入 blake3_dart 内部类以支持增量哈希
@@ -84,9 +84,46 @@ Future<void> uploadFile({
     final fileSize = task.fileSize;
 
     if (fileSize <= smallFileThreshold) {
-      // 小文件上传：直接读取整个文件并发送
+      // 小文件上传：先 initUpload 检查秒传，不秒传再 uploadSmall 传内容
       l.info('[Upload] Small file mode: ${task.filename} (${_formatSize(fileSize)})');
 
+      // 先请求秒传检查
+      final initResult = await _retryOnTimeout(
+        () => fmRepo.initUpload(
+          name: task.filename,
+          size: task.fileSize,
+          hash: task.fileHash!,
+          parentId: task.parentId,
+          overwrite: task.overwrite,
+          tags: task.tags,
+        ),
+        operationName: 'initUpload(${task.filename})',
+      );
+
+      if (!initResult.success) {
+        await storage.updateUploadTask(
+          task.id,
+          status: UploadStatus.FAILED,
+          errorMessage: initResult.message,
+        );
+        l.error('[Upload] InitUpload FAILED: ${task.filename} - ${initResult.message}');
+        return;
+      }
+
+      // 秒传成功
+      if (initResult.data!.exists) {
+        l.info('[Upload] Instant upload: ${task.filename}');
+        await storage.updateUploadTask(
+          task.id,
+          status: UploadStatus.COMPLETED,
+          uploadedBytes: fileSize,
+        );
+        final totalDuration = DateTime.now().difference(startTime);
+        l.info('[Upload] COMPLETED (instant): ${task.filename} in ${totalDuration.inMilliseconds}ms');
+        return;
+      }
+
+      // 不秒传，上传文件内容
       final file = io.File(task.filepath);
       final content = await file.readAsBytes();
 
@@ -118,11 +155,6 @@ Future<void> uploadFile({
         );
         l.error('[Upload] FAILED: ${task.filename} after ${uploadDuration.inSeconds}s - ${result.message}');
         return;
-      }
-
-      // 检查是否秒传
-      if (result.data?.exists == true) {
-        l.info('[Upload] Instant upload: ${task.filename}');
       }
 
       await storage.updateUploadTask(

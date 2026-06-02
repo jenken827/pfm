@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/backup_bloc/backup_bloc.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/proto/native/backup.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -25,9 +26,10 @@ class _ServerBackupPageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('服务端备份'),
+        title: Text(al.serverBackup_title),
         centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(
@@ -46,7 +48,7 @@ class _ServerBackupPageView extends StatelessWidget {
                 children: [
                   Icon(Icons.backup_outlined, size: 48, color: Colors.grey[400]),
                   const SizedBox(height: 12),
-                  Text('暂无服务端备份任务',
+                  Text(al.serverBackup_noTasks,
                       style: TextStyle(color: Colors.grey[600])),
                 ],
               ),
@@ -85,7 +87,8 @@ class _ServerBackupTaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusText = _getStatusText(task.lastRunStatus);
+    final al = AppLocalizations.of(context)!;
+    final statusText = _getStatusText(task.lastRunStatus, al);
     final statusColor = _getStatusColor(task.lastRunStatus);
 
     return Card(
@@ -107,7 +110,7 @@ class _ServerBackupTaskTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    task.hasName() ? task.name : '未命名',
+                    task.hasName() ? task.name : al.serverBackup_unnamed,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
@@ -129,21 +132,21 @@ class _ServerBackupTaskTile extends StatelessWidget {
                     context.read<BackupBloc>().add(BackupTriggerEvent(
                         id: task.hasId() ? task.id.toInt() : 0));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已触发备份')),
+                      SnackBar(content: Text(al.serverBackup_triggered)),
                     );
                   },
-                  child: const Text('立即执行'),
+                  child: Text(al.serverBackup_executeNow),
                 ),
                 TextButton(
                   onPressed: () => _showEditDialog(context),
-                  child: const Text('编辑'),
+                  child: Text(al.common_edit),
                 ),
                 TextButton(
                   onPressed: () => _confirmDelete(context),
                   style: TextButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.error,
                   ),
-                  child: const Text('删除'),
+                  child: Text(al.common_delete),
                 ),
               ],
             ),
@@ -153,18 +156,18 @@ class _ServerBackupTaskTile extends StatelessWidget {
     );
   }
 
-  String _getStatusText(BackupRunStatus status) {
+  String _getStatusText(BackupRunStatus status, AppLocalizations al) {
     switch (status) {
       case BackupRunStatus.BACKUP_RUN_STATUS_IDLE:
-        return '空闲';
+        return al.serverBackup_statusIdle;
       case BackupRunStatus.BACKUP_RUN_STATUS_RUNNING:
-        return '运行中';
+        return al.serverBackup_statusRunning;
       case BackupRunStatus.BACKUP_RUN_STATUS_SUCCESS:
-        return '成功';
+        return al.serverBackup_statusSuccess;
       case BackupRunStatus.BACKUP_RUN_STATUS_FAILED:
-        return '失败';
+        return al.serverBackup_statusFailed;
       default:
-        return '未知';
+        return al.common_unknown;
     }
   }
 
@@ -194,15 +197,17 @@ class _ServerBackupTaskTile extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+    final name = task.hasName() ? task.name : '';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除备份任务'),
-        content: Text('确定要删除「${task.hasName() ? task.name : ''}」吗？'),
+        title: Text(al.serverBackup_deleteTask),
+        content: Text(al.serverBackup_deleteConfirm(name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -213,7 +218,7 @@ class _ServerBackupTaskTile extends StatelessWidget {
                   ids: [task.hasId() ? task.id.toInt() : 0]));
               Navigator.pop(ctx);
             },
-            child: const Text('删除'),
+            child: Text(al.common_delete),
           ),
         ],
       ),
@@ -337,6 +342,7 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final isEdit = widget.task != null;
     return Padding(
       padding: EdgeInsets.only(
@@ -350,24 +356,24 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEdit ? '编辑服务端备份' : '创建服务端备份',
+              Text(isEdit ? al.serverBackup_editTask : al.serverBackup_createTask,
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                    labelText: '任务名称', border: OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? '请输入任务名称' : null,
+                decoration: InputDecoration(
+                    labelText: al.serverBackup_taskName, border: const OutlineInputBorder()),
+                validator: (v) => v?.isEmpty == true ? al.serverBackup_taskNameRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _sourcePathController,
-                decoration: const InputDecoration(
-                  labelText: '源路径',
-                  hintText: '服务器本地文件系统路径',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: al.serverBackup_sourcePath,
+                  hintText: al.serverBackup_sourcePathHint,
+                  border: const OutlineInputBorder(),
                 ),
-                validator: (v) => v?.isEmpty == true ? '请输入源路径' : null,
+                validator: (v) => v?.isEmpty == true ? al.serverBackup_sourcePathRequired : null,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -376,8 +382,8 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                 child: InputDecorator(
                   isEmpty: _targetDirId == null,
                   decoration: InputDecoration(
-                    labelText: '目标目录',
-                    hintText: _targetDirId == null ? '点击选择目标文件夹' : null,
+                    labelText: al.serverBackup_targetDir,
+                    hintText: _targetDirId == null ? al.serverBackup_targetDirHint : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.folder_open),
                   ),
@@ -389,15 +395,15 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
               const SizedBox(height: 12),
               DropdownButtonFormField<BackupStrategy>(
                 value: _strategy,
-                decoration: const InputDecoration(
-                    labelText: '备份策略', border: OutlineInputBorder()),
-                items: const [
+                decoration: InputDecoration(
+                    labelText: al.serverBackup_backupStrategy, border: const OutlineInputBorder()),
+                items: [
                   DropdownMenuItem(
                       value: BackupStrategy.BACKUP_STRATEGY_SCHEDULED,
-                      child: Text('定时备份')),
+                      child: Text(al.serverBackup_scheduledBackup)),
                   DropdownMenuItem(
                       value: BackupStrategy.BACKUP_STRATEGY_WATCH,
-                      child: Text('监听备份')),
+                      child: Text(al.serverBackup_watchBackup)),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _strategy = v);
@@ -407,34 +413,34 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _cronController,
-                  decoration: const InputDecoration(
-                    labelText: 'Cron 表达式',
+                  decoration: InputDecoration(
+                    labelText: al.serverBackup_cronExpression,
                     hintText: '0 0 * * *',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
               ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _ignoreController,
-                decoration: const InputDecoration(
-                  labelText: '忽略规则（可选）',
-                  hintText: '兼容 .gitignore 语法',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: al.serverBackup_ignoreRules,
+                  hintText: al.serverBackup_ignoreRulesHint,
+                  border: const OutlineInputBorder(),
                 ),
                 maxLines: 2,
               ),
               SwitchListTile(
-                  title: const Text('包含子目录'),
+                  title: Text(al.serverBackup_includeSubdir),
                   value: _recursive,
                   onChanged: (v) => setState(() => _recursive = v)),
               SwitchListTile(
-                  title: const Text('启用'),
+                  title: Text(al.clientBackup_enable),
                   value: _enabled,
                   onChanged: (v) => setState(() => _enabled = v)),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: _submit, child: Text(isEdit ? '保存' : '创建')),
+                  onPressed: _submit, child: Text(isEdit ? al.common_save : al.common_create)),
             ],
           ),
         ),
@@ -455,10 +461,11 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
   }
 
   void _submit() {
+    final al = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     if (_targetDirId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请选择目标目录')));
+          SnackBar(content: Text(al.serverBackup_selectTargetDir)));
       return;
     }
     final bloc = context.read<BackupBloc>();

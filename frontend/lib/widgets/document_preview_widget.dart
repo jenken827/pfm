@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/services/local_storage.dart';
 
@@ -32,6 +33,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   }
 
   Future<void> _loadDocument() async {
+    final al = AppLocalizations.of(context)!;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -44,13 +46,13 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
         await _loadTxtDocument();
       } else {
         setState(() {
-          _error = '此文件类型请使用 Flyfish Viewer 预览';
+          _error = al.docPreview_useFlyfishViewer;
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _error = '加载文档失败: $e';
+        _error = '${al.docPreview_loadFailed}: $e';
         _isLoading = false;
       });
     }
@@ -75,6 +77,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   }
 
   Future<void> _loadTxtDocument() async {
+    final al = AppLocalizations.of(context)!;
     try {
       final dio = Dio();
       final response = await dio.get(
@@ -91,7 +94,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
       });
     } catch (e) {
       setState(() {
-        _error = '加载文本文件失败: $e';
+        _error = '${al.docPreview_loadTextFailed}: $e';
         _isLoading = false;
       });
     }

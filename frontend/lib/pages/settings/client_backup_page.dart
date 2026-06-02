@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/client_backup_bloc/client_backup_bloc.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/models/client_backup_config.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/utils/platform.dart';
@@ -27,9 +28,10 @@ class _ClientBackupPageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('自动备份'),
+        title: Text(al.clientBackup_title),
         centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(
@@ -45,7 +47,7 @@ class _ClientBackupPageView extends StatelessWidget {
                 children: [
                   Icon(Icons.phone_android_outlined, size: 48, color: Colors.grey[400]),
                   const SizedBox(height: 12),
-                  Text('暂无自动备份任务',
+                  Text(al.clientBackup_noTasks,
                       style: TextStyle(color: Colors.grey[600])),
                 ],
               ),
@@ -84,6 +86,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Padding(
@@ -111,7 +114,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
                   _StatusChip(
                     label: config.lastBackupCount > 0
                         ? '${config.lastBackupCount} 文件'
-                        : '已同步',
+                        : al.clientBackup_synced,
                     color: Colors.green,
                   ),
               ],
@@ -144,20 +147,20 @@ class _ClientBackupTaskTile extends StatelessWidget {
                               child:
                                   CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('立即执行'),
+                          : Text(al.clientBackup_executeNow),
                     );
                   },
                 ),
                 TextButton(
                   onPressed: () => _showEditDialog(context),
-                  child: const Text('编辑'),
+                  child: Text(al.common_edit),
                 ),
                 TextButton(
                   onPressed: () => _confirmDelete(context),
                   style: TextButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.error,
                   ),
-                  child: const Text('删除'),
+                  child: Text(al.common_delete),
                 ),
               ],
             ),
@@ -184,15 +187,16 @@ class _ClientBackupTaskTile extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除客户端备份任务'),
-        content: Text('确定要删除「${config.name}」吗？备份记录也会被清除。'),
+        title: Text(al.clientBackup_deleteTask),
+        content: Text(al.clientBackup_deleteConfirm(config.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -204,7 +208,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
                   .add(ClientBackupDeleteEvent(ids: [config.id]));
               Navigator.pop(ctx);
             },
-            child: const Text('删除'),
+            child: Text(al.common_delete),
           ),
         ],
       ),
@@ -317,6 +321,7 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final isEdit = widget.config != null;
     return Padding(
       padding: EdgeInsets.only(
@@ -330,14 +335,14 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEdit ? '编辑自动备份' : '创建自动备份',
+              Text(isEdit ? al.clientBackup_editTask : al.clientBackup_createTask,
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                    labelText: '任务名称', border: OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? '请输入任务名称' : null,
+                decoration: InputDecoration(
+                    labelText: al.clientBackup_taskName, border: const OutlineInputBorder()),
+                validator: (v) => v?.isEmpty == true ? al.clientBackup_taskNameRequired : null,
               ),
               const SizedBox(height: 12),
               // 本地路径选择
@@ -347,8 +352,8 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
                 child: InputDecorator(
                   isEmpty: _sourcePath == null,
                   decoration: InputDecoration(
-                    labelText: '本地源路径',
-                    hintText: _sourcePath == null ? '点击选择本地文件夹' : null,
+                    labelText: al.clientBackup_localPath,
+                    hintText: _sourcePath == null ? al.clientBackup_localPathHint : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.folder_open),
                   ),
@@ -365,8 +370,8 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
                 child: InputDecorator(
                   isEmpty: _targetDirId == null,
                   decoration: InputDecoration(
-                    labelText: '服务端目标目录',
-                    hintText: _targetDirId == null ? '点击选择目标文件夹' : null,
+                    labelText: al.clientBackup_targetDir,
+                    hintText: _targetDirId == null ? al.clientBackup_targetDirHint : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.cloud_upload_outlined),
                   ),
@@ -378,24 +383,24 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _ignoreController,
-                decoration: const InputDecoration(
-                  labelText: '忽略规则（可选）',
-                  hintText: '兼容 .gitignore 语法，每行一条',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: al.clientBackup_ignoreRules,
+                  hintText: al.clientBackup_ignoreRulesHint,
+                  border: const OutlineInputBorder(),
                 ),
                 maxLines: 3,
               ),
               SwitchListTile(
-                  title: const Text('包含子目录'),
+                  title: Text(al.clientBackup_includeSubdir),
                   value: _recursive,
                   onChanged: (v) => setState(() => _recursive = v)),
               SwitchListTile(
-                  title: const Text('启用'),
+                  title: Text(al.clientBackup_enable),
                   value: _enabled,
                   onChanged: (v) => setState(() => _enabled = v)),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: _submit, child: Text(isEdit ? '保存' : '创建')),
+                  onPressed: _submit, child: Text(isEdit ? al.common_save : al.common_create)),
             ],
           ),
         ),
@@ -404,9 +409,10 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
   }
 
   Future<void> _pickSourcePath() async {
+    final al = AppLocalizations.of(context)!;
     if (isDesktop()) {
       final path = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: '选择备份源文件夹',
+        dialogTitle: al.clientBackup_selectSourceFolder,
       );
       if (path != null && mounted) {
         setState(() => _sourcePath = path);
@@ -417,7 +423,7 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
       final result = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('输入源路径'),
+          title: Text(al.clientBackup_inputSourcePath),
           content: TextField(
             controller: controller,
             decoration: const InputDecoration(
@@ -428,10 +434,10 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消')),
+                child: Text(al.common_cancel)),
             FilledButton(
                 onPressed: () => Navigator.pop(ctx, controller.text),
-                child: const Text('确定')),
+                child: Text(al.common_confirm)),
           ],
         ),
       );
@@ -454,15 +460,16 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
   }
 
   void _submit() {
+    final al = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     if (_sourcePath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请选择本地源路径')));
+          SnackBar(content: Text(al.clientBackup_selectLocalPath)));
       return;
     }
     if (_targetDirId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请选择服务端目标目录')));
+          SnackBar(content: Text(al.clientBackup_selectTargetDir)));
       return;
     }
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/album_backup_service.dart';
 import 'package:pfm/services/local_storage.dart';
@@ -77,9 +78,10 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('相册备份')),
+        appBar: AppBar(title: Text(al.albumBackup_title)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -87,21 +89,21 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
     // 仅在移动端显示
     if (!Platform.isAndroid && !Platform.isIOS) {
       return Scaffold(
-        appBar: AppBar(title: const Text('相册备份')),
-        body: const Center(
-          child: Text('相册备份仅支持移动端'),
+        appBar: AppBar(title: Text(al.albumBackup_title)),
+        body: Center(
+          child: Text(al.albumBackup_mobileOnly),
         ),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('相册自动备份'),
+        title: Text(al.albumBackup_autoTitle),
         centerTitle: true,
         actions: [
           TextButton(
             onPressed: _startBackup,
-            child: const Text('立即备份'),
+            child: Text(al.albumBackup_backupNow),
           ),
         ],
       ),
@@ -112,8 +114,8 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
           // 开关
           SwitchListTile(
-            title: const Text('开启自动备份'),
-            subtitle: const Text('自动备份新照片到云端'),
+            title: Text(al.albumBackup_enableAuto),
+            subtitle: Text(al.albumBackup_autoHint),
             value: _config.enabled,
             onChanged: (value) {
               _saveConfig(_config.copyWith(enabled: value));
@@ -122,8 +124,8 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
           // WiFi 限制
           SwitchListTile(
-            title: const Text('仅 WiFi 备份'),
-            subtitle: const Text('节省移动数据流量'),
+            title: Text(al.albumBackup_wifiOnly),
+            subtitle: Text(al.albumBackup_wifiOnlyHint),
             value: _config.wifiOnly,
             onChanged: _config.enabled
                 ? (value) {
@@ -134,8 +136,8 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
           // 备份视频
           SwitchListTile(
-            title: const Text('备份视频'),
-            subtitle: const Text('包含相册中的视频文件'),
+            title: Text(al.albumBackup_backupVideos),
+            subtitle: Text(al.albumBackup_backupVideosHint),
             value: _config.backupVideos,
             onChanged: _config.enabled
                 ? (value) {
@@ -148,10 +150,10 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
           // 目标文件夹
           ListTile(
-            title: const Text('备份到'),
+            title: Text(al.albumBackup_backupTo),
             subtitle: Text(
               _config.targetParentId.isEmpty
-                  ? '未设置（将备份到根目录）'
+                  ? al.albumBackup_notSetRoot
                   : _config.targetFolderName.isEmpty
                       ? _config.targetParentId
                       : _config.targetFolderName,
@@ -166,7 +168,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              '选择要备份的相册',
+              al.albumBackup_selectAlbums,
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
@@ -181,6 +183,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Widget _buildStatusCard() {
+    final al = AppLocalizations.of(context)!;
     Color statusColor;
     String statusText;
     IconData statusIcon;
@@ -188,42 +191,42 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
     switch (_result.status) {
       case AlbumBackupStatus.idle:
         statusColor = Colors.grey;
-        statusText = '空闲';
+        statusText = al.albumBackup_statusIdle;
         statusIcon = Icons.cloud_upload_outlined;
         break;
       case AlbumBackupStatus.scanning:
         statusColor = Colors.blue;
-        statusText = '扫描中...';
+        statusText = al.albumBackup_statusScanning;
         statusIcon = Icons.search;
         break;
       case AlbumBackupStatus.uploading:
         statusColor = Colors.orange;
-        statusText = '备份中 ${_result.uploadedPhotos}/${_result.newPhotos}';
+        statusText = al.albumBackup_statusBackingUp(_result.uploadedPhotos, _result.newPhotos);
         statusIcon = Icons.cloud_upload;
         break;
       case AlbumBackupStatus.completed:
         statusColor = Colors.green;
-        statusText = '备份完成';
+        statusText = al.albumBackup_statusCompleted;
         statusIcon = Icons.cloud_done;
         break;
       case AlbumBackupStatus.error:
         statusColor = Colors.red;
-        statusText = '备份失败';
+        statusText = al.albumBackup_statusFailed;
         statusIcon = Icons.error_outline;
         break;
       case AlbumBackupStatus.noPermission:
         statusColor = Colors.red;
-        statusText = '需要相册权限';
+        statusText = al.albumBackup_needPermission;
         statusIcon = Icons.lock_outline;
         break;
       case AlbumBackupStatus.noNetwork:
         statusColor = Colors.orange;
-        statusText = '无网络';
+        statusText = al.albumBackup_noNetwork;
         statusIcon = Icons.wifi_off;
         break;
       case AlbumBackupStatus.waitingForWifi:
         statusColor = Colors.orange;
-        statusText = '等待 WiFi';
+        statusText = al.albumBackup_waitingWifi;
         statusIcon = Icons.wifi;
         break;
     }
@@ -274,7 +277,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
             if (_result.lastBackupTime != null) ...[
               const SizedBox(height: 8),
               Text(
-                '上次备份: ${_result.lastBackupTime}',
+                al.albumBackup_lastBackup(_result.lastBackupTime!.toString()),
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
             ],
@@ -285,6 +288,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Widget _buildAlbumTile(AssetPathEntity album) {
+    final al = AppLocalizations.of(context)!;
     final isSelected = _config.backupAlbumIds.isEmpty ||
         _config.backupAlbumIds.contains(album.id);
 
@@ -294,7 +298,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
         final count = snapshot.data ?? 0;
         return CheckboxListTile(
           title: Text(album.name),
-          subtitle: Text('$count 张照片'),
+          subtitle: Text(al.albumBackup_photoCount(count)),
           value: isSelected,
           onChanged: _config.enabled
               ? (value) {

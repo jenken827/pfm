@@ -8,7 +8,7 @@ import 'package:get_it/get_it.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';

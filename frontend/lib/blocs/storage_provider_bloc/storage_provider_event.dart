@@ -30,6 +30,7 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     this.encryptionSuffix,
     this.defaultBound,
     this.proxy,
+    this.maxConcurrentUploads,
   });
 
   final StorageProviderType providerType;
@@ -44,6 +45,7 @@ class StorageProviderAddEvent extends StorageProviderEvent {
   final String? encryptionSuffix;
   final bool? defaultBound;
   final String? proxy;
+  final int? maxConcurrentUploads;
 }
 
 /// 更新存储介质
@@ -59,6 +61,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
     this.fileSizeLimit,
     this.defaultBound,
     this.proxy,
+    this.maxConcurrentUploads,
   });
 
   final int id;
@@ -71,6 +74,7 @@ class StorageProviderUpdateEvent extends StorageProviderEvent {
   final int? fileSizeLimit;
   final bool? defaultBound;
   final String? proxy;
+  final int? maxConcurrentUploads;
 }
 
 /// 删除存储介质

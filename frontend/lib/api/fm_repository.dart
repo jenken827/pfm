@@ -828,6 +828,7 @@ class FmRepository {
     String? encryptionSuffix,
     bool? defaultBound,
     String? proxy,
+    int? maxConcurrentUploads,
   }) async {
     try {
       final req = AddStorageProviderReq(providerType: providerType, name: name);
@@ -842,6 +843,8 @@ class FmRepository {
       if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
+      // TODO: maxConcurrentUploads 不在 AddStorageProviderReq 中，需要在 proto 中添加
+      // if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
@@ -1244,6 +1247,29 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('重试上传记录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 重试所有失败的上传记录
+  Future<ApiResult<void>> retryAllFailedUploadRecords() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.UploadService/RetryAllFailedUploadRecords',
+        data: Empty().toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('重试所有失败记录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('重试所有失败记录失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

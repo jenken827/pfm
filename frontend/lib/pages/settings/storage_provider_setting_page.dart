@@ -4,6 +4,7 @@ import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/pages/settings/components/config_field_widget.dart';
 import 'package:pfm/pages/settings/components/storage_provider_tile.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -31,8 +32,9 @@ class _StorageProviderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('存储介质设置'), centerTitle: true),
+      appBar: AppBar(title: Text(al.storageProvider_title), centerTitle: true),
       body: BlocBuilder<StorageProviderBloc, StorageProviderState>(
         builder: (context, state) {
           if (state.status == StorageProviderStatus.loading) {
@@ -52,7 +54,7 @@ class _StorageProviderView extends StatelessWidget {
                     onPressed: () => context.read<StorageProviderBloc>().add(
                       const StorageProviderLoadEvent(),
                     ),
-                    child: const Text('重试'),
+                    child: Text(al.common_retry),
                   ),
                 ],
               ),
@@ -70,12 +72,12 @@ class _StorageProviderView extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
-                  const Text('暂无存储介质'),
+                  Text(al.storageProvider_noProvider),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: () => _showProviderDialog(context: context),
                     icon: const Icon(Icons.add),
-                    label: const Text('添加存储介质'),
+                    label: Text(al.storageProvider_add),
                   ),
                 ],
               ),
@@ -109,6 +111,7 @@ class _StorageProviderView extends StatelessWidget {
     required BuildContext context,
     StorageProvider? provider,
   }) {
+    final al = AppLocalizations.of(context)!;
     // 获取存储提供者类型列表
     final state = context.read<StorageProviderBloc>().state;
     final providerTypes = state.providerTypes;
@@ -116,7 +119,7 @@ class _StorageProviderView extends StatelessWidget {
     if (providerTypes.isEmpty && provider == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('存储提供者类型列表未加载，请稍后重试')));
+      ).showSnackBar(SnackBar(content: Text(al.storageProvider_typesNotLoaded)));
       return;
     }
 
@@ -177,7 +180,7 @@ class _StorageProviderView extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(provider == null ? '添加存储介质' : '编辑存储介质'),
+          title: Text(provider == null ? al.storageProvider_add : al.storageProvider_edit),
           content: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 500, // 桌面端最大宽度
@@ -197,9 +200,9 @@ class _StorageProviderView extends StatelessWidget {
                     if (provider == null && providerTypes.isNotEmpty) ...[
                       FormBuilderDropdown<StorageProviderTypeInfo>(
                         name: 'provider_type',
-                        decoration: const InputDecoration(
-                          labelText: '存储类型',
-                          prefixIcon: Icon(Icons.category),
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_storageType,
+                          prefixIcon: const Icon(Icons.category),
                         ),
                         initialValue: selectedTypeInfo,
                         items: providerTypes.map((type) {
@@ -219,9 +222,9 @@ class _StorageProviderView extends StatelessWidget {
                     // 编辑时显示类型（只读）
                     if (provider != null && selectedTypeInfo != null) ...[
                       InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: '存储类型',
-                          prefixIcon: Icon(Icons.category),
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_storageType,
+                          prefixIcon: const Icon(Icons.category),
                         ),
                         child: Text(selectedTypeInfo!.displayName),
                       ),
@@ -231,25 +234,25 @@ class _StorageProviderView extends StatelessWidget {
                     // 名称
                     FormBuilderTextField(
                       name: 'name',
-                      decoration: const InputDecoration(
-                        labelText: '名称',
-                        hintText: '请输入存储介质名称',
-                        prefixIcon: Icon(Icons.label),
+                      decoration: InputDecoration(
+                        labelText: al.storageProvider_name,
+                        hintText: al.storageProvider_nameHint,
+                        prefixIcon: const Icon(Icons.label),
                       ),
                       autofocus: provider == null,
                       initialValue: provider?.name,
                       validator: FormBuilderValidators.required(
-                        errorText: '请输入名称',
+                        errorText: al.storageProvider_nameRequired,
                       ),
                     ),
                     const SizedBox(height: 16),
                     // 描述
                     FormBuilderTextField(
                       name: 'description',
-                      decoration: const InputDecoration(
-                        labelText: '描述',
-                        hintText: '请输入描述（可选）',
-                        prefixIcon: Icon(Icons.description),
+                      decoration: InputDecoration(
+                        labelText: al.storageProvider_description,
+                        hintText: al.storageProvider_descHint,
+                        prefixIcon: const Icon(Icons.description),
                       ),
                       initialValue: provider?.description,
                       maxLines: 2,
@@ -259,8 +262,8 @@ class _StorageProviderView extends StatelessWidget {
                     // 启用状态开关
                     FormBuilderSwitch(
                       name: 'enabled',
-                      title: const Text('启用状态'),
-                      subtitle: const Text('禁用后将无法使用此存储介质'),
+                      title: Text(al.storageProvider_enableStatus),
+                      subtitle: Text(al.storageProvider_disableHint),
                       initialValue: provider?.enabled ?? true,
                     ),
 
@@ -268,8 +271,8 @@ class _StorageProviderView extends StatelessWidget {
                     // 默认绑定开关
                     FormBuilderSwitch(
                       name: 'default_bound',
-                      title: const Text('默认绑定'),
-                      subtitle: const Text('设为默认存储提供者'),
+                      title: Text(al.storageProvider_defaultBind),
+                      subtitle: Text(al.storageProvider_defaultBindHint),
                       initialValue: provider?.defaultBound ?? true,
                     ),
 
@@ -277,11 +280,11 @@ class _StorageProviderView extends StatelessWidget {
                     // 优先级
                     FormBuilderTextField(
                       name: 'order',
-                      decoration: const InputDecoration(
-                        labelText: '优先级',
+                      decoration: InputDecoration(
+                        labelText: al.storageProvider_priority,
                         hintText: '0',
-                        helperText: '数值越小优先级越高',
-                        prefixIcon: Icon(Icons.sort),
+                        helperText: al.storageProvider_priorityHint,
+                        prefixIcon: const Icon(Icons.sort),
                       ),
                       keyboardType: TextInputType.number,
                       initialValue: (provider?.sortOrder ?? 0).toString(),
@@ -295,11 +298,11 @@ class _StorageProviderView extends StatelessWidget {
                         Expanded(
                           child: FormBuilderTextField(
                             name: 'capacity_value',
-                            decoration: const InputDecoration(
-                              labelText: '容量限制',
+                            decoration: InputDecoration(
+                              labelText: al.storageProvider_capacityLimit,
                               hintText: '100',
-                              helperText: '输入数值',
-                              prefixIcon: Icon(Icons.storage),
+                              helperText: al.storageProvider_inputNumber,
+                              prefixIcon: const Icon(Icons.storage),
                             ),
                             keyboardType: TextInputType.number,
                             initialValue: capacityValue,
@@ -310,7 +313,7 @@ class _StorageProviderView extends StatelessWidget {
                           width: 100,
                           child: FormBuilderDropdown<String>(
                             name: 'capacity_unit',
-                            decoration: const InputDecoration(labelText: '单位'),
+                            decoration: InputDecoration(labelText: al.storageProvider_unit),
                             initialValue: capacityUnit,
                             items: unitDropItems,
                             onChanged: (value) {},
@@ -326,11 +329,11 @@ class _StorageProviderView extends StatelessWidget {
                         Expanded(
                           child: FormBuilderTextField(
                             name: 'file_size_limit_value',
-                            decoration: const InputDecoration(
-                              labelText: '单文件大小限制',
+                            decoration: InputDecoration(
+                              labelText: al.storageProvider_fileSizeLimit,
                               hintText: '100',
-                              helperText: '输入数值',
-                              prefixIcon: Icon(Icons.storage),
+                              helperText: al.storageProvider_inputNumber,
+                              prefixIcon: const Icon(Icons.storage),
                             ),
                             keyboardType: TextInputType.number,
                             initialValue: fileSizeLimitValue,
@@ -341,7 +344,7 @@ class _StorageProviderView extends StatelessWidget {
                           width: 100,
                           child: FormBuilderDropdown<String>(
                             name: 'file_size_limit_unit',
-                            decoration: const InputDecoration(labelText: '单位'),
+                            decoration: InputDecoration(labelText: al.storageProvider_unit),
                             initialValue: fileSizeLimitUnit,
                             items: unitDropItems,
                             onChanged: (value) {},
@@ -355,7 +358,7 @@ class _StorageProviderView extends StatelessWidget {
                         selectedTypeInfo!.configFields.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        '配置信息',
+                        al.storageProvider_configInfo,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
@@ -369,27 +372,46 @@ class _StorageProviderView extends StatelessWidget {
                     // 代理设置
                     const SizedBox(height: 16),
                     Text(
-                      '代理设置',
+                      al.storageProvider_proxySetting,
                       style: Theme.of(context).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
                     FormBuilderTextField(
                       name: 'proxy',
-                      decoration: const InputDecoration(
-                        labelText: '代理地址',
+                      decoration: InputDecoration(
+                        labelText: al.storageProvider_proxyAddress,
                         hintText: 'http://127.0.0.1:7890',
-                        helperText: '可选，支持 http/socks5 代理',
-                        prefixIcon: Icon(Icons.settings_ethernet),
+                        helperText: al.storageProvider_proxyHint,
+                        prefixIcon: const Icon(Icons.settings_ethernet),
                       ),
                       initialValue: provider?.proxy,
+                    ),
+
+                    const SizedBox(height: 16),
+                    Text(
+                      al.storageProvider_concurrencySetting,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    FormBuilderTextField(
+                      name: 'max_concurrent_uploads',
+                      decoration: InputDecoration(
+                        labelText: al.storageProvider_maxConcurrentUpload,
+                        hintText: al.storageProvider_maxConcurrentHint,
+                        helperText: al.storageProvider_maxConcurrentDesc,
+                        prefixIcon: const Icon(Icons.speed),
+                      ),
+                      keyboardType: TextInputType.number,
+                      initialValue: (provider?.maxConcurrentUploads ?? 0).toString(),
                     ),
 
                     // 加密设置（仅添加时可编辑）
                     if (provider == null) ...[
                       const SizedBox(height: 24),
                       Text(
-                        '加密设置',
+                        al.storageProvider_encryptionSetting,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
@@ -397,11 +419,11 @@ class _StorageProviderView extends StatelessWidget {
 
                       FormBuilderTextField(
                         name: 'encryption_key',
-                        decoration: const InputDecoration(
-                          labelText: '加密密钥',
-                          hintText: '请输入加密密钥（可选）',
-                          helperText: '用于文件加密的密钥',
-                          prefixIcon: Icon(Icons.vpn_key),
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_encryptionKey,
+                          hintText: al.storageProvider_encryptionKeyHint,
+                          helperText: al.storageProvider_encryptionKeyDesc,
+                          prefixIcon: const Icon(Icons.vpn_key),
                         ),
                         initialValue: provider?.encryptionKey,
                         maxLines: 1,
@@ -410,11 +432,11 @@ class _StorageProviderView extends StatelessWidget {
 
                       FormBuilderTextField(
                         name: 'encryption_suffix',
-                        decoration: const InputDecoration(
-                          labelText: '加密文件后缀',
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_encryptionSuffix,
                           hintText: 'bin',
-                          helperText: '加密后的文件后缀（如：bin、enc）',
-                          prefixIcon: Icon(Icons.extension),
+                          helperText: al.storageProvider_encryptionSuffixHint,
+                          prefixIcon: const Icon(Icons.extension),
                         ),
                         initialValue: provider?.encryptionSuffix ?? 'bin',
                       ),
@@ -424,20 +446,20 @@ class _StorageProviderView extends StatelessWidget {
                     if (provider != null) ...[
                       const SizedBox(height: 24),
                       Text(
-                        '加密设置（只读）',
+                        al.storageProvider_encryptionReadonly,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
                       InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: '加密密钥',
-                          prefixIcon: Icon(Icons.vpn_key),
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_encryptionKey,
+                          prefixIcon: const Icon(Icons.vpn_key),
                         ),
                         child: Text(
                           provider.encryptionKey.isNotEmpty
                               ? '${provider.encryptionKey.substring(0, provider.encryptionKey.length > 8 ? 8 : provider.encryptionKey.length)}...'
-                              : '未设置',
+                              : al.common_notSet,
                           style: TextStyle(
                             color: provider.encryptionKey.isNotEmpty
                                 ? Theme.of(context).textTheme.bodyLarge?.color
@@ -447,14 +469,14 @@ class _StorageProviderView extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: '加密文件后缀',
-                          prefixIcon: Icon(Icons.extension),
+                        decoration: InputDecoration(
+                          labelText: al.storageProvider_encryptionSuffix,
+                          prefixIcon: const Icon(Icons.extension),
                         ),
                         child: Text(
                           provider.encryptionSuffix.isNotEmpty
                               ? provider.encryptionSuffix
-                              : '未设置',
+                              : al.common_notSet,
                           style: TextStyle(
                             color: provider.encryptionSuffix.isNotEmpty
                                 ? Theme.of(context).textTheme.bodyLarge?.color
@@ -471,7 +493,7 @@ class _StorageProviderView extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(al.common_cancel),
             ),
             FilledButton(
               onPressed: () {
@@ -579,7 +601,7 @@ class _StorageProviderView extends StatelessWidget {
                   Navigator.pop(ctx);
                 }
               },
-              child: Text(provider == null ? '添加' : '保存'),
+              child: Text(provider == null ? al.common_add : al.common_save),
             ),
           ],
         ),
@@ -588,15 +610,16 @@ class _StorageProviderView extends StatelessWidget {
   }
 
   void _showDeleteDialog(BuildContext context, StorageProvider provider) {
+    final al = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除存储介质'),
-        content: Text('确定要删除存储介质 "${provider.name}" 吗？'),
+        title: Text(al.storageProvider_deleteProvider),
+        content: Text(al.storageProvider_deleteConfirm(provider.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -608,7 +631,7 @@ class _StorageProviderView extends StatelessWidget {
               );
               Navigator.pop(ctx);
             },
-            child: const Text('删除'),
+            child: Text(al.common_delete),
           ),
         ],
       ),

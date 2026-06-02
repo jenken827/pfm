@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 
 /// 关于页面
 class AboutPage extends StatefulWidget {
@@ -29,8 +30,9 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('关于'), centerTitle: true),
+      appBar: AppBar(title: Text(al.about_title), centerTitle: true),
       body: ListView(
         children: [
           // 应用图标和名称
@@ -40,43 +42,43 @@ class _AboutPageState extends State<AboutPage> {
           // 版本信息
           _buildInfoTile(
             icon: Icons.info_outline,
-            title: '版本号',
-            subtitle: _packageInfo?.version ?? '加载中...',
+            title: al.about_version,
+            subtitle: _packageInfo?.version ?? al.common_loading,
           ),
           const Divider(height: 1),
 
           _buildInfoTile(
             icon: Icons.build_outlined,
-            title: '构建号',
+            title: al.about_buildNumber,
             subtitle: '${_packageInfo?.buildNumber}-{{commit-hash}}',
           ),
           const Divider(height: 1),
 
           _buildInfoTile(
             icon: Icons.inventory_2_outlined,
-            title: '包名',
-            subtitle: _packageInfo?.packageName ?? '加载中...',
+            title: al.about_packageName,
+            subtitle: _packageInfo?.packageName ?? al.common_loading,
           ),
           const SizedBox(height: 24),
 
           // 应用信息
-          _buildSectionHeader('应用信息'),
+          _buildSectionHeader(al.about_appInfo),
           _buildInfoTile(
             icon: Icons.description_outlined,
-            title: '应用名称',
+            title: al.about_appName,
             subtitle: _packageInfo?.appName ?? 'PFM',
           ),
           const Divider(height: 1),
 
           // 技术信息
-          _buildSectionHeader('技术栈'),
-          _buildInfoTile(icon: Icons.code, title: '前端框架', subtitle: 'Flutter'),
+          _buildSectionHeader(al.about_techStack),
+          _buildInfoTile(icon: Icons.code, title: al.about_frontend, subtitle: 'Flutter'),
           const Divider(height: 1),
-          _buildInfoTile(icon: Icons.storage, title: '后端框架', subtitle: 'Go'),
+          _buildInfoTile(icon: Icons.storage, title: al.about_backend, subtitle: 'Go'),
           const SizedBox(height: 24),
 
           // 版权信息
-          _buildCopyright(),
+          _buildCopyright(al),
         ],
       ),
     );
@@ -151,7 +153,7 @@ class _AboutPageState extends State<AboutPage> {
     );
   }
 
-  Widget _buildCopyright() {
+  Widget _buildCopyright(AppLocalizations al) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -164,7 +166,7 @@ class _AboutPageState extends State<AboutPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '个人文件管理器',
+            al.about_appTitle,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),

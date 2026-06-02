@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/response"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // UploadServer 上传服务
@@ -82,6 +83,15 @@ func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *connect.R
 // RetryUploadRecord 重试上传记录
 func (s *UploadServer) RetryUploadRecord(ctx context.Context, req *connect.Request[native.RetryUploadRecordReq]) (*connect.Response[native.BaseResp], error) {
 	err := service.RetryUploadRecord(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(nil)
+}
+
+// RetryAllFailedUploadRecords 重试所有失败的上传记录
+func (s *UploadServer) RetryAllFailedUploadRecords(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[native.BaseResp], error) {
+	err := service.RetryAllFailedUploadRecords(ctx)
 	if err != nil {
 		return response.ErrResp(err)
 	}

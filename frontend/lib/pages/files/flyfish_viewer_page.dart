@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -78,6 +79,8 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.file.name,
@@ -102,6 +105,8 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   /// 桌面端：在系统浏览器中打开文件预览
   Widget _buildDesktopView() {
+    final al = AppLocalizations.of(context)!;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -109,14 +114,14 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
           Icon(Icons.open_in_browser, size: 64, color: Colors.blue[400]),
           const SizedBox(height: 16),
           Text(
-            '将在浏览器中打开预览',
+            al.flyfish_willOpenInBrowser,
             style: TextStyle(fontSize: 18, color: Colors.grey[600]),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () => _openInBrowser(),
             icon: const Icon(Icons.open_in_new),
-            label: const Text('打开预览'),
+            label: Text(al.flyfish_openPreview),
           ),
         ],
       ),
@@ -125,6 +130,8 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   /// 移动端：WebView 预览
   Widget _buildMobileView() {
+    final al = AppLocalizations.of(context)!;
+
     return Stack(
       children: [
         if (_error != null)
@@ -144,7 +151,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
                     });
                     _initWebView();
                   },
-                  child: const Text('重试'),
+                  child: Text(al.common_retry),
                 ),
               ],
             ),
@@ -152,13 +159,13 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
         else if (_controller != null)
           WebViewWidget(controller: _controller!),
         if (_isLoading)
-          const Center(
+          Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('正在加载文档...'),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(al.flyfish_loadingDocument),
               ],
             ),
           ),

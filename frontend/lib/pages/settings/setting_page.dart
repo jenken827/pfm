@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
@@ -11,34 +12,35 @@ class SettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final ls = GetIt.I.get<LocalStorage>();
     final casdoorConfig = ls.casdoorConfig;
     final isLoggedIn = ls.isLoggedIn;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('设置'), centerTitle: true),
+      appBar: AppBar(title: Text(al.settings_title), centerTitle: true),
       body: ListView(
         children: [
           // 服务器配置信息
-          _SectionHeader(title: '服务器配置'),
+          _SectionHeader(title: al.settings_serverConfig),
           _SettingsTile(
             icon: Icons.dns_outlined,
             title: 'API Server',
-            subtitle: ls.fileServer ?? '未配置',
+            subtitle: ls.fileServer ?? al.common_notConfigured,
             onTap: isLoggedIn ? null : () => _showServerConfigDialog(context),
           ),
           const Divider(height: 1),
           _SettingsTile(
             icon: Icons.key,
             title: 'Casdoor',
-            subtitle: casdoorConfig?.serverUrl ?? '未配置',
+            subtitle: casdoorConfig?.serverUrl ?? al.common_notConfigured,
             onTap: isLoggedIn ? null : () => const LoginCasdoorConfigRoute().push(context),
           ),
           const Divider(height: 1),
           _SettingsTile(
             icon: Icons.person_outline,
-            title: '当前用户',
-            subtitle: ls.user?.name ?? '未登录',
+            title: al.settings_currentUser,
+            subtitle: ls.user?.name ?? al.common_notLoggedIn,
             onTap: null,
           ),
           if (isLoggedIn) ...[
@@ -46,7 +48,7 @@ class SettingPage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                '如需修改服务器配置，请先退出登录',
+                al.settings_changeServerHint,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -58,12 +60,12 @@ class SettingPage extends StatelessWidget {
           const SizedBox(height: 16),
 
           // 应用设置
-          _SectionHeader(title: '应用设置'),
+          _SectionHeader(title: al.settings_appSettings),
           // 主题设置
           _SettingsTile(
             icon: Icons.palette_outlined,
-            title: '主题设置',
-            subtitle: '自定义应用外观',
+            title: al.settings_themeSetting,
+            subtitle: al.settings_themeSubtitle,
             onTap: () => const ThemeSettingRoute().push(context),
           ),
           const Divider(height: 1),
@@ -71,8 +73,8 @@ class SettingPage extends StatelessWidget {
           // 语言设置
           _SettingsTile(
             icon: Icons.language,
-            title: '语言设置',
-            subtitle: '选择应用语言',
+            title: al.settings_languageSetting,
+            subtitle: al.settings_languageSubtitle,
             onTap: () => _showLanguageDialog(context),
           ),
           const Divider(height: 1),
@@ -80,8 +82,8 @@ class SettingPage extends StatelessWidget {
           // 存储介质设置
           _SettingsTile(
             icon: Icons.storage_outlined,
-            title: '存储提供者设置',
-            subtitle: '管理存储提供者',
+            title: al.settings_storageProvider,
+            subtitle: al.settings_storageProviderSubtitle,
             onTap: () => const StorageProviderSettingRoute().push(context),
           ),
           const Divider(height: 1),
@@ -89,8 +91,8 @@ class SettingPage extends StatelessWidget {
           // 服务端备份
           _SettingsTile(
             icon: Icons.dns_outlined,
-            title: '服务端备份',
-            subtitle: '备份服务器本地文件到应用目录',
+            title: al.settings_serverBackup,
+            subtitle: al.settings_serverBackupSubtitle,
             onTap: () => const ServerBackupRoute().push(context),
           ),
           const Divider(height: 1),
@@ -98,8 +100,8 @@ class SettingPage extends StatelessWidget {
           // 自动备份
           _SettingsTile(
             icon: Icons.phone_android_outlined,
-            title: '自动备份',
-            subtitle: '备份本地文件到服务器',
+            title: al.settings_autoBackup,
+            subtitle: al.settings_autoBackupSubtitle,
             onTap: () => const ClientBackupRoute().push(context),
           ),
           const Divider(height: 1),
@@ -108,8 +110,8 @@ class SettingPage extends StatelessWidget {
           if (isMobile()) ...[
             _SettingsTile(
               icon: Icons.photo_library_outlined,
-              title: '相册备份',
-              subtitle: '自动备份手机相册到服务器',
+              title: al.settings_albumBackup,
+              subtitle: al.settings_albumBackupSubtitle,
               onTap: () => const AlbumBackupRoute().push(context),
             ),
             const Divider(height: 1),
@@ -119,8 +121,8 @@ class SettingPage extends StatelessWidget {
           if (isMobile()) ...[
             _SettingsTile(
               icon: Icons.contacts_outlined,
-              title: '通讯录备份',
-              subtitle: '备份联系人为 vCard 格式',
+              title: al.settings_contactBackup,
+              subtitle: al.settings_contactBackupSubtitle,
               onTap: () => const ContactBackupRoute().push(context),
             ),
             const Divider(height: 1),
@@ -129,8 +131,8 @@ class SettingPage extends StatelessWidget {
           // 上传设置
           _SettingsTile(
             icon: Icons.tune_outlined,
-            title: '上传设置',
-            subtitle: '分片大小和并发数',
+            title: al.settings_uploadSetting,
+            subtitle: al.settings_uploadSubtitle,
             onTap: () => _showUploadSettingsDialog(context),
           ),
           const Divider(height: 1),
@@ -138,8 +140,8 @@ class SettingPage extends StatelessWidget {
           // 导出日志
           _SettingsTile(
             icon: Icons.bug_report_outlined,
-            title: '导出日志',
-            subtitle: '导出日志文件用于问题分析',
+            title: al.settings_exportLog,
+            subtitle: al.settings_exportLogSubtitle,
             onTap: () => _exportLogs(context),
           ),
           const Divider(height: 1),
@@ -147,8 +149,8 @@ class SettingPage extends StatelessWidget {
           // 关于
           _SettingsTile(
             icon: Icons.info_outline,
-            title: '关于',
-            subtitle: '查看应用信息',
+            title: al.settings_about,
+            subtitle: al.settings_aboutSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AboutPage()),
@@ -159,8 +161,8 @@ class SettingPage extends StatelessWidget {
           // 退出登录
           _SettingsTile(
             icon: Icons.logout,
-            title: '退出登录',
-            subtitle: '清除登录信息',
+            title: al.settings_logout,
+            subtitle: al.settings_logoutSubtitle,
             iconColor: Theme.of(context).colorScheme.error,
             onTap: () => _showLogoutDialog(context),
           ),
@@ -171,16 +173,17 @@ class SettingPage extends StatelessWidget {
 
   /// 显示设置文件服务器对话框
   void _showServerConfigDialog(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final ls = GetIt.I.get<LocalStorage>();
     final controller = TextEditingController(text: ls.fileServer ?? '');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('设置文件服务器'),
+        title: Text(al.login_setServer),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: '请输入服务器地址',
+          decoration: InputDecoration(
+            hintText: al.login_serverHint,
             prefixIcon: Icon(Icons.link),
           ),
           autofocus: true,
@@ -189,7 +192,7 @@ class SettingPage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () async {
@@ -200,11 +203,11 @@ class SettingPage extends StatelessWidget {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(
                     ctx,
-                  ).showSnackBar(const SnackBar(content: Text('服务器地址已保存')));
+                  ).showSnackBar(SnackBar(content: Text(al.login_serverSaved)));
                 }
               }
             },
-            child: const Text('保存'),
+            child: Text(al.common_save),
           ),
         ],
       ),
@@ -212,11 +215,12 @@ class SettingPage extends StatelessWidget {
   }
 
   void _showLanguageDialog(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final ls = GetIt.I.get<LocalStorage>();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('选择语言'),
+        title: Text(al.settings_chooseLanguage),
         content: RadioGroup<String>(
           groupValue: ls.themeLanguage.locale,
           onChanged: (String? value) async {
@@ -230,11 +234,11 @@ class SettingPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               RadioListTile<String>(
-                title: const Text('简体中文'),
+                title: Text(al.settings_chinese),
                 value: 'zh',
               ),
               RadioListTile<String>(
-                title: const Text('English'),
+                title: Text(al.settings_english),
                 value: 'en',
               ),
             ],
@@ -245,15 +249,16 @@ class SettingPage extends StatelessWidget {
   }
 
   void _showLogoutDialog(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('确定要退出登录吗？'),
+        title: Text(al.settings_logout),
+        content: Text(al.settings_logoutConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pfm/api/fm_repository.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 
@@ -55,19 +56,21 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _restoreSelected() async {
     if (_selectedIds.isEmpty) return;
 
+    final al = AppLocalizations.of(context)!;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('恢复文件'),
-        content: Text('确定要恢复选中的 ${_selectedIds.length} 个文件吗？'),
+        title: Text(al.trash_restore),
+        content: Text(al.trash_restoreMsg(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('恢复'),
+            child: Text(al.trash_restoreBtn),
           ),
         ],
       ),
@@ -82,13 +85,13 @@ class _TrashPageState extends State<TrashPage> {
       if (result.success && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('文件已恢复')));
+        ).showSnackBar(SnackBar(content: Text(al.trash_restored)));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? '恢复失败')));
+        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_restoreFailed)));
       }
     } catch (e) {
       if (mounted) {
@@ -102,22 +105,24 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _deleteSelectedPermanently() async {
     if (_selectedIds.isEmpty) return;
 
+    final al = AppLocalizations.of(context)!;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('彻底删除'),
-        content: Text('确定要彻底删除选中的 ${_selectedIds.length} 个文件吗？\n\n此操作不可恢复！'),
+        title: Text(al.trash_permanentDelete),
+        content: Text(al.trash_permanentDeleteMsg(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('彻底删除'),
+            child: Text(al.trash_permanentDelete),
           ),
         ],
       ),
@@ -132,13 +137,13 @@ class _TrashPageState extends State<TrashPage> {
       if (result.success && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('文件已彻底删除')));
+        ).showSnackBar(SnackBar(content: Text(al.trash_permanentDeleted)));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
+        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_permanentDeleteFailed)));
       }
     } catch (e) {
       if (mounted) {
@@ -152,22 +157,24 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _emptyTrash() async {
     if (_files.isEmpty) return;
 
+    final al = AppLocalizations.of(context)!;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('清空回收站'),
-        content: const Text('确定要清空回收站吗？\n\n此操作将永久删除所有文件，不可恢复！'),
+        title: Text(al.trash_emptyBin),
+        content: Text(al.trash_emptyBinMsg),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('清空'),
+            child: Text(al.trash_emptyBtn),
           ),
         ],
       ),
@@ -182,13 +189,13 @@ class _TrashPageState extends State<TrashPage> {
       if (result.success && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('回收站已清空')));
+        ).showSnackBar(SnackBar(content: Text(al.trash_emptied)));
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? '清空失败')));
+        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_emptyFailed)));
       }
     } catch (e) {
       if (mounted) {
@@ -201,26 +208,28 @@ class _TrashPageState extends State<TrashPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('回收站'),
+        title: Text(al.trash_title),
         actions: [
           if (_selectedIds.isNotEmpty) ...[
             IconButton(
               icon: const Icon(Icons.restore),
-              tooltip: '恢复选中',
+              tooltip: al.trash_restoreSelected,
               onPressed: _restoreSelected,
             ),
             IconButton(
               icon: const Icon(Icons.delete_forever),
-              tooltip: '彻底删除选中',
+              tooltip: al.trash_deleteSelected,
               onPressed: _deleteSelectedPermanently,
             ),
           ],
           if (_files.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep),
-              tooltip: '清空回收站',
+              tooltip: al.trash_emptyBin,
               onPressed: _emptyTrash,
             ),
         ],
@@ -230,6 +239,8 @@ class _TrashPageState extends State<TrashPage> {
   }
 
   Widget _buildBody() {
+    final al = AppLocalizations.of(context)!;
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -247,7 +258,7 @@ class _TrashPageState extends State<TrashPage> {
             const SizedBox(height: 16),
             Text(_error!, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _loadTrash, child: const Text('重试')),
+            FilledButton(onPressed: _loadTrash, child: Text(al.common_retry)),
           ],
         ),
       );
@@ -264,7 +275,7 @@ class _TrashPageState extends State<TrashPage> {
               color: Theme.of(context).colorScheme.outline,
             ),
             const SizedBox(height: 16),
-            Text('回收站是空的', style: Theme.of(context).textTheme.bodyLarge),
+            Text(al.trash_emptyHint, style: Theme.of(context).textTheme.bodyLarge),
           ],
         ),
       );
@@ -279,7 +290,7 @@ class _TrashPageState extends State<TrashPage> {
             padding: const EdgeInsets.all(12),
             color: Theme.of(context).colorScheme.primaryContainer,
             child: Text(
-              '已选中 ${_selectedIds.length} 个文件',
+              al.trash_selectedCount(_selectedIds.length),
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onPrimaryContainer,
               ),

@@ -71,25 +71,25 @@ class MainScaffold extends StatelessWidget {
               showUnselectedLabels: false,
               type: BottomNavigationBarType.fixed,
               items: <BottomNavigationBarItem>[
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: '主页',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.home_outlined),
+                  activeIcon: const Icon(Icons.home),
+                  label: al.nav_home,
                 ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.folder_outlined),
-                  activeIcon: Icon(Icons.folder),
-                  label: '文件',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.folder_outlined),
+                  activeIcon: const Icon(Icons.folder),
+                  label: al.nav_files,
                 ),
                 BottomNavigationBarItem(
                   icon: _buildTransferIcon(context, activeCount, false),
                   activeIcon: _buildTransferIcon(context, activeCount, true),
-                  label: al.transfer,
+                  label: al.nav_transfer,
                 ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.settings_outlined),
-                  activeIcon: Icon(Icons.settings),
-                  label: '设置',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.settings_outlined),
+                  activeIcon: const Icon(Icons.settings),
+                  label: al.nav_settings,
                 ),
               ],
               currentIndex: navigationShell.currentIndex,
@@ -159,15 +159,15 @@ class MainScaffold extends StatelessWidget {
                     labelType: NavigationRailLabelType.all,
                     leading: const SizedBox(height: 8),
                     destinations: <NavigationRailDestination>[
-                      const NavigationRailDestination(
-                        icon: Icon(Icons.home_outlined),
-                        selectedIcon: Icon(Icons.home),
-                        label: Text('主页'),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.home_outlined),
+                        selectedIcon: const Icon(Icons.home),
+                        label: Text(al.nav_home),
                       ),
-                      const NavigationRailDestination(
-                        icon: Icon(Icons.folder_outlined),
-                        selectedIcon: Icon(Icons.folder),
-                        label: Text('文件'),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.folder_outlined),
+                        selectedIcon: const Icon(Icons.folder),
+                        label: Text(al.nav_files),
                       ),
                       NavigationRailDestination(
                         icon: _buildTransferIcon(context, activeCount, false),
@@ -176,12 +176,12 @@ class MainScaffold extends StatelessWidget {
                           activeCount,
                           true,
                         ),
-                        label: Text(al.transfer),
+                        label: Text(al.nav_transfer),
                       ),
-                      const NavigationRailDestination(
-                        icon: Icon(Icons.settings_outlined),
-                        selectedIcon: Icon(Icons.settings),
-                        label: Text('设置'),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.settings_outlined),
+                        selectedIcon: const Icon(Icons.settings),
+                        label: Text(al.nav_settings),
                       ),
                     ],
                   );

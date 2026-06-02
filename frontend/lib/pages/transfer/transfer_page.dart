@@ -18,6 +18,7 @@ class TransferPage extends StatefulWidget {
 class _TransferPageState extends State<TransferPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  VoidCallback? _uploadRecordRefreshCallback;
 
   @override
   void initState() {
@@ -61,22 +62,22 @@ class _TransferPageState extends State<TransferPage>
       child: Builder(
         builder: (context) => Scaffold(
           appBar: AppBar(
-            title: Text(al.transfer),
+            title: Text(al.nav_transfer),
             centerTitle: true,
             bottom: TabBar(
               controller: _tabController,
               tabs: [
                 Tab(
                   icon: const Icon(Icons.cloud_upload_outlined),
-                  text: '上传', // al.upload,
+                  text: al.transfer_upload,
                 ),
                 Tab(
                   icon: const Icon(Icons.cloud_download_outlined),
-                  text: '下载', // al.download,
+                  text: al.transfer_download,
                 ),
                 Tab(
                   icon: const Icon(Icons.history),
-                  text: '云上传记录',
+                  text: al.transfer_cloudUploadRecords,
                 ),
               ],
             ),
@@ -85,9 +86,14 @@ class _TransferPageState extends State<TransferPage>
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: () {
-                  context.read<TransferBloc>().add(TransferRefreshEvent());
+                  if (_tabController.index == 2) {
+                    // 云上传记录 Tab
+                    _uploadRecordRefreshCallback?.call();
+                  } else {
+                    context.read<TransferBloc>().add(TransferRefreshEvent());
+                  }
                 },
-                tooltip: '刷新',
+                tooltip: al.transfer_refresh,
               ),
             ],
           ),
@@ -103,7 +109,11 @@ class _TransferPageState extends State<TransferPage>
                   // 下载任务列表
                   DownloadTaskList(),
                   // 上传记录列表
-                  UploadRecordList(),
+                  UploadRecordList(
+                    onRefreshRegistered: (callback) {
+                      _uploadRecordRefreshCallback = callback;
+                    },
+                  ),
                 ],
               );
             },

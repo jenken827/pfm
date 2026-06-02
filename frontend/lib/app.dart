@@ -18,7 +18,7 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> with WindowListener {
+class _AppState extends State<App> with WindowListener, WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -26,6 +26,8 @@ class _AppState extends State<App> with WindowListener {
     if (_isDesktop()) {
       windowManager.addListener(this);
     }
+    // 注册生命周期监听（移动端触发相册自动备份）
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -34,7 +36,27 @@ class _AppState extends State<App> with WindowListener {
     if (_isDesktop()) {
       windowManager.removeListener(this);
     }
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // app 回到前台时触发相册自动备份
+    if (state == AppLifecycleState.resumed &&
+        (Platform.isAndroid || Platform.isIOS)) {
+      _triggerAlbumBackup();
+    }
+  }
+
+  void _triggerAlbumBackup() async {
+    try {
+      final albumBackup = await AlbumBackupService.instance();
+      await albumBackup.autoTrigger();
+    } catch (e) {
+      getLogger().warning('Album auto-trigger on resume failed: $e');
+    }
   }
 
   @override

@@ -12,6 +12,7 @@ import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/services/logger.dart';
 import 'package:pfm/utils/file_utils.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 
 /// 文件详情页面（从API获取完整数据）
 class FileDetailPage extends StatefulWidget {
@@ -65,9 +66,10 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('文件详情'),
+        title: Text(al.detail_fileDetail),
         centerTitle: true,
         actions: [
           IconButton(
@@ -90,6 +92,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
   }
 
   Widget _buildErrorWidget(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -100,14 +103,14 @@ class _FileDetailPageState extends State<FileDetailPage> {
             color: Theme.of(context).colorScheme.error,
           ),
           const SizedBox(height: 16),
-          Text('加载失败', style: Theme.of(context).textTheme.titleMedium),
+          Text(al.common_loadingFailed, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(
             _errorMessage ?? '',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
-          FilledButton(onPressed: _loadDetail, child: const Text('重试')),
+          FilledButton(onPressed: _loadDetail, child: Text(al.common_retry)),
         ],
       ),
     );
@@ -141,6 +144,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
   // ==================== 文件头部 ====================
 
   Widget _buildFileHeader(BuildContext context, File file) {
+    final al = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -167,7 +171,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _getFileTypeText(file.type),
+                  _getFileTypeText(file.type, al),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -183,35 +187,36 @@ class _FileDetailPageState extends State<FileDetailPage> {
   // ==================== 基本信息 ====================
 
   Widget _buildBasicInfo(BuildContext context, File file) {
+    final al = AppLocalizations.of(context)!;
     return _buildSection(
       context,
-      title: '基本信息',
+      title: al.detail_basicInfo,
       child: Column(
         children: [
           _buildInfoRow(
             context,
             Icons.sd_storage,
-            '文件大小',
+            al.detail_fileSize,
             _formatFileSize(file.size.toInt()),
           ),
           _buildInfoRow(
             context,
             Icons.tag,
-            '文件哈希',
+            al.detail_fileHash,
             file.hash,
             isMonospace: true,
           ),
-          _buildInfoRow(context, Icons.insert_drive_file, 'MIME类型', file.mime),
+          _buildInfoRow(context, Icons.insert_drive_file, al.detail_mimeType, file.mime),
           _buildInfoRow(
             context,
             Icons.schedule,
-            '创建时间',
+            al.detail_createdTime,
             _formatTimestamp(file.createdAt),
           ),
           _buildInfoRow(
             context,
             Icons.update,
-            '修改时间',
+            al.detail_modifiedTime,
             _formatTimestamp(file.updatedAt),
           ),
         ],
@@ -222,6 +227,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
   // ==================== 位置分布 ====================
 
   Widget _buildLocationDistribution(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final locations = _detailData?.locations ?? [];
 
     // Check if there's at least one completed location
@@ -234,19 +240,19 @@ class _FileDetailPageState extends State<FileDetailPage> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('位置分布'),
+          Text(al.detail_locationDistribution),
           if (hasCompletedLocation)
             IconButton(
               icon: const Icon(Icons.sync),
               onPressed: () => _showSyncDialog(context),
-              tooltip: '同步到其他存储',
+              tooltip: al.detail_syncToOther,
             ),
         ],
       ),
       child: locations.isEmpty
           ? Center(
               child: Text(
-                '暂无位置信息',
+                al.detail_noLocationInfo,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -261,16 +267,17 @@ class _FileDetailPageState extends State<FileDetailPage> {
   }
 
   Widget _buildLocationRow(BuildContext context, ProviderLocationInfo loc) {
+    final al = AppLocalizations.of(context)!;
     final providerName = loc.providerName;
     final encrypted = loc.encrypted;
     final isChunked = loc.isChunked;
     final chunkTotal = loc.chunkTotal;
-    final statusText = _getProviderStatusText(loc.status);
+    final statusText = _getProviderStatusText(loc.status, al);
     final isTelegram = loc.providerType == StorageProviderType.TELEGRAM;
 
     // Telegram 缓存状态
     final cacheStatusText = isTelegram
-        ? _getCacheStatusText(loc.cacheStatus)
+        ? _getCacheStatusText(loc.cacheStatus, al)
         : null;
     // 实际存储大小（可能是加密后）
     final storedSize = loc.size > 0 ? _formatFileSize(loc.size.toInt()) : null;
@@ -315,7 +322,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              encrypted ? '已加密' : '未加密',
+              encrypted ? al.detail_encrypted : al.detail_notEncrypted,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: encrypted
                     ? Theme.of(context).colorScheme.onErrorContainer
@@ -334,7 +341,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              isChunked ? '$chunkTotal 分片' : '单文件',
+              isChunked ? al.detail_chunks(chunkTotal) : al.detail_singleFile,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: isChunked
                     ? Theme.of(context).colorScheme.onTertiaryContainer
@@ -404,7 +411,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
                   context,
                 ).showSnackBar(SnackBar(content: Text(snackMsg)));
               },
-              tooltip: '下载',
+              tooltip: al.detail_download,
             ),
         ],
       ),
@@ -414,17 +421,18 @@ class _FileDetailPageState extends State<FileDetailPage> {
   // ==================== 标签管理 ====================
 
   Widget _buildTagsSection(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final tags = _detailData?.tags ?? [];
 
     return _buildSection(
       context,
-      title: '标签',
+      title: al.detail_tags,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (tags.isEmpty)
             Text(
-              '暂无标签',
+              al.detail_noTags,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -458,7 +466,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
             alignment: Alignment.centerRight,
             child: FilledButton.tonal(
               onPressed: () => _showEditTagsDialog(context),
-              child: const Text('编辑标签'),
+              child: Text(al.detail_editTags),
             ),
           ),
         ],
@@ -468,25 +476,25 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   // 显示编辑标签对话框
   Future<void> _showEditTagsDialog(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final currentTags = List<String>.from(_detailData?.tags ?? []);
     final controller = TextEditingController(text: currentTags.join(','));
 
-    final result = await showDialog<List<String>?>(
-      context: context,
+    final result = await showDialog<List<String>?>(  context: context,
       builder: (context) => AlertDialog(
-        title: const Text('编辑标签'),
+        title: Text(al.detail_editTags),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: '输入标签，用逗号分隔',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: al.detail_tagInputHint,
+            border: const OutlineInputBorder(),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -502,7 +510,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
               Navigator.pop(context, newTags);
             },
-            child: const Text('保存'),
+            child: Text(al.common_save),
           ),
         ],
       ),
@@ -515,6 +523,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   // 更新文件标签
   Future<void> _updateFileTags(List<String> newTags) async {
+    final al = AppLocalizations.of(context)!;
     final fileId = _detailData?.file?.id;
     if (fileId == null) return;
 
@@ -532,20 +541,20 @@ class _FileDetailPageState extends State<FileDetailPage> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
+          ).showSnackBar(SnackBar(content: Text(al.detail_tagUpdateSuccess)));
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('标签更新失败: ${result.message}')));
+          ).showSnackBar(SnackBar(content: Text('${al.detail_tagUpdateFailed}: ${result.message}')));
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('标签更新失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('${al.detail_tagUpdateFailed}: $e')));
       }
     } finally {
       if (mounted) {
@@ -559,15 +568,16 @@ class _FileDetailPageState extends State<FileDetailPage> {
   // ==================== 文件历史 ====================
 
   Widget _buildFileHistory(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final histories = _detailData?.histories ?? [];
 
     return _buildSection(
       context,
-      title: '文件历史',
+      title: al.detail_fileHistory,
       child: histories.isEmpty
           ? Center(
               child: Text(
-                '暂无历史版本',
+                al.detail_noHistory,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -582,6 +592,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
   }
 
   Widget _buildHistoryRow(BuildContext context, FileHistory h) {
+    final al = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -597,11 +608,11 @@ class _FileDetailPageState extends State<FileDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'v${_formatTimestamp(h.versionNumber)}',
+                  al.detail_version('${h.versionNumber}'),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 Text(
-                  _formatFileSize(h.size.toInt()),
+                  al.detail_versionSize(_formatFileSize(h.size.toInt())),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -622,14 +633,14 @@ class _FileDetailPageState extends State<FileDetailPage> {
             IconButton(
               icon: const Icon(Icons.preview, size: 18),
               onPressed: () => _previewHistory(h),
-              tooltip: '预览此版本',
+              tooltip: al.detail_previewVersion,
               visualDensity: VisualDensity.compact,
             ),
           // 下载按钮
           IconButton(
             icon: const Icon(Icons.download, size: 18),
             onPressed: () => _downloadHistory(h),
-            tooltip: '下载此版本',
+            tooltip: al.detail_downloadVersion,
             visualDensity: VisualDensity.compact,
           ),
           // 删除按钮
@@ -640,7 +651,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
               color: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => _confirmDeleteHistory(h),
-            tooltip: '删除此版本',
+            tooltip: al.detail_deleteVersion,
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -738,6 +749,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   /// 预览文件历史版本
   Future<void> _previewHistory(FileHistory h) async {
+    final al = AppLocalizations.of(context)!;
     getLogger().debug("priview icon button pressed,preview file");
     try {
       // 跳转到预览页面，传递历史版本 ID
@@ -756,7 +768,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('预览失败: $e')));
+      ).showSnackBar(SnackBar(content: Text('${al.detail_previewFailed}: $e')));
     }
   }
 
@@ -799,22 +811,22 @@ class _FileDetailPageState extends State<FileDetailPage> {
     }
   }
 
-  String _getFileTypeText(FileType type) {
+  String _getFileTypeText(FileType type, AppLocalizations al) {
     switch (type) {
       case FileType.FOLDER:
-        return '文件夹';
+        return al.detail_folder;
       case FileType.IMAGE:
-        return '图片';
+        return al.detail_image;
       case FileType.VIDEO:
-        return '视频';
+        return al.detail_video;
       case FileType.AUDIO:
-        return '音频';
+        return al.detail_audio;
       case FileType.DOCUMENT:
-        return '文档';
+        return al.detail_document;
       case FileType.ARCHIVE:
-        return '压缩包';
+        return al.detail_archive;
       default:
-        return '文件';
+        return al.detail_file;
     }
   }
 
@@ -837,31 +849,31 @@ class _FileDetailPageState extends State<FileDetailPage> {
     }
   }
 
-  String _getProviderStatusText(LocationStatus status) {
+  String _getProviderStatusText(LocationStatus status, AppLocalizations al) {
     switch (status) {
       case LocationStatus.PPENDING:
-        return '待上传';
+        return al.detail_statusPending;
       case LocationStatus.PUPLOADING:
-        return '上传中';
+        return al.detail_statusUploading;
       case LocationStatus.PCOMPLETED:
-        return '已完成';
+        return al.detail_statusCompleted;
       case LocationStatus.PFAILED:
-        return '失败';
+        return al.detail_statusFailed;
       default:
-        return '未知';
+        return al.detail_statusUnknown;
     }
   }
 
-  String _getCacheStatusText(CacheStatus status) {
+  String _getCacheStatusText(CacheStatus status, AppLocalizations al) {
     switch (status) {
       case CacheStatus.UNCACHED:
-        return '未缓存';
+        return al.detail_cacheNotCached;
       case CacheStatus.CACHING:
-        return '缓存中';
+        return al.detail_cacheCaching;
       case CacheStatus.CACHED:
-        return '已缓存';
+        return al.detail_cacheCached;
       default:
-        return '未知';
+        return al.detail_statusUnknown;
     }
   }
 
@@ -885,6 +897,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   /// 下载文件历史版本
   Future<void> _downloadHistory(FileHistory h) async {
+    final al = AppLocalizations.of(context)!;
     try {
       final downloadDir = await getDownloadsDirectory();
       if (!mounted) return;
@@ -934,39 +947,40 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已添加到下载队列')));
+      ).showSnackBar(SnackBar(content: Text(al.detail_downloadQueued)));
     } catch (e) {
       getLogger().error('下载历史版本失败: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('下载失败: $e')));
+      ).showSnackBar(SnackBar(content: Text('${al.detail_downloadFailed}: $e')));
     }
   }
 
   /// 确认删除文件历史版本
   Future<void> _confirmDeleteHistory(FileHistory h) async {
+    final al = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
+        title: Text(al.detail_confirmDeleteVersion),
         content: Text(
-          '确定要删除这个历史版本吗？\n'
-          '版本：v${_formatTimestamp(h.versionNumber)}\n'
-          '大小：${_formatFileSize(h.size.toInt())}\n\n'
-          '此操作不可撤销！',
+          '${al.detail_confirmDeleteVersionMsg}\n'
+          '${al.detail_version('${h.versionNumber}')}\n'
+          '${al.detail_versionSize(_formatFileSize(h.size.toInt()))}\n\n'
+          '${al.detail_cannotUndo}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('删除'),
+            child: Text(al.common_delete),
           ),
         ],
       ),
@@ -979,6 +993,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   /// 删除文件历史版本
   Future<void> _deleteHistory(int historyId) async {
+    final al = AppLocalizations.of(context)!;
     try {
       setState(() => _isLoading = true);
 
@@ -992,13 +1007,13 @@ class _FileDetailPageState extends State<FileDetailPage> {
       if (result.success) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('删除成功')));
+        ).showSnackBar(SnackBar(content: Text(al.detail_deleteSuccess)));
         // 刷新文件详情
         await _loadDetail();
       } else {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? '删除失败')));
+        ).showSnackBar(SnackBar(content: Text(result.message ?? al.detail_deleteFailed)));
       }
     } catch (e) {
       getLogger().error('删除历史版本失败: $e');
@@ -1006,12 +1021,13 @@ class _FileDetailPageState extends State<FileDetailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+      ).showSnackBar(SnackBar(content: Text('${al.detail_deleteFailed}: $e')));
     }
   }
 
   /// Show sync dialog to select target providers
   Future<void> _showSyncDialog(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     final repo = FmRepository();
 
     // Get file hash from current file
@@ -1020,7 +1036,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('文件哈希不存在，无法同步')));
+      ).showSnackBar(SnackBar(content: Text(al.detail_hashNotExists)));
       return;
     }
 
@@ -1043,7 +1059,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
     if (!providersResult.success || providersResult.data == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(providersResult.message ?? '获取可用提供者失败')),
+          SnackBar(content: Text(providersResult.message ?? al.detail_getProvidersFailed)),
         );
       }
       return;
@@ -1056,7 +1072,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('没有可用的存储提供者')));
+        ).showSnackBar(SnackBar(content: Text(al.detail_noAvailableProviders)));
       }
       return;
     }
@@ -1088,14 +1104,14 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
     if (syncResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已创建 ${selectedProviderIds.length} 个同步任务')),
+        SnackBar(content: Text(al.detail_syncTasksCreated(selectedProviderIds.length))),
       );
       // Refresh detail data
       await _loadDetail();
     } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(syncResult.message ?? '同步失败')));
+      ).showSnackBar(SnackBar(content: Text(syncResult.message ?? al.detail_syncFailed)));
     }
   }
 }
@@ -1154,8 +1170,9 @@ class _SyncProviderSelectionDialogState
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('选择同步目标'),
+      title: Text(al.detail_selectSyncTarget),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView.builder(
@@ -1184,13 +1201,13 @@ class _SyncProviderSelectionDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(al.common_cancel),
         ),
         FilledButton(
           onPressed: _selectedProviderIds.isEmpty
               ? null
               : () => Navigator.pop(context, _selectedProviderIds.toList()),
-          child: const Text('确认'),
+          child: Text(al.common_confirm),
         ),
       ],
     );

@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../router/router.dart';
 import '../../services/services.dart';
 import '../../utils/utils.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -64,14 +65,15 @@ class _LoginPageState extends State<LoginPage> {
   /// 显示设置文件服务器对话框
   Future<void> _showServerConfigDialog() async {
     final controller = TextEditingController(text: _ls.fileServer ?? '');
+    final al = AppLocalizations.of(context)!;
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('设置文件服务器'),
+        title: Text(al.login_setServer),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: '请输入服务器地址',
+          decoration: InputDecoration(
+            hintText: al.login_serverHint,
             prefixIcon: Icon(Icons.link),
           ),
           autofocus: true,
@@ -80,7 +82,7 @@ class _LoginPageState extends State<LoginPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(al.common_cancel),
           ),
           FilledButton(
             onPressed: () async {
@@ -92,12 +94,12 @@ class _LoginPageState extends State<LoginPage> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(
                     context,
-                  ).showSnackBar(const SnackBar(content: Text('服务器地址已保存')));
+                  ).showSnackBar(SnackBar(content: Text(al.login_serverSaved)));
                   setState(() {}); // 刷新界面显示新地址
                 }
               }
             },
-            child: const Text('保存'),
+            child: Text(al.common_save),
           ),
         ],
       ),
@@ -109,6 +111,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final al = AppLocalizations.of(context)!;
     final screenSize = MediaQuery.of(context).size;
     final isWideScreen = screenSize.width > 600;
 
@@ -190,7 +193,7 @@ class _LoginPageState extends State<LoginPage> {
                 OutlinedButton.icon(
                   onPressed: _isLoading ? null : _showServerConfigDialog,
                   icon: const Icon(Icons.dns),
-                  label: Text('File Server: ${_ls.fileServer ?? "未设置"}'),
+                  label: Text(al.login_fileServer(_ls.fileServer ?? al.login_notSet)),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),

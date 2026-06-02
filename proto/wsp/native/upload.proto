@@ -5,6 +5,7 @@ package native;
 import "buf/validate/validate.proto";
 // import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
@@ -254,6 +255,8 @@ service UploadService {
 
   // 删除上传记录
   rpc DeleteUploadRecord(DeleteUploadRecordReq) returns (BaseResp);
+  // 重试所有失败的上传记录
+  rpc RetryAllFailedUploadRecords(google.protobuf.Empty) returns (BaseResp);
 }
 
 // 重试上传记录请求

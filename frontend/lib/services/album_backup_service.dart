@@ -5,7 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:path/path.dart' as p;
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -213,6 +213,18 @@ class AlbumBackupService {
     return true;
   }
 
+  /// 自动触发备份（app 启动、回到前台时调用）
+  /// 检查配置条件后自动执行，不重复触发
+  Future<void> autoTrigger() async {
+    if (_isBackingUp) return;
+    if (!_config.enabled) return;
+    if (_config.targetParentId.isEmpty) return;
+    if (_config.backupAlbumIds.isEmpty) return;
+
+    _logger.info('Album backup auto-triggered');
+    await startBackup();
+  }
+
   /// 执行备份
   Future<AlbumBackupResult> startBackup() async {
     if (_isBackingUp) {
@@ -264,6 +276,7 @@ class AlbumBackupService {
       final bgService = GetIt.I.get<BackgroundService>();
       const batchSize = 50;
       var batch = <UploadTaskRecord>[];
+      var backupRecords = <Map<String, dynamic>>[];
       int failed = 0;
       int created = 0;
       bool uploadStarted = false;
@@ -302,6 +315,7 @@ class AlbumBackupService {
           }
 
           final fileName = photo.title ?? p.basename(filePath);
+          final now = DateTime.now();
 
           batch.add(UploadTaskRecord(
             id: const Uuid().v4(),
@@ -311,12 +325,26 @@ class AlbumBackupService {
             parentId: _config.targetParentId,
             status: UploadStatus.PENDING,
             tags: photo.id,  // 存储资产 ID
-            createdAt: DateTime.now(),
+            createdAt: now,
           ));
+
+          // 同步写 backup_file_records（用 asset ID 作为 relative_path）
+          backupRecords.add({
+            'id': const Uuid().v4(),
+            'config_id': Sqlite3Storage.albumBackupConfigId,
+            'relative_path': photo.id,
+            'file_size': fileSize,
+            'modified_at': photo.createDateTime.millisecondsSinceEpoch,
+            'status': BackupFileStatus.pending.index,
+            'created_at': now.toIso8601String(),
+          });
 
           // 每 batchSize 个写一次库并调度上传
           if (batch.length >= batchSize) {
             await bgService.addUploadTasksBatch(batch);
+            for (final record in backupRecords) {
+              await _storage.addBackupFileRecord(record);
+            }
             created += batch.length;
             _logger.info('Batch wrote ${batch.length} tasks (total: $created)');
             if (!uploadStarted) {
@@ -326,6 +354,7 @@ class AlbumBackupService {
             }
             _updateStatus(uploadedPhotos: created);
             batch = [];
+            backupRecords = [];
             await Future.delayed(Duration.zero); // 让出主线程
           }
         } catch (e) {
@@ -337,6 +366,9 @@ class AlbumBackupService {
       // 写入剩余的
       if (batch.isNotEmpty) {
         await bgService.addUploadTasksBatch(batch);
+        for (final record in backupRecords) {
+          await _storage.addBackupFileRecord(record);
+        }
         created += batch.length;
         _logger.info('Final batch wrote ${batch.length} tasks (total: $created)');
       }
@@ -406,12 +438,8 @@ class AlbumBackupService {
       allPhotos.addAll(photos);
     }
 
-    // 过滤已备份的照片（用 tags 字段存储资产 ID 来判断）
-    final allTasks = await _storage.getAllUploadTasksAsync();
-    final backedUpAssetIds = allTasks
-        .where((t) => t.status == UploadStatus.COMPLETED && t.tags != null)
-        .map((t) => t.tags!)
-        .toSet();
+    // 从 backup_file_records 表获取已备份的 asset ID（不受 upload_tasks 清理影响）
+    final backedUpAssetIds = await _storage.getCompletedAlbumBackupAssetIds();
 
     final photosToBackup = allPhotos
         .where((photo) => !backedUpAssetIds.contains(photo.id))

@@ -6,7 +6,7 @@ import 'package:get_it/get_it.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pbenum.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -225,6 +225,15 @@ class BackgroundService {
         chunkSize: GetIt.I.get<LocalStorage>().uploadChunkSize,
         smallFileThreshold: GetIt.I.get<LocalStorage>().smallFileThreshold,
       );
+
+      // 上传完成后，回填 backup_file_records（仅相册备份任务有 tags）
+      final task = await _storage.getUploadTaskAsync(taskId);
+      if (task != null &&
+          task.tags != null &&
+          task.tags!.isNotEmpty &&
+          task.status == UploadStatus.COMPLETED) {
+        await _syncBackupRecordOnComplete(task);
+      }
     } catch (e, s) {
       _logger.error('Upload failed: $taskId', e, s);
       // 异常时确保状态更新为 FAILED，避免卡在 UPLOADING
@@ -233,11 +242,61 @@ class BackgroundService {
           status: UploadStatus.FAILED,
           errorMessage: e.toString(),
         );
+        // 同步更新 backup_file_records 状态
+        final task = await _storage.getUploadTaskAsync(taskId);
+        if (task != null && task.tags != null && task.tags!.isNotEmpty) {
+          await _syncBackupRecordOnFailed(task);
+        }
       } catch (_) {}
     } finally {
       _runningUploads.remove(taskId);
       _updateForegroundNotification();
       await notifyUploadTasksChanged();
+    }
+  }
+
+  /// 上传成功后回填 backup_file_records
+  Future<void> _syncBackupRecordOnComplete(UploadTaskRecord task) async {
+    try {
+      final record = await _storage.getBackupFileRecord(
+        Sqlite3Storage.albumBackupConfigId,
+        task.tags!,
+      );
+      if (record != null) {
+        await _storage.updateBackupFileRecord(
+          record['id'] as String,
+          {
+            'file_hash': task.fileHash,
+            'status': BackupFileStatus.completed.index,
+            'uploaded_at': DateTime.now().toIso8601String(),
+          },
+        );
+        _logger.info('Backup record updated to completed for asset: ${task.tags}');
+      }
+    } catch (e) {
+      _logger.warning('Failed to sync backup record on complete: $e');
+    }
+  }
+
+  /// 上传失败后更新 backup_file_records 状态
+  Future<void> _syncBackupRecordOnFailed(UploadTaskRecord task) async {
+    try {
+      final record = await _storage.getBackupFileRecord(
+        Sqlite3Storage.albumBackupConfigId,
+        task.tags!,
+      );
+      if (record != null) {
+        await _storage.updateBackupFileRecord(
+          record['id'] as String,
+          {
+            'status': BackupFileStatus.failed.index,
+            'message': task.errorMessage,
+          },
+        );
+        _logger.info('Backup record updated to failed for asset: ${task.tags}');
+      }
+    } catch (e) {
+      _logger.warning('Failed to sync backup record on failure: $e');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 
@@ -210,6 +211,7 @@ class _StringListFieldState extends State<_StringListField> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: FormBuilderField<List<String>>(
@@ -260,7 +262,7 @@ class _StringListFieldState extends State<_StringListField> {
                           onPressed: _controllers.length > 1
                               ? () => _removeRow(index)
                               : null,
-                          tooltip: '删除',
+                          tooltip: al.common_delete,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
@@ -273,7 +275,7 @@ class _StringListFieldState extends State<_StringListField> {
                   child: TextButton.icon(
                     onPressed: _addRow,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('添加'),
+                    label: Text(al.common_add),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: Size.zero,

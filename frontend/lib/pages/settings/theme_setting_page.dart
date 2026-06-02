@@ -1,6 +1,7 @@
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import '../../services/services.dart';
 
 /// 主题设置页面
@@ -9,17 +10,18 @@ class ThemeSettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final ls = GetIt.I.get<LocalStorage>();
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('主题设置'), centerTitle: true),
+      appBar: AppBar(title: Text(al.theme_title), centerTitle: true),
       body: ListView(
         children: [
           // 主题模式
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('主题模式', style: theme.textTheme.titleMedium),
+            child: Text(al.theme_mode, style: theme.textTheme.titleMedium),
           ),
           RadioGroup<ThemeMode>(
             groupValue: ls.themeLanguage.themeMode,
@@ -32,18 +34,18 @@ class ThemeSettingPage extends StatelessWidget {
             child: Column(
               children: [
                 RadioListTile<ThemeMode>(
-                  title: const Text('浅色模式'),
-                  subtitle: const Text('使用浅色主题'),
+                  title: Text(al.theme_light),
+                  subtitle: Text(al.theme_lightDesc),
                   value: ThemeMode.light,
                 ),
                 RadioListTile<ThemeMode>(
-                  title: const Text('深色模式'),
-                  subtitle: const Text('使用深色主题'),
+                  title: Text(al.theme_dark),
+                  subtitle: Text(al.theme_darkDesc),
                   value: ThemeMode.dark,
                 ),
                 RadioListTile<ThemeMode>(
-                  title: const Text('跟随系统'),
-                  subtitle: const Text('根据系统设置自动切换'),
+                  title: Text(al.theme_system),
+                  subtitle: Text(al.theme_systemDesc),
                   value: ThemeMode.system,
                 ),
               ],
@@ -54,7 +56,7 @@ class ThemeSettingPage extends StatelessWidget {
           // 主题颜色
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('主题颜色', style: theme.textTheme.titleMedium),
+            child: Text(al.theme_color, style: theme.textTheme.titleMedium),
           ),
           _ThemeColorGrid(currentColor: ls.currentThemeName),
         ],
@@ -85,6 +87,10 @@ class _ThemeColorGrid extends StatelessWidget {
         runSpacing: 12,
         children: _colors.map((option) {
           final isSelected = currentColor == option.name;
+          // 生成该主题方案的预览颜色
+          final previewColor = FlexThemeData.light(
+            scheme: option.color,
+          ).colorScheme.primary;
           return GestureDetector(
             onTap: () async {
               final ls = GetIt.I.get<LocalStorage>();
@@ -95,14 +101,14 @@ class _ThemeColorGrid extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
+                color: previewColor,
                 borderRadius: BorderRadius.circular(12),
                 border: isSelected
                     ? Border.all(color: theme.colorScheme.primary, width: 3)
                     : null,
               ),
               child: isSelected
-                  ? Icon(Icons.check, color: theme.colorScheme.primary)
+                  ? Icon(Icons.check, color: Colors.white)
                   : null,
             ),
           );

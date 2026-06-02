@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:pfm/blocs/blocs.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/utils/format.dart';
 
 /// 下载任务列表
@@ -35,6 +36,7 @@ class DownloadTaskList extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -46,14 +48,14 @@ class DownloadTaskList extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无下载任务',
+            al.downloadTask_noTasks,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            '点击文件开始下载',
+            al.downloadTask_noTasksHint,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -115,7 +117,10 @@ class _DownloadTaskItem extends StatelessWidget {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 20),
                   onSelected: (value) => _handleMenuAction(context, value),
-                  itemBuilder: (context) => _buildMenuItems(),
+                  itemBuilder: (context) {
+                    final al = AppLocalizations.of(context)!;
+                    return _buildMenuItems(al);
+                  },
                 ),
               ],
             ),
@@ -203,21 +208,21 @@ class _DownloadTaskItem extends StatelessWidget {
     );
   }
 
-  List<PopupMenuItem<String>> _buildMenuItems() {
+  List<PopupMenuItem<String>> _buildMenuItems(AppLocalizations al) {
     return [
       if (task.isDownloading)
-        const PopupMenuItem(value: 'pause', child: Text('暂停')),
+        PopupMenuItem(value: 'pause', child: Text(al.downloadTask_pause)),
       if (task.isPaused)
-        const PopupMenuItem(value: 'resume', child: Text('继续')),
+        PopupMenuItem(value: 'resume', child: Text(al.downloadTask_resume)),
       if (task.isFailed || task.isPreDownload)
-        const PopupMenuItem(value: 'retry', child: Text('重试')),
+        PopupMenuItem(value: 'retry', child: Text(al.downloadTask_retry)),
       if (task.isDownloading || task.isPaused)
-        const PopupMenuItem(value: 'cancel', child: Text('取消')),
+        PopupMenuItem(value: 'cancel', child: Text(al.downloadTask_cancel)),
       if (task.isCompleted && task.localPath != null) ...[
-        const PopupMenuItem(value: 'open', child: Text('打开文件')),
-        const PopupMenuItem(value: 'folder', child: Text('打开所在目录')),
+        PopupMenuItem(value: 'open', child: Text(al.downloadTask_openFile)),
+        PopupMenuItem(value: 'folder', child: Text(al.downloadTask_openDir)),
       ],
-      const PopupMenuItem(value: 'remove', child: Text('移除')),
+      PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
     ];
   }
 
@@ -249,13 +254,14 @@ class _DownloadTaskItem extends StatelessWidget {
   }
 
   Future<void> _openFile(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     if (task.localPath == null) return;
     
     final file = File(task.localPath!);
     if (!await file.exists()) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件不存在')),
+          SnackBar(content: Text(al.downloadTask_fileNotExist)),
         );
       }
       return;
@@ -264,19 +270,20 @@ class _DownloadTaskItem extends StatelessWidget {
     final result = await OpenFile.open(task.localPath!);
     if (result.type != ResultType.done && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('无法打开文件: ${result.message}')),
+        SnackBar(content: Text('${al.downloadTask_cannotOpenFile}: ${result.message}')),
       );
     }
   }
 
   Future<void> _openFolder(BuildContext context) async {
+    final al = AppLocalizations.of(context)!;
     if (task.localPath == null) return;
     
     final file = File(task.localPath!);
     if (!await file.exists()) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件不存在')),
+          SnackBar(content: Text(al.downloadTask_fileNotExist)),
         );
       }
       return;
@@ -288,7 +295,7 @@ class _DownloadTaskItem extends StatelessWidget {
       final result = await OpenFile.open(task.localPath!);
       if (result.type != ResultType.done && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开目录: ${result.message}')),
+          SnackBar(content: Text('${al.downloadTask_cannotOpenDir}: ${result.message}')),
         );
       }
     } else {
@@ -298,45 +305,47 @@ class _DownloadTaskItem extends StatelessWidget {
   }
 
   void _copyPath(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (task.localPath == null) return;
     
     Clipboard.setData(ClipboardData(text: task.localPath!));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('路径已复制')),
+      SnackBar(content: Text(al.downloadTask_pathCopied)),
     );
   }
 
   Widget _buildStatusChip(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     String label;
     Color color;
 
     switch (task.status) {
       case DownloadTaskStatus.pending:
-        label = '等待中';
+        label = al.downloadTask_statusWaiting;
         color = Colors.grey;
         break;
       case DownloadTaskStatus.downloading:
-        label = '下载中';
+        label = al.downloadTask_statusDownloading;
         color = Theme.of(context).colorScheme.primary;
         break;
       case DownloadTaskStatus.completed:
-        label = '已完成';
+        label = al.downloadTask_statusCompleted;
         color = Colors.green;
         break;
       case DownloadTaskStatus.paused:
-        label = '已暂停';
+        label = al.downloadTask_statusPaused;
         color = Colors.orange;
         break;
       case DownloadTaskStatus.cancelled:
-        label = '已取消';
+        label = al.downloadTask_statusCanceled;
         color = Colors.grey;
         break;
       case DownloadTaskStatus.failed:
-        label = '失败';
+        label = al.downloadTask_statusFailed;
         color = Theme.of(context).colorScheme.error;
         break;
       case DownloadTaskStatus.preDownload:
-        label = '预下载';
+        label = al.downloadTask_statusPreDownload;
         color = Colors.blue;
         break;
     }

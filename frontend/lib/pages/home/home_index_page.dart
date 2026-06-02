@@ -8,6 +8,7 @@ import 'package:pfm/pages/files/file_preview_page.dart';
 import 'package:pfm/pages/files/flyfish_viewer_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/local_storage.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 
 /// 首页 - 最近使用 + 分类浏览
 class HomeIndexPage extends StatefulWidget {
@@ -44,6 +45,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final al = AppLocalizations.of(context)!;
 
     return Scaffold(
       body: SafeArea(
@@ -51,14 +53,14 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
           padding: const EdgeInsets.symmetric(vertical: 16),
           children: [
             // 最近使用
-            _buildSectionTitle(context, '最近使用', Icons.access_time),
+            _buildSectionTitle(context, al.home_recentlyUsed, Icons.access_time),
             const SizedBox(height: 12),
             _buildRecentFiles(context),
 
             const SizedBox(height: 32),
 
             // 分类浏览
-            _buildSectionTitle(context, '分类浏览', Icons.grid_view),
+            _buildSectionTitle(context, al.home_categoryBrowse, Icons.grid_view),
             const SizedBox(height: 12),
             _buildCategoryGrid(context),
           ],
@@ -91,6 +93,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   }
 
   Widget _buildRecentFiles(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     if (_loadingRecent) {
       return const SizedBox(
         height: 120,
@@ -103,7 +106,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         height: 120,
         child: Center(
           child: Text(
-            '暂无最近使用的文件',
+            al.home_noRecentFiles,
             style: TextStyle(color: Colors.grey[500]),
           ),
         ),
@@ -126,40 +129,41 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   }
 
   Widget _buildCategoryGrid(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     final categories = [
       _CategoryItem(
         icon: Icons.photo_outlined,
-        label: '照片',
+        label: al.home_photos,
         color: Colors.blue,
         fileType: FileType.IMAGE,
       ),
       _CategoryItem(
         icon: Icons.videocam_outlined,
-        label: '视频',
+        label: al.home_videos,
         color: Colors.red,
         fileType: FileType.VIDEO,
       ),
       _CategoryItem(
         icon: Icons.audiotrack_outlined,
-        label: '音频',
+        label: al.home_audios,
         color: Colors.orange,
         fileType: FileType.AUDIO,
       ),
       _CategoryItem(
         icon: Icons.description_outlined,
-        label: '文档',
+        label: al.home_documents,
         color: Colors.green,
         fileType: FileType.DOCUMENT,
       ),
       _CategoryItem(
         icon: Icons.archive_outlined,
-        label: '压缩包',
+        label: al.home_archives,
         color: Colors.purple,
         fileType: FileType.ARCHIVE,
       ),
       _CategoryItem(
         icon: Icons.insert_drive_file_outlined,
-        label: '其他',
+        label: al.home_others,
         color: Colors.grey,
         fileType: FileType.FILE_TYPE_UNKNOWN,
       ),
@@ -357,6 +361,7 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: _loading
@@ -364,7 +369,7 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
           : _files.isEmpty
               ? Center(
                   child: Text(
-                    '暂无${widget.title}文件',
+                    al.home_noCategoryFiles(widget.title),
                     style: TextStyle(color: Colors.grey[500]),
                   ),
                 )
