@@ -46,7 +46,7 @@ Future<T> _retryOnTimeout<T>(
 
 Future<void> uploadFile({
   required String taskId,
-  required Sqlite3Storage storage,
+  required TransferStorage storage,
   required FmRepository fmRepo,
   int chunkSize = 2 * 1024 * 1024,
   int smallFileThreshold = 5 * 1024 * 1024,
@@ -128,6 +128,9 @@ Future<void> uploadFile({
       final content = await file.readAsBytes();
 
       final uploadStart = DateTime.now();
+      // 节流：避免 onSendProgress 高频写 DB 导致锁竞争
+      int _lastProgressBytes = 0;
+      DateTime _lastProgressTime = DateTime.now();
       final result = await _retryOnTimeout(
         () => fmRepo.uploadSmall(
           name: task.filename,
@@ -139,7 +142,15 @@ Future<void> uploadFile({
           tags: task.tags,
           onSendProgress: (sent, total) {
             final capped = sent > fileSize ? fileSize : sent;
-            storage.updateUploadTask(task.id, uploadedBytes: capped);
+            final now = DateTime.now();
+            final bytesDelta = capped - _lastProgressBytes;
+            final timeDelta = now.difference(_lastProgressTime).inMilliseconds;
+            // 字节数变化超过 1% 或距上次更新超过 2 秒才写 DB
+            if (bytesDelta > fileSize ~/ 100 || timeDelta > 2000) {
+              _lastProgressBytes = capped;
+              _lastProgressTime = now;
+              storage.updateUploadTask(task.id, uploadedBytes: capped);
+            }
           },
         ),
         operationName: 'uploadSmall(${task.filename})',

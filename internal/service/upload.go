@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -137,7 +138,7 @@ func checkFileExists(parentID, fileName, fileHash string) (*native.FileORM, *nat
 	return existingFile, sameNameFile, nil
 }
 
-// createSyncTask 创建同步任务
+// createSyncTask 创建同步任务（支持 UPSERT：如果同 hash 记录已存在则合并 provider 列表并重试）
 func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHash string, providerIds []uint32) {
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
@@ -154,11 +155,60 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
 	}
 
-	if err := db.GetDB().Create(syncRecord).Error; err != nil {
-		llog.L().Errorf("create sync record failed: %v", err)
+	gormDB := db.GetDB()
+	if err := gormDB.Create(syncRecord).Error; err != nil {
+		// 唯一约束冲突 → 查询已有记录，合并 provider 列表并重新 dispatch
+		var existing native.UploadRecordORM
+		if qErr := gormDB.Where("file_hash = ?", fileHash).First(&existing).Error; qErr != nil {
+			llog.L().Errorf("create sync record failed and lookup also failed: %v / %v", err, qErr)
+			return
+		}
+
+		// 合并新旧 providerIds（去重）
+		merged := mergeProviderIds(existing.TargetProviderIds, providerIds)
+		mergedJSON, _ := json.Marshal(merged)
+		mergedStr := string(mergedJSON)
+
+		// 重置状态为 PPENDING，更新 provider 列表，清除旧错误信息
+		if uErr := gormDB.Model(&existing).Updates(map[string]interface{}{
+			"target_provider_ids": mergedStr,
+			"status":              int32(native.LocationStatus_PPENDING),
+			"message":             "",
+		}).Error; uErr != nil {
+			llog.L().Errorf("update existing sync record failed: %v", uErr)
+			return
+		}
+
+		existing.TargetProviderIds = &mergedStr
+		existing.Status = utils.EnumPtr(native.LocationStatus_PPENDING)
+		msg := ""
+		existing.Message = &msg
+		llog.L().Infof("reusing existing sync record #%d, merged providers: %s", *existing.Id, mergedStr)
+		go storage.Dispatch(context.Background(), &existing)
 	} else {
 		go storage.Dispatch(context.Background(), syncRecord)
 	}
+}
+
+// mergeProviderIds 合并已有 JSON 数组与新 providerIds，去重返回
+func mergeProviderIds(existingJSON *string, newIds []uint32) []uint32 {
+	set := make(map[uint32]bool)
+	for _, id := range newIds {
+		set[id] = true
+	}
+	if existingJSON != nil && *existingJSON != "" {
+		var existing []uint32
+		if err := json.Unmarshal([]byte(*existingJSON), &existing); err == nil {
+			for _, id := range existing {
+				set[id] = true
+			}
+		}
+	}
+	result := make([]uint32, 0, len(set))
+	for id := range set {
+		result = append(result, id)
+	}
+	return result
 }
 
 // buildExistingEncryptMap 构建每个 provider 的加密状态映射
@@ -239,10 +289,10 @@ func handleInstantUpload(
 		}
 	}
 
-	// 如果需要同步，创建同步任务
+	// 如果需要同步，创建同步任务（只传需要同步的提供者，不是全部）
 	if len(needSyncProviders) > 0 {
 		llog.L().Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), fileHash)
-		createSyncTask(fileName, fileSize, parentID, fileHash, providerIds)
+		createSyncTask(fileName, fileSize, parentID, fileHash, needSyncProviders)
 	}
 
 	// 处理同名文件
@@ -690,7 +740,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	// 1. 合并所有分片
 	outputFile, err := os.Create(*uploadRecord.TempPath)
 	if err != nil {
-		llog.L().Errorf("create output file failed: %v", err)
+		markUploadFailedSync(uploadRecord, fmt.Sprintf("create output file failed: %v", err))
 		return
 	}
 	defer outputFile.Close()
@@ -703,14 +753,16 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		f := utils.GetChunkTempPath(*uploadRecord.FileHash, i)
 		chunkFile, err := os.Open(f)
 		if err != nil {
-			llog.L().Errorf("open chunk file failed: %v", err)
+			markUploadFailedSync(uploadRecord, fmt.Sprintf("open chunk file failed: %v", err))
+			cleanupChunks(uploadRecord)
 			return
 		}
 
 		n, err := io.Copy(io.MultiWriter(outputFile, hasher), chunkFile)
 		chunkFile.Close()
 		if err != nil {
-			llog.L().Errorf("copy chunk to output failed: %v", err)
+			markUploadFailedSync(uploadRecord, fmt.Sprintf("copy chunk to output failed: %v", err))
+			cleanupChunks(uploadRecord)
 			return
 		}
 		totalSize += n
@@ -719,7 +771,8 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	finalHash := hex.EncodeToString(hasher.Sum(nil))
 
 	if finalHash != *uploadRecord.FileHash {
-		llog.L().Errorf("file hash mismatch: expected %s, got %s", *uploadRecord.FileHash, finalHash)
+		markUploadFailedSync(uploadRecord, fmt.Sprintf("file hash mismatch: expected %s, got %s", *uploadRecord.FileHash, finalHash))
+		cleanupChunks(uploadRecord)
 		return
 	}
 
@@ -746,7 +799,8 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	}
 	createdFile, mErr := handleOverwriteFile(ctx, fileRecord, overwriteID, "")
 	if mErr != nil {
-		llog.L().Errorf("handle file record failed: %v", mErr)
+		markUploadFailedSync(uploadRecord, fmt.Sprintf("create file record failed: %v", mErr))
+		cleanupChunks(uploadRecord)
 		return
 	}
 
@@ -765,6 +819,26 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	// 5. 上传到存储（异步，在独立协程中执行）
 	// 注意：必须在独立协程中执行，否则 outputFile 的 defer Close() 无法及时释放文件句柄
 	go storage.Dispatch(context.Background(), uploadRecord)
+}
+
+// markUploadFailedSync 标记分块上传失败（同步版本，用于 processCompleteUpload 错误路径）
+func markUploadFailedSync(ur *native.UploadRecordORM, reason string) {
+	if ur.Id != nil {
+		failedStatus := int32(native.LocationStatus_PFAILED)
+		ur.Status = &failedStatus
+		ur.Message = &reason
+		if err := db.UpdateUploadRecord(ur, []string{"status", "message"}); err != nil {
+			llog.L().Errorf("mark upload failed error: %v, id: %d", err, *ur.Id)
+		}
+	}
+	llog.L().Errorf("chunk upload failed: %s, hash: %s", reason, *ur.FileHash)
+}
+
+// cleanupChunks 清理分片临时文件
+func cleanupChunks(ur *native.UploadRecordORM) {
+	if err := os.RemoveAll(utils.GetChunkTempDir(*ur.FileHash)); err != nil {
+		llog.L().Warnf("remove chunks failed: %v", err)
+	}
 }
 
 // CancelUpload 取消上传
@@ -870,7 +944,9 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	// 触发后台存储上传
-	smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID)
+	if err := smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID); err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
 
 	exists := false
 	return &native.UploadSmallRespData{
@@ -945,7 +1021,7 @@ func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blak
 }
 
 // smallFileUploadToProviders 创建上传记录并触发后台存储上传
-func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, parentFile *native.FileORM, tempPath, overwriteID string) {
+func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, parentFile *native.FileORM, tempPath, overwriteID string) error {
 	uploadRecord := &native.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
@@ -960,9 +1036,13 @@ func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, p
 
 	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
 		llog.L().Errorf("create upload record failed: %v", err)
-	} else {
-		go storage.Dispatch(context.Background(), uploadRecord)
+		// 清理 temp 文件
+		os.RemoveAll(filepath.Dir(tempPath))
+		return err
 	}
+
+	go storage.Dispatch(context.Background(), uploadRecord)
+	return nil
 }
 
 // ListUploadRecords 获取上传记录列表

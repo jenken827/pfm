@@ -56,7 +56,6 @@ dependencies:
   protobuf: ^6.0.0
   equatable: ^2.0.8
   fixnum: ^1.1.1
-  workmanager: ^0.9.0+3
   flutter_background_service: ^5.0.0
   flutter_local_notifications: ^18.0.0
   photo_manager: ^3.6.4

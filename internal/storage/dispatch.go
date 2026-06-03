@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -42,6 +43,7 @@ type providerSemaphore struct {
 // dispatcher 分发器
 type dispatcher struct {
 	processing          sync.Map // map[uploadKey]chan struct{}
+	lockTime            sync.Map // map[uploadKey]time.Time — 锁创建时间，用于超时清理
 	globalSemaphore     chan struct{}
 	providerSemaphores  sync.Map // map[uint32]*providerSemaphore
 	providerConcurrence sync.Map // map[uint32]int 存储提供者配置的并发数
@@ -360,9 +362,9 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 	}
 	defer releaseLock(key)
 
-	fl := getOrCreateFileLocation(tid, *ur.FileHash)
-	if fl == nil {
-		return true, fmt.Sprintf("provider %d: failed to create file location", tid)
+	fl, flErr := getOrCreateFileLocation(tid, *ur.FileHash)
+	if flErr != nil {
+		return true, fmt.Sprintf("provider %d: %v", tid, flErr)
 	}
 
 	if *fl.Status == int32(native.LocationStatus_PCOMPLETED) {
@@ -672,24 +674,22 @@ func createChunkLocation(fl *native.FileLocationORM, chunkInfo *types.StoragePro
 }
 
 // getOrCreateFileLocation 获取或创建文件位置记录
-func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileLocationORM {
+func getOrCreateFileLocation(providerID uint32, blake3Hash string) (*native.FileLocationORM, error) {
 	// 先查询是否已存在
 	location, err := db.GetFileLocationByProviderAndHash(providerID, blake3Hash)
 	if err == nil {
-		return location
+		return location, nil
 	}
 
 	// 不存在则创建，但先检查存储提供者是否可用
 	st := GetStorage(providerID)
 	if st == nil {
-		llog.L().Warnf("storage provider not found, skip creating file location: provider=%d", providerID)
-		return nil
+		return nil, fmt.Errorf("storage provider not found: %d", providerID)
 	}
 
 	orm := st.GetOrm()
 	if orm == nil || !*orm.Enabled {
-		llog.L().Warnf("storage provider not enabled, skip creating file location: provider=%d", providerID)
-		return nil
+		return nil, fmt.Errorf("storage provider not enabled: %d", providerID)
 	}
 
 	// 创建文件位置记录
@@ -699,15 +699,19 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) *native.FileL
 		Status:     (*int32)(native.LocationStatus_PPENDING.Enum()),
 	}
 	if err := db.CreateFileLocation(fl); err != nil {
-		llog.L().Errorf("create file location failed: %v", err)
-		return nil
+		return nil, fmt.Errorf("create file location failed: %v", err)
 	}
 
-	return fl
+	return fl, nil
 }
 
 // completeUpload 完成上传，清理临时文件
 func completeUpload(ur *native.UploadRecordORM) {
+	// 幂等检查：如果已经是 PCOMPLETED，跳过
+	if ur.Status != nil && *ur.Status == int32(native.LocationStatus_PCOMPLETED) {
+		return
+	}
+
 	// 解析目标提供者列表
 	var targetProviderIds []uint32
 	if ur.TargetProviderIds != nil && *ur.TargetProviderIds != "" {
@@ -734,15 +738,28 @@ func completeUpload(ur *native.UploadRecordORM) {
 
 	// 更新上传记录状态
 	if completedCount == len(targetProviderIds) {
-		// 所有上传都完成
+		// 使用 DB 乐观锁防止并发更新
 		if ur.Id != nil {
-			db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.LocationStatus_PCOMPLETED)}, []string{"status"})
+			result := db.GetDB().Model(&native.UploadRecordORM{}).
+				Where("id = ? AND status != ?", *ur.Id, int32(native.LocationStatus_PCOMPLETED)).
+				Updates(map[string]interface{}{
+					"status":  int32(native.LocationStatus_PCOMPLETED),
+					"message": "",
+				})
+
+			if result.Error != nil {
+				llog.L().Errorf("update upload record to completed failed: %v, id: %d", result.Error, *ur.Id)
+				return
+			}
+			if result.RowsAffected == 0 {
+				// 已经被其他 goroutine 更新，跳过后续清理
+				return
+			}
 		}
 
 		// 清理整个文件临时目录
 		if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
 			llog.L().Warnf("cleanup file temp dir failed: %v", err)
-
 		}
 
 		// 删除上传记录（仅当有ID时）
@@ -777,18 +794,27 @@ func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
 	if ur.Id == nil {
 		return
 	}
-
-	db.UpdateUploadRecord(&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.LocationStatus_PUPLOADING)}, []string{"status"})
+	if err := db.UpdateUploadRecord(
+		&native.UploadRecordORM{Id: ur.Id, Status: utils.EnumPtr(native.LocationStatus_PUPLOADING)},
+		[]string{"status"},
+	); err != nil {
+		llog.L().Errorf("mark uploading failed: %v, id: %d", err, *ur.Id)
+		// 不 return — 允许 Dispatch 继续执行，至少尝试上传
+	}
 }
 
-// acquireLock 获取并发控制锁（非阻塞）
+// acquireLock 获取并发控制锁（非阻塞），带过期锁自动清理
 func acquireLock(key uploadKey) bool {
+	cleanupExpiredLocks()
+
 	ch := make(chan struct{})
 	_, loaded := globalDispatcher.processing.LoadOrStore(key, ch)
 	if loaded {
 		// 已经有任务在处理，直接返回false，不等待
 		return false
 	}
+	// 记录锁的创建时间
+	globalDispatcher.lockTime.Store(key, time.Now())
 	return true
 }
 
@@ -797,7 +823,21 @@ func releaseLock(key uploadKey) {
 	if ch, ok := globalDispatcher.processing.Load(key); ok {
 		close(ch.(chan struct{}))
 		globalDispatcher.processing.Delete(key)
+		globalDispatcher.lockTime.Delete(key)
 	}
+}
+
+// cleanupExpiredLocks 清理超时未释放的锁（防止崩溃后锁永久占用）
+func cleanupExpiredLocks() {
+	const lockTimeout = 30 * time.Minute
+	globalDispatcher.lockTime.Range(func(key, value interface{}) bool {
+		if t, ok := value.(time.Time); ok && time.Since(t) > lockTimeout {
+			llog.L().Warnf("cleaning expired upload lock: hash=%s provider=%v",
+				key.(uploadKey).blake3Hash[:8], key.(uploadKey).providerID)
+			releaseLock(key.(uploadKey))
+		}
+		return true
+	})
 }
 
 // resumeDispatch 恢复分发（系统启动时调用）
@@ -809,9 +849,27 @@ func resumeDispatch() {
 		return
 	}
 
-	for _, record := range records {
-		go Dispatch(context.Background(), record)
+	if len(records) == 0 {
+		return
 	}
+
+	llog.L().Infof("resuming %d pending/uploading upload records", len(records))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // 最多同时 dispatch 10 个
+
+	for _, record := range records {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(r *native.UploadRecordORM) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			Dispatch(context.Background(), r)
+		}(record)
+	}
+
+	wg.Wait()
+	llog.L().Infof("resume dispatch completed, processed %d records", len(records))
 }
 
 // generateThumbnailForUpload 为上传的文件生成缩略图

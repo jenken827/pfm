@@ -22,11 +22,15 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   List<FileLocationInfo> _locations = [];
   bool _isLoading = true;
   String? _errorMessage;
+  bool _loaded = false;
 
   @override
-  void initState() {
-    super.initState();
-    _loadDetail();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_loaded) {
+      _loaded = true;
+      _loadDetail();
+    }
   }
 
   Future<void> _loadDetail() async {

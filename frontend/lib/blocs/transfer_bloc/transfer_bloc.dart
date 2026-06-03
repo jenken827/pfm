@@ -5,7 +5,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart';
 import 'package:pfm/models/models.dart';
-import 'package:pfm/proto/native/enum.pb.dart';
+import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
 import 'package:uuid/uuid.dart';
 
@@ -82,12 +82,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -99,14 +99,22 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
-      await _bgService.storage.clearUploadCompleted();
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      await _bgService.transferStorage.clearUploadCompleted();
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
+      final counts = await _bgService.transferStorage.countAllUploadTasks();
       emit(
-        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+        state.copyWith(
+          uploadTasks: tasks,
+          fakeStatus: state.fakeStatus + 1,
+          dbUploadingCount: counts['uploading'] ?? 0,
+          dbPendingCount: counts['pending'] ?? 0,
+          dbCompletedCount: counts['completed'] ?? 0,
+          dbFailedCount: counts['failed'] ?? 0,
+        ),
       );
     } else {
-      await _bgService.storage.clearDownloadCompleted();
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      await _bgService.transferStorage.clearDownloadCompleted();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -119,10 +127,18 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
-      await _bgService.storage.clearUploadFailed();
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      await _bgService.transferStorage.clearUploadFailed();
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
+      final counts = await _bgService.transferStorage.countAllUploadTasks();
       emit(
-        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+        state.copyWith(
+          uploadTasks: tasks,
+          fakeStatus: state.fakeStatus + 1,
+          dbUploadingCount: counts['uploading'] ?? 0,
+          dbPendingCount: counts['pending'] ?? 0,
+          dbCompletedCount: counts['completed'] ?? 0,
+          dbFailedCount: counts['failed'] ?? 0,
+        ),
       );
     } else {
       // 下载暂不支持单独清除失败，后续可按需添加
@@ -135,14 +151,14 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
-      await _bgService.storage.pauseUploadTasks(event.taskId);
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      await _bgService.transferStorage.pauseUploadTasks(event.taskId);
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
       await _bgService.pauseDownload(event.taskId!);
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -155,13 +171,13 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) async {
     if (state.isUpload) {
       await _bgService.resumeUploadTasks(event.taskId);
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
       await _bgService.resumeDownload(event.taskId!);
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -173,14 +189,14 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     if (state.isUpload) {
-      await _bgService.storage.cancelUploadTask(event.taskId);
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      await _bgService.transferStorage.cancelUploadTask(event.taskId);
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
       await _bgService.cancelDownload(event.taskId!);
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -195,15 +211,15 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       '_onRemove: taskId: ${event.taskId}, isUpload: ${state.isUpload}',
     );
     if (state.isUpload) {
-      await _bgService.storage.deleteUploadTask(event.taskId);
-      final tasks = await _bgService.storage.getAllUploadTasksAsync();
+      await _bgService.transferStorage.deleteUploadTask(event.taskId);
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
       emit(
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
-      await _bgService.storage.deleteDownloadTask(event.taskId);
+      await _bgService.transferStorage.deleteDownloadTask(event.taskId);
 
-      final records = await _bgService.storage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -347,13 +363,36 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) async {
     // 直接查库获取全部失败任务，不受内存中 100 条限制
-    final taskIds = await _bgService.storage.retryFailedUploadTasks();
+    final taskIds = await _bgService.transferStorage.retryFailedUploadTasks();
+    // 同步重置 backup_file_records 状态（原先在 Sqlite3Storage 中处理）
     for (final taskId in taskIds) {
+      final task = await _bgService.transferStorage.getUploadTaskAsync(taskId);
+      if (task != null && task.tags != null && task.tags!.isNotEmpty) {
+        final record = await _bgService.storage.getBackupFileRecord(
+          Sqlite3Storage.albumBackupConfigId,
+          task.tags!,
+        );
+        if (record != null &&
+            record['status'] as int == BackupFileStatus.failed.index) {
+          await _bgService.storage.updateBackupFileRecord(
+            record['id'] as String,
+            {'status': BackupFileStatus.pending.index, 'message': null},
+          );
+        }
+      }
       await _bgService.scheduleUpload(taskId, true);
     }
     // 刷新列表
-    final tasks = await _bgService.storage.getAllUploadTasksAsync();
-    emit(state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1));
+    final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
+    final counts = await _bgService.transferStorage.countAllUploadTasks();
+    emit(state.copyWith(
+      uploadTasks: tasks,
+      fakeStatus: state.fakeStatus + 1,
+      dbUploadingCount: counts['uploading'] ?? 0,
+      dbPendingCount: counts['pending'] ?? 0,
+      dbCompletedCount: counts['completed'] ?? 0,
+      dbFailedCount: counts['failed'] ?? 0,
+    ));
   }
 
   /// DownloadTaskRecord -> DownloadTaskState 转换

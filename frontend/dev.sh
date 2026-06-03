@@ -302,43 +302,6 @@ run_flutter_build() {
     esac
 }
 
-# 临时注入 Gradle 代理配置
-# 用法: _inject_gradle_proxy
-# 在调用方函数中设置 trap EXIT 调用 _restore_gradle_proxy
-GRADLE_PROPS="android/gradle.properties"
-GRADLE_PROPS_BACKUP="android/gradle.properties.bak"
-_inject_gradle_proxy() {
-    cp "$GRADLE_PROPS" "$GRADLE_PROPS_BACKUP"
-
-    # 从脚本顶部的 HTTP_PROXY 解析 host 和 port
-    local PROXY_HOST PROXY_PORT
-    if [ -n "$HTTP_PROXY" ]; then
-        PROXY_HOST=$(echo "$HTTP_PROXY" | sed -E 's|https?://||' | cut -d: -f1)
-        PROXY_PORT=$(echo "$HTTP_PROXY" | sed -E 's|https?://||' | cut -d: -f2)
-    fi
-
-    if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
-        cat >> "$GRADLE_PROPS" << PROXY_EOF
-
-# 由 dev.sh 临时注入的代理配置（构建后自动恢复）
-systemProp.http.proxyHost=$PROXY_HOST
-systemProp.http.proxyPort=$PROXY_PORT
-systemProp.https.proxyHost=$PROXY_HOST
-systemProp.https.proxyPort=$PROXY_PORT
-systemProp.http.nonProxyHosts=localhost|127.0.0.1
-PROXY_EOF
-        echo "📌 已临时注入 Gradle 代理: $PROXY_HOST:$PROXY_PORT"
-    fi
-}
-
-# 恢复 Gradle 配置文件
-_restore_gradle_proxy() {
-    if [ -f "$GRADLE_PROPS_BACKUP" ]; then
-        cp "$GRADLE_PROPS_BACKUP" "$GRADLE_PROPS"
-        rm -f "$GRADLE_PROPS_BACKUP"
-        echo "🔄 已恢复 gradle.properties"
-    fi
-}
 
 # 确保 sqlite3 原生库已下载（Android 构建需要）
 # - 先检查项目是否依赖 sqlite3
@@ -462,8 +425,6 @@ build_android_apk() {
     export HTTP_PROXY="$HTTP_PROXY"
     export HTTPS_PROXY="$HTTPS_PROXY"
 
-    # 临时注入 Gradle 代理配置（构建完成后自动恢复）
-    _inject_gradle_proxy
 
     # 预先运行 pub get 创建 hook 目录
     puro flutter pub get
@@ -533,8 +494,6 @@ build_android_appbundle() {
     # 确保 sqlite3 原生库已下载
     ensure_sqlite3_libs
     
-    # 临时注入 Gradle 代理配置（构建完成后自动恢复）
-    _inject_gradle_proxy
     
     # 执行构建
     puro flutter build appbundle --release --no-tree-shake-icons
@@ -752,11 +711,10 @@ case "$ACTION" in
         replace_commit_hash_in_about
         puro flutter pub get
         # 构建失败也要恢复文件，用 trap 确保清理
-        trap 'restore_build_number; restore_commit_hash_in_about; _restore_gradle_proxy' EXIT
+        trap 'restore_build_number; restore_commit_hash_in_about' EXIT
         run_flutter_build "$PLATFORM"
         restore_build_number
         restore_commit_hash_in_about
-        _restore_gradle_proxy
         trap - EXIT
         ;;
 
@@ -769,11 +727,10 @@ case "$ACTION" in
         generate_splash
         run_build_runner
         # 构建失败也要恢复文件，用 trap 确保清理
-        trap 'restore_build_number; restore_commit_hash_in_about; _restore_gradle_proxy' EXIT
+        trap 'restore_build_number; restore_commit_hash_in_about' EXIT
         run_flutter_build "$PLATFORM"
         restore_build_number
         restore_commit_hash_in_about
-        _restore_gradle_proxy
         trap - EXIT
         echo "✅ 所有构建任务已完成！"
         ;;

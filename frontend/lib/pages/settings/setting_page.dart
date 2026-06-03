@@ -266,6 +266,8 @@ class SettingPage extends StatelessWidget {
             ),
             onPressed: () async {
               await GetIt.I.get<LocalStorage>().clearLoginInfo();
+              // 停止所有后台传输任务
+              GetIt.I.get<BackgroundService>().cancelAllTransfers();
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 const LoginRoute().go(context);

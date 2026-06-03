@@ -88,6 +88,7 @@ class ClientBackupService {
     if (!config.enabled) return (0, 0, 0);
 
     final storage = await Sqlite3Storage.instance();
+    final transferStorage = await TransferStorage.instance();
     final l = getLogger();
 
     // 1. 扫描本地目录
@@ -143,7 +144,7 @@ class ClientBackupService {
           overwrite: true,
         );
 
-        await storage.addUploadTask(uploadTask);
+        await transferStorage.addUploadTask(uploadTask);
 
         // 创建/更新备份文件记录
         final existingRecord = await storage.getBackupFileRecord(

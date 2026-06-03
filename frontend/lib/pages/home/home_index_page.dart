@@ -214,7 +214,10 @@ class _RecentFileCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return SizedBox(
+    return InkWell(
+      onTap: () => _handleTap(context),
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
       width: 100,
       child: Column(
         children: [
@@ -241,7 +244,31 @@ class _RecentFileCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
+  }
+
+  void _handleTap(BuildContext context) {
+    final type = file.type.value;
+    if (type == 2) {
+      // 图片：预览
+      context.push(
+        FilePreviewRoute().location,
+        extra: PreviewArgs(file: file, images: [file], initialIndex: 0),
+      );
+    } else if (type == 3 || type == 4) {
+      // 视频/音频
+      context.push(FilePreviewRoute().location, extra: file);
+    } else if (type == 5 || type == 6) {
+      // 文档/压缩包：Flyfish Viewer
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => FlyfishViewerPage(file: file)),
+      );
+    } else {
+      // 其他：详情页
+      context.push(FileDetailRoute().location, extra: file);
+    }
   }
 
   IconData _getFileIcon(int type) {

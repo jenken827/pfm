@@ -32,6 +32,9 @@ func Init() {
 
 	// 启动时恢复未完成的上传任务
 	go resumeDispatch()
+
+	// 启动 temp 文件定期清理
+	StartTempCleanup()
 }
 
 // GetStorages 获取存储实例

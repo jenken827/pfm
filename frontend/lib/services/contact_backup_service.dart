@@ -266,8 +266,6 @@ class ContactBackupService {
       createdAt: DateTime.now(),
     );
 
-    await _storage.addUploadTask(task);
-
     final bgService = GetIt.I.get<BackgroundService>();
     await bgService.scheduleNewUploadTask(task);
 

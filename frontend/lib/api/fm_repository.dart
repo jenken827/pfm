@@ -14,6 +14,7 @@ import '../proto/native/provider.pb.dart';
 import '../proto/native/upload.pb.dart';
 import '../router/router.dart';
 import '../services/local_storage.dart';
+import '../services/background_service.dart';
 import '../services/logger.dart';
 import 'util.dart';
 
@@ -48,6 +49,8 @@ class FmRepository {
     _logger.error('Token invalid, clearing login info and redirecting to login');
     final ls = GetIt.I.get<LocalStorage>();
     await ls.clearLoginInfo();
+    // 停止所有后台传输任务
+    GetIt.I.get<BackgroundService>().cancelAllTransfers();
     approuter.go('/login');
   }
 

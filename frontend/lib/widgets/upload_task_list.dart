@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/utils/format.dart';
+import 'package:pfm/utils/platform.dart';
 
 /// 上传任务列表
 class UploadTaskList extends StatelessWidget {
@@ -463,31 +468,221 @@ class _UploadTaskItem extends StatelessWidget {
           case 'remove':
             bloc.add(TransferRemoveEvent(task.id));
             break;
+          case 'detail':
+            _showDetailSheet(context);
+            break;
         }
       },
       itemBuilder: (context) {
+        final detailItem = PopupMenuItem(
+          value: 'detail',
+          child: ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text(AppLocalizations.of(context).uploadRecord_viewDetail),
+            dense: true,
+          ),
+        );
         if (task.isActive) {
           return [
             PopupMenuItem(value: 'pause', child: Text(al.uploadTask_pause)),
             PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            detailItem,
             PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else if (task.status == UploadStatus.PAUSED) {
           return [
             PopupMenuItem(value: 'resume', child: Text(al.uploadTask_resume)),
             PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            detailItem,
             PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else if (task.status == UploadStatus.FAILED) {
           return [
             PopupMenuItem(value: 'retry', child: Text(al.uploadTask_retry)),
             PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
+            detailItem,
             PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
           ];
         } else {
-          return [PopupMenuItem(value: 'remove', child: Text(al.common_remove))];
+          return [
+            detailItem,
+            PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
+          ];
         }
       },
     );
+  }
+
+  void _showDetailSheet(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
+
+    String statusText;
+    switch (task.status) {
+      case UploadStatus.PENDING:
+        statusText = al.uploadTask_statusWaiting;
+        break;
+      case UploadStatus.UPLOADING:
+        statusText = al.uploadTask_statusUploading;
+        break;
+      case UploadStatus.COMPLETED:
+        statusText = al.uploadTask_statusCompleted;
+        break;
+      case UploadStatus.PAUSED:
+        statusText = al.uploadTask_statusPaused;
+        break;
+      case UploadStatus.CANCELED:
+        statusText = al.uploadTask_statusCanceled;
+        break;
+      case UploadStatus.FAILED:
+        statusText = al.uploadTask_statusFailed;
+        break;
+      case UploadStatus.HASHING:
+        statusText = al.uploadTask_statusHashing;
+        break;
+      default:
+        statusText = al.common_unknown;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 拖拽手柄
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // 文件名
+              Text(
+                task.filename,
+                style: Theme.of(ctx).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              // 详情列表
+              _detailRow(ctx, '状态', statusText),
+              _detailRow(ctx, '文件大小', formatCapacityString(task.fileSize)),
+              _detailRow(ctx, '上传进度', '${task.progress.toStringAsFixed(1)}%'),
+              if (task.uploadedBytes > 0)
+                _detailRow(ctx, '已上传', _formatBytes(task.uploadedBytes)),
+              if (task.speed > 0)
+                _detailRow(ctx, '上传速度', task.formatSpeed),
+              _detailRow(ctx, '本地路径', task.filepath),
+              _detailRow(ctx, '目标目录 ID', task.parentId),
+              if (task.fileHash != null && task.fileHash!.isNotEmpty)
+                _detailRow(ctx, '文件哈希 (Blake3)', task.fileHash!),
+              if (task.chunkTotal > 0)
+                _detailRow(ctx, '分片信息', '${task.chunkTotal} 片 × ${formatCapacityString(task.chunkSize)}'),
+              if (task.tags != null && task.tags!.isNotEmpty)
+                _detailRow(ctx, '标签', task.tags!),
+              _detailRow(ctx, '覆盖同名', task.overwrite ? '是' : '否'),
+              _detailRow(ctx, '重试次数', '${task.retryCount}'),
+              _detailRow(ctx, '创建时间', dateFormat.format(task.createdAt)),
+              if (task.completedAt != null)
+                _detailRow(ctx, '完成时间', dateFormat.format(task.completedAt!)),
+              if (task.errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text('错误信息', style: Theme.of(ctx).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    task.errorMessage!,
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.onErrorContainer),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              // 打开本地文件所在目录
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => _openLocalDirectory(ctx),
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('打开本地目录'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openLocalDirectory(BuildContext context) async {
+    final dir = File(task.filepath).parent.path;
+    try {
+      if (isDesktop()) {
+        if (Platform.isWindows) {
+          await Process.run('explorer', [dir]);
+        } else if (Platform.isMacOS) {
+          await Process.run('open', [dir]);
+        } else if (Platform.isLinux) {
+          await Process.run('xdg-open', [dir]);
+        }
+      } else {
+        // 移动端无法直接打开目录，复制路径到剪贴板
+        await Clipboard.setData(ClipboardData(text: task.filepath));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已复制路径到剪贴板: ${task.filepath}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('打开失败: $e')),
+        );
+      }
+    }
   }
 }

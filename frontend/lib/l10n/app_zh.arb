@@ -10,6 +10,7 @@
     "common_close": "关闭",
     "common_add": "添加",
     "common_remove": "移除",
+    "common_detail": "查看详情",
     "common_refresh": "刷新",
     "common_loading": "加载中...",
     "common_loadingFailed": "加载失败",

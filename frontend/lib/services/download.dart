@@ -16,7 +16,7 @@ import 'package:pfm/services/services.dart';
 /// - Telegram 大文件预下载（202 响应处理）
 Future<void> downloadFile({
   required String taskId,
-  required Sqlite3Storage storage,
+  required TransferStorage storage,
   required String baseUrl,
   required CasdoorToken token,
 }) async {
@@ -150,7 +150,7 @@ Future<String?> _checkPreDownload({
 /// 单线程下载（用于小文件）
 Future<void> _downloadSingleThread({
   required DownloadTaskRecord task,
-  required Sqlite3Storage storage,
+  required TransferStorage storage,
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
@@ -234,7 +234,7 @@ Future<void> _downloadSingleThread({
 /// 多线程并发下载（用于大文件）
 Future<void> _downloadMultiThread({
   required DownloadTaskRecord task,
-  required Sqlite3Storage storage,
+  required TransferStorage storage,
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
@@ -347,7 +347,7 @@ class _Lock {
 Future<void> _downloadWorker({
   required int workerIndex,
   required DownloadTaskRecord task,
-  required Sqlite3Storage storage,
+  required TransferStorage storage,
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
