@@ -419,6 +419,31 @@ class BackgroundService {
     }
   }
 
+  /// 重命名并重试上传任务
+  Future<void> renameAndRetryUpload(String taskId, String newFilename) async {
+    _logger.info('Renaming and retrying upload task: $taskId -> $newFilename');
+    
+    // 获取任务
+    final task = await _transferStorage.getUploadTaskAsync(taskId);
+    if (task == null) {
+      _logger.warning('Task not found: $taskId');
+      return;
+    }
+    
+    // 更新文件名并重置状态
+    await _transferStorage.updateUploadTask(
+      taskId,
+      filename: newFilename,
+      status: UploadStatus.PENDING,
+      errorMessage: null,
+      retryCount: 0,
+    );
+    
+    // 重新调度上传
+    await scheduleUpload(taskId, true);
+    _logger.info('Renamed and rescheduled upload task: $taskId');
+  }
+
   /// 调度上传任务
   Future<void> scheduleUpload(String taskId, bool isNew) async {
     _logger.info('scheduleUpload: $taskId');

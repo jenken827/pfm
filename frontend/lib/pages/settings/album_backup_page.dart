@@ -61,6 +61,32 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
     await _backupService.startBackup();
   }
 
+  Future<void> _startRebackup() async {
+    final al = AppLocalizations.of(context)!;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(al.albumBackup_rebackup),
+        content: Text(al.albumBackup_rebackupConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(al.common_cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(al.albumBackup_rebackup),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _backupService.startBackup(force: true);
+    }
+  }
+
   Future<void> _selectTargetFolder() async {
     final result = await Navigator.push<FolderPickResult>(
       context,
@@ -104,6 +130,24 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
           TextButton(
             onPressed: _startBackup,
             child: Text(al.albumBackup_backupNow),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'rebackup') {
+                _startRebackup();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'rebackup',
+                child: ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: Text(al.albumBackup_rebackup),
+                  subtitle: Text(al.albumBackup_rebackupHint),
+                ),
+              ),
+            ],
           ),
         ],
       ),

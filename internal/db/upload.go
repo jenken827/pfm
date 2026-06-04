@@ -151,6 +151,16 @@ func ClearUploadRecords(id uint32) error {
 	})
 }
 
+// CountUploadRecordsByStatus 按状态统计上传记录数
+func CountUploadRecordsByStatus(status int32) (int64, error) {
+	var count int64
+	if err := db.Model(&native.UploadRecordORM{}).Where("status = ?", status).Count(&count).Error; err != nil {
+		llog.L().Errorf("count upload records by status failed: %v", err)
+		return 0, err
+	}
+	return count, nil
+}
+
 // ListUploadRecords 分页查询上传记录
 func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRecordORM, int64, error) {
 	var total int64

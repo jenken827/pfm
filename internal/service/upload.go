@@ -460,6 +460,33 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 
 	blake3Hash := *req.Hash
 
+	// 如果前端传递了 upload_id，根据 upload_id 获取上传记录
+	if req.UploadId != nil && *req.UploadId > 0 {
+		record, chunks, err := db.GetUploadRecordByID(*req.UploadId, true)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			llog.L().Errorf("get upload record by ID failed: %v", err)
+			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		}
+		if record != nil {
+			// 比对 hash 是否相等
+			if record.FileHash != nil && *record.FileHash == blake3Hash {
+				// hash 相等，认为是续传，更新名称（如果不同的话）
+				if record.FileName != nil && *record.FileName != *req.Name {
+					llog.L().Infof("update filename from %s to %s for upload record %d", *record.FileName, *req.Name, *record.Id)
+					record.FileName = req.Name
+					if err := db.GetDB().Save(record).Error; err != nil {
+						llog.L().Errorf("update filename failed: %v", err)
+						return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+					}
+				}
+				return resumeExistingUpload(record, chunks, blake3Hash)
+			} else {
+				// hash 不相等，创建新的上传记录
+				llog.L().Infof("hash mismatch for upload record %d, creating new upload", *record.Id)
+			}
+		}
+	}
+
 	// 检查是否有未完成的上传任务（断点续传）
 	record, chunks, err := db.GetUploadRecordByHash(blake3Hash, true)
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -571,8 +598,37 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFil
 	}
 
 	if err := db.GetDB().Create(ur).Error; err != nil {
-		llog.L().Errorf("create upload record failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		// 唯一约束冲突 → 查询已有记录，更新文件名并重试
+		var existing native.UploadRecordORM
+		if qErr := db.GetDB().Where("file_hash = ?", blake3Hash).First(&existing).Error; qErr != nil {
+			llog.L().Errorf("create upload record failed and lookup also failed: %v / %v", err, qErr)
+			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		}
+
+		// 更新已有记录的文件名、父目录、覆盖ID等信息
+		updates := map[string]interface{}{
+			"file_name":    *req.Name,
+			"parent_id":    *req.ParentId,
+			"overwrite_id": overwriteID,
+			"status":       int32(native.LocationStatus_PPENDING),
+			"message":      "",
+			"tags":         req.Tags,
+		}
+		if uErr := db.GetDB().Model(&existing).Updates(updates).Error; uErr != nil {
+			llog.L().Errorf("update existing upload record failed: %v", uErr)
+			return nil, &models.Err{E: uErr, C: native.RespCode_INTERNAL_ERROR}
+		}
+
+		llog.L().Infof("reuse existing upload record: %d, new filename: %s", *existing.Id, *req.Name)
+		uploadID := *existing.Id
+		chunkTotal := *existing.ChunkTotal
+		chunkSize := *existing.ChunkSize
+		return &native.InitUploadRespData{
+			UploadId:       &uploadID,
+			UploadedChunks: make([]byte, (chunkTotal+7)/8),
+			ChunkTotal:     &chunkTotal,
+			ChunkSize:      &chunkSize,
+		}, nil
 	}
 	llog.L().Infof("init upload: %d, chunk_total: %d, chunk_size: %d",
 		*ur.Id, chunkTotal, chunkSize)
@@ -943,9 +999,15 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		return nil, mErr
 	}
 
-	// 触发后台存储上传
-	if err := smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID); err != nil {
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	// 触发后台存储上传：优先复用 initUpload 已创建的 upload record
+	if req.UploadId != nil && *req.UploadId > 0 {
+		if err := reuseAndDispatchUpload(*req.UploadId, tempPath, *req.Name, *req.ParentId, overwriteID, parentFile.BoundProviderIds); err != nil {
+			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+	} else {
+		if err := smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID); err != nil {
+			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
 	}
 
 	exists := false
@@ -1045,6 +1107,44 @@ func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, p
 	return nil
 }
 
+// reuseAndDispatchUpload 复用 initUpload 已创建的 upload record 并触发后台存储上传
+func reuseAndDispatchUpload(uploadID uint32, tempPath, fileName, parentID, overwriteID string, targetProviderIds *string) error {
+	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, false)
+	if err != nil {
+		llog.L().Errorf("get upload record by id failed: %v", err)
+		return err
+	}
+
+	// 更新 upload record：指向新的临时文件路径
+	updates := map[string]interface{}{
+		"temp_path":            tempPath,
+		"file_name":            fileName,
+		"parent_id":            parentID,
+		"overwrite_id":         overwriteID,
+		"target_provider_ids":  targetProviderIds,
+		"status":               int32(native.LocationStatus_PPENDING),
+		"message":              "",
+	}
+	if err := db.GetDB().Model(uploadRecord).Updates(updates).Error; err != nil {
+		llog.L().Errorf("update upload record failed: %v", err)
+		return err
+	}
+
+	// 刷新记录以获取更新后的字段
+	uploadRecord.TempPath = &tempPath
+	uploadRecord.FileName = &fileName
+	uploadRecord.ParentId = &parentID
+	uploadRecord.OverwriteId = &overwriteID
+	uploadRecord.TargetProviderIds = targetProviderIds
+	uploadRecord.Status = utils.EnumPtr(native.LocationStatus_PPENDING)
+	msg := ""
+	uploadRecord.Message = &msg
+
+	llog.L().Infof("reuse upload record %d for small file: %s", uploadID, fileName)
+	go storage.Dispatch(context.Background(), uploadRecord)
+	return nil
+}
+
 // ListUploadRecords 获取上传记录列表
 func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*native.ListUploadRecordsResp, *models.Err) {
 	// 默认参数
@@ -1061,6 +1161,14 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 	records, total, err := db.ListUploadRecords(page, pageSize, (*int32)(req.Status))
 	if err != nil {
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	// 查询失败记录总数（用于状态栏统计）
+	failedCount, err := db.CountUploadRecordsByStatus(int32(native.LocationStatus_PFAILED))
+	if err != nil {
+		llog.L().Warnf("count failed upload records error: %v", err)
+		// 不影响主查询，继续返回
+		failedCount = 0
 	}
 
 	// 转换为 Proto
@@ -1092,9 +1200,11 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 	}
 
 	totalUint32 := uint32(total)
+	failedCountUint32 := uint32(failedCount)
 	return &native.ListUploadRecordsResp{
-		Records: uploadRecords,
-		Total:   &totalUint32,
+		Records:     uploadRecords,
+		Total:       &totalUint32,
+		FailedCount: &failedCountUint32,
 	}, nil
 }
 

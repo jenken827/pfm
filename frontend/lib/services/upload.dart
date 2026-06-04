@@ -95,7 +95,8 @@ Future<void> uploadFile({
           hash: task.fileHash!,
           parentId: task.parentId,
           overwrite: task.overwrite,
-          tags: task.tags,
+          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          uploadId: task.uploadId != null ? int.tryParse(task.uploadId!) : null,
         ),
         operationName: 'initUpload(${task.filename})',
       );
@@ -123,6 +124,10 @@ Future<void> uploadFile({
         return;
       }
 
+      // 保存 uploadId 供续传使用
+      final uploadId = initResult.data!.uploadId;
+      task.uploadId = uploadId.toString();
+
       // 不秒传，上传文件内容
       final file = io.File(task.filepath);
       final content = await file.readAsBytes();
@@ -139,7 +144,8 @@ Future<void> uploadFile({
           hash: task.fileHash!,
           content: content,
           overwrite: task.overwrite,
-          tags: task.tags,
+          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          uploadId: uploadId,
           onSendProgress: (sent, total) {
             final capped = sent > fileSize ? fileSize : sent;
             final now = DateTime.now();
@@ -196,7 +202,8 @@ Future<void> uploadFile({
           parentId: task.parentId,
           chunkSize: chunkSize,
           overwrite: task.overwrite,
-          tags: task.tags,
+          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          uploadId: task.uploadId != null ? int.tryParse(task.uploadId!) : null,
         ),
         operationName: 'initUpload(${task.filename})',
       );

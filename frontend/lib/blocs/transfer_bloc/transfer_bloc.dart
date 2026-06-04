@@ -30,6 +30,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferTabChangedEvent>(_onTabChanged);
     on<TransferRetryEvent>(_onRetry);
     on<TransferRetryAllFailedEvent>(_onRetryAllFailed);
+    on<TransferRenameAndRetryEvent>(_onRenameAndRetry);
   }
 
   final BackgroundService _bgService;
@@ -180,6 +181,20 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
+    }
+  }
+
+  /// 重命名并重试上传
+  Future<void> _onRenameAndRetry(
+    TransferRenameAndRetryEvent event,
+    Emitter<TransferState> emit,
+  ) async {
+    if (state.isUpload) {
+      await _bgService.renameAndRetryUpload(event.taskId, event.newFilename);
+      final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
+      emit(
+        state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
+      );
     }
   }
 

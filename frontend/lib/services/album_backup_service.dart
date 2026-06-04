@@ -226,7 +226,8 @@ class AlbumBackupService {
   }
 
   /// 执行备份
-  Future<AlbumBackupResult> startBackup() async {
+  /// [force] 为 true 时跳过已备份检查，强制重新备份所有照片
+  Future<AlbumBackupResult> startBackup({bool force = false}) async {
     if (_isBackingUp) {
       _logger.info('Backup already in progress');
       return _result;
@@ -253,7 +254,7 @@ class AlbumBackupService {
       _updateStatus(status: AlbumBackupStatus.scanning);
 
       // 获取要备份的照片
-      final photos = await _getPhotosToBackup();
+      final photos = await _getPhotosToBackup(force: force);
       _logger.info('Found ${photos.length} photos to backup');
 
       if (photos.isEmpty) {
@@ -402,7 +403,8 @@ class AlbumBackupService {
   }
 
   /// 获取需要备份的照片列表
-  Future<List<AssetEntity>> _getPhotosToBackup() async {
+  /// [force] 为 true 时跳过已备份检查，返回所有照片
+  Future<List<AssetEntity>> _getPhotosToBackup({bool force = false}) async {
     // 确定要查询的相册
     List<AssetPathEntity> albums;
     if (_config.backupAlbumIds.isEmpty) {
@@ -439,6 +441,12 @@ class AlbumBackupService {
     }
 
     // 从 backup_file_records 表获取已备份的 asset ID（不受 upload_tasks 清理影响）
+    // force 模式下跳过检查，强制重新备份所有照片
+    if (force) {
+      _logger.info('Force mode: skipping backup check, will re-backup all ${allPhotos.length} photos');
+      return allPhotos;
+    }
+
     final backedUpAssetIds = await _storage.getCompletedAlbumBackupAssetIds();
 
     final photosToBackup = allPhotos

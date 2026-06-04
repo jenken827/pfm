@@ -951,6 +951,7 @@ class FmRepository {
     required List<int> content,
     bool overwrite = false,
     String? tags,
+    int? uploadId,
     void Function(int, int)? onSendProgress,
   }) async {
     try {
@@ -963,6 +964,9 @@ class FmRepository {
         ..overwrite = overwrite;
       if (tags != null && tags.isNotEmpty) {
         req.tags = tags;
+      }
+      if (uploadId != null && uploadId > 0) {
+        req.uploadId = uploadId;
       }
 
       final response = await _uploadDio.post(
@@ -1000,6 +1004,7 @@ class FmRepository {
     int? chunkSize,
     bool overwrite = false,
     String? tags,
+    int? uploadId,
   }) async {
     try {
       final req = InitUploadReq()
@@ -1011,6 +1016,9 @@ class FmRepository {
       if (tags != null && tags.isNotEmpty) req.tags = tags;
       if (chunkSize != null && chunkSize > 0) {
         req.chunkSize = Int64(chunkSize);
+      }
+      if (uploadId != null && uploadId > 0) {
+        req.uploadId = uploadId;
       }
 
       final response = await _uploadDio.post(

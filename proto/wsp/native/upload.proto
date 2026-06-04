@@ -94,6 +94,8 @@ message InitUploadReq {
   optional string tags = 6;
   // 客户端指定的分片大小（字节），0 或不传则使用服务端默认值
   optional uint64 chunk_size = 7;
+  // 上传任务ID（用于断点续传，重试时传递）
+  optional uint32 upload_id = 8;
 }
 
 // 初始化上传响应
@@ -117,6 +119,8 @@ message UploadSmallReq {
   optional bytes content = 6 [(buf.validate.field).required = true];
   // 文件标签（逗号分隔）
   optional string tags = 7;
+  // 上传记录ID（续传时由 initUpload 返回）
+  optional uint32 upload_id = 8;
 }
 
 // 小文件上传响应
@@ -193,6 +197,8 @@ message UploadRecordInfo {
 message ListUploadRecordsResp {
   repeated UploadRecordInfo records = 1;
   optional uint32 total = 2;
+  // 失败记录总数（用于状态栏统计）
+  optional uint32 failed_count = 3;
 }
 
 // 获取上传记录详情请求

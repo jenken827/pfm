@@ -54,6 +54,7 @@ class TransferStorage {
     int? uploadedBytes,
     String? fileHash,
     int? speed,
+    String? filename,
   }) async {
     final raw = _uploadBox.get(id);
     if (raw == null) return;
@@ -73,6 +74,7 @@ class TransferStorage {
     if (speed != null) existing['speed'] = speed;
     if (chunkTotal != null) existing['chunk_total'] = chunkTotal;
     if (chunkSize != null) existing['chunk_size'] = chunkSize.toInt();
+    if (filename != null) existing['filename'] = filename;
 
     await _uploadBox.put(id, existing);
   }

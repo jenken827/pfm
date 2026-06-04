@@ -536,6 +536,9 @@
             }
         }
     },
+    "albumBackup_rebackup": "重新备份",
+    "albumBackup_rebackupHint": "跳过检查，重新备份所有照片",
+    "albumBackup_rebackupConfirm": "将重新备份所选相册中的所有照片，忽略已备份记录。适用于后端问题导致上传失败的情况。是否继续？",
     "contactBackup_title": "通讯录备份",
     "contactBackup_mobileOnly": "通讯录备份仅在移动端可用",
     "contactBackup_mobileOnlyDesc": "请在 Android 或 iOS 设备上使用此功能",

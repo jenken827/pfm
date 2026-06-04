@@ -465,6 +465,9 @@ class _UploadTaskItem extends StatelessWidget {
           case 'retry':
             bloc.add(TransferResumeEvent(task.id));
             break;
+          case 'rename_retry':
+            _showRenameDialog(context, bloc);
+            break;
           case 'remove':
             bloc.add(TransferRemoveEvent(task.id));
             break;
@@ -499,6 +502,7 @@ class _UploadTaskItem extends StatelessWidget {
         } else if (task.status == UploadStatus.FAILED) {
           return [
             PopupMenuItem(value: 'retry', child: Text(al.uploadTask_retry)),
+            PopupMenuItem(value: 'rename_retry', child: Text('重命名重试')),
             PopupMenuItem(value: 'cancel', child: Text(al.uploadTask_cancel)),
             detailItem,
             PopupMenuItem(value: 'remove', child: Text(al.common_remove)),
@@ -510,6 +514,50 @@ class _UploadTaskItem extends StatelessWidget {
           ];
         }
       },
+    );
+  }
+
+  /// 显示重命名对话框
+  void _showRenameDialog(BuildContext context, TransferBloc bloc) {
+    final al = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: task.filename);
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('重命名并重试'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('输入新的文件名：'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: '文件名',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(al.common_cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final newFilename = controller.text.trim();
+              if (newFilename.isNotEmpty && newFilename != task.filename) {
+                bloc.add(TransferRenameAndRetryEvent(task.id, newFilename));
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: Text('重试'),
+          ),
+        ],
+      ),
     );
   }
 

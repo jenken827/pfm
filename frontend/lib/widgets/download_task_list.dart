@@ -7,6 +7,7 @@ import 'package:open_file/open_file.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/utils/format.dart';
+import 'package:pfm/utils/platform.dart';
 
 /// 下载任务列表
 class DownloadTaskList extends StatelessWidget {
@@ -289,17 +290,32 @@ class _DownloadTaskItem extends StatelessWidget {
       return;
     }
 
-    // Android: 使用 open_file 打开文件管理器并定位到文件
-    // iOS: 不支持直接打开目录，只能打开文件
-    if (Platform.isAndroid) {
-      final result = await OpenFile.open(task.localPath!);
-      if (result.type != ResultType.done && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${al.downloadTask_cannotOpenDir}: ${result.message}')),
-        );
+    // 获取文件所在目录
+    final dir = file.parent.path;
+
+    try {
+      if (isDesktop()) {
+        // 桌面端：使用系统命令打开目录
+        if (Platform.isWindows) {
+          await Process.run('explorer', [dir]);
+        } else if (Platform.isMacOS) {
+          await Process.run('open', [dir]);
+        } else if (Platform.isLinux) {
+          await Process.run('xdg-open', [dir]);
+        }
+      } else if (Platform.isAndroid) {
+        // Android: 使用 open_file 打开目录
+        final result = await OpenFile.open(dir);
+        if (result.type != ResultType.done && context.mounted) {
+          // 如果打开目录失败，复制路径
+          _copyPath(context);
+        }
+      } else {
+        // iOS 不支持打开目录，复制路径提示用户
+        _copyPath(context);
       }
-    } else {
-      // iOS 不支持打开目录，复制路径提示用户
+    } catch (e) {
+      // 打开失败时复制路径
       _copyPath(context);
     }
   }

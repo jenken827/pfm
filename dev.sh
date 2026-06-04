@@ -49,23 +49,38 @@ show_help() {
   flutter-clean  清理 Flutter 构建缓存
   help           显示此帮助信息
 
-选项 (仅用于 build/run 命令):
-  -o <path>      指定输出文件路径（默认: ./pfm）
+选项:
+  build/run 命令:
+    -o <path>        指定输出文件路径（默认: ./pfm）
+    --skip-tests     跳过测试缓存（-count=1）
+    
+  test/test-cover 命令:
+    -v               详细输出
+    -run <pattern>   运行匹配的测试
+    -short           运行短测试
+    -count <n>       运行 n 次（禁用缓存）
+    
+  lint 命令:
+    --fix            自动修复问题
 
 示例:
-  $0 build                   # 编译服务器
+  $0 build                        # 编译服务器
   $0 build -o /usr/local/bin/pfm  # 编译到指定路径
-  $0 run                     # 编译并运行
-  $0 dev                     # 开发模式运行（不编译）
-  $0 proto                   # 生成所有 protobuf 代码
-  $0 proto-go                # 仅生成 Go protobuf 代码
-  $0 proto-dart              # 仅生成 Dart protobuf 代码
-  $0 test                    # 运行测试
-  $0 test-cover              # 运行测试并生成覆盖率报告
-  $0 tidy                    # 清理 Go 模块依赖
-  $0 lint                    # 代码检查
-  $0 clean                   # 清理构建产物
-  $0 flutter-clean           # 清理 Flutter 构建缓存
+  $0 build --skip-tests           # 跳过测试缓存
+  $0 run                          # 编译并运行
+  $0 dev                          # 开发模式运行（不编译）
+  $0 proto                        # 生成所有 protobuf 代码
+  $0 proto-go                     # 仅生成 Go protobuf 代码
+  $0 proto-dart                   # 仅生成 Dart protobuf 代码
+  $0 test                         # 运行测试
+  $0 test -v                      # 详细输出
+  $0 test -run TestInitUpload     # 运行特定测试
+  $0 test-cover                   # 运行测试并生成覆盖率报告
+  $0 tidy                         # 清理 Go 模块依赖
+  $0 lint                         # 代码检查
+  $0 lint --fix                   # 自动修复
+  $0 clean                        # 清理构建产物
+  $0 flutter-clean                # 清理 Flutter 构建缓存
 
 注意:
   - build 和 run 命令会自动从 git commit hash 和日期生成版本号
@@ -100,7 +115,31 @@ check_command() {
 
 # 编译 Go 服务器
 cmd_build() {
-    local OUTPUT="${1:-./pfm}"
+    local OUTPUT="./pfm"
+    local SKIP_TESTS=false
+    
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o|--output)
+                OUTPUT="$2"
+                shift 2
+                ;;
+            --skip-tests)
+                SKIP_TESTS=true
+                shift
+                ;;
+            -*)
+                echo "❌ 未知选项: $1"
+                exit 1
+                ;;
+            *)
+                OUTPUT="$1"
+                shift
+                ;;
+        esac
+    done
+    
     local VERSION=$(get_version)
 
     echo "🔨 编译 Go 服务器..."
@@ -108,21 +147,57 @@ cmd_build() {
     echo "📌 输出: $OUTPUT"
 
     check_command "go"
-    go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o "$OUTPUT" .
+    
+    local BUILD_ARGS="-ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    if [ "$SKIP_TESTS" = true ]; then
+        echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
+    fi
+    
+    eval go build $BUILD_ARGS -o \"$OUTPUT\" .
 
     echo "✅ 编译完成！版本: $VERSION"
 }
 
 # 编译并运行
 cmd_run() {
-    local OUTPUT="${1:-./pfm}"
+    local OUTPUT="./pfm"
+    local SKIP_TESTS=false
+    
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o|--output)
+                OUTPUT="$2"
+                shift 2
+                ;;
+            --skip-tests)
+                SKIP_TESTS=true
+                shift
+                ;;
+            -*)
+                echo "❌ 未知选项: $1"
+                exit 1
+                ;;
+            *)
+                OUTPUT="$1"
+                shift
+                ;;
+        esac
+    done
+    
     local VERSION=$(get_version)
 
     echo "🔨 编译并运行 Go 服务器..."
     echo "📌 版本: $VERSION"
 
     check_command "go"
-    go build -ldflags "-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}" -o "$OUTPUT" .
+    
+    local BUILD_ARGS="-ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    if [ "$SKIP_TESTS" = true ]; then
+        echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
+    fi
+    
+    eval go build $BUILD_ARGS -o \"$OUTPUT\" .
     echo "🚀 启动服务器..."
     "$OUTPUT" -d ./data
 }
@@ -173,18 +248,82 @@ cmd_proto_dart() {
 
 # 运行测试
 cmd_test() {
+    local TEST_ARGS=""
+    
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v)
+                TEST_ARGS="$TEST_ARGS -v"
+                shift
+                ;;
+            -run)
+                TEST_ARGS="$TEST_ARGS -run $2"
+                shift 2
+                ;;
+            -short)
+                TEST_ARGS="$TEST_ARGS -short"
+                shift
+                ;;
+            -count)
+                TEST_ARGS="$TEST_ARGS -count $2"
+                shift 2
+                ;;
+            -*)
+                echo "❌ 未知选项: $1"
+                exit 1
+                ;;
+            *)
+                TEST_ARGS="$TEST_ARGS $1"
+                shift
+                ;;
+        esac
+    done
+    
     echo "🧪 运行测试..."
     check_command "go"
-    go test ./...
+    eval go test $TEST_ARGS ./...
     echo "✅ 测试完成！"
 }
 
 # 运行测试并生成覆盖率报告
 cmd_test_cover() {
+    local TEST_ARGS=""
+    
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v)
+                TEST_ARGS="$TEST_ARGS -v"
+                shift
+                ;;
+            -run)
+                TEST_ARGS="$TEST_ARGS -run $2"
+                shift 2
+                ;;
+            -short)
+                TEST_ARGS="$TEST_ARGS -short"
+                shift
+                ;;
+            -count)
+                TEST_ARGS="$TEST_ARGS -count $2"
+                shift 2
+                ;;
+            -*)
+                echo "❌ 未知选项: $1"
+                exit 1
+                ;;
+            *)
+                TEST_ARGS="$TEST_ARGS $1"
+                shift
+                ;;
+        esac
+    done
+    
     echo "🧪 运行测试并生成覆盖率报告..."
     check_command "go"
 
-    go test -coverprofile=coverage.out ./...
+    eval go test -coverprofile=coverage.out $TEST_ARGS ./...
     go tool cover -func=coverage.out
 
     echo ""
@@ -202,9 +341,29 @@ cmd_tidy() {
 
 # 代码检查
 cmd_lint() {
+    local LINT_ARGS=""
+    
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --fix)
+                LINT_ARGS="$LINT_ARGS --fix"
+                shift
+                ;;
+            -*)
+                echo "❌ 未知选项: $1"
+                exit 1
+                ;;
+            *)
+                LINT_ARGS="$LINT_ARGS $1"
+                shift
+                ;;
+        esac
+    done
+    
     echo "🔍 运行代码检查..."
     check_command "golangci-lint"
-    golangci-lint run ./...
+    eval golangci-lint run $LINT_ARGS ./...
     echo "✅ 代码检查完成！"
 }
 

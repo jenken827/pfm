@@ -22,10 +22,12 @@ class UploadRecordList extends StatefulWidget {
 
 class _UploadRecordListState extends State<UploadRecordList> {
   List<UploadRecordInfo> _records = [];
-  // int _total = 0;
-  final int _page = 1;
+  int _total = 0;
+  int _failedCount = 0;
+  int _page = 1;
   final int _pageSize = 20;
   bool _isLoading = false;
+  bool _hasMore = true;
   String? _errorMessage;
 
   @override
@@ -40,16 +42,23 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
   /// 公开的刷新方法，供外部调用
   void refresh() {
-    _loadRecords();
+    _page = 1;
+    _hasMore = true;
+    _loadRecords(reset: true);
   }
 
-  Future<void> _loadRecords() async {
+  Future<void> _loadRecords({bool reset = false}) async {
     if (_isLoading) return;
+    if (!reset && !_hasMore) return;
 
     if (mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
+        if (reset) {
+          _page = 1;
+          _hasMore = true;
+        }
       });
     }
 
@@ -63,10 +72,23 @@ class _UploadRecordListState extends State<UploadRecordList> {
       if (!mounted) return;
 
       if (result.success) {
+        final newRecords = result.data!.records
+            .where((r) => r.status != LocationStatus.PCOMPLETED)
+            .toList();
         setState(() {
-          _records = result.data!.records
-              .where((r) => r.status != LocationStatus.PCOMPLETED)
-              .toList();
+          if (reset || _page == 1) {
+            _records = newRecords;
+          } else {
+            _records.addAll(newRecords);
+          }
+          // 服务端返回的全局统计
+          if (result.data!.hasTotal()) {
+            _total = result.data!.total;
+          }
+          if (result.data!.hasFailedCount()) {
+            _failedCount = result.data!.failedCount;
+          }
+          _hasMore = newRecords.length >= _pageSize;
           _isLoading = false;
         });
       } else {
@@ -82,6 +104,13 @@ class _UploadRecordListState extends State<UploadRecordList> {
         _isLoading = false;
       });
     }
+  }
+
+  /// 加载下一页
+  void _loadMore() {
+    if (_isLoading || !_hasMore) return;
+    _page++;
+    _loadRecords();
   }
 
   /// 解析 JSON 数组并返回提供者数量
@@ -183,10 +212,18 @@ class _UploadRecordListState extends State<UploadRecordList> {
         // 列表
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _loadRecords,
+            onRefresh: () async => refresh(),
             child: ListView.builder(
-              itemCount: _records.length,
+              itemCount: _records.length + (_hasMore ? 1 : 0),
               itemBuilder: (context, index) {
+                // 底部加载更多指示器
+                if (index == _records.length) {
+                  _loadMore();
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
                 final record = _records[index];
                 return _buildRecordTile(al, record);
               },
@@ -198,8 +235,6 @@ class _UploadRecordListState extends State<UploadRecordList> {
   }
 
   Widget _buildActionBar(AppLocalizations al) {
-    final failedCount = _records.where((r) => r.status == LocationStatus.PFAILED).length;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -214,16 +249,16 @@ class _UploadRecordListState extends State<UploadRecordList> {
         children: [
           // 统计信息
           Text(
-            al.uploadRecord_total(_records.length),
+            al.uploadRecord_total(_total),
             style: TextStyle(
               fontSize: 12,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          if (failedCount > 0) ...[
+          if (_failedCount > 0) ...[
             const SizedBox(width: 8),
             Text(
-              al.uploadRecord_failedCount(failedCount),
+              al.uploadRecord_failedCount(_failedCount),
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.error,
@@ -232,7 +267,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           ],
           const Spacer(),
           // 重试失败按钮
-          if (failedCount > 0)
+          if (_failedCount > 0)
             TextButton.icon(
               onPressed: _retryAllFailed,
               icon: const Icon(Icons.refresh, size: 16),
@@ -250,14 +285,13 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
   Future<void> _retryAllFailed() async {
     final al = AppLocalizations.of(context)!;
-    final failedCount = _records.where((r) => r.status == LocationStatus.PFAILED).length;
-    if (failedCount == 0) return;
+    if (_failedCount == 0) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(al.uploadRecord_retryFailedTitle),
-        content: Text(al.uploadRecord_retryFailedConfirm(failedCount)),
+        content: Text(al.uploadRecord_retryFailedConfirm(_failedCount)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -286,7 +320,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           SnackBar(content: Text('${al.uploadRecord_retryFailedMsg}: ${result.message}')),
         );
       }
-      _loadRecords();
+      refresh();
     }
   }
 
@@ -377,7 +411,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           context,
         ).showSnackBar(SnackBar(content: Text(al.uploadRecord_restarted)));
         // 刷新列表
-        _loadRecords();
+        refresh();
       } else if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -424,7 +458,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
           context,
         ).showSnackBar(SnackBar(content: Text(al.uploadRecord_deleted)));
         // 刷新列表
-        _loadRecords();
+        refresh();
       } else if (mounted) {
         ScaffoldMessenger.of(
           context,

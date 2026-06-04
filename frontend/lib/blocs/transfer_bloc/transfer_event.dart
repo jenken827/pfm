@@ -103,5 +103,12 @@ class TransferRetryEvent extends TransferEvent {
   final String taskId;
 }
 
+/// 重命名并重试上传任务
+class TransferRenameAndRetryEvent extends TransferEvent {
+  TransferRenameAndRetryEvent(this.taskId, this.newFilename);
+  final String taskId;
+  final String newFilename;
+}
+
 // 重试所有失败的上传任务
 class TransferRetryAllFailedEvent extends TransferEvent {}
