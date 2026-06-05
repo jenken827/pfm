@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
+import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/router/files_route.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
 import 'package:pfm/pages/files/flyfish_viewer_page.dart';
-import 'package:pfm/router/router.dart';
+import 'package:pfm/services/recent_files_storage.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 
@@ -19,7 +20,7 @@ class HomeIndexPage extends StatefulWidget {
 }
 
 class _HomeIndexPageState extends State<HomeIndexPage> {
-  List<File> _recentFiles = [];
+  List<Map<String, dynamic>> _recentFiles = [];
   bool _loadingRecent = true;
 
   @override
@@ -29,15 +30,13 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   }
 
   Future<void> _loadRecentFiles() async {
-    final repo = FmRepository();
-    final result = await repo.getRecentFiles(pageSize: 20);
-    if (mounted && result.success && result.data != null) {
+    final storage = GetIt.I.get<RecentFilesStorage>();
+    final records = storage.getRecentFiles(limit: 20);
+    if (mounted) {
       setState(() {
-        _recentFiles = result.data!.files;
+        _recentFiles = records;
         _loadingRecent = false;
       });
-    } else if (mounted) {
-      setState(() => _loadingRecent = false);
     }
   }
 
@@ -121,8 +120,8 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         itemCount: _recentFiles.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final file = _recentFiles[index];
-          return _RecentFileCard(file: file);
+          final record = _recentFiles[index];
+          return _RecentFileCard(record: record);
         },
       ),
     );
@@ -203,72 +202,58 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   }
 }
 
-/// 最近使用文件卡片
+/// 最近使用文件卡片（基于本地存储记录）
 class _RecentFileCard extends StatelessWidget {
-  final File file;
+  final Map<String, dynamic> record;
 
-  const _RecentFileCard({required this.file});
+  const _RecentFileCard({required this.record});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final fileName = record['fileName'] as String? ?? '';
+    final fileType = record['fileType'] as int? ?? 0;
 
     return InkWell(
       onTap: () => _handleTap(context),
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
-      width: 100,
-      child: Column(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
+        width: 100,
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                _getFileIcon(fileType),
+                size: 32,
+                color: colorScheme.primary,
+              ),
             ),
-            child: Icon(
-              _getFileIcon(file.type.value),
-              size: 32,
-              color: colorScheme.primary,
+            const SizedBox(height: 8),
+            Text(
+              fileName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            file.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 
   void _handleTap(BuildContext context) {
-    final type = file.type.value;
-    if (type == 2) {
-      // 图片：预览
-      context.push(
-        FilePreviewRoute().location,
-        extra: PreviewArgs(file: file, images: [file], initialIndex: 0),
-      );
-    } else if (type == 3 || type == 4) {
-      // 视频/音频
-      context.push(FilePreviewRoute().location, extra: file);
-    } else if (type == 5 || type == 6) {
-      // 文档/压缩包：Flyfish Viewer
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => FlyfishViewerPage(file: file)),
-      );
-    } else {
-      // 其他：详情页
-      context.push(FileDetailRoute().location, extra: file);
-    }
+    final fileId = record['fileId'] as String? ?? '';
+    if (fileId.isEmpty) return;
+    // 通过 file_id 跳转到文件详情页
+    context.push('/files/detail/$fileId');
   }
 
   IconData _getFileIcon(int type) {
@@ -456,7 +441,6 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
 
   void _handleFileTap(BuildContext context, File file) {
     if (file.type.value == 2) {
-      // 图片：传递所有图片列表支持左右滑动
       final images = _files.where((f) => f.type.value == 2).toList();
       final index = images.indexWhere((f) => f.id == file.id);
       context.push(
@@ -468,18 +452,13 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
         ),
       );
     } else if (file.type.value == 3 || file.type.value == 4) {
-      // 视频/音频：使用原生播放器预览
       context.push(FilePreviewRoute().location, extra: file);
     } else if (file.type.value == 5 || file.type.value == 6) {
-      // 文档/压缩包：使用 Flyfish Viewer
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => FlyfishViewerPage(file: file),
-        ),
+        MaterialPageRoute(builder: (_) => FlyfishViewerPage(file: file)),
       );
     } else {
-      // 其他类型：跳转到详情页
       context.push(FileDetailRoute().location, extra: file);
     }
   }
@@ -508,9 +487,7 @@ class _CategoryFilesPageState extends State<CategoryFilesPage> {
   String _formatSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
   }
 }

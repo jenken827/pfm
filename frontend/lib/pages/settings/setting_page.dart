@@ -128,6 +128,15 @@ class SettingPage extends StatelessWidget {
             const Divider(height: 1),
           ],
 
+          // 权限管理（管理员功能）
+          _SettingsTile(
+            icon: Icons.security,
+            title: '权限管理',
+            subtitle: '管理用户目录权限',
+            onTap: () => const PermissionManagementRoute().push(context),
+          ),
+          const Divider(height: 1),
+
           // 上传设置
           _SettingsTile(
             icon: Icons.tune_outlined,

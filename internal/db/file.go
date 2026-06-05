@@ -289,6 +289,18 @@ func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileOR
 	return files, total, hasMore, nil
 }
 
+// GetFileChildren 获取指定目录下的所有子文件（不含软删除）
+func GetFileChildren(parentID string) ([]*native.FileORM, error) {
+	var children []*native.FileORM
+	ctx := context.Background()
+	if err := db.WithContext(ctx).
+		Where("parent_id = ?", parentID).
+		Find(&children).Error; err != nil {
+		return nil, err
+	}
+	return children, nil
+}
+
 // GetFolderList 获取指定目录下的所有文件夹
 func GetFolderList(parentID string) ([]*native.FileORM, error) {
 	var folders []*native.FileORM

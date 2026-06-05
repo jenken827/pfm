@@ -10,11 +10,42 @@ import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/hive/hive.dart';
 import 'package:pfm/platform/platform.dart';
 import 'services/services.dart';
+import 'package:pfm/services/recent_files_storage.dart';
 import 'router/router.dart';
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 桌面平台单实例检查
+  if (_isDesktop()) {
+    final lockFile = File('${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock');
+    if (lockFile.existsSync()) {
+      // 检查进程是否还活着
+      try {
+        final pid = int.parse(lockFile.readAsStringSync().trim());
+        // 尝试检查进程是否存在（Windows: tasklist, Linux/Mac: kill -0）
+        final result = Process.runSync(
+          Platform.isWindows ? 'tasklist' : 'kill',
+          Platform.isWindows ? ['/FI', 'PID eq $pid'] : ['-0', '$pid'],
+        );
+        if (result.exitCode == 0) {
+          // 进程还在运行，退出
+          print('PFM is already running (PID: $pid)');
+          exit(0);
+        }
+      } catch (_) {
+        // 解析失败，锁文件无效，继续启动
+      }
+    }
+    // 写入当前 PID
+    lockFile.writeAsStringSync('${pid}\n');
+    // 退出时清理锁文件
+    ProcessSignal.sigint.watch().listen((_) {
+      lockFile.deleteSync(recursive: true);
+      exit(0);
+    });
+  }
 
   // 初始化 MediaKit
   MediaKit.ensureInitialized();
@@ -48,6 +79,9 @@ void main() async {
     ..add(TransferUploadSubscribeEvent())
     ..add(TransferDownloadSubscribeEvent());
   GetIt.I.registerSingleton(transferBloc);
+
+  final recentFilesStorage = await RecentFilesStorage.instance();
+  GetIt.I.registerSingleton<RecentFilesStorage>(recentFilesStorage);
 
   // 根据登录状态设置初始路由
   if (ls.isLoggedIn) {

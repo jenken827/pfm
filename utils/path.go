@@ -55,6 +55,24 @@ func GetChunkTempPath(fileHash string, chunkIndex int) string {
 	return filepath.Join(globals.TempDir, fileHash, globals.ChunksDirName, fmt.Sprintf("chunk_%d", chunkIndex))
 }
 
+// FindTempFile 在 hash 临时目录中查找任意一个文件（fallback）
+// 当精确路径（hash+filename）不存在时，扫描目录找到任意可用文件
+// 同一 hash 下文件内容相同，所以任意文件名都可以
+func FindTempFile(fileHash string) (string, bool) {
+	dir := GetFileTempDir(fileHash)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // 跳过 chunks/ 等子目录
+		}
+		return filepath.Join(dir, entry.Name()), true
+	}
+	return "", false
+}
+
 // CleanupFileTempDir 清理文件临时目录
 // 删除整个 filehash 目录及其所有内容
 // 包含重试机制，处理文件仍被占用的情况

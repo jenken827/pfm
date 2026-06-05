@@ -114,8 +114,20 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 			return
 		}
 		if _, err := os.Stat(*ur.TempPath); err != nil {
-			markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
-			return
+			// Fallback: 精确路径不存在时，扫描 hash 目录查找任意可用文件
+			// 场景：用户 rename 重试上传，新 temp 文件名与 upload_record 中的旧文件名不同
+			if ur.FileHash != nil {
+				if found, ok := utils.FindTempFile(*ur.FileHash); ok {
+					llog.L().Infof("temp file fallback: %s -> %s", *ur.TempPath, found)
+					ur.TempPath = &found
+				} else {
+					markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
+					return
+				}
+			} else {
+				markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
+				return
+			}
 		}
 	}
 

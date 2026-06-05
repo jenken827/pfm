@@ -7,6 +7,7 @@ import '../pages/settings/server_backup_page.dart';
 import '../pages/settings/client_backup_page.dart';
 import '../pages/settings/album_backup_page.dart';
 import '../pages/settings/contact_backup_page.dart';
+import '../pages/settings/permission_management_page.dart';
 
 part 'settings_route.g.dart';
 
@@ -20,6 +21,7 @@ part 'settings_route.g.dart';
     TypedGoRoute<ClientBackupRoute>(path: 'client-backup'),
     TypedGoRoute<AlbumBackupRoute>(path: 'album-backup'),
     TypedGoRoute<ContactBackupRoute>(path: 'contact-backup'),
+    TypedGoRoute<PermissionManagementRoute>(path: 'permission'),
   ],
 )
 @immutable
@@ -90,5 +92,16 @@ class ContactBackupRoute extends GoRouteData with $ContactBackupRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const ContactBackupPage();
+  }
+}
+
+/// 权限管理路由
+class PermissionManagementRoute extends GoRouteData
+    with $PermissionManagementRoute {
+  const PermissionManagementRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const PermissionManagementPage();
   }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -21,6 +22,14 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 	failedReasons := make(map[string]string)
 
 	targetParentID := req.GetTargetParentId()
+
+	// 权限检查：检查对目标目录的上传权限（移动需要写权限）
+	if !checkFilePermission(ctx, targetParentID, PermUpload) {
+		return 0, nil, nil, &models.Err{
+			E: fmt.Errorf("permission denied: no write access to target directory %s", targetParentID),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
 
 	// 1. 获取目标文件夹信息
 	targetFolder, err := db.GetFileByID(targetParentID)
@@ -48,6 +57,13 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 
 	// 2. 遍历要移动的文件
 	for _, fileID := range req.FileIds {
+		// 权限检查：检查对源文件的移动权限
+		if !checkFilePermission(ctx, fileID, PermMove) {
+			failedIDs = append(failedIDs, fileID)
+			failedReasons[fileID] = "permission denied: no move access"
+			continue
+		}
+
 		// 获取文件记录
 		file, err := db.GetFileByID(fileID)
 		if err != nil {

@@ -17,6 +17,7 @@ import 'package:pfm/pages/files/file_preview_page.dart';
 import 'package:pfm/pages/files/flyfish_viewer_page.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/local_storage.dart';
+import 'package:pfm/services/recent_files_storage.dart';
 import 'package:pfm/utils/utils.dart';
 import 'package:pfm/widgets/folder_settings_dialog.dart';
 
@@ -471,6 +472,7 @@ class _FileViewState extends State<_FileView> {
         context.read<FileBloc>().add(FileNavigateEvent(file.id, file.name));
       } else {
         // 文件则根据类型跳转
+        _recordFileAccess(file);
         if (file.type == pbenum.FileType.IMAGE) {
           // 图片：传递图片列表支持左右滑动
           final images = state.files
@@ -513,6 +515,22 @@ class _FileViewState extends State<_FileView> {
         file.type == pbenum.FileType.VIDEO ||
         file.type == pbenum.FileType.AUDIO ||
         file.type == pbenum.FileType.DOCUMENT;
+  }
+
+  /// 记录文件访问到本地存储（最近浏览）
+  void _recordFileAccess(File file) {
+    try {
+      final storage = GetIt.I.get<RecentFilesStorage>();
+      storage.recordAccess(
+        fileId: file.id,
+        fileName: file.name,
+        fileType: file.type.value,
+        fileSize: file.size.toInt(),
+        parentId: file.parentId,
+      );
+    } catch (_) {
+      // 忽略记录失败，不影响用户体验
+    }
   }
 
   void _handleFileLongPress(BuildContext context, File file) {

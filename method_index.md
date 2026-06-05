@@ -50,6 +50,22 @@
 | `CreateShareLink(ctx, req) (*CreateShareLinkResp, *Err)` | 创建分享链接 |
 | `CancelShareLink(ctx, req) (*BaseResp, *Err)` | 取消分享链接 |
 
+
+### permission.go
+
+| 方法 | 说明 |
+|------|------|
+| `CheckPermission(userID, fileID, requiredPerm) bool` | 检查用户对文件/目录的权限（沿 parent_id 链向上查找，支持继承） |
+| `CheckPermissionWithDetails(userID, fileID, requiredPerm) (bool, string)` | 检查权限并返回来源详情（调试用） |
+| `GetUserAccessibleDirectories(userID) (map[string]uint32, error)` | 获取用户可访问的目录及权限位掩码 |
+| `GrantDirectoryPermission(ctx, req, operator) *Err` | 授予目录权限 |
+| `RevokeDirectoryPermission(ctx, req, operator) *Err` | 撤销目录权限 |
+| `UpdateDirectoryPermission(ctx, req, operator) *Err` | 更新目录权限 |
+| `GetUserPermissions(ctx, req) (*GetUserPermissionsResp, *Err)` | 获取用户的目录权限列表 |
+| `GetDirectoryPermissions(ctx, req) (*GetDirectoryPermissionsResp, *Err)` | 获取目录的权限列表（支持递归） |
+| `BatchGrantPermission(ctx, req, operator) *Err` | 批量授予权限（支持递归子目录） |
+| `GetAccessibleDirectories(ctx, req) (*GetAccessibleDirectoriesResp, *Err)` | 获取用户可访问的目录列表 |
+
 ## internal/db/
 
 ### upload.go
@@ -96,6 +112,20 @@
 | `UpdateProvider(provider) error` | 更新提供者配置 |
 | `DeleteProvider(id) error` | 删除提供者 |
 | `GetEnabledProviders() ([]StorageProvider, error)` | 获取启用的提供者 |
+
+
+### permission.go
+
+| 方法 | 说明 |
+|------|------|
+| `GetDirectoryPermission(userID, fileID) (*DirectoryPermissionORM, error)` | 获取用户对指定目录的权限 |
+| `GetUserDirectoryPermissions(userID) ([]*DirectoryPermissionORM, error)` | 获取用户的所有目录权限 |
+| `GetDirectoryPermissionsByFileID(fileID) ([]*DirectoryPermissionORM, error)` | 获取目录的所有用户权限 |
+| `CreateDirectoryPermission(perm) error` | 创建目录权限 |
+| `UpdateDirectoryPermission(perm) error` | 更新目录权限 |
+| `DeleteDirectoryPermission(userID, fileID) error` | 删除目录权限 |
+| `GetAllDirectoryPermissions() ([]*DirectoryPermissionORM, error)` | 获取所有目录权限（管理员用） |
+| `CreateAuditLog(log) error` | 创建权限审计日志 |
 
 ## internal/storage/
 

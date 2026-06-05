@@ -10,6 +10,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 import '../proto/native/backup.pb.dart';
 import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
+import '../proto/native/permission.pb.dart';
 import '../proto/native/provider.pb.dart';
 import '../proto/native/upload.pb.dart';
 import '../router/router.dart';
@@ -1730,6 +1731,265 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('按类型获取文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  // ==================== Permission Service ====================
+
+  /// 授予目录权限
+  Future<ApiResult<void>> grantDirectoryPermission({
+    required String userId,
+    required String fileId,
+    required int permissions,
+    bool inherit = true,
+    String alias = '',
+  }) async {
+    try {
+      final req = GrantDirectoryPermissionReq()
+        ..userId = userId
+        ..fileId = fileId
+        ..permissions = permissions
+        ..inherit = inherit
+        ..alias = alias;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/GrantDirectoryPermission',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('授予权限失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('授予权限失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 撤销目录权限
+  Future<ApiResult<void>> revokeDirectoryPermission({
+    required String userId,
+    required String fileId,
+  }) async {
+    try {
+      final req = RevokeDirectoryPermissionReq()
+        ..userId = userId
+        ..fileId = fileId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/RevokeDirectoryPermission',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('撤销权限失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('撤销权限失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新目录权限
+  Future<ApiResult<void>> updateDirectoryPermission({
+    required String userId,
+    required String fileId,
+    int? permissions,
+    bool? inherit,
+  }) async {
+    try {
+      final req = UpdateDirectoryPermissionReq()
+        ..userId = userId
+        ..fileId = fileId;
+      if (permissions != null) req.permissions = permissions;
+      if (inherit != null) req.inherit = inherit;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/UpdateDirectoryPermission',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('更新权限失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新权限失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取用户的目录权限列表
+  Future<ApiResult<GetUserPermissionsResp>> getUserPermissions({
+    required String userId,
+  }) async {
+    try {
+      final req = GetUserPermissionsReq()..userId = userId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/GetUserPermissions',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetUserPermissionsResp>(
+        data,
+        GetUserPermissionsResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户权限失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户权限失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取目录的权限列表
+  Future<ApiResult<GetDirectoryPermissionsResp>> getDirectoryPermissions({
+    required String fileId,
+    bool recursive = false,
+  }) async {
+    try {
+      final req = GetDirectoryPermissionsReq()
+        ..fileId = fileId
+        ..recursive = recursive;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/GetDirectoryPermissions',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetDirectoryPermissionsResp>(
+        data,
+        GetDirectoryPermissionsResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取目录权限失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取目录权限失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 批量授予权限
+  Future<ApiResult<void>> batchGrantPermission({
+    required String userId,
+    required List<String> fileIds,
+    required int permissions,
+    bool inherit = true,
+    bool includeChildren = false,
+  }) async {
+    try {
+      final req = BatchGrantPermissionReq()
+        ..userId = userId
+        ..fileIds.addAll(fileIds)
+        ..permissions = permissions
+        ..inherit = inherit
+        ..includeChildren = includeChildren;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/BatchGrantPermission',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('批量授权失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('批量授权失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取用户可访问的目录列表
+  Future<ApiResult<GetAccessibleDirectoriesResp>> getAccessibleDirectories({
+    required String userId,
+  }) async {
+    try {
+      final req = GetAccessibleDirectoriesReq()..userId = userId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/GetAccessibleDirectories',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetAccessibleDirectoriesResp>(
+        data,
+        GetAccessibleDirectoriesResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取可访问目录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取可访问目录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取用户列表（管理员用）
+  Future<ApiResult<ListUsersResp>> listUsers() async {
+    try {
+      final req = ListUsersReq();
+
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/ListUsers',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListUsersResp>(
+        data,
+        ListUsersResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户列表失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

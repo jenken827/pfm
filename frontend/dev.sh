@@ -313,19 +313,23 @@ ensure_sqlite3_libs() {
         return 0  # 不依赖 sqlite3，跳过
     fi
     
-    local SQLITE3_VERSION="sqlite3-3.2.0"
+    local SQLITE3_VERSION="sqlite3-3.3.2"
     local BASE_URL="https://github.com/simolus3/sqlite3.dart/releases/download/$SQLITE3_VERSION"
     local PERSISTENT_CACHE=".sqlite3-cache"
     local HOOK_SHARED=".dart_tool/hooks_runner/shared/sqlite3/build"
     
-    # 架构映射
+    # 架构映射（Android）
     declare -A ARCH_FILES=(
         ["arm"]="libsqlite3.arm.android.so"
         ["arm64"]="libsqlite3.arm64.android.so"
         ["x64"]="libsqlite3.x64.android.so"
     )
     
+    # Windows DLL 文件名
+    local WINDOWS_DLL="sqlite3.x64.windows.dll"
+    
     # 第一步：确保持久缓存中有所有架构的文件
+    # Android
     for arch in "${!ARCH_FILES[@]}"; do
         local cache_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
         if [ ! -f "$cache_file" ]; then
@@ -341,40 +345,77 @@ ensure_sqlite3_libs() {
         fi
     done
     
+    # Windows
+    local win_cache="$PERSISTENT_CACHE/$WINDOWS_DLL"
+    if [ ! -f "$win_cache" ]; then
+        echo "📥 下载 $WINDOWS_DLL..."
+        mkdir -p "$PERSISTENT_CACHE"
+        curl -x "$HTTP_PROXY" -sL -o "$win_cache" "$BASE_URL/$WINDOWS_DLL"
+        if [ -f "$win_cache" ]; then
+            echo "✅ Windows DLL 下载完成"
+        else
+            echo "❌ Windows DLL 下载失败"
+            return 1
+        fi
+    fi
+    
     # 第二步：填充所有 download-* 目录（不管有没有 .tmp 文件）
     # hook 目录 hash 每次都变，策略：给所有 download-* 目录都复制
     local fixed=0
     for download_dir in "$HOOK_SHARED"/download-*/; do
         [ -d "$download_dir" ] || continue
         
-        # 如果已有 libsqlite3.so 且大小正常，跳过
+        # 检查是否已有有效的库文件（.dll 或 .so 存在且大小 > 0）
+        local has_valid_lib=false
+        if [ -f "$download_dir/sqlite3.dll" ] && [ -s "$download_dir/sqlite3.dll" ]; then
+            has_valid_lib=true
+        fi
         if [ -f "$download_dir/libsqlite3.so" ] && [ -s "$download_dir/libsqlite3.so" ]; then
+            has_valid_lib=true
+        fi
+        
+        if [ "$has_valid_lib" = true ]; then
             continue
         fi
         
-        # 删除可能的 .tmp 文件
-        rm -f "$download_dir"/*.tmp 2>/dev/null
+        # 删除可能的 .tmp 文件（忽略锁定错误）
+        rm -f "$download_dir"/*.tmp 2>/dev/null || true
         
-        # 默认用 arm64（最常见），检查 input.json 确定架构
+        # 检查 input.json 确定目标平台和架构
+        local is_windows=false
         local arch="arm64"
         for hook_dir in .dart_tool/hooks_runner/sqlite3/*/; do
             [ -d "$hook_dir" ] || continue
-            if grep -q "\"arm\"" "$hook_dir/input.json" 2>/dev/null; then
+            if grep -q '"windows"' "$hook_dir/input.json" 2>/dev/null; then
+                is_windows=true
+            fi
+            if grep -q '"arm"' "$hook_dir/input.json" 2>/dev/null; then
                 arch="arm"
             elif grep -q "x64" "$hook_dir/input.json" 2>/dev/null; then
                 arch="x64"
             fi
         done
         
-        local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
-        if [ -f "$src_file" ]; then
-            cp "$src_file" "$download_dir/libsqlite3.so"
-            echo "📋 已填充 $arch 到 $(basename "$download_dir")"
-            fixed=$((fixed + 1))
+        if [ "$is_windows" = true ]; then
+            # Windows 平台
+            local src_file="$PERSISTENT_CACHE/$WINDOWS_DLL"
+            if [ -f "$src_file" ]; then
+                cp "$src_file" "$download_dir/sqlite3.dll"
+                echo "📋 已填充 Windows DLL 到 $(basename "$download_dir")"
+                fixed=$((fixed + 1))
+            fi
+        else
+            # Android 平台
+            local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
+            if [ -f "$src_file" ]; then
+                cp "$src_file" "$download_dir/libsqlite3.so"
+                echo "📋 已填充 $arch 到 $(basename "$download_dir")"
+                fixed=$((fixed + 1))
+            fi
         fi
     done
     
-    # 第三步：检查是否所有 hook 目录都有对应的 libsqlite3.so
+    # 第三步：检查是否所有 hook 目录都有对应的库文件
     # 遍历所有 hook 目录，查找 output.json 中引用的下载目录
     for hook_dir in .dart_tool/hooks_runner/sqlite3/*/; do
         [ -d "$hook_dir" ] || continue
@@ -382,26 +423,41 @@ ensure_sqlite3_libs() {
         [ -f "$output_file" ] || continue
         
         # 从 output.json 提取期望的文件路径
-        local expected_file=$(grep -o '"file": "[^"]*libsqlite3\.so"' "$output_file" 2>/dev/null | cut -d'"' -f4)
+        local expected_file=$(grep -o '"file": "[^"]*sqlite3[^"]*"' "$output_file" 2>/dev/null | cut -d'"' -f4)
         if [ -n "$expected_file" ] && [ ! -f "$expected_file" ]; then
             # 文件不存在，需要从持久缓存复制
             local expected_dir=$(dirname "$expected_file")
-            local arch="arm64"
-            grep -q "arm\"" "$hook_dir/input.json" 2>/dev/null && arch="arm"
-            grep -q "x64" "$hook_dir/input.json" 2>/dev/null && arch="x64"
+            mkdir -p "$expected_dir"
             
-            local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
-            if [ -f "$src_file" ]; then
-                mkdir -p "$expected_dir"
-                cp "$src_file" "$expected_file"
-                echo "📋 已从 output.json 填充 $arch 到 $(basename "$expected_dir")"
-                fixed=$((fixed + 1))
+            # 判断是 Windows 还是 Android
+            if echo "$expected_file" | grep -q "\.dll"; then
+                # Windows
+                local src_file="$PERSISTENT_CACHE/$WINDOWS_DLL"
+                if [ -f "$src_file" ]; then
+                    cp "$src_file" "$expected_file"
+                    echo "📋 从缓存填充 Windows DLL 到 $expected_file"
+                    fixed=$((fixed + 1))
+                fi
+            else
+                # Android
+                local arch="arm64"
+                if grep -q '"arm"' "$hook_dir/input.json" 2>/dev/null; then
+                    arch="arm"
+                elif grep -q "x64" "$hook_dir/input.json" 2>/dev/null; then
+                    arch="x64"
+                fi
+                local src_file="$PERSISTENT_CACHE/${ARCH_FILES[$arch]}"
+                if [ -f "$src_file" ]; then
+                    cp "$src_file" "$expected_file"
+                    echo "📋 从缓存填充 $arch 到 $expected_file"
+                    fixed=$((fixed + 1))
+                fi
             fi
         fi
     done
     
     if [ $fixed -gt 0 ]; then
-        echo "✅ 共填充 $fixed 个 sqlite3 缓存目录"
+        echo "✅ 已填充 $fixed 个 SQLite 库文件"
     fi
 }
 
@@ -555,6 +611,9 @@ build_windows() {
     echo "🪟 构建 Windows..."
     echo "目标输出目录: $OUTPUT_NAME"
     
+    # 确保 sqlite3 库已缓存
+    ensure_sqlite3_libs
+    
     # 执行构建
     puro flutter build windows --release --no-tree-shake-icons
     
@@ -671,6 +730,7 @@ case "$ACTION" in
 
     run)
         check_flutter_commands
+        ensure_sqlite3_libs
         if [[ -n "$2" ]]; then
             echo "🚀 运行 Flutter 应用（设备: $2）..."
             puro flutter run -d "$2"

@@ -458,6 +458,14 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		}
 	}
 
+	// 权限检查：检查对父目录的上传权限
+	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+		return nil, &models.Err{
+			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
 	blake3Hash := *req.Hash
 
 	// 如果前端传递了 upload_id，根据 upload_id 获取上传记录
@@ -932,6 +940,14 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 
 // UploadSmall 小文件上传（< 10MB）
 func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.UploadSmallRespData, *models.Err) {
+	// 权限检查：检查对父目录的上传权限
+	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+		return nil, &models.Err{
+			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
 	// 验证文件大小（必须小于 10MB）
 	if *req.Size > SmallFileThreshold {
 		llog.L().Errorf("file too large for small file upload: %d > %d", *req.Size, SmallFileThreshold)

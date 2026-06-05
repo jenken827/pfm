@@ -126,9 +126,17 @@ class DesktopTray implements TrayListener {
         await showWindow();
         break;
       case 'exit':
-        // 真正退出应用
+        // 清理锁文件
+        try {
+          final lockFile = File('${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock');
+          if (lockFile.existsSync()) {
+            lockFile.deleteSync(recursive: true);
+          }
+        } catch (_) {}
+        // 取消阻止关闭，然后真正退出
+        await windowManager.setPreventClose(false);
         await destroy();
-        SystemNavigator.pop();
+        await windowManager.close();
         break;
     }
   }

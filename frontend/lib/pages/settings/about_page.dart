@@ -50,7 +50,7 @@ class _AboutPageState extends State<AboutPage> {
           _buildInfoTile(
             icon: Icons.build_outlined,
             title: al.about_buildNumber,
-            subtitle: '${_packageInfo?.buildNumber}-{{commit-hash}}',
+            subtitle: '${_packageInfo?.buildNumber}-248ff832',
           ),
           const Divider(height: 1),
 
