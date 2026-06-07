@@ -168,6 +168,8 @@ enum BackupStrategy {
   BACKUP_STRATEGY_SCHEDULED = 1;
   // 监听文件变化备份（fsnotify）
   BACKUP_STRATEGY_WATCH = 2;
+  // 手动备份（仅在用户点击时触发）
+  BACKUP_STRATEGY_MANUAL = 3;
 }
 
 // BackupRunStatus 备份执行状态

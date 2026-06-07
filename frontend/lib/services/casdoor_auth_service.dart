@@ -9,6 +9,7 @@ import 'package:path/path.dart';
 
 import 'local_storage.dart';
 import '../models/models.dart';
+import '../api/fm_repository.dart';
 
 /// Casdoor PKCE 工具类
 class CasdoorPkce {
@@ -105,12 +106,34 @@ class CasdoorLoginHelper {
   /// 从 token 解析用户信息并保存
   static Future<User> saveLoginInfo(CasdoorToken token) async {
     final userInfo = JwtDecoder.decode(token.accessToken!);
-    final user = User.fromMap(userInfo);
+    var user = User.fromMap(userInfo);
 
     final ls = GetIt.I.get<LocalStorage>();
     await ls.saveToken(token);
-    await ls.saveUser(user);
 
+    // 尝试从后端获取用户角色（JWT 可能不包含 roles）
+    if (user.roles.isEmpty) {
+      try {
+        final repo = FmRepository();
+        final rolesResult = await repo.getMyRoles();
+        if (rolesResult.success && rolesResult.data != null) {
+          user = User(
+            id: user.id,
+            name: user.name,
+            createdTime: user.createdTime,
+            updatedTime: user.updatedTime,
+            avatar: user.avatar,
+            email: user.email,
+            phone: user.phone,
+            roles: rolesResult.data!.roles.map((e) => e.toString()).toList(),
+          );
+        }
+      } catch (e) {
+        // 忽略错误，使用空角色
+      }
+    }
+
+    await ls.saveUser(user);
     return user;
   }
 

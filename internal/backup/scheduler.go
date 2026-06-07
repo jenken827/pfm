@@ -148,6 +148,7 @@ func (s *BackupScheduler) removeTask(taskID uint64) {
 
 // TriggerBackup 手动触发备份
 func (s *BackupScheduler) TriggerBackup(taskID uint64) {
+	llog.L().Infof("triggering backup manually, task_id: %d", taskID)
 	go s.safeExecuteBackup(taskID)
 }
 
@@ -261,6 +262,7 @@ func scanDirectory(rootPath string, recursive bool, ignoreRules string) ([]*Back
 		relPath, _ := filepath.Rel(rootPath, path)
 
 		if ign != nil && ign.MatchesPath(relPath) {
+			llog.L().Infof("scanDirectory: ignoring file: %s", relPath)
 			return nil
 		}
 
@@ -429,11 +431,19 @@ func (s *BackupScheduler) updateBackupFileRecord(task *native.BackupTaskORM, can
 }
 
 // ensureDirStructure 确保目标目录结构存在
+// 创建子目录时逐层继承父目录的加密属性
 func ensureDirStructure(ctx context.Context, targetParentID, relativePath string) (string, error) {
 	dir := filepath.Dir(relativePath)
 	llog.L().Debugf("ensureDirStructure: relativePath=%s, dir=%s, targetParentID=%s", relativePath, dir, targetParentID)
 	if dir == "." || dir == "" {
 		return targetParentID, nil
+	}
+
+	// 检查目标父目录的加密设置
+	targetDir, err := db.GetFileByID(targetParentID)
+	if err == nil && targetDir != nil {
+		llog.L().Infof("ensureDirStructure: target folder encryption=%v, targetParentID=%s",
+			targetDir.EnableEncryption != nil && *targetDir.EnableEncryption, targetParentID)
 	}
 
 	parts := strings.Split(dir, string(filepath.Separator))
@@ -442,17 +452,46 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 	for _, part := range parts {
 		existing, err := db.GetFileByParentAndName(currentParentID, part)
 		if err == nil && existing != nil {
+			// 检查已存在目录的加密属性是否需要继承更新
+			parentDir, err := db.GetFileByID(currentParentID)
+			if err == nil && parentDir != nil && parentDir.EnableEncryption != nil &&
+				(existing.EnableEncryption == nil || *existing.EnableEncryption != *parentDir.EnableEncryption) {
+				llog.L().Infof("ensureDirStructure: updating folder '%s' encryption from %v to %v",
+					part, existing.EnableEncryption, parentDir.EnableEncryption)
+				existing.EnableEncryption = parentDir.EnableEncryption
+				db.UpdateFile(existing, []string{"enable_encryption"})
+			}
 			currentParentID = *existing.Id
 			continue
 		}
 
+		// 从当前父目录获取加密设置（逐层继承）
+		var parentEncrypt *bool
+		parentDir, err := db.GetFileByID(currentParentID)
+		if err == nil && parentDir != nil && parentDir.EnableEncryption != nil {
+			parentEncrypt = parentDir.EnableEncryption
+			llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=%v, parentID=%s",
+				part, *parentEncrypt, currentParentID)
+		} else {
+			llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
+				part, currentParentID)
+		}
+
 		newDir := &native.FileORM{
-			Name:     utils.StringPtr(part),
-			ParentId: &currentParentID,
-			Type:     utils.EnumPtr(native.FileType_FOLDER),
-			IsReady:  utils.BoolPtr(true),
+			Name:             utils.StringPtr(part),
+			ParentId:         &currentParentID,
+			Type:             utils.EnumPtr(native.FileType_FOLDER),
+			IsReady:          utils.BoolPtr(true),
+			EnableEncryption: parentEncrypt, // 继承父目录的加密属性
 		}
 		if err := db.CreateFile(newDir); err != nil {
+			// 并发竞态：其他 goroutine 可能刚创建了同一目录，重试查找
+			existing, retryErr := db.GetFileByParentAndName(currentParentID, part)
+			if retryErr == nil && existing != nil {
+				llog.L().Debugf("ensureDirStructure: directory '%s' created by concurrent goroutine, using existing", part)
+				currentParentID = *existing.Id
+				continue
+			}
 			return "", err
 		}
 		currentParentID = *newDir.Id

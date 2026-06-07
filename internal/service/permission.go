@@ -33,22 +33,27 @@ func CheckPermission(userID, fileID string, requiredPerm uint32) bool {
 		perm, err := db.GetDirectoryPermission(userID, currentID)
 		if err == nil && perm != nil {
 			// 找到权限记录，直接以它为准（无论是当前目录还是祖先）
-			return *perm.Permissions&requiredPerm == requiredPerm
+			allowed := *perm.Permissions&requiredPerm == requiredPerm
+			llog.L().Infof("CheckPermission: user=%s, file=%s, perm=%d, required=%d, allowed=%v", userID, currentID, *perm.Permissions, requiredPerm, allowed)
+			return allowed
 		}
 
 		// 没有记录，继续向上找最近的祖先权限
 		file, err := db.GetFileByID(currentID)
 		if err != nil || file == nil {
+			llog.L().Infof("CheckPermission: user=%s, file=%s, no file found", userID, currentID)
 			return false
 		}
 
 		parentID := *file.ParentId
 		if parentID == "" || parentID == "0" {
+			llog.L().Infof("CheckPermission: user=%s, file=%s, reached root, no permission", userID, currentID)
 			return false
 		}
 
 		currentID = parentID
 	}
+	llog.L().Infof("CheckPermission: user=%s, file=%s, empty fileID", userID, fileID)
 	return false
 }
 
@@ -536,4 +541,27 @@ func ListUsers(ctx context.Context) (*native.ListUsersResp, *models.Err) {
 	}
 
 	return result, nil
+}
+
+// GetMyRoles 获取当前用户角色
+func GetMyRoles(ctx context.Context) (*native.GetMyRolesResp, *models.Err) {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 检查是否为管理员
+	isAdmin := isAdminUser(ctx)
+
+	var roles []string
+	if isAdmin {
+		roles = []string{"pfm_admin"}
+	} else {
+		roles = []string{"pfm_user"}
+	}
+
+	return &native.GetMyRolesResp{
+		Roles:   roles,
+		IsAdmin: &isAdmin,
+	}, nil
 }

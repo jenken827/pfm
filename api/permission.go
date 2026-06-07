@@ -10,6 +10,7 @@ import (
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/response"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // PermissionServer 权限服务
@@ -95,7 +96,19 @@ func (s *PermissionServer) GetAccessibleDirectories(ctx context.Context, req *co
 
 // ListUsers 获取用户列表（管理员用）
 func (s *PermissionServer) ListUsers(ctx context.Context, req *connect.Request[native.ListUsersReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	result, err := service.ListUsers(ctx)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(result)
+}
+
+// GetMyRoles 获取当前用户角色
+func (s *PermissionServer) GetMyRoles(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[native.BaseResp], error) {
+	result, err := service.GetMyRoles(ctx)
 	if err != nil {
 		return response.ErrResp(err)
 	}

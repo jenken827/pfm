@@ -331,6 +331,7 @@ func handleInstantUpload(
 		Hash:     existingFile.Hash,
 		Type:     existingFile.Type,
 		Mime:     existingFile.Mime,
+		IsReady:  utils.BoolPtr(true), // 秒传：文件已存在，标记为就绪
 	}
 	if createErr := db.CreateFile(newFileRecord); createErr != nil {
 		llog.L().Errorf("create file record failed: %v", createErr)

@@ -1,14 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/models/casdoor.dart';
 import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
 
 /// 设置页面
-class SettingPage extends StatelessWidget {
+class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
+
+  @override
+  State<SettingPage> createState() => _SettingPageState();
+}
+
+class _SettingPageState extends State<SettingPage> {
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdminRole();
+  }
+
+  Future<void> _checkAdminRole() async {
+    final ls = GetIt.I.get<LocalStorage>();
+    // 先从本地存储检查
+    if (ls.user?.roles.contains('pfm_admin') ?? false) {
+      if (mounted) setState(() => _isAdmin = true);
+      return;
+    }
+
+    // 本地没有 roles，从后端获取
+    try {
+      final repo = FmRepository();
+      final result = await repo.getMyRoles();
+      if (result.success && result.data != null) {
+        final isAdmin = result.data!.isAdmin;
+        // 更新本地存储
+        if (ls.user != null) {
+          final user = ls.user!;
+          final updatedUser = User(
+            id: user.id,
+            name: user.name,
+            createdTime: user.createdTime,
+            updatedTime: user.updatedTime,
+            avatar: user.avatar,
+            email: user.email,
+            phone: user.phone,
+            roles: result.data!.roles.map((e) => e.toString()).toList(),
+          );
+          await ls.saveUser(updatedUser);
+        }
+        if (mounted) setState(() => _isAdmin = isAdmin);
+      }
+    } catch (e) {
+      // 忽略错误
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,23 +130,27 @@ class SettingPage extends StatelessWidget {
           ),
           const Divider(height: 1),
 
-          // 存储介质设置
-          _SettingsTile(
-            icon: Icons.storage_outlined,
-            title: al.settings_storageProvider,
-            subtitle: al.settings_storageProviderSubtitle,
-            onTap: () => const StorageProviderSettingRoute().push(context),
-          ),
-          const Divider(height: 1),
+          // 存储介质设置（管理员专用）
+          if (_isAdmin) ...[
+            _SettingsTile(
+              icon: Icons.storage_outlined,
+              title: al.settings_storageProvider,
+              subtitle: al.settings_storageProviderSubtitle,
+              onTap: () => const StorageProviderSettingRoute().push(context),
+            ),
+            const Divider(height: 1),
+          ],
 
-          // 服务端备份
-          _SettingsTile(
-            icon: Icons.dns_outlined,
-            title: al.settings_serverBackup,
-            subtitle: al.settings_serverBackupSubtitle,
-            onTap: () => const ServerBackupRoute().push(context),
-          ),
-          const Divider(height: 1),
+          // 服务端备份（管理员专用）
+          if (_isAdmin) ...[
+            _SettingsTile(
+              icon: Icons.dns_outlined,
+              title: al.settings_serverBackup,
+              subtitle: al.settings_serverBackupSubtitle,
+              onTap: () => const ServerBackupRoute().push(context),
+            ),
+            const Divider(height: 1),
+          ],
 
           // 自动备份
           _SettingsTile(
@@ -128,14 +183,16 @@ class SettingPage extends StatelessWidget {
             const Divider(height: 1),
           ],
 
-          // 权限管理（管理员功能）
-          _SettingsTile(
-            icon: Icons.security,
-            title: '权限管理',
-            subtitle: '管理用户目录权限',
-            onTap: () => const PermissionManagementRoute().push(context),
-          ),
-          const Divider(height: 1),
+          // 权限管理（管理员专用）
+          if (_isAdmin) ...[
+            _SettingsTile(
+              icon: Icons.security,
+              title: '权限管理',
+              subtitle: '管理用户目录权限',
+              onTap: () => const PermissionManagementRoute().push(context),
+            ),
+            const Divider(height: 1),
+          ],
 
           // 上传设置
           _SettingsTile(

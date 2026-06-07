@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/models"
+	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // getCurrentUserIDFromCtx 从 context 获取当前用户 ID
@@ -55,4 +58,15 @@ func checkFilePermission(ctx context.Context, fileID string, perm uint32) bool {
 	}
 
 	return CheckPermission(userID, fileID, perm)
+}
+
+// RequireAdmin 检查当前用户是否为管理员，非管理员返回 PERMISSION_DENIED 错误
+func RequireAdmin(ctx context.Context) *models.Err {
+	if isAdminUser(ctx) {
+		return nil
+	}
+	return &models.Err{
+		E: fmt.Errorf("permission denied: admin access required"),
+		C: native.RespCode_PERMISSION_DENIED,
+	}
 }

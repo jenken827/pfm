@@ -190,21 +190,14 @@ class ContactBackupService {
         return _result;
       }
 
-      // 保存到固定文件名（替换旧文件）
+      // 保存到带日期后缀的文件名（避免覆盖旧备份）
       final tempDir = await getTemporaryDirectory();
-      final filePath = p.join(tempDir.path, 'contacts_backup.vcf');
+      final now = DateTime.now();
+      final dateSuffix = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+      final fileName = 'contacts_backup_$dateSuffix.vcf';
+      final filePath = p.join(tempDir.path, fileName);
       final file = File(filePath);
       await file.writeAsString(vCardContent);
-
-      // 删除旧的备份文件（如果路径不同）
-      if (_config.lastBackupFilePath != null &&
-          _config.lastBackupFilePath != filePath) {
-        final oldFile = File(_config.lastBackupFilePath!);
-        if (await oldFile.exists()) {
-          await oldFile.delete();
-          _logger.info('Deleted old backup file: ${_config.lastBackupFilePath}');
-        }
-      }
 
       _logger.info('Exported contacts to: $filePath');
       _updateStatus(filePath: filePath);
@@ -214,7 +207,6 @@ class ContactBackupService {
       await _uploadBackup(file);
 
       // 更新配置
-      final now = DateTime.now();
       _config = _config.copyWith(
         lastBackupHash: hash,
         lastBackupTime: now,
@@ -243,7 +235,8 @@ class ContactBackupService {
 
   /// 上传备份文件到服务器
   Future<void> _uploadBackup(File file) async {
-    final fileName = 'contacts_backup.vcf';
+    // 从文件路径提取带日期后缀的文件名
+    final fileName = p.basename(file.path);
     final fileSize = await file.length();
     final content = await file.readAsBytes();
 
@@ -262,7 +255,7 @@ class ContactBackupService {
       fileHash: fileHash,
       parentId: _config.targetParentId,
       status: UploadStatus.PENDING,
-      overwrite: true, // 固定文件名，覆盖已有文件
+      overwrite: false, // 文件名带日期，不需要覆盖
       createdAt: DateTime.now(),
     );
 

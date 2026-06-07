@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
@@ -55,8 +57,28 @@ func Run() {
 	route(mux)
 
 	schema := config.GetConfig().Schema
+	addr := schema.Addr
+	port := schema.Port
+
+	// Debug 模式：使用临时端口
+	if globals.Debug {
+		if globals.DebugPort > 0 {
+			port = uint32(globals.DebugPort)
+		} else {
+			// 使用随机可用端口
+			listener, err := net.Listen("tcp", fmt.Sprintf("%s:0", addr))
+			if err != nil {
+				llog.L().Errorf("Failed to get random port: %v", err)
+				os.Exit(1)
+			}
+			port = uint32(listener.Addr().(*net.TCPAddr).Port)
+			listener.Close()
+		}
+		llog.L().Infof("Debug mode enabled, using port %d", port)
+	}
+
 	s := &http.Server{
-		Addr:      fmt.Sprintf("%s:%d", schema.Addr, schema.Port),
+		Addr:      fmt.Sprintf("%s:%d", addr, port),
 		Handler:   handlerWithRecover,
 		Protocols: p,
 	}
@@ -78,7 +100,7 @@ func Run() {
 				serverErr <- fmt.Errorf("server panic: %v", r)
 			}
 		}()
-		llog.L().Infof("Starting server on %s:%d", schema.Addr, schema.Port)
+		llog.L().Infof("Starting server on %s:%d", addr, port)
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
@@ -87,7 +109,7 @@ func Run() {
 	// 监听结束信号或启动错误
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	fmt.Printf("Started server on %s:%d\n", schema.Addr, schema.Port)
+	fmt.Printf("Started server on %s:%d\n", addr, port)
 
 	select {
 	case err := <-serverErr:

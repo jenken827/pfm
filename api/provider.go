@@ -20,6 +20,9 @@ var _ = (nativeconnect.StorageProviderServiceHandler)((*StorageProviderServer)(n
 
 // GetStorageProviderTypes 获取支持的存储提供者类型列表
 func (s *StorageProviderServer) GetStorageProviderTypes(ctx context.Context, req *connect.Request[native.GetStorageProviderTypesReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	data, err := service.GetStorageProviderTypes(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)
@@ -30,6 +33,9 @@ func (s *StorageProviderServer) GetStorageProviderTypes(ctx context.Context, req
 
 // AddStorageProvider 添加存储提供者
 func (s *StorageProviderServer) AddStorageProvider(ctx context.Context, req *connect.Request[native.AddStorageProviderReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	err := service.AddStorageProvider(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)
@@ -40,6 +46,9 @@ func (s *StorageProviderServer) AddStorageProvider(ctx context.Context, req *con
 
 // GetStorageProvider 获取存储提供者详情
 func (s *StorageProviderServer) GetStorageProvider(ctx context.Context, req *connect.Request[native.StorageProviderGetReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	data, err := service.GetStorageProvider(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)
@@ -55,6 +64,9 @@ func (s *StorageProviderServer) GetStorageProvider(ctx context.Context, req *con
 
 // ListStorageProviders 获取存储提供者列表
 func (s *StorageProviderServer) ListStorageProviders(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	data, err := service.ListStorageProviders(ctx)
 	if err != nil {
 		return response.ErrResp(err)
@@ -76,6 +88,9 @@ func (s *StorageProviderServer) ListStorageProviders(ctx context.Context, req *c
 
 // UpdateStorageProvider 更新存储提供者
 func (s *StorageProviderServer) UpdateStorageProvider(ctx context.Context, req *connect.Request[native.UpdateStorageProviderReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	llog.L().Infof("UpdateStorageProvider, req: %v", req.Msg)
 	err := service.UpdateStorageProvider(ctx, req.Msg)
 	if err != nil {
@@ -87,6 +102,9 @@ func (s *StorageProviderServer) UpdateStorageProvider(ctx context.Context, req *
 
 // DeleteStorageProvider 删除存储提供者
 func (s *StorageProviderServer) DeleteStorageProvider(ctx context.Context, req *connect.Request[native.StorageProviderDeleteReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	err := service.DeleteStorageProvider(ctx, req.Msg)
 	if err != nil {
 		return response.ErrResp(err)

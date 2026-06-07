@@ -118,24 +118,42 @@ class _ServerBackupTaskTile extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            _InfoRow(
-                icon: Icons.folder_outlined,
-                text: task.hasSourcePath() ? task.sourcePath : '-'),
-            if (task.hasCronExpression() && task.cronExpression.isNotEmpty)
-              _InfoRow(icon: Icons.schedule, text: task.cronExpression),
+            Row(
+              children: [
+                _StrategyTag(strategy: task.hasStrategy() ? task.strategy : BackupStrategy.BACKUP_STRATEGY_SCHEDULED),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: task.hasCronExpression() &&
+                          task.cronExpression.isNotEmpty &&
+                          (task.hasStrategy() ? task.strategy : BackupStrategy.BACKUP_STRATEGY_SCHEDULED) ==
+                              BackupStrategy.BACKUP_STRATEGY_SCHEDULED
+                      ? _InfoRow(icon: Icons.schedule, text: task.cronExpression)
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () {
-                    context.read<BackupBloc>().add(BackupTriggerEvent(
-                        id: task.hasId() ? task.id.toInt() : 0));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(al.serverBackup_triggered)),
-                    );
-                  },
-                  child: Text(al.serverBackup_executeNow),
+                  onPressed: task.lastRunStatus ==
+                          BackupRunStatus.BACKUP_RUN_STATUS_RUNNING
+                      ? null
+                      : () {
+                          final al = AppLocalizations.of(context)!;
+                          context.read<BackupBloc>().add(BackupTriggerEvent(
+                              id: task.hasId() ? task.id.toInt() : 0));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(al.serverBackup_triggered)),
+                          );
+                        },
+                  child: Text(
+                    task.lastRunStatus ==
+                            BackupRunStatus.BACKUP_RUN_STATUS_RUNNING
+                        ? al.serverBackup_statusRunning
+                        : al.serverBackup_executeNow,
+                  ),
                 ),
                 TextButton(
                   onPressed: () => _showEditDialog(context),
@@ -276,6 +294,45 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+class _StrategyTag extends StatelessWidget {
+  final BackupStrategy strategy;
+
+  const _StrategyTag({required this.strategy});
+
+  @override
+  Widget build(BuildContext context) {
+    final al = AppLocalizations.of(context)!;
+    String label;
+    Color color;
+    switch (strategy) {
+      case BackupStrategy.BACKUP_STRATEGY_SCHEDULED:
+        label = al.serverBackup_scheduledBackup;
+        color = Colors.blue;
+        break;
+      case BackupStrategy.BACKUP_STRATEGY_WATCH:
+        label = al.serverBackup_watchBackup;
+        color = Colors.orange;
+        break;
+      case BackupStrategy.BACKUP_STRATEGY_MANUAL:
+        label = al.serverBackup_manualBackup;
+        color = Colors.grey;
+        break;
+      default:
+        label = al.common_unknown;
+        color = Colors.grey;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+    );
+  }
+}
+
 // ==================== 服务端备份创建/编辑 Sheet ====================
 
 class _CreateServerBackupSheet extends StatefulWidget {
@@ -404,6 +461,9 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                   DropdownMenuItem(
                       value: BackupStrategy.BACKUP_STRATEGY_WATCH,
                       child: Text(al.serverBackup_watchBackup)),
+                  DropdownMenuItem(
+                      value: BackupStrategy.BACKUP_STRATEGY_MANUAL,
+                      child: Text(al.serverBackup_manualBackup)),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _strategy = v);
@@ -434,10 +494,11 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                   title: Text(al.serverBackup_includeSubdir),
                   value: _recursive,
                   onChanged: (v) => setState(() => _recursive = v)),
-              SwitchListTile(
-                  title: Text(al.clientBackup_enable),
-                  value: _enabled,
-                  onChanged: (v) => setState(() => _enabled = v)),
+              if (_strategy != BackupStrategy.BACKUP_STRATEGY_MANUAL)
+                SwitchListTile(
+                    title: Text(al.clientBackup_enable),
+                    value: _enabled,
+                    onChanged: (v) => setState(() => _enabled = v)),
               const SizedBox(height: 16),
               FilledButton(
                   onPressed: _submit, child: Text(isEdit ? al.common_save : al.common_create)),

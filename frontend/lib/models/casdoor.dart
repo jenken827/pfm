@@ -45,6 +45,7 @@ class User {
   final String? avatar;
   final String? email;
   final String? phone;
+  final List<String> roles;
 
   User({
     required this.id,
@@ -54,6 +55,7 @@ class User {
     this.avatar,
     this.email,
     this.phone,
+    this.roles = const [],
   });
   User.fromMap(Map<String, dynamic> map)
     : this(
@@ -68,5 +70,9 @@ class User {
         avatar: map['avatar'],
         email: map['email'],
         phone: map['phone'],
+        roles: (map['roles'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
       );
 }

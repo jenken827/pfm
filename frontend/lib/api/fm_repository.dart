@@ -1993,4 +1993,30 @@ class FmRepository {
       return ApiResult(success: false, message: e.toString());
     }
   }
+
+  /// 获取当前用户角色
+  Future<ApiResult<GetMyRolesResp>> getMyRoles() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.PermissionService/GetMyRoles',
+        data: {},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetMyRolesResp>(
+        data,
+        GetMyRolesResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户角色失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户角色失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
 }

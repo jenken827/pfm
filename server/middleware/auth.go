@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -32,6 +33,22 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (connect.AnyResponse, error) {
+
+			// Debug 模式：绕过认证，使用模拟的管理员用户
+			if globals.Debug {
+				claims := &casdoorsdk.Claims{
+					User: casdoorsdk.User{
+						Id:    "debug-admin-id",
+						Name:  "debug-admin",
+						Email: "debug@localhost",
+						Roles: []*casdoorsdk.Role{
+							{Name: "pfm_admin"},
+						},
+					},
+				}
+				ctx = context.WithValue(ctx, globals.ContextUserKey, claims)
+				return next(ctx, req)
+			}
 
 			accessToken := req.Header().Get(tokenHeader)
 			if accessToken == "" {

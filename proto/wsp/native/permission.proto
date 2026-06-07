@@ -166,6 +166,12 @@ message CasdoorUserInfo {
     optional string created_time = 6;
 }
 
+// 获取当前用户角色响应
+message GetMyRolesResp {
+    repeated string roles = 1;      // 角色名称列表
+    optional bool is_admin = 2;     // 是否管理员
+}
+
 // 权限服务
 service PermissionService {
     // 授予目录权限
@@ -184,4 +190,6 @@ service PermissionService {
     rpc GetAccessibleDirectories(GetAccessibleDirectoriesReq) returns (BaseResp);
     // 获取用户列表（管理员用）
     rpc ListUsers(ListUsersReq) returns (BaseResp);
+    // 获取当前用户角色
+    rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
 }

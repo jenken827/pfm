@@ -19,6 +19,10 @@ var (
 	Version string
 	// ShowVersion 显示版本
 	ShowVersion bool
+	// Debug 调试模式
+	Debug bool
+	// DebugPort 调试模式端口
+	DebugPort int
 )
 
 // Parse 解析命令行参数
@@ -29,15 +33,19 @@ func Parse() {
 	flag.StringVar(&ConfigPath, "c", "", "Config file path (shorthand)")
 	flag.BoolVar(&ShowVersion, "version", false, "Show version")
 	flag.BoolVar(&ShowVersion, "v", false, "Show version (shorthand)")
+	flag.BoolVar(&Debug, "debug", false, "Debug mode (bypass auth, use temp port)")
+	flag.IntVar(&DebugPort, "debug-port", 0, "Debug mode port (default: random available port)")
 
 	// Custom usage message
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
-		fmt.Fprintf(os.Stderr, "  -dir, -d string\tData directory\n")
-		fmt.Fprintf(os.Stderr, "  -config, -c string\tConfig file path\n")
-		fmt.Fprintf(os.Stderr, "  -version, -v\t\tShow version\n")
-		fmt.Fprintf(os.Stderr, "  -h, --help\t\tShow this help message\n")
+		fmt.Fprintf(os.Stderr, "  -dir, -d string	Data directory\n")
+		fmt.Fprintf(os.Stderr, "  -config, -c string	Config file path\n")
+		fmt.Fprintf(os.Stderr, "  -version, -v		Show version\n")
+		fmt.Fprintf(os.Stderr, "  -debug		Debug mode (bypass auth, use temp port)\n")
+		fmt.Fprintf(os.Stderr, "  -debug-port int	Debug mode port (default: random available port)\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help		Show this help message\n")
 		fmt.Fprintf(os.Stderr, "\nNote: At least one of -dir or -config must be specified.\n")
 	}
 

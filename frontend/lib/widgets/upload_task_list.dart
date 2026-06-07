@@ -520,7 +520,9 @@ class _UploadTaskItem extends StatelessWidget {
   /// 显示重命名对话框
   void _showRenameDialog(BuildContext context, TransferBloc bloc) {
     final al = AppLocalizations.of(context)!;
-    final controller = TextEditingController(text: task.filename);
+    // 生成随机文件名，保留扩展名
+    final randomName = _generateRandomFilename(task.filename);
+    final controller = TextEditingController(text: randomName);
     
     showDialog(
       context: context,
@@ -559,6 +561,28 @@ class _UploadTaskItem extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 生成随机文件名，在原文件名基础上加随机后缀，保留扩展名
+  String _generateRandomFilename(String originalFilename) {
+    // 提取扩展名
+    final lastDotIndex = originalFilename.lastIndexOf('.');
+    String name;
+    String extension;
+    
+    if (lastDotIndex > 0 && lastDotIndex < originalFilename.length - 1) {
+      name = originalFilename.substring(0, lastDotIndex);
+      extension = originalFilename.substring(lastDotIndex);
+    } else {
+      name = originalFilename;
+      extension = '';
+    }
+    
+    // 生成6位随机后缀
+    final random = DateTime.now().millisecondsSinceEpoch % 1000000;
+    final suffix = random.toString().padLeft(6, '0');
+    
+    return '${name}_$suffix$extension';
   }
 
   void _showDetailSheet(BuildContext context) {

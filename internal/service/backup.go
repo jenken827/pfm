@@ -274,15 +274,25 @@ func GetBackupTask(ctx context.Context, req *native.GetBackupTaskReq) (*native.G
 
 // TriggerBackup 手动触发备份
 func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Err {
+	llog.L().Infof("TriggerBackup called, req.Id: %v", req.Id)
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
+		llog.L().Errorf("TriggerBackup: task not found, id: %v, err: %v", req.Id, err)
 		return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
 	}
 
-	if !*task.Enabled {
+	// 防重复触发：任务正在运行中
+	if task.LastRunStatus != nil && *task.LastRunStatus == int32(native.BackupRunStatus_BACKUP_RUN_STATUS_RUNNING) {
+		return &models.Err{E: errors.New("backup task is already running"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 手动模式不需要检查 enabled
+	isManual := task.Strategy != nil && *task.Strategy == int32(native.BackupStrategy_BACKUP_STRATEGY_MANUAL)
+	if !isManual && !*task.Enabled {
 		return &models.Err{E: errors.New("backup task is disabled"), C: native.RespCode_PARAMS_ERROR}
 	}
 
+	llog.L().Infof("TriggerBackup: calling scheduler.TriggerBackup, task_id: %d", *task.Id)
 	backup.GetScheduler().TriggerBackup(*task.Id)
 	return nil
 }

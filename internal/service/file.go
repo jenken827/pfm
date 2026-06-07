@@ -22,14 +22,22 @@ import (
 
 // GetFileList 获取文件列表
 func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, bool, *models.Err) {
+	userID := getCurrentUserIDFromCtx(ctx)
+	parentID := req.GetParentId()
+	llog.L().Infof("GetFileList: user=%s, parentId=%s", userID, parentID)
+
 	// 权限检查：检查对父目录的读权限
-	if !checkFilePermission(ctx, req.GetParentId(), PermRead) {
+	allowed := checkFilePermission(ctx, parentID, PermRead)
+	llog.L().Infof("GetFileList: user=%s, parentId=%s, allowed=%v", userID, parentID, allowed)
+	if !allowed {
 		// 非管理员查询根目录无权限时，返回用户有权限的目录
-		if req.GetParentId() == "" && !isAdminUser(ctx) {
+		if parentID == "" && !isAdminUser(ctx) {
+			llog.L().Infof("GetFileList: user=%s, root fallback to getAccessibleFilesAsRoot", userID)
 			return getAccessibleFilesAsRoot(ctx, req.GetOffset(), req.GetPageSize())
 		}
+		llog.L().Infof("GetFileList: user=%s, permission denied for parentId=%s", userID, parentID)
 		return nil, 0, false, &models.Err{
-			E: fmt.Errorf("permission denied: no read access to directory %s", req.GetParentId()),
+			E: fmt.Errorf("permission denied: no read access to directory %s", parentID),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
@@ -38,12 +46,13 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 	offset := req.GetOffset()
 	pageSize := req.GetPageSize()
 
-	files, total, hasMore, err := db.GetFileList(req.GetParentId(), offset, pageSize)
+	files, total, hasMore, err := db.GetFileList(parentID, offset, pageSize)
 	if err != nil {
 		llog.L().Errorf("GetFileList failed, err: %v", err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
+	llog.L().Infof("GetFileList: user=%s, parentId=%s, returned %d files", userID, parentID, len(files))
 	return files, total, hasMore, nil
 }
 
@@ -72,6 +81,9 @@ func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.Fi
 
 // getAccessibleFilesAsRoot 非管理员用户查询根目录时，返回有权限的文件/目录
 func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*native.FileORM, int64, bool, *models.Err) {
+	if pageSize == 0 {
+		pageSize = 500
+	}
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return nil, 0, false, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
@@ -79,8 +91,10 @@ func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*
 
 	perms, err := db.GetUserDirectoryPermissions(userID)
 	if err != nil {
+		llog.L().Errorf("getAccessibleFilesAsRoot: GetUserDirectoryPermissions failed, user=%s, err=%v", userID, err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
+	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, totalPerms=%d", userID, len(perms))
 
 	// 只保留有读权限的
 	var readPerms []*native.DirectoryPermissionORM
@@ -89,14 +103,17 @@ func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*
 			readPerms = append(readPerms, p)
 		}
 	}
+	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, readPerms=%d", userID, len(readPerms))
 
 	// 过滤为顶层目录
 	topPerms := filterTopLevel(readPerms)
+	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, topPerms=%d", userID, len(topPerms))
 
 	var allFiles []*native.FileORM
 	for _, p := range topPerms {
 		file, err := db.GetFileByID(*p.FileId)
 		if err != nil || file == nil {
+			llog.L().Infof("getAccessibleFilesAsRoot: skip fileId=%s (not found)", *p.FileId)
 			continue
 		}
 		// 应用别名
@@ -105,6 +122,8 @@ func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*
 		}
 		allFiles = append(allFiles, file)
 	}
+
+	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, returning %d files", userID, len(allFiles))
 
 	total := int64(len(allFiles))
 	start := int(offset)
@@ -1281,11 +1300,20 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 
 	// 按目录权限过滤
 	var filtered []*native.FileORM
+	userID := getCurrentUserIDFromCtx(ctx)
+	llog.L().Infof("GetFilesByType: user=%s, totalFiles=%d", userID, len(allFiles))
 	for _, f := range allFiles {
-		if f.ParentId != nil && checkFilePermission(ctx, *f.ParentId, PermRead) {
+		if f.ParentId == nil {
+			llog.L().Infof("GetFilesByType: skip file %s (no parent)", f.Name)
+			continue
+		}
+		allowed := checkFilePermission(ctx, *f.ParentId, PermRead)
+		llog.L().Infof("GetFilesByType: file=%s, parent=%s, allowed=%v", *f.Name, *f.ParentId, allowed)
+		if allowed {
 			filtered = append(filtered, f)
 		}
 	}
+	llog.L().Infof("GetFilesByType: user=%s, filtered=%d", userID, len(filtered))
 
 	// 应用 offset/limit
 	total := int64(len(filtered))
