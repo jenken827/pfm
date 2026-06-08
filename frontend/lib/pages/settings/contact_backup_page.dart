@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/contact_backup_service.dart';
 import 'package:pfm/utils/platform.dart';
@@ -68,16 +69,16 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.phone_android, size: 64, color: Colors.grey[400]),
+              Icon(Icons.phone_android, size: 64, color: PfmColors.lightTextMuted),
               const SizedBox(height: 16),
               Text(
                 al.contactBackup_mobileOnly,
-                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 18, color: PfmColors.lightTextSecondary),
               ),
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_mobileOnlyDesc,
-                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 14, color: PfmColors.lightTextMuted),
               ),
             ],
           ),
@@ -151,42 +152,42 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
     switch (_result.status) {
       case ContactBackupStatus.idle:
-        statusColor = Colors.grey;
+        statusColor = PfmColors.lightTextMuted;
         statusText = al.contactBackup_statusReady;
         statusIcon = Icons.contacts_outlined;
         break;
       case ContactBackupStatus.loading:
-        statusColor = Colors.blue;
+        statusColor = PfmColors.primary;
         statusText = al.contactBackup_statusLoading;
         statusIcon = Icons.hourglass_empty;
         break;
       case ContactBackupStatus.exporting:
-        statusColor = Colors.blue;
+        statusColor = PfmColors.primary;
         statusText = al.contactBackup_statusExporting(_result.exportedContacts, _result.totalContacts);
         statusIcon = Icons.import_export;
         break;
       case ContactBackupStatus.uploading:
-        statusColor = Colors.orange;
+        statusColor = PfmColors.warning;
         statusText = al.contactBackup_statusUploading;
         statusIcon = Icons.cloud_upload;
         break;
       case ContactBackupStatus.completed:
-        statusColor = Colors.green;
+        statusColor = PfmColors.success;
         statusText = al.contactBackup_statusCompleted;
         statusIcon = Icons.check_circle;
         break;
       case ContactBackupStatus.skipped:
-        statusColor = Colors.green;
+        statusColor = PfmColors.success;
         statusText = al.contactBackup_statusSkipped;
         statusIcon = Icons.check_circle_outline;
         break;
       case ContactBackupStatus.error:
-        statusColor = Colors.red;
+        statusColor = PfmColors.error;
         statusText = al.contactBackup_statusFailed;
         statusIcon = Icons.error_outline;
         break;
       case ContactBackupStatus.noPermission:
-        statusColor = Colors.red;
+        statusColor = PfmColors.error;
         statusText = al.contactBackup_needPermission;
         statusIcon = Icons.lock_outline;
         break;
@@ -220,7 +221,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: PfmColors.lightTextSecondary,
                           ),
                         ),
                       ],
@@ -230,7 +231,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           al.contactBackup_totalContacts(_result.totalContacts),
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: PfmColors.lightTextSecondary,
                           ),
                         ),
                       ],
@@ -253,7 +254,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
               ),
             ],
           ],
@@ -273,13 +274,13 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue[700]),
+                Icon(Icons.info_outline, color: PfmColors.primary),
                 const SizedBox(width: 8),
                 Text(
                   al.contactBackup_instructions,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue[700],
+                    color: PfmColors.primary,
                   ),
                 ),
               ],
@@ -307,13 +308,13 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.description_outlined, color: Colors.grey[700]),
+                Icon(Icons.description_outlined, color: PfmColors.lightTextSecondary),
                 const SizedBox(width: 8),
                 Text(
                   al.contactBackup_howToRestore,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
+                    color: PfmColors.lightTextSecondary,
                   ),
                 ),
               ],
@@ -325,7 +326,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
             const SizedBox(height: 8),
             Text(
               al.contactRestore_supportedPlatforms,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
             ),
           ],
         ),

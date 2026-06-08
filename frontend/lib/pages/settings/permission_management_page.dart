@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:pfm/design/design_tokens.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/proto/native/permission.pb.dart';
 import 'package:pfm/proto/native/file.pb.dart';
@@ -14,6 +16,7 @@ class PermissionManagementPage extends StatefulWidget {
 }
 
 class _PermissionManagementPageState extends State<PermissionManagementPage> {
+  late AppLocalizations al;
   final FmRepository _repo = FmRepository();
 
   List<CasdoorUserInfo> _users = [];
@@ -45,15 +48,16 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('权限管理'),
+        title: Text(al.permission_title),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadUsers,
-            tooltip: '刷新',
+            tooltip: al.permission_refresh,
           ),
         ],
       ),
@@ -70,9 +74,9 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            Text(_errorMessage!, style: const TextStyle(color: PfmColors.error)),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadUsers, child: const Text('重试')),
+            ElevatedButton(onPressed: _loadUsers, child: Text(al.permission_retry)),
           ],
         ),
       );
@@ -87,7 +91,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
         return ListTile(
           leading: CircleAvatar(
             backgroundColor:
-                hasRole ? Theme.of(context).colorScheme.primary : Colors.grey,
+                hasRole ? Theme.of(context).colorScheme.primary : PfmColors.lightTextMuted,
             child: Text(
               user.userId.isNotEmpty ? user.userId[0].toUpperCase() : '?',
               style:
@@ -113,8 +117,8 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
                       .toList(),
                 )
               else
-                const Text('无角色',
-                    style: TextStyle(fontSize: 12, color: Colors.orange)),
+                Text(al.permission_noRoles,
+                    style: TextStyle(fontSize: 12, color: PfmColors.warning)),
             ],
           ),
           trailing: const Icon(Icons.chevron_right),
@@ -143,6 +147,7 @@ class UserPermissionDetailPage extends StatefulWidget {
 }
 
 class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
+  late AppLocalizations al;
   final FmRepository _repo = FmRepository();
   List<DirectoryPermissionInfo> _permissions = [];
   bool _isLoading = false;
@@ -192,13 +197,13 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
       _loadPermissions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('授权成功')),
+          SnackBar(content: Text(al.permission_grantSuccess)),
         );
       }
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('授权失败: ${grantResult.message}')),
+          SnackBar(content: Text('${al.permission_grantFailed}: ${grantResult.message}')),
         );
       }
     }
@@ -208,17 +213,17 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认撤销'),
-        content: Text('确定撤销 ${perm.fileName} 的权限？'),
+        title: Text(al.permission_confirmRevoke),
+        content: Text(al.permission_confirmRevokeMsg(perm.fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context).common_cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('撤销'),
+            style: ElevatedButton.styleFrom(backgroundColor: PfmColors.error),
+            child: Text(al.permission_revoke),
           ),
         ],
       ),
@@ -235,13 +240,13 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
       _loadPermissions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('权限已撤销')),
+          SnackBar(content: Text(al.permission_revokeSuccess)),
         );
       }
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('撤销失败: ${result.message}')),
+          SnackBar(content: Text('${al.permission_revokeFailed}: ${result.message}')),
         );
       }
     }
@@ -250,17 +255,17 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
   String _permName(int perm) {
     switch (perm) {
       case permRead:
-        return '读取';
+        return al.permission_read;
       case permUpload:
-        return '上传';
+        return al.permission_upload;
       case permMkdir:
-        return '创建目录';
+        return al.permission_createDir;
       case permDelete:
-        return '删除';
+        return al.permission_delete;
       case permMove:
-        return '移动';
+        return al.permission_move;
       case permRename:
-        return '重命名';
+        return al.permission_rename;
       default:
         return '未知';
     }
@@ -279,6 +284,7 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    al = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.user.userId),
@@ -287,14 +293,14 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openGrantFlow,
         icon: const Icon(Icons.add),
-        label: const Text('授权'),
+        label: Text(al.permission_grant),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _permissions.isEmpty
-              ? const Center(
-                  child: Text('暂无目录权限',
-                      style: TextStyle(color: Colors.grey, fontSize: 16)))
+              ? Center(
+                  child: Text(al.permission_noDirPermissions,
+                      style: TextStyle(color: PfmColors.lightTextMuted, fontSize: 16)))
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
                   itemCount: _permissions.length,
@@ -322,7 +328,7 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
                             if (perm.filePath.isNotEmpty)
                               Text(perm.filePath,
                                   style: TextStyle(
-                                      fontSize: 12, color: Colors.grey[600])),
+                                      fontSize: 12, color: PfmColors.lightTextSecondary)),
                             const SizedBox(height: 4),
                             Wrap(
                               spacing: 4,
@@ -344,7 +350,7 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
                           ],
                         ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
+                          icon: const Icon(Icons.delete, color: PfmColors.error),
                           onPressed: () => _revokePermission(perm),
                           tooltip: '撤销',
                         ),
@@ -375,8 +381,8 @@ class DirectoryPickerPage extends StatefulWidget {
 }
 
 class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
-  // 面包屑
-  final List<_Crumb> _crumbs = [_Crumb(id: '', name: '根目录')];
+  late AppLocalizations al;
+  late List<_Crumb> _crumbs;
 
   List<File> _folders = [];
   bool _isLoading = false;
@@ -402,6 +408,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
   @override
   void initState() {
     super.initState();
+    _crumbs = [_Crumb(id: '', name: 'Root')];  // Will be localized in build
     _loadFolders('');
   }
 
@@ -463,9 +470,13 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
 
   @override
   Widget build(BuildContext context) {
+    al = AppLocalizations.of(context)!;
+    if (_crumbs.isEmpty) {
+      _crumbs = [_Crumb(id: '', name: al.permission_rootDirectory)];
+    }
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isRoot ? '选择目录' : _currentName),
+        title: Text(_isRoot ? al.permission_selectDirectory : _currentName),
         centerTitle: true,
       ),
       // 底部操作栏
@@ -496,7 +507,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
             if (_crumbs.length > 1)
               Text(
                 _crumbs.map((c) => c.name).join(' / '),
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
               ),
             const SizedBox(height: 8),
             // 权限
@@ -504,12 +515,12 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
               spacing: 6,
               runSpacing: 4,
               children: [
-                _chip('读取', permRead),
-                _chip('上传', permUpload),
-                _chip('创建目录', permMkdir),
-                _chip('删除', permDelete),
-                _chip('移动', permMove),
-                _chip('重命名', permRename),
+                _chip(al.permission_read, permRead),
+                _chip(al.permission_upload, permUpload),
+                _chip(al.permission_createDir, permMkdir),
+                _chip(al.permission_delete, permDelete),
+                _chip(al.permission_move, permMove),
+                _chip(al.permission_rename, permRename),
               ],
             ),
             const SizedBox(height: 8),
@@ -517,8 +528,8 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
             TextField(
               controller: _aliasController,
               decoration: InputDecoration(
-                labelText: '别名（可选，解决同名冲突）',
-                hintText: '留空则使用目录名',
+                labelText: al.permission_aliasLabel,
+                hintText: al.permission_aliasHint,
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -534,7 +545,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(44),
               ),
-              child: const Text('选择此目录并授权'),
+              child: Text(al.permission_selectAndGrant),
             ),
           ],
         ),
@@ -556,7 +567,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                   for (int i = 0; i < _crumbs.length; i++) ...[
                     if (i > 0)
                       const Icon(Icons.chevron_right,
-                          size: 16, color: Colors.grey),
+                          size: 16, color: PfmColors.lightTextMuted),
                     InkWell(
                       onTap: () => _goTo(i),
                       child: Text(
@@ -565,7 +576,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                           fontSize: 13,
                           color: i == _crumbs.length - 1
                               ? Theme.of(context).colorScheme.primary
-                              : Colors.grey[700],
+                              : PfmColors.lightTextSecondary,
                           fontWeight: i == _crumbs.length - 1
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -582,19 +593,19 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _folders.isEmpty
-                    ? const Center(
-                        child: Text('此目录下没有子文件夹',
-                            style: TextStyle(color: Colors.grey)))
+                    ? Center(
+                        child: Text(al.permission_noSubfolders,
+                            style: TextStyle(color: PfmColors.lightTextMuted)))
                     : ListView.builder(
                         itemCount: _folders.length,
                         itemBuilder: (context, index) {
                           final folder = _folders[index];
                           return ListTile(
                             leading: Icon(Icons.folder,
-                                color: Colors.amber[700]),
+                                color: PfmColors.warning),
                             title: Text(folder.name),
                             trailing: const Icon(Icons.chevron_right,
-                                color: Colors.grey),
+                                color: PfmColors.lightTextMuted),
                             onTap: () => _enter(folder),
                           );
                         },

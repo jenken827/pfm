@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PFM - Clean Minimal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #fafafa;
+    --bg-card: #ffffff;
+    --bg-hover: #f5f5f5;
+    --bg-active: #f0f0f0;
+    --fg: #1a1a1a;
+    --fg-secondary: #666;
+    --fg-muted: #999;
+    --border: #e8e8e8;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --accent-fg: #ffffff;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+    --nav-width: 72px;
+    --nav-rail-width: 220px;
+  }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* === Layout === */
+  .app { display: flex; height: 100vh; }
+  .nav-rail {
+    width: var(--nav-rail-width);
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 12px;
+    flex-shrink: 0;
+  }
+  .main { flex: 1; overflow-y: auto; padding: 32px 40px; }
+
+  /* === Nav === */
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    margin-bottom: 32px;
+  }
+  .nav-logo-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 16px;
+  }
+  .nav-logo-text { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+  .nav-section { margin-bottom: 24px; }
+  .nav-section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--fg-muted);
+    padding: 0 12px; margin-bottom: 8px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: all 0.15s;
+    font-size: 14px; font-weight: 500; color: var(--fg-secondary);
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--bg-hover); color: var(--fg); }
+  .nav-item.active { background: var(--accent-light); color: var(--accent); }
+  .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .nav-spacer { flex: 1; }
+  .nav-user {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px; border-top: 1px solid var(--border);
+    margin-top: auto;
+  }
+  .nav-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 600; font-size: 14px;
+  }
+  .nav-user-info { flex: 1; min-width: 0; }
+  .nav-user-name { font-weight: 600; font-size: 13px; }
+  .nav-user-email { font-size: 12px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* === Header === */
+  .page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 32px;
+  }
+  .page-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-subtitle { font-size: 14px; color: var(--fg-secondary); margin-top: 4px; }
+  .header-actions { display: flex; gap: 8px; }
+
+  /* === Buttons === */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    border: none; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: var(--bg-card); color: var(--fg); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--bg-hover); }
+  .btn-ghost { background: transparent; color: var(--fg-secondary); }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--fg); }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-icon { padding: 8px; }
+
+  /* === Stats Cards === */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    transition: all 0.15s;
+  }
+  .stat-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+  .stat-label { font-size: 12px; color: var(--fg-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; letter-spacing: -0.5px; }
+  .stat-change { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+  .stat-change.up { color: var(--success); }
+  .stat-change.down { color: var(--error); }
+
+  /* === Section === */
+  .section { margin-bottom: 32px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-size: 16px; font-weight: 600; }
+
+  /* === File Grid === */
+  .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .file-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .file-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .file-icon {
+    width: 48px; height: 48px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px; font-size: 24px;
+  }
+  .file-icon.folder { background: #dbeafe; color: #2563eb; }
+  .file-icon.image { background: #fce7f3; color: #db2777; }
+  .file-icon.doc { background: #d1fae5; color: #059669; }
+  .file-icon.video { background: #ede9fe; color: #7c3aed; }
+  .file-icon.archive { background: #fef3c7; color: #d97706; }
+  .file-name { font-size: 13px; font-weight: 500; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { font-size: 12px; color: var(--fg-muted); }
+
+  /* === Recent Files Table === */
+  .file-table { width: 100%; border-collapse: collapse; }
+  .file-table th {
+    text-align: left; padding: 10px 16px;
+    font-size: 12px; font-weight: 500; color: var(--fg-muted);
+    text-transform: uppercase; letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .file-table tr:hover td { background: var(--bg-hover); }
+  .file-table .file-row { cursor: pointer; }
+  .file-table .file-row-icon { width: 32px; height: 32px; border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .file-table .file-row-name { display: flex; align-items: center; gap: 12px; }
+  .file-table .file-row-name span { font-weight: 500; }
+
+  /* === Quick Actions === */
+  .quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 32px; }
+  .quick-action {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .quick-action:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+  .quick-action-icon {
+    width: 44px; height: 44px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .quick-action-icon.upload { background: #dbeafe; color: #2563eb; }
+  .quick-action-icon.backup { background: #d1fae5; color: #059669; }
+  .quick-action-icon.share { background: #ede9fe; color: #7c3aed; }
+  .quick-action-title { font-size: 14px; font-weight: 600; }
+  .quick-action-desc { font-size: 12px; color: var(--fg-secondary); margin-top: 2px; }
+
+  /* === Storage Usage === */
+  .storage-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .storage-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .storage-title { font-size: 14px; font-weight: 600; }
+  .storage-value { font-size: 13px; color: var(--fg-secondary); }
+  .storage-bar { height: 8px; background: var(--bg-active); border-radius: 4px; overflow: hidden; margin-bottom: 16px; }
+  .storage-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .storage-providers { display: flex; flex-direction: column; gap: 12px; }
+  .storage-provider { display: flex; align-items: center; gap: 12px; }
+  .storage-provider-icon { width: 32px; height: 32px; border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .storage-provider-info { flex: 1; }
+  .storage-provider-name { font-size: 13px; font-weight: 500; }
+  .storage-provider-usage { font-size: 12px; color: var(--fg-muted); }
+  .storage-provider-bar { height: 4px; background: var(--bg-active); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .storage-provider-bar-fill { height: 100%; border-radius: 2px; }
+
+  /* === Responsive === */
+  @media (max-width: 768px) {
+    .nav-rail { display: none; }
+    .main { padding: 20px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .quick-actions { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Navigation Rail -->
+  <nav class="nav-rail">
+    <div class="nav-logo">
+      <div class="nav-logo-icon">P</div>
+      <div class="nav-logo-text">PFM</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">主菜单</div>
+      <a class="nav-item active" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        文件
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        传输
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">管理</div>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        备份
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        存储
+      </a>
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        权限
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      设置
+    </a>
+
+    <div class="nav-user">
+      <div class="nav-avatar">K</div>
+      <div class="nav-user-info">
+        <div class="nav-user-name">ken json</div>
+        <div class="nav-user-email">ken@example.com</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">首页</div>
+        <div class="page-subtitle">欢迎回来，ken json</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          上传
+        </button>
+        <button class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">总文件数</div>
+        <div class="stat-value">1,234</div>
+        <div class="stat-change up">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+          +12 本周
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">存储使用</div>
+        <div class="stat-value">45.2 GB</div>
+        <div class="stat-change">/ 100 GB</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">传输中</div>
+        <div class="stat-value">3</div>
+        <div class="stat-change">2 上传 · 1 下载</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">备份状态</div>
+        <div class="stat-value" style="color: var(--success);">正常</div>
+        <div class="stat-change">上次: 2 小时前</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">快捷操作</div>
+      </div>
+      <div class="quick-actions">
+        <div class="quick-action">
+          <div class="quick-action-icon upload">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div>
+            <div class="quick-action-title">上传文件</div>
+            <div class="quick-action-desc">从本地选择文件上传</div>
+          </div>
+        </div>
+        <div class="quick-action">
+          <div class="quick-action-icon backup">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div class="quick-action-title">立即备份</div>
+            <div class="quick-action-desc">触发手动备份任务</div>
+          </div>
+        </div>
+        <div class="quick-action">
+          <div class="quick-action-icon share">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </div>
+          <div>
+            <div class="quick-action-title">分享文件</div>
+            <div class="quick-action-desc">创建分享链接</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Files -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">最近文件</div>
+        <button class="btn btn-ghost">查看全部 →</button>
+      </div>
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>文件名</th>
+              <th>大小</th>
+              <th>修改时间</th>
+              <th>位置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="file-row">
+              <td>
+                <div class="file-row-name">
+                  <div class="file-row-icon" style="background: #dbeafe; color: #2563eb;">📁</div>
+                  <span>项目文档</span>
+                </div>
+              </td>
+              <td style="color: var(--fg-secondary);">—</td>
+              <td style="color: var(--fg-secondary);">今天 14:30</td>
+              <td style="color: var(--fg-secondary);">根目录</td>
+            </tr>
+            <tr class="file-row">
+              <td>
+                <div class="file-row-name">
+                  <div class="file-row-icon" style="background: #fce7f3; color: #db2777;">🖼️</div>
+                  <span>设计稿-v3.fig</span>
+                </div>
+              </td>
+              <td style="color: var(--fg-secondary);">24.5 MB</td>
+              <td style="color: var(--fg-secondary);">今天 11:20</td>
+              <td style="color: var(--fg-secondary);">项目文档</td>
+            </tr>
+            <tr class="file-row">
+              <td>
+                <div class="file-row-name">
+                  <div class="file-row-icon" style="background: #d1fae5; color: #059669;">📄</div>
+                  <span>会议纪要-0607.md</span>
+                </div>
+              </td>
+              <td style="color: var(--fg-secondary);">12 KB</td>
+              <td style="color: var(--fg-secondary);">昨天 18:45</td>
+              <td style="color: var(--fg-secondary);">项目文档</td>
+            </tr>
+            <tr class="file-row">
+              <td>
+                <div class="file-row-name">
+                  <div class="file-row-icon" style="background: #ede9fe; color: #7c3aed;">🎬</div>
+                  <span>演示视频.mp4</span>
+                </div>
+              </td>
+              <td style="color: var(--fg-secondary);">156 MB</td>
+              <td style="color: var(--fg-secondary);">昨天 10:15</td>
+              <td style="color: var(--fg-secondary);">媒体</td>
+            </tr>
+            <tr class="file-row">
+              <td>
+                <div class="file-row-name">
+                  <div class="file-row-icon" style="background: #fef3c7; color: #d97706;">📦</div>
+                  <span>backup-20260606.zip</span>
+                </div>
+              </td>
+              <td style="color: var(--fg-secondary);">2.3 GB</td>
+              <td style="color: var(--fg-secondary);">6月6日</td>
+              <td style="color: var(--fg-secondary);">备份</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Storage -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">存储空间</div>
+        <button class="btn btn-ghost">管理 →</button>
+      </div>
+      <div class="storage-card">
+        <div class="storage-header">
+          <div class="storage-title">总用量</div>
+          <div class="storage-value">45.2 GB / 100 GB</div>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-bar-fill" style="width: 45%; background: linear-gradient(90deg, var(--accent), #818cf8);"></div>
+        </div>
+        <div class="storage-providers">
+          <div class="storage-provider">
+            <div class="storage-provider-icon" style="background: #dbeafe; color: #2563eb;">💾</div>
+            <div class="storage-provider-info">
+              <div class="storage-provider-name">本地存储</div>
+              <div class="storage-provider-usage">12.3 GB / 50 GB</div>
+              <div class="storage-provider-bar">
+                <div class="storage-provider-bar-fill" style="width: 25%; background: var(--accent);"></div>
+              </div>
+            </div>
+          </div>
+          <div class="storage-provider">
+            <div class="storage-provider-icon" style="background: #dbeafe; color: #2563eb;">☁️</div>
+            <div class="storage-provider-info">
+              <div class="storage-provider-name">Telegram</div>
+              <div class="storage-provider-usage">18.7 GB / ∞</div>
+              <div class="storage-provider-bar">
+                <div class="storage-provider-bar-fill" style="width: 15%; background: #818cf8;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="storage-provider">
+            <div class="storage-provider-icon" style="background: #d1fae5; color: #059669;">☁️</div>
+            <div class="storage-provider-info">
+              <div class="storage-provider-name">百度网盘</div>
+              <div class="storage-provider-usage">14.2 GB / 1 TB</div>
+              <div class="storage-provider-bar">
+                <div class="storage-provider-bar-fill" style="width: 1%; background: var(--success);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

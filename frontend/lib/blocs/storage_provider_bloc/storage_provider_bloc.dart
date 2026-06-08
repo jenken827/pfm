@@ -88,6 +88,7 @@ class StorageProviderBloc
       encryptionSuffix: event.encryptionSuffix,
       defaultBound: event.defaultBound,
       proxy: event.proxy,
+      maxConcurrentUploads: event.maxConcurrentUploads,
     );
 
     if (result.success) {
@@ -117,6 +118,7 @@ class StorageProviderBloc
       fileSizeLimit: event.fileSizeLimit,
       defaultBound: event.defaultBound,
       proxy: event.proxy,
+      maxConcurrentUploads: event.maxConcurrentUploads,
     );
 
     if (result.success) {

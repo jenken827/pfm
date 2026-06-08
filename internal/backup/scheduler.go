@@ -452,29 +452,59 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 	for _, part := range parts {
 		existing, err := db.GetFileByParentAndName(currentParentID, part)
 		if err == nil && existing != nil {
-			// 检查已存在目录的加密属性是否需要继承更新
+			// 检查已存在目录的属性是否需要从父目录继承更新
 			parentDir, err := db.GetFileByID(currentParentID)
-			if err == nil && parentDir != nil && parentDir.EnableEncryption != nil &&
-				(existing.EnableEncryption == nil || *existing.EnableEncryption != *parentDir.EnableEncryption) {
-				llog.L().Infof("ensureDirStructure: updating folder '%s' encryption from %v to %v",
-					part, existing.EnableEncryption, parentDir.EnableEncryption)
-				existing.EnableEncryption = parentDir.EnableEncryption
-				db.UpdateFile(existing, []string{"enable_encryption"})
+			if err == nil && parentDir != nil {
+				var fieldsToUpdate []string
+
+				// 检查加密属性
+				if parentDir.EnableEncryption != nil &&
+					(existing.EnableEncryption == nil || *existing.EnableEncryption != *parentDir.EnableEncryption) {
+					llog.L().Infof("ensureDirStructure: updating folder '%s' encryption from %v to %v",
+						part, existing.EnableEncryption, parentDir.EnableEncryption)
+					existing.EnableEncryption = parentDir.EnableEncryption
+					fieldsToUpdate = append(fieldsToUpdate, "enable_encryption")
+				}
+
+				// 检查绑定的存储提供者
+				if parentDir.BoundProviderIds != nil && *parentDir.BoundProviderIds != "" && *parentDir.BoundProviderIds != "[]" &&
+					(existing.BoundProviderIds == nil || *existing.BoundProviderIds == "" || *existing.BoundProviderIds == "[]") {
+					existingProviders := ""
+					if existing.BoundProviderIds != nil {
+						existingProviders = *existing.BoundProviderIds
+					}
+					llog.L().Infof("ensureDirStructure: updating folder '%s' providers from '%s' to '%s'",
+						part, existingProviders, *parentDir.BoundProviderIds)
+					existing.BoundProviderIds = parentDir.BoundProviderIds
+					fieldsToUpdate = append(fieldsToUpdate, "bound_provider_ids")
+				}
+
+				if len(fieldsToUpdate) > 0 {
+					db.UpdateFile(existing, fieldsToUpdate)
+				}
 			}
 			currentParentID = *existing.Id
 			continue
 		}
 
-		// 从当前父目录获取加密设置（逐层继承）
+		// 从当前父目录获取加密设置和绑定的存储提供者（逐层继承）
 		var parentEncrypt *bool
+		var parentProviders *string
 		parentDir, err := db.GetFileByID(currentParentID)
-		if err == nil && parentDir != nil && parentDir.EnableEncryption != nil {
-			parentEncrypt = parentDir.EnableEncryption
-			llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=%v, parentID=%s",
-				part, *parentEncrypt, currentParentID)
-		} else {
-			llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
-				part, currentParentID)
+		if err == nil && parentDir != nil {
+			if parentDir.EnableEncryption != nil {
+				parentEncrypt = parentDir.EnableEncryption
+				llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=%v, parentID=%s",
+					part, *parentEncrypt, currentParentID)
+			} else {
+				llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
+					part, currentParentID)
+			}
+			if parentDir.BoundProviderIds != nil && *parentDir.BoundProviderIds != "" && *parentDir.BoundProviderIds != "[]" {
+				parentProviders = parentDir.BoundProviderIds
+				llog.L().Infof("ensureDirStructure: creating folder '%s', parent providers=%s, parentID=%s",
+					part, *parentProviders, currentParentID)
+			}
 		}
 
 		newDir := &native.FileORM{
@@ -482,7 +512,8 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 			ParentId:         &currentParentID,
 			Type:             utils.EnumPtr(native.FileType_FOLDER),
 			IsReady:          utils.BoolPtr(true),
-			EnableEncryption: parentEncrypt, // 继承父目录的加密属性
+			EnableEncryption: parentEncrypt,  // 继承父目录的加密属性
+			BoundProviderIds: parentProviders, // 继承父目录绑定的存储提供者
 		}
 		if err := db.CreateFile(newDir); err != nil {
 			// 并发竞态：其他 goroutine 可能刚创建了同一目录，重试查找

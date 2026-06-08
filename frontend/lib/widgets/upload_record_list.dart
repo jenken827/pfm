@@ -7,6 +7,8 @@ import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/upload.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/utils/format.dart';
+import 'package:pfm/design/design_tokens.dart';
+import 'package:pfm/design/components/components.dart';
 import 'package:pfm/widgets/upload_record_detail_dialog.dart';
 
 /// 上传记录列表
@@ -164,47 +166,56 @@ class _UploadRecordListState extends State<UploadRecordList> {
     }
 
     if (_errorMessage != null) {
+      final colorScheme = Theme.of(context).colorScheme;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('${al.uploadRecord_loadFailed}: $_errorMessage'),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadRecords, child: Text(al.common_retry)),
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(color: PfmColors.errorSurface, borderRadius: BorderRadius.circular(PfmRadius.xl)),
+              child: const Icon(Icons.error_outline, size: 32, color: PfmColors.error),
+            ),
+            const SizedBox(height: PfmSpacing.lg),
+            Text(al.uploadRecord_loadFailed, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurface)),
+            const SizedBox(height: PfmSpacing.lg),
+            ElevatedButton.icon(onPressed: _loadRecords, icon: const Icon(Icons.refresh, size: 18), label: Text(al.common_retry)),
           ],
         ),
       );
     }
 
     if (_records.isEmpty) {
-      return Center(child: Text(al.uploadRecord_noRecords));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(color: PfmColors.archiveSurface, borderRadius: BorderRadius.circular(PfmRadius.xl)),
+              child: const Icon(Icons.history, size: 40, color: PfmColors.archive),
+            ),
+            const SizedBox(height: PfmSpacing.xl),
+            Text(al.uploadRecord_noRecords, style: PfmTypography.titleMedium.copyWith(color: Theme.of(context).colorScheme.onSurface)),
+          ],
+        ),
+      );
     }
 
     return Column(
       children: [
         // 批量操作菜单
         _buildActionBar(al),
-        // 提示信息
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           child: Row(
             children: [
-              Icon(
-                Icons.info_outline,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
+              Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: PfmSpacing.sm),
               Expanded(
-                child: Text(
-                  al.uploadRecord_recordsHint,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                child: Text(al.uploadRecord_recordsHint, style: PfmTypography.labelSmall.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             ],
           ),
@@ -235,34 +246,22 @@ class _UploadRecordListState extends State<UploadRecordList> {
   }
 
   Widget _buildActionBar(AppLocalizations al) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.sm),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
-          // 统计信息
-          Text(
-            al.uploadRecord_total(_total),
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text(al.uploadRecord_total(_total), style: PfmTypography.labelMedium.copyWith(color: colorScheme.onSurfaceVariant)),
           if (_failedCount > 0) ...[
-            const SizedBox(width: 8),
-            Text(
-              al.uploadRecord_failedCount(_failedCount),
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.error,
-              ),
+            const SizedBox(width: PfmSpacing.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
+              decoration: BoxDecoration(color: PfmColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
+              child: Text(al.uploadRecord_failedCount(_failedCount), style: PfmTypography.labelSmall.copyWith(color: PfmColors.error)),
             ),
           ],
           const Spacer(),
@@ -287,25 +286,13 @@ class _UploadRecordListState extends State<UploadRecordList> {
     final al = AppLocalizations.of(context)!;
     if (_failedCount == 0) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(al.uploadRecord_retryFailedTitle),
-        content: Text(al.uploadRecord_retryFailedConfirm(_failedCount)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(al.common_cancel),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(al.uploadRecord_retry),
-          ),
-        ],
-      ),
+    final confirmed = await PfmDialogs.confirm(
+      context,
+      title: al.uploadRecord_retryFailedTitle,
+      message: al.uploadRecord_retryFailedConfirm(_failedCount),
+      confirmLabel: al.uploadRecord_retry,
     );
-
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     final repository = context.read<FmRepository>();
     final result = await repository.retryAllFailedUploadRecords();
@@ -325,37 +312,36 @@ class _UploadRecordListState extends State<UploadRecordList> {
   }
 
   Widget _buildRecordTile(AppLocalizations al, UploadRecordInfo record) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ListTile(
-      leading: Icon(
-        Icons.insert_drive_file,
-        color: Theme.of(context).primaryColor,
+      leading: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(color: PfmColors.primarySurface, borderRadius: BorderRadius.circular(PfmRadius.sm)),
+        child: const Icon(Icons.insert_drive_file, color: PfmColors.primary, size: 20),
       ),
-      title: Text(record.fileName),
+      title: Text(record.fileName, style: TextStyle(color: colorScheme.onSurface)),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(formatCapacityString(record.fileSize.toInt())),
+          Text(formatCapacityString(record.fileSize.toInt()), style: TextStyle(color: colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
                 decoration: BoxDecoration(
                   color: _getStatusColor(record.status).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(PfmRadius.full),
                 ),
                 child: Text(
                   _getStatusText(al, record.status),
-                  style: TextStyle(
-                    color: _getStatusColor(record.status),
-                    fontSize: 12,
-                  ),
+                  style: PfmTypography.labelSmall.copyWith(color: _getStatusColor(record.status)),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 al.uploadRecord_target(_getProviderCount(al, record.targetProviderIds)),
-                style: const TextStyle(fontSize: 12),
+                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -428,26 +414,14 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
   Future<void> _deleteRecord(UploadRecordInfo record) async {
     final al = AppLocalizations.of(context)!;
-    // 确认删除
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(al.uploadRecord_confirmDelete),
-        content: Text(al.uploadRecord_confirmDeleteMsg(record.fileName)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(al.common_cancel),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(al.uploadRecord_delete),
-          ),
-        ],
-      ),
+    final confirmed = await PfmDialogs.confirm(
+      context,
+      title: al.uploadRecord_confirmDelete,
+      message: al.uploadRecord_confirmDeleteMsg(record.fileName),
+      confirmLabel: al.uploadRecord_delete,
+      isDestructive: true,
     );
-
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     try {
       final repository = context.read<FmRepository>();

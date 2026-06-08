@@ -6,7 +6,8 @@ import 'package:pfm/models/casdoor.dart';
 import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
-import 'package:pfm/utils/platform.dart';
+import 'package:pfm/design/design_tokens.dart';
+import 'package:pfm/design/components/components.dart';
 
 /// 设置页面
 class SettingPage extends StatefulWidget {
@@ -68,171 +69,228 @@ class _SettingPageState extends State<SettingPage> {
     final casdoorConfig = ls.casdoorConfig;
     final isLoggedIn = ls.isLoggedIn;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < PfmConstraints.mobileBreakpoint;
+
     return Scaffold(
-      appBar: AppBar(title: Text(al.settings_title), centerTitle: true),
-      body: ListView(
-        children: [
-          // 服务器配置信息
-          _SectionHeader(title: al.settings_serverConfig),
-          _SettingsTile(
-            icon: Icons.dns_outlined,
-            title: 'API Server',
-            subtitle: ls.fileServer ?? al.common_notConfigured,
-            onTap: isLoggedIn ? null : () => _showServerConfigDialog(context),
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? PfmSpacing.lg : PfmSpacing.xxxxl,
+            vertical: PfmSpacing.xxl,
           ),
-          const Divider(height: 1),
-          _SettingsTile(
-            icon: Icons.key,
-            title: 'Casdoor',
-            subtitle: casdoorConfig?.serverUrl ?? al.common_notConfigured,
-            onTap: isLoggedIn ? null : () => const LoginCasdoorConfigRoute().push(context),
-          ),
-          const Divider(height: 1),
-          _SettingsTile(
-            icon: Icons.person_outline,
-            title: al.settings_currentUser,
-            subtitle: ls.user?.name ?? al.common_notLoggedIn,
-            onTap: null,
-          ),
-          if (isLoggedIn) ...[
-            const Divider(height: 1),
+          children: [
+            // 页面标题
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.only(bottom: PfmSpacing.xxxl),
               child: Text(
-                al.settings_changeServerHint,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                al.settings_title,
+                style: PfmTypography.displayLarge.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
-          ],
-          const Divider(height: 1),
 
-          const SizedBox(height: 16),
-
-          // 应用设置
-          _SectionHeader(title: al.settings_appSettings),
-          // 主题设置
-          _SettingsTile(
-            icon: Icons.palette_outlined,
-            title: al.settings_themeSetting,
-            subtitle: al.settings_themeSubtitle,
-            onTap: () => const ThemeSettingRoute().push(context),
-          ),
-          const Divider(height: 1),
-
-          // 语言设置
-          _SettingsTile(
-            icon: Icons.language,
-            title: al.settings_languageSetting,
-            subtitle: al.settings_languageSubtitle,
-            onTap: () => _showLanguageDialog(context),
-          ),
-          const Divider(height: 1),
-
-          // 存储介质设置（管理员专用）
-          if (_isAdmin) ...[
-            _SettingsTile(
-              icon: Icons.storage_outlined,
-              title: al.settings_storageProvider,
-              subtitle: al.settings_storageProviderSubtitle,
-              onTap: () => const StorageProviderSettingRoute().push(context),
+            // 服务器配置信息
+            _SectionHeader(title: al.settings_serverConfig),
+            Card(
+              child: Column(
+                children: [
+                  _SettingsTile(
+                    icon: Icons.dns_outlined,
+                    iconBackground: PfmColors.primarySurface,
+                    iconColor: PfmColors.primary,
+                    title: 'API Server',
+                    subtitle: ls.fileServer ?? al.common_notConfigured,
+                    onTap: isLoggedIn ? null : () => _showServerConfigDialog(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.key,
+                    iconBackground: PfmColors.archiveSurface,
+                    iconColor: PfmColors.archive,
+                    title: 'Casdoor',
+                    subtitle: casdoorConfig?.serverUrl ?? al.common_notConfigured,
+                    onTap: isLoggedIn ? null : () => const LoginCasdoorConfigRoute().push(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.person_outline,
+                    iconBackground: PfmColors.documentSurface,
+                    iconColor: PfmColors.document,
+                    title: al.settings_currentUser,
+                    subtitle: ls.user?.name ?? al.common_notLoggedIn,
+                    onTap: null,
+                  ),
+                ],
+              ),
             ),
-            const Divider(height: 1),
-          ],
+            if (isLoggedIn)
+              Padding(
+                padding: const EdgeInsets.only(top: PfmSpacing.sm, left: PfmSpacing.sm),
+                child: Text(
+                  al.settings_changeServerHint,
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
 
-          // 服务端备份（管理员专用）
-          if (_isAdmin) ...[
-            _SettingsTile(
-              icon: Icons.dns_outlined,
-              title: al.settings_serverBackup,
-              subtitle: al.settings_serverBackupSubtitle,
-              onTap: () => const ServerBackupRoute().push(context),
+            const SizedBox(height: PfmSpacing.xxxl),
+
+            // 应用设置
+            _SectionHeader(title: al.settings_appSettings),
+            Card(
+              child: Column(
+                children: [
+                  _SettingsTile(
+                    icon: Icons.palette_outlined,
+                    iconBackground: PfmColors.imageSurface,
+                    iconColor: PfmColors.image,
+                    title: al.settings_themeSetting,
+                    subtitle: al.settings_themeSubtitle,
+                    onTap: () => const ThemeSettingRoute().push(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.language,
+                    iconBackground: PfmColors.primarySurface,
+                    iconColor: PfmColors.primary,
+                    title: al.settings_languageSetting,
+                    subtitle: al.settings_languageSubtitle,
+                    onTap: () => _showLanguageDialog(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.tune_outlined,
+                    iconBackground: PfmColors.videoSurface,
+                    iconColor: PfmColors.video,
+                    title: al.settings_uploadSetting,
+                    subtitle: al.settings_uploadSubtitle,
+                    onTap: () => _showUploadSettingsDialog(context),
+                  ),
+                ],
+              ),
             ),
-            const Divider(height: 1),
-          ],
 
-          // 自动备份
-          _SettingsTile(
-            icon: Icons.phone_android_outlined,
-            title: al.settings_autoBackup,
-            subtitle: al.settings_autoBackupSubtitle,
-            onTap: () => const ClientBackupRoute().push(context),
-          ),
-          const Divider(height: 1),
+            const SizedBox(height: PfmSpacing.xxxl),
 
-          // 相册备份（仅移动端）
-          if (isMobile()) ...[
-            _SettingsTile(
-              icon: Icons.photo_library_outlined,
-              title: al.settings_albumBackup,
-              subtitle: al.settings_albumBackupSubtitle,
-              onTap: () => const AlbumBackupRoute().push(context),
+            // 数据管理
+            _SectionHeader(title: '数据管理'),
+            Card(
+              child: Column(
+                children: [
+                  if (_isAdmin) ...[
+                    _SettingsTile(
+                      icon: Icons.storage_outlined,
+                      iconBackground: PfmColors.primarySurface,
+                      iconColor: PfmColors.primary,
+                      title: al.settings_storageProvider,
+                      subtitle: al.settings_storageProviderSubtitle,
+                      onTap: () => const StorageProviderSettingRoute().push(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.dns_outlined,
+                      iconBackground: PfmColors.successSurface,
+                      iconColor: PfmColors.success,
+                      title: al.settings_serverBackup,
+                      subtitle: al.settings_serverBackupSubtitle,
+                      onTap: () => const ServerBackupRoute().push(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                  ],
+                  _SettingsTile(
+                    icon: Icons.phone_android_outlined,
+                    iconBackground: PfmColors.archiveSurface,
+                    iconColor: PfmColors.archive,
+                    title: al.settings_autoBackup,
+                    subtitle: al.settings_autoBackupSubtitle,
+                    onTap: () => const ClientBackupRoute().push(context),
+                  ),
+                  if (isMobile) ...[
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.photo_library_outlined,
+                      iconBackground: PfmColors.imageSurface,
+                      iconColor: PfmColors.image,
+                      title: al.settings_albumBackup,
+                      subtitle: al.settings_albumBackupSubtitle,
+                      onTap: () => const AlbumBackupRoute().push(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.contacts_outlined,
+                      iconBackground: PfmColors.documentSurface,
+                      iconColor: PfmColors.document,
+                      title: al.settings_contactBackup,
+                      subtitle: al.settings_contactBackupSubtitle,
+                      onTap: () => const ContactBackupRoute().push(context),
+                    ),
+                  ],
+                  if (_isAdmin) ...[
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.security,
+                      iconBackground: PfmColors.errorSurface,
+                      iconColor: PfmColors.error,
+                      title: '权限管理',
+                      subtitle: '管理用户目录权限',
+                      onTap: () => const PermissionManagementRoute().push(context),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            const Divider(height: 1),
-          ],
 
-          // 通讯录备份（仅移动端）
-          if (isMobile()) ...[
-            _SettingsTile(
-              icon: Icons.contacts_outlined,
-              title: al.settings_contactBackup,
-              subtitle: al.settings_contactBackupSubtitle,
-              onTap: () => const ContactBackupRoute().push(context),
+            const SizedBox(height: PfmSpacing.xxxl),
+
+            // 其他
+            _SectionHeader(title: '其他'),
+            Card(
+              child: Column(
+                children: [
+                  _SettingsTile(
+                    icon: Icons.bug_report_outlined,
+                    iconBackground: PfmColors.warningSurface,
+                    iconColor: PfmColors.warning,
+                    title: al.settings_exportLog,
+                    subtitle: al.settings_exportLogSubtitle,
+                    onTap: () => _exportLogs(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
+                    icon: Icons.info_outline,
+                    iconBackground: PfmColors.primarySurface,
+                    iconColor: PfmColors.primary,
+                    title: al.settings_about,
+                    subtitle: al.settings_aboutSubtitle,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AboutPage()),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const Divider(height: 1),
-          ],
 
-          // 权限管理（管理员专用）
-          if (_isAdmin) ...[
-            _SettingsTile(
-              icon: Icons.security,
-              title: '权限管理',
-              subtitle: '管理用户目录权限',
-              onTap: () => const PermissionManagementRoute().push(context),
+            const SizedBox(height: PfmSpacing.xxxl),
+
+            // 退出登录
+            Card(
+              child: _SettingsTile(
+                icon: Icons.logout,
+                iconBackground: PfmColors.errorSurface,
+                iconColor: PfmColors.error,
+                title: al.settings_logout,
+                subtitle: al.settings_logoutSubtitle,
+                onTap: () => _showLogoutDialog(context),
+              ),
             ),
-            const Divider(height: 1),
+
+            const SizedBox(height: PfmSpacing.xxxxl),
           ],
-
-          // 上传设置
-          _SettingsTile(
-            icon: Icons.tune_outlined,
-            title: al.settings_uploadSetting,
-            subtitle: al.settings_uploadSubtitle,
-            onTap: () => _showUploadSettingsDialog(context),
-          ),
-          const Divider(height: 1),
-
-          // 导出日志
-          _SettingsTile(
-            icon: Icons.bug_report_outlined,
-            title: al.settings_exportLog,
-            subtitle: al.settings_exportLogSubtitle,
-            onTap: () => _exportLogs(context),
-          ),
-          const Divider(height: 1),
-
-          // 关于
-          _SettingsTile(
-            icon: Icons.info_outline,
-            title: al.settings_about,
-            subtitle: al.settings_aboutSubtitle,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AboutPage()),
-            ),
-          ),
-          const Divider(height: 1),
-
-          // 退出登录
-          _SettingsTile(
-            icon: Icons.logout,
-            title: al.settings_logout,
-            subtitle: al.settings_logoutSubtitle,
-            iconColor: Theme.of(context).colorScheme.error,
-            onTap: () => _showLogoutDialog(context),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -314,36 +372,22 @@ class _SettingPageState extends State<SettingPage> {
     );
   }
 
-  void _showLogoutDialog(BuildContext context) {
+  void _showLogoutDialog(BuildContext context) async {
     final al = AppLocalizations.of(context)!;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(al.settings_logout),
-        content: Text(al.settings_logoutConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(al.common_cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () async {
-              await GetIt.I.get<LocalStorage>().clearLoginInfo();
-              // 停止所有后台传输任务
-              GetIt.I.get<BackgroundService>().cancelAllTransfers();
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                const LoginRoute().go(context);
-              }
-            },
-            child: const Text('退出'),
-          ),
-        ],
-      ),
+    final confirmed = await PfmDialogs.confirm(
+      context,
+      title: al.settings_logout,
+      message: al.settings_logoutConfirm,
+      confirmLabel: '退出',
+      isDestructive: true,
     );
+    if (confirmed && context.mounted) {
+      await GetIt.I.get<LocalStorage>().clearLoginInfo();
+      GetIt.I.get<BackgroundService>().cancelAllTransfers();
+      if (context.mounted) {
+        const LoginRoute().go(context);
+      }
+    }
   }
 
   void _showUploadSettingsDialog(BuildContext context) {
@@ -491,7 +535,7 @@ class _SettingPageState extends State<SettingPage> {
   }
 }
 
-/// 设置项组件
+/// 设置项组件 - Clean Minimal 风格
 class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
@@ -499,6 +543,7 @@ class _SettingsTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.iconColor,
+    this.iconBackground,
   });
 
   final IconData icon;
@@ -506,20 +551,64 @@ class _SettingsTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onTap;
   final Color? iconColor;
+  final Color? iconBackground;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: iconColor),
-      title: Text(title),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: onTap != null ? const Icon(Icons.chevron_right) : null,
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
       onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBackground ?? colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(PfmRadius.sm),
+              ),
+              child: Icon(icon, color: iconColor ?? colorScheme.onSurfaceVariant, size: 18),
+            ),
+            const SizedBox(width: PfmSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: PfmTypography.bodyLarge.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: PfmSpacing.xs),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PfmTypography.labelSmall.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(Icons.chevron_right, size: 18, color: colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// 分组标题组件
+/// 分组标题组件 - Clean Minimal 风格
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
 
@@ -528,12 +617,11 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.only(bottom: PfmSpacing.md, left: PfmSpacing.xs),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
+        style: PfmTypography.titleSmall.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

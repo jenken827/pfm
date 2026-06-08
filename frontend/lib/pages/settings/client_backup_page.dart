@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/client_backup_bloc/client_backup_bloc.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/models/client_backup_config.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/utils/platform.dart';
@@ -45,10 +46,10 @@ class _ClientBackupPageView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.phone_android_outlined, size: 48, color: Colors.grey[400]),
+                  Icon(Icons.phone_android_outlined, size: 48, color: PfmColors.lightTextMuted),
                   const SizedBox(height: 12),
                   Text(al.clientBackup_noTasks,
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: TextStyle(color: PfmColors.lightTextSecondary)),
                 ],
               ),
             );
@@ -101,7 +102,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
                   size: 20,
                   color: config.enabled
                       ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
+                      : PfmColors.lightTextMuted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -115,7 +116,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
                     label: config.lastBackupCount > 0
                         ? '${config.lastBackupCount} 文件'
                         : al.clientBackup_synced,
-                    color: Colors.green,
+                    color: PfmColors.success,
                   ),
               ],
             ),
@@ -250,12 +251,12 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
+          Icon(icon, size: 14, color: PfmColors.lightTextSecondary),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Colors.grey[700], fontSize: 12),
+              style: TextStyle(color: PfmColors.lightTextSecondary, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

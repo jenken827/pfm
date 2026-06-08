@@ -8,6 +8,7 @@ import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/utils/format.dart';
 import 'package:pfm/utils/platform.dart';
+import 'package:pfm/design/design_tokens.dart';
 
 /// 下载任务列表
 class DownloadTaskList extends StatelessWidget {
@@ -38,27 +39,36 @@ class DownloadTaskList extends StatelessWidget {
 
   Widget _buildEmptyState(BuildContext context) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.cloud_download_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            al.downloadTask_noTasks,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: PfmColors.successSurface,
+              borderRadius: BorderRadius.circular(PfmRadius.xl),
+            ),
+            child: const Icon(
+              Icons.cloud_download_outlined,
+              size: 40,
+              color: PfmColors.success,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: PfmSpacing.xl),
+          Text(
+            al.downloadTask_noTasks,
+            style: PfmTypography.titleMedium.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: PfmSpacing.sm),
           Text(
             al.downloadTask_noTasksHint,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            style: PfmTypography.bodyMedium.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -78,21 +88,25 @@ class _DownloadTaskItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(PfmSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 文件名和状态
             Row(
               children: [
-                Icon(
-                  Icons.insert_drive_file,
-                  color: colorScheme.primary,
-                  size: 24,
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: PfmColors.successSurface,
+                    borderRadius: BorderRadius.circular(PfmRadius.sm),
+                  ),
+                  child: const Icon(Icons.download, color: PfmColors.success, size: 20),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: PfmSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,14 +177,17 @@ class _DownloadTaskItem extends StatelessWidget {
             ],
             // 进度条
             if (task.isDownloading || task.isPaused) ...[
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: task.progress / 100,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(4),
-                minHeight: 6,
+              const SizedBox(height: PfmSpacing.md),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(PfmRadius.full),
+                child: LinearProgressIndicator(
+                  value: task.progress / 100,
+                  backgroundColor: colorScheme.outlineVariant,
+                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  minHeight: 4,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: PfmSpacing.sm),
               Row(
                 children: [
                   Text(
@@ -367,20 +384,15 @@ class _DownloadTaskItem extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      margin: const EdgeInsets.only(right: PfmSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(PfmRadius.full),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
+        style: PfmTypography.labelSmall.copyWith(color: color),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/backup_bloc/backup_bloc.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/proto/native/backup.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -46,10 +47,10 @@ class _ServerBackupPageView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.backup_outlined, size: 48, color: Colors.grey[400]),
+                  Icon(Icons.backup_outlined, size: 48, color: PfmColors.lightTextMuted),
                   const SizedBox(height: 12),
                   Text(al.serverBackup_noTasks,
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: TextStyle(color: PfmColors.lightTextSecondary)),
                 ],
               ),
             );
@@ -105,7 +106,7 @@ class _ServerBackupTaskTile extends StatelessWidget {
                   size: 20,
                   color: task.hasEnabled() && task.enabled
                       ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
+                      : PfmColors.lightTextMuted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -192,13 +193,13 @@ class _ServerBackupTaskTile extends StatelessWidget {
   Color _getStatusColor(BackupRunStatus status) {
     switch (status) {
       case BackupRunStatus.BACKUP_RUN_STATUS_RUNNING:
-        return Colors.blue;
+        return PfmColors.primary;
       case BackupRunStatus.BACKUP_RUN_STATUS_SUCCESS:
-        return Colors.green;
+        return PfmColors.success;
       case BackupRunStatus.BACKUP_RUN_STATUS_FAILED:
-        return Colors.red;
+        return PfmColors.error;
       default:
-        return Colors.grey;
+        return PfmColors.lightTextMuted;
     }
   }
 
@@ -278,12 +279,12 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
+          Icon(icon, size: 14, color: PfmColors.lightTextSecondary),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Colors.grey[700], fontSize: 12),
+              style: TextStyle(color: PfmColors.lightTextSecondary, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -307,19 +308,19 @@ class _StrategyTag extends StatelessWidget {
     switch (strategy) {
       case BackupStrategy.BACKUP_STRATEGY_SCHEDULED:
         label = al.serverBackup_scheduledBackup;
-        color = Colors.blue;
+        color = PfmColors.primary;
         break;
       case BackupStrategy.BACKUP_STRATEGY_WATCH:
         label = al.serverBackup_watchBackup;
-        color = Colors.orange;
+        color = PfmColors.warning;
         break;
       case BackupStrategy.BACKUP_STRATEGY_MANUAL:
         label = al.serverBackup_manualBackup;
-        color = Colors.grey;
+        color = PfmColors.lightTextMuted;
         break;
       default:
         label = al.common_unknown;
-        color = Colors.grey;
+        color = PfmColors.lightTextMuted;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),

@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PFM - Dense Professional</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f0f;
+    --bg-surface: #1a1a1a;
+    --bg-elevated: #242424;
+    --bg-hover: #2a2a2a;
+    --bg-active: #333;
+    --fg: #e8e8e8;
+    --fg-secondary: #a0a0a0;
+    --fg-muted: #666;
+    --border: #2a2a2a;
+    --border-light: #333;
+    --accent: #3b82f6;
+    --accent-dim: #1e3a5f;
+    --accent-fg: #fff;
+    --success: #22c55e;
+    --success-dim: #14532d;
+    --warning: #eab308;
+    --warning-dim: #713f12;
+    --error: #ef4444;
+    --error-dim: #7f1d1d;
+    --radius: 6px;
+    --radius-sm: 4px;
+    --sidebar-width: 200px;
+    --topbar-height: 40px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+    font-size: 13px;
+  }
+
+  /* === Layout === */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .topbar {
+    height: var(--topbar-height);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px; gap: 16px;
+    flex-shrink: 0;
+  }
+  .body { display: flex; flex: 1; overflow: hidden; }
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0; overflow-y: auto;
+  }
+  .main { flex: 1; overflow-y: auto; }
+
+  /* === Topbar === */
+  .topbar-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .topbar-logo-icon {
+    width: 24px; height: 24px; background: var(--accent);
+    border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 12px;
+  }
+  .topbar-search {
+    flex: 1; max-width: 400px; position: relative;
+  }
+  .topbar-search input {
+    width: 100%; padding: 6px 12px 6px 32px;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--fg); font-size: 12px;
+    font-family: inherit; outline: none;
+  }
+  .topbar-search input:focus { border-color: var(--accent); }
+  .topbar-search svg {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: var(--fg-muted);
+  }
+  .topbar-actions { display: flex; gap: 4px; margin-left: auto; }
+  .topbar-btn {
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.1s;
+    background: transparent; border: none; color: var(--fg-secondary);
+  }
+  .topbar-btn:hover { background: var(--bg-hover); color: var(--fg); }
+  .topbar-btn svg { width: 16px; height: 16px; }
+  .topbar-user {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px; border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .topbar-user:hover { background: var(--bg-hover); }
+  .topbar-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 600; font-size: 11px;
+  }
+  .topbar-username { font-size: 12px; font-weight: 500; }
+
+  /* === Sidebar === */
+  .sidebar-section { padding: 8px; }
+  .sidebar-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--fg-muted);
+    padding: 8px 8px 4px;
+  }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: all 0.1s;
+    color: var(--fg-secondary); font-size: 12px; font-weight: 500;
+    text-decoration: none;
+  }
+  .sidebar-item:hover { background: var(--bg-hover); color: var(--fg); }
+  .sidebar-item.active { background: var(--accent-dim); color: var(--accent); }
+  .sidebar-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar-item .badge {
+    margin-left: auto; background: var(--accent); color: white;
+    font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600;
+  }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-storage {
+    padding: 12px; border-top: 1px solid var(--border);
+    margin-top: auto;
+  }
+  .sidebar-storage-label { font-size: 11px; color: var(--fg-muted); margin-bottom: 6px; }
+  .sidebar-storage-bar { height: 4px; background: var(--bg-active); border-radius: 2px; overflow: hidden; }
+  .sidebar-storage-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+  .sidebar-storage-text { font-size: 11px; color: var(--fg-secondary); margin-top: 4px; }
+
+  /* === Main Content === */
+  .content { padding: 20px; }
+  .content-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .content-title { font-size: 18px; font-weight: 700; }
+  .content-actions { display: flex; gap: 4px; }
+
+  /* === Buttons === */
+  .btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.1s;
+    font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary { background: var(--bg-elevated); color: var(--fg); border-color: var(--border-light); }
+  .btn-secondary:hover { background: var(--bg-hover); }
+  .btn-ghost { background: transparent; color: var(--fg-secondary); }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--fg); }
+  .btn svg { width: 14px; height: 14px; }
+  .btn-icon { padding: 5px; }
+
+  /* === Stats Bar === */
+  .stats-bar {
+    display: flex; gap: 1px; margin-bottom: 20px;
+    background: var(--border); border-radius: var(--radius); overflow: hidden;
+  }
+  .stat-cell {
+    flex: 1; background: var(--bg-surface); padding: 12px 16px;
+    display: flex; flex-direction: column;
+  }
+  .stat-label { font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .stat-sub { font-size: 11px; color: var(--fg-secondary); }
+
+  /* === File List === */
+  .file-list-header {
+    display: grid; grid-template-columns: 1fr 80px 120px 100px;
+    padding: 8px 12px; font-size: 11px; font-weight: 500;
+    color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-list-item {
+    display: grid; grid-template-columns: 1fr 80px 120px 100px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.1s;
+    align-items: center;
+  }
+  .file-list-item:hover { background: var(--bg-hover); }
+  .file-list-item.selected { background: var(--accent-dim); }
+  .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .file-icon {
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .file-icon.folder { background: var(--accent-dim); color: var(--accent); }
+  .file-icon.image { background: #4a1942; color: #f472b6; }
+  .file-icon.doc { background: #14532d; color: #4ade80; }
+  .file-icon.video { background: #3b0764; color: #c084fc; }
+  .file-icon.archive { background: #713f12; color: #fbbf24; }
+  .file-name { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-size, .file-date, .file-location { font-size: 11px; color: var(--fg-secondary); }
+
+  /* === Panels === */
+  .panel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .panel-title { font-size: 12px; font-weight: 600; }
+  .panel-body { padding: 12px; }
+
+  /* === Transfer Item === */
+  .transfer-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+  }
+  .transfer-item + .transfer-item { border-top: 1px solid var(--border); }
+  .transfer-icon {
+    width: 24px; height: 24px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .transfer-icon.upload { background: var(--accent-dim); color: var(--accent); }
+  .transfer-icon.download { background: var(--success-dim); color: var(--success); }
+  .transfer-info { flex: 1; min-width: 0; }
+  .transfer-name { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .transfer-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .transfer-bar { flex: 1; height: 3px; background: var(--bg-active); border-radius: 2px; overflow: hidden; }
+  .transfer-bar-fill { height: 100%; border-radius: 2px; }
+  .transfer-bar-fill.upload { background: var(--accent); }
+  .transfer-bar-fill.download { background: var(--success); }
+  .transfer-percent { font-size: 10px; color: var(--fg-muted); }
+
+  /* === Backup Item === */
+  .backup-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+  }
+  .backup-item + .backup-item { border-top: 1px solid var(--border); }
+  .backup-icon {
+    width: 24px; height: 24px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .backup-icon.ok { background: var(--success-dim); color: var(--success); }
+  .backup-icon.warn { background: var(--warning-dim); color: var(--warning); }
+  .backup-info { flex: 1; }
+  .backup-name { font-size: 12px; font-weight: 500; }
+  .backup-time { font-size: 11px; color: var(--fg-muted); }
+
+  /* === Storage Providers === */
+  .provider-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+  }
+  .provider-item + .provider-item { border-top: 1px solid var(--border); }
+  .provider-icon {
+    width: 24px; height: 24px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .provider-info { flex: 1; }
+  .provider-name { font-size: 12px; font-weight: 500; }
+  .provider-usage { font-size: 11px; color: var(--fg-muted); }
+
+  /* === Status Bar === */
+  .statusbar {
+    height: 24px; background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 11px; color: var(--fg-muted); gap: 16px;
+  }
+  .statusbar-item { display: flex; align-items: center; gap: 4px; }
+  .statusbar-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .statusbar-dot.green { background: var(--success); }
+  .statusbar-dot.yellow { background: var(--warning); }
+  .statusbar-spacer { flex: 1; }
+
+  /* === Responsive === */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .panel-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-logo-icon">P</div>
+      <span>PFM</span>
+    </div>
+    <div class="topbar-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="搜索文件... (Ctrl+K)">
+    </div>
+    <div class="topbar-actions">
+      <button class="topbar-btn" title="上传">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </button>
+      <button class="topbar-btn" title="通知">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </button>
+      <button class="topbar-btn" title="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+    <div class="topbar-user">
+      <div class="topbar-avatar">K</div>
+      <span class="topbar-username">ken json</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">导航</div>
+        <a class="sidebar-item active" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          首页
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          文件
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          传输
+          <span class="badge">3</span>
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          回收站
+        </a>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">管理</div>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          备份任务
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          存储管理
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          权限管理
+        </a>
+        <a class="sidebar-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          相册备份
+        </a>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-storage">
+        <div class="sidebar-storage-label">存储空间</div>
+        <div class="sidebar-storage-bar">
+          <div class="sidebar-storage-bar-fill" style="width: 45%;"></div>
+        </div>
+        <div class="sidebar-storage-text">45.2 GB / 100 GB</div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+      <div class="content">
+        <div class="content-header">
+          <div class="content-title">首页</div>
+          <div class="content-actions">
+            <button class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              上传
+            </button>
+            <button class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              新建
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+          <div class="stat-cell">
+            <div class="stat-label">文件总数</div>
+            <div class="stat-value">1,234</div>
+            <div class="stat-sub">+12 本周</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">存储用量</div>
+            <div class="stat-value">45.2 GB</div>
+            <div class="stat-sub">/ 100 GB</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">活跃传输</div>
+            <div class="stat-value">3</div>
+            <div class="stat-sub">2↑ 1↓</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">备份</div>
+            <div class="stat-value" style="color: var(--success);">✓</div>
+            <div class="stat-sub">2h 前</div>
+          </div>
+        </div>
+
+        <!-- Panels Row -->
+        <div class="panel-row">
+          <!-- Transfer Panel -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">传输队列</div>
+              <button class="btn btn-ghost btn-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div class="transfer-item">
+                <div class="transfer-icon upload">↑</div>
+                <div class="transfer-info">
+                  <div class="transfer-name">设计稿-v3.fig</div>
+                  <div class="transfer-progress">
+                    <div class="transfer-bar"><div class="transfer-bar-fill upload" style="width: 67%;"></div></div>
+                    <div class="transfer-percent">67%</div>
+                  </div>
+                </div>
+              </div>
+              <div class="transfer-item">
+                <div class="transfer-icon upload">↑</div>
+                <div class="transfer-info">
+                  <div class="transfer-name">演示视频.mp4</div>
+                  <div class="transfer-progress">
+                    <div class="transfer-bar"><div class="transfer-bar-fill upload" style="width: 23%;"></div></div>
+                    <div class="transfer-percent">23%</div>
+                  </div>
+                </div>
+              </div>
+              <div class="transfer-item">
+                <div class="transfer-icon download">↓</div>
+                <div class="transfer-info">
+                  <div class="transfer-name">backup-20260606.zip</div>
+                  <div class="transfer-progress">
+                    <div class="transfer-bar"><div class="transfer-bar-fill download" style="width: 89%;"></div></div>
+                    <div class="transfer-percent">89%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backup Panel -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">备份状态</div>
+              <button class="btn btn-ghost btn-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              </button>
+            </div>
+            <div class="panel-body">
+              <div class="backup-item">
+                <div class="backup-icon ok">✓</div>
+                <div class="backup-info">
+                  <div class="backup-name">linkding-书签</div>
+                  <div class="backup-time">今天 02:00 · 12 个文件</div>
+                </div>
+              </div>
+              <div class="backup-item">
+                <div class="backup-icon ok">✓</div>
+                <div class="backup-info">
+                  <div class="backup-name">postgres数据库</div>
+                  <div class="backup-time">今天 02:05 · 3 个文件</div>
+                </div>
+              </div>
+              <div class="backup-item">
+                <div class="backup-icon ok">✓</div>
+                <div class="backup-info">
+                  <div class="backup-name">vaultwarden</div>
+                  <div class="backup-time">今天 02:30 · 5 个文件</div>
+                </div>
+              </div>
+              <div class="backup-item">
+                <div class="backup-icon warn">!</div>
+                <div class="backup-info">
+                  <div class="backup-name">obsidian笔记</div>
+                  <div class="backup-time">等待中 · 3:30 执行</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Files -->
+        <div class="panel" style="margin-bottom: 20px;">
+          <div class="panel-header">
+            <div class="panel-title">最近文件</div>
+            <button class="btn btn-ghost">查看全部 →</button>
+          </div>
+          <div class="file-list-header">
+            <span>文件名</span>
+            <span>大小</span>
+            <span>修改时间</span>
+            <span>位置</span>
+          </div>
+          <div class="file-list-item">
+            <div class="file-info">
+              <div class="file-icon folder">📁</div>
+              <div class="file-name">项目文档</div>
+            </div>
+            <div class="file-size">—</div>
+            <div class="file-date">今天 14:30</div>
+            <div class="file-location">根目录</div>
+          </div>
+          <div class="file-list-item">
+            <div class="file-info">
+              <div class="file-icon image">🖼️</div>
+              <div class="file-name">设计稿-v3.fig</div>
+            </div>
+            <div class="file-size">24.5 MB</div>
+            <div class="file-date">今天 11:20</div>
+            <div class="file-location">项目文档</div>
+          </div>
+          <div class="file-list-item">
+            <div class="file-info">
+              <div class="file-icon doc">📄</div>
+              <div class="file-name">会议纪要-0607.md</div>
+            </div>
+            <div class="file-size">12 KB</div>
+            <div class="file-date">昨天 18:45</div>
+            <div class="file-location">项目文档</div>
+          </div>
+          <div class="file-list-item">
+            <div class="file-info">
+              <div class="file-icon video">🎬</div>
+              <div class="file-name">演示视频.mp4</div>
+            </div>
+            <div class="file-size">156 MB</div>
+            <div class="file-date">昨天 10:15</div>
+            <div class="file-location">媒体</div>
+          </div>
+          <div class="file-list-item">
+            <div class="file-info">
+              <div class="file-icon archive">📦</div>
+              <div class="file-name">backup-20260606.zip</div>
+            </div>
+            <div class="file-size">2.3 GB</div>
+            <div class="file-date">6月6日</div>
+            <div class="file-location">备份</div>
+          </div>
+        </div>
+
+        <!-- Storage Providers -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">存储提供者</div>
+            <button class="btn btn-ghost">管理 →</button>
+          </div>
+          <div class="panel-body">
+            <div class="provider-item">
+              <div class="provider-icon" style="background: var(--accent-dim); color: var(--accent);">💾</div>
+              <div class="provider-info">
+                <div class="provider-name">本地存储</div>
+                <div class="provider-usage">12.3 GB / 50 GB</div>
+              </div>
+            </div>
+            <div class="provider-item">
+              <div class="provider-icon" style="background: var(--accent-dim); color: var(--accent);">☁️</div>
+              <div class="provider-info">
+                <div class="provider-name">Telegram</div>
+                <div class="provider-usage">18.7 GB / ∞</div>
+              </div>
+            </div>
+            <div class="provider-item">
+              <div class="provider-icon" style="background: var(--success-dim); color: var(--success);">☁️</div>
+              <div class="provider-info">
+                <div class="provider-name">百度网盘</div>
+                <div class="provider-usage">14.2 GB / 1 TB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="statusbar">
+    <div class="statusbar-item">
+      <div class="statusbar-dot green"></div>
+      已连接
+    </div>
+    <div class="statusbar-item">版本: 20260608-b21e373</div>
+    <div class="statusbar-item">3 个任务待执行</div>
+    <div class="statusbar-spacer"></div>
+    <div class="statusbar-item">1,234 个文件</div>
+    <div class="statusbar-item">45.2 GB 已用</div>
+  </div>
+</div>
+</body>
+</html>

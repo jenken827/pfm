@@ -847,8 +847,7 @@ class FmRepository {
       if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
-      // TODO: maxConcurrentUploads 不在 AddStorageProviderReq 中，需要在 proto 中添加
-      // if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
+      if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
@@ -882,6 +881,7 @@ class FmRepository {
     int? fileSizeLimit,
     bool? defaultBound,
     String? proxy,
+    int? maxConcurrentUploads,
   }) async {
     try {
       final req = UpdateStorageProviderReq(id: id);
@@ -894,6 +894,7 @@ class FmRepository {
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
+      if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',

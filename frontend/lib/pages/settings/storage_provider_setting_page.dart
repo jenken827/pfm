@@ -5,6 +5,7 @@ import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/settings/components/config_field_widget.dart';
 import 'package:pfm/pages/settings/components/storage_provider_tile.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -551,6 +552,10 @@ class _StorageProviderView extends StatelessWidget {
                   final orderValue =
                       int.tryParse(formData['order']?.toString() ?? '0') ?? 0;
 
+                  // 解析最大并发上传数
+                  final maxConcurrentUploads =
+                      int.tryParse(formData['max_concurrent_uploads']?.toString() ?? '0') ?? 0;
+
                   context.read<StorageProviderBloc>().add(
                     provider == null
                         ? StorageProviderAddEvent(
@@ -580,6 +585,7 @@ class _StorageProviderView extends StatelessWidget {
                             proxy: formData['proxy']?.isNotEmpty == true
                                 ? formData['proxy']
                                 : null,
+                            maxConcurrentUploads: maxConcurrentUploads,
                           )
                         : StorageProviderUpdateEvent(
                             id: provider.id.toInt(),
@@ -595,6 +601,7 @@ class _StorageProviderView extends StatelessWidget {
                             fileSizeLimit: fileSizeLimit,
                             defaultBound: formData['default_bound'] as bool?,
                             proxy: formData['proxy'] as String?,
+                            maxConcurrentUploads: maxConcurrentUploads,
                           ),
                   );
 

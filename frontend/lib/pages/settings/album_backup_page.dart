@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/album_backup_service.dart';
 import 'package:pfm/services/local_storage.dart';
@@ -234,42 +235,42 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
     switch (_result.status) {
       case AlbumBackupStatus.idle:
-        statusColor = Colors.grey;
+        statusColor = PfmColors.lightTextMuted;
         statusText = al.albumBackup_statusIdle;
         statusIcon = Icons.cloud_upload_outlined;
         break;
       case AlbumBackupStatus.scanning:
-        statusColor = Colors.blue;
+        statusColor = PfmColors.primary;
         statusText = al.albumBackup_statusScanning;
         statusIcon = Icons.search;
         break;
       case AlbumBackupStatus.uploading:
-        statusColor = Colors.orange;
+        statusColor = PfmColors.warning;
         statusText = al.albumBackup_statusBackingUp(_result.uploadedPhotos, _result.newPhotos);
         statusIcon = Icons.cloud_upload;
         break;
       case AlbumBackupStatus.completed:
-        statusColor = Colors.green;
+        statusColor = PfmColors.success;
         statusText = al.albumBackup_statusCompleted;
         statusIcon = Icons.cloud_done;
         break;
       case AlbumBackupStatus.error:
-        statusColor = Colors.red;
+        statusColor = PfmColors.error;
         statusText = al.albumBackup_statusFailed;
         statusIcon = Icons.error_outline;
         break;
       case AlbumBackupStatus.noPermission:
-        statusColor = Colors.red;
+        statusColor = PfmColors.error;
         statusText = al.albumBackup_needPermission;
         statusIcon = Icons.lock_outline;
         break;
       case AlbumBackupStatus.noNetwork:
-        statusColor = Colors.orange;
+        statusColor = PfmColors.warning;
         statusText = al.albumBackup_noNetwork;
         statusIcon = Icons.wifi_off;
         break;
       case AlbumBackupStatus.waitingForWifi:
-        statusColor = Colors.orange;
+        statusColor = PfmColors.warning;
         statusText = al.albumBackup_waitingWifi;
         statusIcon = Icons.wifi;
         break;
@@ -302,7 +303,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: PfmColors.lightTextSecondary,
                           ),
                         ),
                     ],
@@ -322,7 +323,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.albumBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
               ),
             ],
           ],

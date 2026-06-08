@@ -6,8 +6,9 @@ import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/widgets/download_task_list.dart';
 import 'package:pfm/widgets/upload_task_list.dart';
 import 'package:pfm/widgets/upload_record_list.dart';
+import 'package:pfm/design/design_tokens.dart';
 
-/// 传输页面 - 包含上传和下载标签页
+/// 传输页面 - Clean Minimal 设计
 class TransferPage extends StatefulWidget {
   const TransferPage({super.key});
 
@@ -56,69 +57,133 @@ class _TransferPageState extends State<TransferPage>
   @override
   Widget build(BuildContext context) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < PfmConstraints.mobileBreakpoint;
 
     return BlocProvider.value(
       value: GetIt.I.get<TransferBloc>(),
       child: Builder(
         builder: (context) => Scaffold(
-          appBar: AppBar(
-            title: Text(al.nav_transfer),
-            centerTitle: true,
-            bottom: TabBar(
-              controller: _tabController,
-              tabs: [
-                Tab(
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  text: al.transfer_upload,
-                ),
-                Tab(
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  text: al.transfer_download,
-                ),
-                Tab(
-                  icon: const Icon(Icons.history),
-                  text: al.transfer_cloudUploadRecords,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // 工具栏
+                _buildToolbar(context, al, colorScheme, isMobile),
+                // Tab 栏
+                _buildTabBar(context, al, colorScheme),
+                // 内容
+                Expanded(
+                  child: BlocBuilder<TransferBloc, TransferState>(
+                    buildWhen: (previous, current) =>
+                        previous.currentTab != current.currentTab,
+                    builder: (context, state) {
+                      return TabBarView(
+                        controller: _tabController,
+                        children: [
+                          UploadTaskList(),
+                          DownloadTaskList(),
+                          UploadRecordList(
+                            onRefreshRegistered: (callback) {
+                              _uploadRecordRefreshCallback = callback;
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
-            actions: [
-              // 刷新按钮
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  if (_tabController.index == 2) {
-                    // 云上传记录 Tab
-                    _uploadRecordRefreshCallback?.call();
-                  } else {
-                    context.read<TransferBloc>().add(TransferRefreshEvent());
-                  }
-                },
-                tooltip: al.transfer_refresh,
-              ),
-            ],
-          ),
-          body: BlocBuilder<TransferBloc, TransferState>(
-            buildWhen: (previous, current) =>
-                previous.currentTab != current.currentTab,
-            builder: (context, state) {
-              return TabBarView(
-                controller: _tabController,
-                children: [
-                  // 上传任务列表
-                  UploadTaskList(),
-                  // 下载任务列表
-                  DownloadTaskList(),
-                  // 上传记录列表
-                  UploadRecordList(
-                    onRefreshRegistered: (callback) {
-                      _uploadRecordRefreshCallback = callback;
-                    },
-                  ),
-                ],
-              );
-            },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildToolbar(
+    BuildContext context,
+    AppLocalizations al,
+    ColorScheme colorScheme,
+    bool isMobile,
+  ) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? PfmSpacing.lg : PfmSpacing.xxxxl,
+        vertical: PfmSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            al.nav_transfer,
+            style: PfmTypography.titleLarge.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(
+              Icons.refresh,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onPressed: () {
+              if (_tabController.index == 2) {
+                _uploadRecordRefreshCallback?.call();
+              } else {
+                context.read<TransferBloc>().add(TransferRefreshEvent());
+              }
+            },
+            tooltip: al.transfer_refresh,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar(
+    BuildContext context,
+    AppLocalizations al,
+    ColorScheme colorScheme,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: colorScheme.primary,
+        unselectedLabelColor: colorScheme.onSurfaceVariant,
+        labelStyle: PfmTypography.labelLarge,
+        unselectedLabelStyle: PfmTypography.labelLarge,
+        indicatorColor: colorScheme.primary,
+        indicatorWeight: 2,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: Colors.transparent,
+        tabs: [
+          Tab(
+            icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+            text: al.transfer_upload,
+          ),
+          Tab(
+            icon: const Icon(Icons.cloud_download_outlined, size: 18),
+            text: al.transfer_download,
+          ),
+          Tab(
+            icon: const Icon(Icons.history, size: 18),
+            text: al.transfer_cloudUploadRecords,
+          ),
+        ],
       ),
     );
   }

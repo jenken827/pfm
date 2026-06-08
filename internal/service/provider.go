@@ -60,6 +60,9 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 	if req.Proxy != nil {
 		orm.Proxy = req.Proxy
 	}
+	if req.MaxConcurrentUploads != nil {
+		orm.MaxConcurrentUploads = req.MaxConcurrentUploads
+	}
 
 	err := db.CreateStorageProvider(orm)
 	if err != nil {
@@ -127,6 +130,9 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 	if req.Proxy != nil {
 		orm.Proxy = req.Proxy
 	}
+	if req.MaxConcurrentUploads != nil {
+		orm.MaxConcurrentUploads = req.MaxConcurrentUploads
+	}
 
 	err := db.UpdateStorageProvider(orm)
 	if err != nil {
@@ -140,6 +146,9 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	storage.UpdateStorage(fullOrm)
+
+	// 刷新并发信号量缓存（max_concurrent_uploads 变更后需要重建信号量）
+	storage.RefreshProviderSemaphore(req.GetId())
 
 	return nil
 }

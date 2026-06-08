@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import '../../services/services.dart';
+import 'package:pfm/design/design_tokens.dart';
 
 /// 主题设置页面
 class ThemeSettingPage extends StatelessWidget {
@@ -14,52 +15,73 @@ class ThemeSettingPage extends StatelessWidget {
     final ls = GetIt.I.get<LocalStorage>();
     final theme = Theme.of(context);
 
+    final colorScheme = theme.colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileScreen = screenWidth < PfmConstraints.mobileBreakpoint;
+
     return Scaffold(
-      appBar: AppBar(title: Text(al.theme_title), centerTitle: true),
-      body: ListView(
-        children: [
-          // 主题模式
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(al.theme_mode, style: theme.textTheme.titleMedium),
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobileScreen ? PfmSpacing.lg : PfmSpacing.xxxxl,
+            vertical: PfmSpacing.xxl,
           ),
-          RadioGroup<ThemeMode>(
-            groupValue: ls.themeLanguage.themeMode,
-            onChanged: (ThemeMode? value) async {
-              if (value != null) {
-                final tl = ls.themeLanguage.copyWith(themeMode: value);
-                await ls.saveThemeLanguage(tl);
-              }
-            },
-            child: Column(
+          children: [
+            // 返回按钮 + 标题
+            Row(
               children: [
-                RadioListTile<ThemeMode>(
-                  title: Text(al.theme_light),
-                  subtitle: Text(al.theme_lightDesc),
-                  value: ThemeMode.light,
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, size: 20),
+                  onPressed: () => Navigator.pop(context),
                 ),
-                RadioListTile<ThemeMode>(
-                  title: Text(al.theme_dark),
-                  subtitle: Text(al.theme_darkDesc),
-                  value: ThemeMode.dark,
-                ),
-                RadioListTile<ThemeMode>(
-                  title: Text(al.theme_system),
-                  subtitle: Text(al.theme_systemDesc),
-                  value: ThemeMode.system,
-                ),
+                const SizedBox(width: PfmSpacing.sm),
+                Text(al.theme_title, style: PfmTypography.titleLarge.copyWith(color: colorScheme.onSurface)),
               ],
             ),
-          ),
-          const Divider(height: 32),
+            const SizedBox(height: PfmSpacing.xxxl),
 
-          // 主题颜色
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(al.theme_color, style: theme.textTheme.titleMedium),
-          ),
-          _ThemeColorGrid(currentColor: ls.currentThemeName),
-        ],
+            // 主题模式
+            Text(al.theme_mode, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+            const SizedBox(height: PfmSpacing.md),
+            Card(
+              child: RadioGroup<ThemeMode>(
+                groupValue: ls.themeLanguage.themeMode,
+                onChanged: (ThemeMode? value) async {
+                  if (value != null) {
+                    final tl = ls.themeLanguage.copyWith(themeMode: value);
+                    await ls.saveThemeLanguage(tl);
+                  }
+                },
+                child: Column(
+                  children: [
+                    RadioListTile<ThemeMode>(
+                      title: Text(al.theme_light, style: TextStyle(color: colorScheme.onSurface)),
+                      subtitle: Text(al.theme_lightDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      value: ThemeMode.light,
+                    ),
+                    RadioListTile<ThemeMode>(
+                      title: Text(al.theme_dark, style: TextStyle(color: colorScheme.onSurface)),
+                      subtitle: Text(al.theme_darkDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      value: ThemeMode.dark,
+                    ),
+                    RadioListTile<ThemeMode>(
+                      title: Text(al.theme_system, style: TextStyle(color: colorScheme.onSurface)),
+                      subtitle: Text(al.theme_systemDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      value: ThemeMode.system,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: PfmSpacing.xxxl),
+
+            // 主题颜色
+            Text(al.theme_color, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+            const SizedBox(height: PfmSpacing.md),
+            _ThemeColorGrid(currentColor: ls.currentThemeName),
+          ],
+        ),
       ),
     );
   }
@@ -80,11 +102,9 @@ class _ThemeColorGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
+    return Wrap(
+        spacing: PfmSpacing.md,
+        runSpacing: PfmSpacing.md,
         children: _colors.map((option) {
           final isSelected = currentColor == option.name;
           // 生成该主题方案的预览颜色
@@ -98,22 +118,21 @@ class _ThemeColorGrid extends StatelessWidget {
               await ls.saveThemeLanguage(tl);
             },
             child: Container(
-              width: 56,
-              height: 56,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: previewColor,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(PfmRadius.lg),
                 border: isSelected
                     ? Border.all(color: theme.colorScheme.primary, width: 3)
                     : null,
               ),
               child: isSelected
-                  ? Icon(Icons.check, color: Colors.white)
+                  ? const Icon(Icons.check, color: Colors.white, size: 20)
                   : null,
             ),
           );
         }).toList(),
-      ),
     );
   }
 }

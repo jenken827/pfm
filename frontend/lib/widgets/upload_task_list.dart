@@ -10,6 +10,7 @@ import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/utils/format.dart';
 import 'package:pfm/utils/platform.dart';
+import 'package:pfm/design/design_tokens.dart';
 
 /// 上传任务列表
 class UploadTaskList extends StatelessWidget {
@@ -49,29 +50,24 @@ class UploadTaskList extends StatelessWidget {
 
   Widget _buildEmptyState(BuildContext context) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.cloud_upload_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            al.uploadTask_noTasks,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: PfmColors.primarySurface,
+              borderRadius: BorderRadius.circular(PfmRadius.xl),
             ),
+            child: const Icon(Icons.cloud_upload_outlined, size: 40, color: PfmColors.primary),
           ),
-          const SizedBox(height: 8),
-          Text(
-            al.uploadTask_noTasksHint,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          const SizedBox(height: PfmSpacing.xl),
+          Text(al.uploadTask_noTasks, style: PfmTypography.titleMedium.copyWith(color: colorScheme.onSurface)),
+          const SizedBox(height: PfmSpacing.sm),
+          Text(al.uploadTask_noTasksHint, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -79,6 +75,7 @@ class UploadTaskList extends StatelessWidget {
 
   Widget _buildActionBar(BuildContext context, TransferState state) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
     // 真正在上传中的数量（不含 PENDING）
     final activeCount = state.dbUploadingCount;
     final pendingCount = state.dbPendingCount;
@@ -86,14 +83,10 @@ class UploadTaskList extends StatelessWidget {
     final failedCount = state.dbFailedCount;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.sm),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -177,20 +170,10 @@ class UploadTaskList extends StatelessWidget {
 
   Widget _buildStatusChip(BuildContext context, String label, Color color) {
     return Container(
-      margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      margin: const EdgeInsets.only(right: PfmSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
+      child: Text(label, style: PfmTypography.labelSmall.copyWith(color: color)),
     );
   }
 }
@@ -207,9 +190,9 @@ class _UploadTaskItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(PfmSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -217,8 +200,12 @@ class _UploadTaskItem extends StatelessWidget {
             Row(
               children: [
                 // 文件图标
-                Icon(_getFileIcon(), color: colorScheme.primary, size: 24),
-                const SizedBox(width: 12),
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(color: PfmColors.primarySurface, borderRadius: BorderRadius.circular(PfmRadius.sm)),
+                  child: Icon(_getFileIcon(), color: PfmColors.primary, size: 20),
+                ),
+                const SizedBox(width: PfmSpacing.md),
                 // 文件名
                 Expanded(
                   child: Column(
@@ -246,15 +233,17 @@ class _UploadTaskItem extends StatelessWidget {
                 _buildActions(context),
               ],
             ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: task.progress / 100,
-              backgroundColor: colorScheme.surfaceContainerHighest,
-              color: colorScheme.primary,
-              borderRadius: BorderRadius.circular(4),
-              minHeight: 6,
+            const SizedBox(height: PfmSpacing.md),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(PfmRadius.full),
+              child: LinearProgressIndicator(
+                value: task.progress / 100,
+                backgroundColor: colorScheme.outlineVariant,
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                minHeight: 4,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: PfmSpacing.sm),
             // 进度条
             if (task.status == UploadStatus.HASHING) ...[
               Row(
@@ -428,21 +417,10 @@ class _UploadTaskItem extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      margin: const EdgeInsets.only(right: PfmSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
+      child: Text(label, style: PfmTypography.labelSmall.copyWith(color: color)),
     );
   }
 
@@ -619,6 +597,9 @@ class _UploadTaskItem extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
+      ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -626,20 +607,15 @@ class _UploadTaskItem extends StatelessWidget {
         expand: false,
         builder: (ctx, scrollController) => SingleChildScrollView(
           controller: scrollController,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(PfmSpacing.xxl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 拖拽手柄
               Center(
                 child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(ctx).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: PfmSpacing.xl),
+                  decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.outlineVariant, borderRadius: BorderRadius.circular(PfmRadius.full)),
                 ),
               ),
               // 文件名
@@ -704,26 +680,17 @@ class _UploadTaskItem extends StatelessWidget {
   }
 
   Widget _detailRow(BuildContext context, String label, String value) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: PfmSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 100,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
+            child: Text(label, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant)),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
+          Expanded(child: Text(value, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurface))),
         ],
       ),
     );

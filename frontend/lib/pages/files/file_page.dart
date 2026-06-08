@@ -20,8 +20,10 @@ import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/services/recent_files_storage.dart';
 import 'package:pfm/utils/utils.dart';
 import 'package:pfm/widgets/folder_settings_dialog.dart';
+import 'package:pfm/design/design_tokens.dart';
+import 'package:pfm/design/components/components.dart';
 
-/// 文件列表页面
+/// 文件列表页面 - Clean Minimal 设计
 class FilePage extends StatelessWidget {
   const FilePage({super.key, this.dirId = ''});
 
@@ -48,7 +50,6 @@ class _FileView extends StatefulWidget {
 }
 
 class _FileViewState extends State<_FileView> {
-  TransferState? _previousTransferState;
   final ScrollController _scrollController = ScrollController();
   double _savedScrollOffset = 0;
   bool _shouldRestoreScroll = false;
@@ -70,16 +71,16 @@ class _FileViewState extends State<_FileView> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < PfmConstraints.mobileBreakpoint;
+
     return MultiBlocListener(
       listeners: [
-        // 监听 TransferBloc 状态变化，检测上传完成
         BlocListener<TransferBloc, TransferState>(
           listenWhen: (previous, current) {
-            // 检测是否有新的上传任务完成
             return current.hasNewCompletedUploads(previous);
           },
           listener: (context, transferState) {
-            // 只在上传完成的文件属于当前目录时才刷新
             final currentDirId = context.read<FileBloc>().state.currentDirId;
             final hasCompletedInCurrentDir = transferState.uploadTasks.any(
               (t) =>
@@ -94,7 +95,6 @@ class _FileViewState extends State<_FileView> {
       ],
       child: BlocConsumer<FileBloc, FileState>(
         listener: (context, state) {
-          // 处理失败状态，显示错误提示
           if (state.status == FileStateStatus.failure && state.msg.isNotEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -104,7 +104,6 @@ class _FileViewState extends State<_FileView> {
               ),
             );
           }
-          // 加载完成后恢复滚动位置
           if (_shouldRestoreScroll &&
               state.status == FileStateStatus.success) {
             _shouldRestoreScroll = false;
@@ -122,15 +121,18 @@ class _FileViewState extends State<_FileView> {
         },
         builder: (context, state) {
           return Scaffold(
-            appBar: _buildAppBar(context, state),
-            body: Column(
-              children: [
-                // 面包屑导航
-                if (state.breadcrumbs.isNotEmpty)
-                  _buildBreadcrumbs(context, state),
-                // 文件列表
-                Expanded(child: _buildContent(context, state)),
-              ],
+            body: SafeArea(
+              child: Column(
+                children: [
+                  // 顶部工具栏
+                  _buildToolbar(context, state, isMobile),
+                  // 面包屑导航
+                  if (state.breadcrumbs.isNotEmpty)
+                    _buildBreadcrumbs(context, state),
+                  // 文件列表
+                  Expanded(child: _buildContent(context, state, isMobile)),
+                ],
+              ),
             ),
             floatingActionButton: _buildFab(context, state),
           );
@@ -139,116 +141,218 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, FileState state) {
+  /// Clean Minimal 风格工具栏
+  Widget _buildToolbar(BuildContext context, FileState state, bool isMobile) {
     final al = AppLocalizations.of(context)!;
-    // 如果在多选模式，显示不同的 AppBar
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (state.isSelectMode) {
-      return AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () =>
-              context.read<FileBloc>().add(const FileSelectModeEvent()),
+      return Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.md,
         ),
-        title: Text(al.file_selectedCount(state.selectedFiles.length)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.select_all),
-            onPressed: () =>
-                context.read<FileBloc>().add(const FileSelectAllEvent()),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          border: Border(
+            bottom: BorderSide(color: colorScheme.outlineVariant),
           ),
-        ],
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () =>
+                  context.read<FileBloc>().add(const FileSelectModeEvent()),
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: PfmSpacing.sm),
+            Text(
+              al.file_selectedCount(state.selectedFiles.length),
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.select_all, size: 20),
+              onPressed: () =>
+                  context.read<FileBloc>().add(const FileSelectAllEvent()),
+              tooltip: al.file_selectAll,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
       );
     }
 
-    return AppBar(
-      title: Text(state.currentDirName.isEmpty ? al.nav_files : state.currentDirName),
-      centerTitle: true,
-      actions: [
-        // 刷新按钮
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: () =>
-              _saveScrollAndRefresh(),
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? PfmSpacing.lg : PfmSpacing.xxxxl,
+        vertical: PfmSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant),
         ),
-        // 搜索按钮
-        IconButton(
-          icon: const Icon(Icons.search),
-          onPressed: () => _showSearchDialog(context),
-        ),
-        // 更多选项菜单
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) => _handleMenuAction(context, value, state),
-          itemBuilder: (context) => [
-            // 视图切换
-            PopupMenuItem(
-              value: 'view',
-              child: Row(
-                children: [
-                  Icon(state.isGridView ? Icons.view_list : Icons.grid_view),
-                  const SizedBox(width: 8),
-                  Text(state.isGridView ? al.file_listView : al.file_gridView),
-                ],
-              ),
+      ),
+      child: Row(
+        children: [
+          // 返回按钮（子目录时显示）
+          if (state.breadcrumbs.length > 1)
+            IconButton(
+              icon: const Icon(Icons.arrow_back, size: 20),
+              onPressed: () {
+                final parent = state.breadcrumbs[state.breadcrumbs.length - 2];
+                context
+                    .read<FileBloc>()
+                    .add(FileNavigateEvent(parent.id, parent.name));
+              },
+              visualDensity: VisualDensity.compact,
             ),
-            // 回收站
-            PopupMenuItem(
-              value: 'trash',
-              child: Row(
-                children: [
-                  const Icon(Icons.delete_outline),
-                  const SizedBox(width: 8),
-                  Text(al.file_recycleBin),
-                ],
+          if (state.breadcrumbs.length > 1)
+            const SizedBox(width: PfmSpacing.sm),
+          // 页面标题
+          Expanded(
+            child: Text(
+              state.currentDirName.isEmpty
+                  ? al.nav_files
+                  : state.currentDirName,
+              style: PfmTypography.titleLarge.copyWith(
+                color: colorScheme.onSurface,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const PopupMenuDivider(),
-            // 排序选项
-            PopupMenuItem(value: 'sort_name', child: Text(al.file_sortByName)),
-            PopupMenuItem(value: 'sort_size', child: Text(al.file_sortBySize)),
-            PopupMenuItem(value: 'sort_type', child: Text(al.file_sortByType)),
-            PopupMenuItem(value: 'sort_modified', child: Text(al.file_sortByModified)),
-            PopupMenuItem(value: 'sort_created', child: Text(al.file_sortByCreated)),
-          ],
-        ),
-      ],
+          ),
+          // 操作按钮
+          IconButton(
+            icon: Icon(
+              Icons.search,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onPressed: () => _showSearchDialog(context),
+            tooltip: '搜索',
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: PfmSpacing.xs),
+          IconButton(
+            icon: Icon(
+              state.isGridView ? Icons.view_list : Icons.grid_view,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onPressed: () =>
+                context.read<FileBloc>().add(FileViewModeEvent(!state.isGridView)),
+            tooltip: state.isGridView ? al.file_listView : al.file_gridView,
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: PfmSpacing.xs),
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onSelected: (value) => _handleMenuAction(context, value, state),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'trash',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline,
+                        size: 18, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: PfmSpacing.md),
+                    Text(al.file_recycleBin),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'sort_name',
+                child: Text(al.file_sortByName),
+              ),
+              PopupMenuItem(
+                value: 'sort_size',
+                child: Text(al.file_sortBySize),
+              ),
+              PopupMenuItem(
+                value: 'sort_type',
+                child: Text(al.file_sortByType),
+              ),
+              PopupMenuItem(
+                value: 'sort_modified',
+                child: Text(al.file_sortByModified),
+              ),
+              PopupMenuItem(
+                value: 'sort_created',
+                child: Text(al.file_sortByCreated),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(PfmRadius.lg),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildContent(BuildContext context, FileState state) {
+  Widget _buildContent(BuildContext context, FileState state, bool isMobile) {
     final al = AppLocalizations.of(context)!;
-    // 处理加载状态（首次加载）
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // 首次加载
     if (state.status == FileStateStatus.loading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(al.file_loading),
+            const SizedBox(height: PfmSpacing.lg),
+            Text(
+              al.file_loading,
+              style: PfmTypography.bodyMedium.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
     }
 
-    // 处理失败状态 - 已通过 listener 显示 snackbar，这里显示重试界面
+    // 加载失败
     if (state.status == FileStateStatus.failure) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: PfmColors.errorSurface,
+                borderRadius: BorderRadius.circular(PfmRadius.xl),
+              ),
+              child: const Icon(
+                Icons.error_outline,
+                size: 32,
+                color: PfmColors.error,
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(al.file_loadFailed),
-            const SizedBox(height: 16),
+            const SizedBox(height: PfmSpacing.lg),
+            Text(
+              al.file_loadFailed,
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: PfmSpacing.lg),
             ElevatedButton.icon(
-              onPressed: () =>
-                  _saveScrollAndRefresh(),
-              icon: const Icon(Icons.refresh),
+              onPressed: () => _saveScrollAndRefresh(),
+              icon: const Icon(Icons.refresh, size: 18),
               label: Text(al.file_retry),
             ),
           ],
@@ -262,19 +366,35 @@ class _FileViewState extends State<_FileView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.folder_open,
-              size: 64,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
+                borderRadius: BorderRadius.circular(PfmRadius.xl),
+              ),
+              child: Icon(
+                Icons.folder_open,
+                size: 40,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(al.file_emptyFolder, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            const SizedBox(height: PfmSpacing.xl),
+            Text(
+              al.file_emptyFolder,
+              style: PfmTypography.titleMedium.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: PfmSpacing.sm),
             Text(
               al.file_emptyFolderHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              style: PfmTypography.bodyMedium.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -282,66 +402,72 @@ class _FileViewState extends State<_FileView> {
     }
 
     return state.isGridView
-        ? _buildGridView(context, state)
-        : _buildListView(context, state);
+        ? _buildGridView(context, state, isMobile)
+        : _buildListView(context, state, isMobile);
   }
 
   Widget _buildBreadcrumbs(BuildContext context, FileState state) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
       child: Row(
         children: [
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: state.breadcrumbs.map((crumb) {
-                  final isLast = crumb == state.breadcrumbs.last;
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      InkWell(
-                        onTap: isLast
-                            ? null
-                            : () => context.read<FileBloc>().add(
-                                FileNavigateEvent(crumb.id, crumb.name),
-                              ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            crumb.name,
-                            style: TextStyle(
-                              color: isLast
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                              fontWeight: isLast
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
+                children: [
+                  for (int i = 0; i < state.breadcrumbs.length; i++) ...[
+                    if (i > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PfmSpacing.xs,
+                        ),
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 14,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      if (!isLast)
-                        Icon(
-                          Icons.chevron_right,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                    ],
-                  );
-                }).toList(),
+                    _BreadcrumbItem(
+                      name: state.breadcrumbs[i].name,
+                      isLast: i == state.breadcrumbs.length - 1,
+                      onTap: () {
+                        final crumb = state.breadcrumbs[i];
+                        context
+                            .read<FileBloc>()
+                            .add(FileNavigateEvent(crumb.id, crumb.name));
+                      },
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
           // 文件数量
-          Padding(
-            padding: const EdgeInsets.only(left: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: PfmSpacing.sm,
+              vertical: PfmSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(PfmRadius.full),
+            ),
             child: Text(
-              state.total > 0 ? '${state.total}' : '${state.files.length}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              '${state.total > 0 ? state.total : state.files.length}',
+              style: PfmTypography.labelSmall.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -350,59 +476,73 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
-  Widget _buildListView(BuildContext context, FileState state) {
+  Widget _buildListView(BuildContext context, FileState state, bool isMobile) {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is ScrollEndNotification &&
             notification.metrics.pixels >=
                 notification.metrics.maxScrollExtent - 100) {
-          // 距离底部100像素时触发加载更多
           context.read<FileBloc>().add(const FileLoadMoreEvent());
         }
         return false;
       },
       child: ListView.builder(
         controller: _scrollController,
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? PfmSpacing.sm : PfmSpacing.xxxxl,
+          vertical: PfmSpacing.md,
+        ),
         itemCount: state.files.length + (state.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
-          // 显示加载更多指示器
           if (index == state.files.length) {
             return const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(PfmSpacing.xxl),
               child: Center(child: CircularProgressIndicator()),
             );
           }
 
           final file = state.files[index];
           final isSelected = state.selectedFiles.contains(file);
+          final iconData = _getFileIconData(file.type);
+          final iconColors = _getFileIconColors(file.type);
 
-          return _FileListTile(
-            file: file,
-            isSelected: isSelected,
-            isSelectMode: state.isSelectMode,
-            onTap: () => _handleFileTap(context, file, state),
-            onLongPress: () => _handleFileLongPress(context, file),
-            onMenuPressed: () => _showFileMenu(context, file),
+          return Padding(
+            padding: const EdgeInsets.only(bottom: PfmSpacing.xs),
+            child: PfmFileListTile(
+              name: file.name,
+              icon: iconData,
+              iconColor: iconColors.$1,
+              iconBackground: iconColors.$2,
+              subtitle: _formatFileInfo(file),
+              isSelected: isSelected,
+              isSelectMode: state.isSelectMode,
+              onTap: () => _handleFileTap(context, file, state),
+              onLongPress: () => _handleFileLongPress(context, file),
+              onMenuPressed: () => _showFileMenu(context, file),
+              thumbnailUrl: file.type == pbenum.FileType.IMAGE
+                  ? _getThumbnailUrl(file.id)
+                  : null,
+              thumbnailHeaders: _getAuthHeaders(),
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _buildGridView(BuildContext context, FileState state) {
+  Widget _buildGridView(
+      BuildContext context, FileState state, bool isMobile) {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is ScrollEndNotification &&
             notification.metrics.pixels >=
                 notification.metrics.maxScrollExtent - 100) {
-          // 距离底部100像素时触发加载更多
           context.read<FileBloc>().add(const FileLoadMoreEvent());
         }
         return false;
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 根据屏幕宽度动态计算列数
           final width = constraints.maxWidth;
           int crossAxisCount;
           if (width > 1200) {
@@ -416,29 +556,40 @@ class _FileViewState extends State<_FileView> {
           }
 
           return GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(
+              isMobile ? PfmSpacing.sm : PfmSpacing.xxxxl,
+            ),
+            controller: _scrollController,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
               childAspectRatio: 0.85,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+              crossAxisSpacing: PfmSpacing.md,
+              mainAxisSpacing: PfmSpacing.md,
             ),
             itemCount: state.files.length + (state.hasMore ? 1 : 0),
             itemBuilder: (context, index) {
-              // 显示加载更多指示器
               if (index == state.files.length) {
                 return const Center(child: CircularProgressIndicator());
               }
 
               final file = state.files[index];
               final isSelected = state.selectedFiles.contains(file);
+              final iconData = _getFileIconData(file.type);
+              final iconColors = _getFileIconColors(file.type);
 
-              return _FileGridTile(
-                file: file,
+              return PfmFileGridTile(
+                name: file.name,
+                icon: iconData,
+                iconColor: iconColors.$1,
+                iconBackground: iconColors.$2,
                 isSelected: isSelected,
                 isSelectMode: state.isSelectMode,
                 onTap: () => _handleFileTap(context, file, state),
                 onLongPress: () => _handleFileLongPress(context, file),
+                thumbnailUrl: file.type == pbenum.FileType.IMAGE
+                    ? _getThumbnailUrl(file.id)
+                    : null,
+                thumbnailHeaders: _getAuthHeaders(),
               );
             },
           );
@@ -449,32 +600,136 @@ class _FileViewState extends State<_FileView> {
 
   Widget? _buildFab(BuildContext context, FileState state) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (state.isSelectMode) {
       return FloatingActionButton.extended(
         onPressed: () => _showBatchActionMenu(context, state),
-        icon: const Icon(Icons.more_horiz),
+        icon: const Icon(Icons.more_horiz, size: 20),
         label: Text(al.file_batchOperations(state.selectedFiles.length)),
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(PfmRadius.lg),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
       );
     }
 
     return FloatingActionButton(
       onPressed: () => _showFabMenu(context),
-      child: const Icon(Icons.add),
+      backgroundColor: PfmColors.primary,
+      foregroundColor: Colors.white,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PfmRadius.lg),
+      ),
+      child: const Icon(Icons.add, size: 24),
     );
   }
+
+  // ============================================================
+  // 辅助方法
+  // ============================================================
+
+  /// 获取文件类型图标
+  static IconData _getFileIconData(pbenum.FileType type) {
+    switch (type) {
+      case pbenum.FileType.FOLDER:
+        return Icons.folder;
+      case pbenum.FileType.IMAGE:
+        return Icons.image;
+      case pbenum.FileType.VIDEO:
+        return Icons.video_file;
+      case pbenum.FileType.AUDIO:
+        return Icons.audio_file;
+      case pbenum.FileType.DOCUMENT:
+        return Icons.description;
+      case pbenum.FileType.ARCHIVE:
+        return Icons.archive;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  /// 获取文件类型颜色（图标色, 背景色）
+  static (Color, Color) _getFileIconColors(pbenum.FileType type) {
+    switch (type) {
+      case pbenum.FileType.FOLDER:
+        return (PfmColors.folder, PfmColors.folderSurface);
+      case pbenum.FileType.IMAGE:
+        return (PfmColors.image, PfmColors.imageSurface);
+      case pbenum.FileType.VIDEO:
+        return (PfmColors.video, PfmColors.videoSurface);
+      case pbenum.FileType.AUDIO:
+        return (PfmColors.image, PfmColors.imageSurface);
+      case pbenum.FileType.DOCUMENT:
+        return (PfmColors.document, PfmColors.documentSurface);
+      case pbenum.FileType.ARCHIVE:
+        return (PfmColors.archive, PfmColors.archiveSurface);
+      default:
+        return (PfmColors.lightTextMuted, PfmColors.lightSurfaceHover);
+    }
+  }
+
+  /// 格式化文件信息
+  String _formatFileInfo(File file) {
+    final size = file.size.toInt();
+    final updatedAt = file.updatedAt;
+
+    final sizeStr = _formatSize(size);
+    String dateStr = '';
+    if (updatedAt.seconds > 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(
+        updatedAt.seconds.toInt() * 1000,
+      );
+      dateStr =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
+          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    }
+
+    return '$sizeStr · $dateStr';
+  }
+
+  String _formatSize(int size) {
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  /// 获取缩略图 URL
+  String? _getThumbnailUrl(String fileId) {
+    final ls = GetIt.I.get<LocalStorage>();
+    final baseUrl = ls.fileServer;
+    if (baseUrl == null || baseUrl.isEmpty) return null;
+    return '$baseUrl/api/file/stream/preview?file_id=$fileId&size=small';
+  }
+
+  /// 获取认证头
+  Map<String, String>? _getAuthHeaders() {
+    final ls = GetIt.I.get<LocalStorage>();
+    final token = ls.token?.accessToken;
+    if (token == null) return null;
+    return {'Authorization': 'Bearer $token'};
+  }
+
+  // ============================================================
+  // 交互处理
+  // ============================================================
 
   void _handleFileTap(BuildContext context, File file, FileState state) {
     if (state.isSelectMode) {
       context.read<FileBloc>().add(FileSelectEvent(file));
     } else {
-      // 目录则进入
       if (file.type == pbenum.FileType.FOLDER) {
         context.read<FileBloc>().add(FileNavigateEvent(file.id, file.name));
       } else {
-        // 文件则根据类型跳转
         _recordFileAccess(file);
         if (file.type == pbenum.FileType.IMAGE) {
-          // 图片：传递图片列表支持左右滑动
           final images = state.files
               .where((f) => f.type == pbenum.FileType.IMAGE)
               .toList();
@@ -489,11 +744,9 @@ class _FileViewState extends State<_FileView> {
           );
         } else if (file.type == pbenum.FileType.VIDEO ||
             file.type == pbenum.FileType.AUDIO) {
-          // 视频/音频：使用原生播放器预览
           context.push(FilePreviewRoute().location, extra: file);
         } else if (file.type == pbenum.FileType.DOCUMENT ||
             file.type == pbenum.FileType.ARCHIVE) {
-          // 文档/压缩包：使用 Flyfish Viewer
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -501,23 +754,12 @@ class _FileViewState extends State<_FileView> {
             ),
           );
         } else {
-          // 其他类型：跳转到详情页
           context.push(FileDetailRoute().location, extra: file);
         }
       }
     }
   }
 
-  /// 判断文件是否支持预览
-  bool _isPreviewable(File file) {
-    // 支持预览的文件类型：图片、视频、音频、文档
-    return file.type == pbenum.FileType.IMAGE ||
-        file.type == pbenum.FileType.VIDEO ||
-        file.type == pbenum.FileType.AUDIO ||
-        file.type == pbenum.FileType.DOCUMENT;
-  }
-
-  /// 记录文件访问到本地存储（最近浏览）
   void _recordFileAccess(File file) {
     try {
       final storage = GetIt.I.get<RecentFilesStorage>();
@@ -528,9 +770,7 @@ class _FileViewState extends State<_FileView> {
         fileSize: file.size.toInt(),
         parentId: file.parentId,
       );
-    } catch (_) {
-      // 忽略记录失败，不影响用户体验
-    }
+    } catch (_) {}
   }
 
   void _handleFileLongPress(BuildContext context, File file) {
@@ -576,135 +816,151 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
+  // ============================================================
+  // 文件操作菜单
+  // ============================================================
+
   void _showFileMenu(BuildContext context, File file) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
     final isFolder = file.type == pbenum.FileType.FOLDER;
 
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(PfmRadius.xl),
+        ),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 查看详情
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: Text(al.file_viewDetail),
+            // 拖拽指示器
+            Container(
+              margin: const EdgeInsets.only(top: PfmSpacing.md),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(PfmRadius.full),
+              ),
+            ),
+            const SizedBox(height: PfmSpacing.lg),
+            _MenuTile(
+              icon: Icons.info_outline,
+              title: al.file_viewDetail,
               onTap: () {
                 Navigator.pop(ctx);
                 context.push(FileDetailRoute().location, extra: file);
               },
             ),
-            // 下载（仅文件，文件夹不显示）
             if (!isFolder)
-              ListTile(
-                leading: const Icon(Icons.download),
-                title: Text(al.file_download),
+              _MenuTile(
+                icon: Icons.download_outlined,
+                title: al.file_download,
                 onTap: () async {
                   Navigator.pop(ctx);
                   await _downloadFile(context, file);
                 },
               ),
-            // 重命名
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: Text(al.file_rename),
+            _MenuTile(
+              icon: Icons.edit_outlined,
+              title: al.file_rename,
               onTap: () {
                 Navigator.pop(ctx);
                 _showRenameDialog(context, file);
               },
             ),
-            // 复制链接（仅文件）
             if (!isFolder)
-              ListTile(
-                leading: const Icon(Icons.link),
-                title: Text(al.file_copyLink),
+              _MenuTile(
+                icon: Icons.link,
+                title: al.file_copyLink,
                 onTap: () async {
                   Navigator.pop(ctx);
-                  try {
-                    final fmRepo = context.read<FmRepository>();
-                    final result = await fmRepo.createShareLink(
-                      fileId: file.id,
-                    );
-                    if (result.success && result.data != null) {
-                      final url = result.data!.shareUrl;
-                      await Clipboard.setData(ClipboardData(text: url));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(al.file_linkCopied)),
-                        );
-                      }
-                    } else {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${al.file_createLinkFailed}: ${result.message ?? "未知错误"}',
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text('${al.file_getLinkFailed}: $e')));
-                    }
-                  }
+                  await _copyShareLink(context, file, al);
                 },
               ),
-            // 移动
-            ListTile(
-              leading: const Icon(Icons.drive_file_move),
-              title: Text(al.file_move),
+            _MenuTile(
+              icon: Icons.drive_file_move_outlined,
+              title: al.file_move,
               onTap: () async {
                 Navigator.pop(ctx);
                 await _showMoveDialog(context, [file]);
               },
             ),
-            // 修改标签（仅文件）
             if (!isFolder)
-              ListTile(
-                leading: const Icon(Icons.label),
-                title: Text(al.file_editTags),
+              _MenuTile(
+                icon: Icons.label_outline,
+                title: al.file_editTags,
                 onTap: () {
                   Navigator.pop(ctx);
                   _showTagsDialog(context, file);
                 },
               ),
-            // 设置（仅文件夹）
             if (isFolder)
-              ListTile(
-                leading: const Icon(Icons.settings),
-                title: Text(al.file_settings),
+              _MenuTile(
+                icon: Icons.settings_outlined,
+                title: al.file_settings,
                 onTap: () {
                   Navigator.pop(ctx);
                   _showFolderSettings(context, file);
                 },
               ),
-            // 删除
-            ListTile(
-              leading: Icon(
-                Icons.delete,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(
-                al.file_delete,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            const Divider(height: 1),
+            _MenuTile(
+              icon: Icons.delete_outline,
+              title: al.file_delete,
+              color: PfmColors.error,
               onTap: () {
                 Navigator.pop(ctx);
                 _showDeleteConfirm(context, [file.id]);
               },
             ),
+            const SizedBox(height: PfmSpacing.md),
           ],
         ),
       ),
     );
   }
 
-  /// 下载文件
+  Future<void> _copyShareLink(
+      BuildContext context, File file, AppLocalizations al) async {
+    try {
+      final fmRepo = context.read<FmRepository>();
+      final result = await fmRepo.createShareLink(fileId: file.id);
+      if (result.success && result.data != null) {
+        final url = result.data!.shareUrl;
+        await Clipboard.setData(ClipboardData(text: url));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(al.file_linkCopied)),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${al.file_createLinkFailed}: ${result.message ?? "未知错误"}',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.file_getLinkFailed}: $e')),
+        );
+      }
+    }
+  }
+
+  // ============================================================
+  // 下载
+  // ============================================================
+
   Future<void> _downloadFile(BuildContext context, File file) async {
     final al = AppLocalizations.of(context)!;
     try {
@@ -712,7 +968,6 @@ class _FileViewState extends State<_FileView> {
       if (downloadDir == null) return;
       final fileName = file.name.isNotEmpty ? file.name : 'unnamed';
       final initialPath = '${downloadDir.path}/$fileName';
-      // 生成唯一文件路径，避免覆盖
       final savePath = await FileUtils.getUniqueFilePath(initialPath);
       if (!context.mounted) return;
       GetIt.I.get<TransferBloc>().add(
@@ -723,63 +978,65 @@ class _FileViewState extends State<_FileView> {
           savePath: savePath,
         ),
       );
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(al.file_downloadStarted(fileName))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(al.file_downloadStarted(fileName))),
+      );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.file_downloadFailed}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.file_downloadFailed}: $e')),
+        );
       }
     }
   }
+
+  // ============================================================
+  // FAB 菜单
+  // ============================================================
 
   void _showFabMenu(BuildContext context) {
     final al = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.create_new_folder),
-              title: Text(al.file_newFolder),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showCreateDirDialog(context);
-              },
+            PfmDialogs.buildDragHandle(context),
+            PfmDialogs.menuItem(
+              icon: Icons.create_new_folder_outlined,
+              title: al.file_newFolder,
+              onTap: () { Navigator.pop(ctx); _showCreateDirDialog(context); },
             ),
-            ListTile(
-              leading: const Icon(Icons.upload_file),
-              title: Text(al.file_uploadFile),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickAndUploadFiles(context);
-              },
+            PfmDialogs.menuItem(
+              icon: Icons.upload_file_outlined,
+              title: al.file_uploadFile,
+              onTap: () { Navigator.pop(ctx); _pickAndUploadFiles(context); },
             ),
-            ListTile(
-              leading: const Icon(Icons.folder),
-              title: Text(al.file_uploadFolder),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickAndUploadFolder(context);
-              },
+            PfmDialogs.menuItem(
+              icon: Icons.folder_outlined,
+              title: al.file_uploadFolder,
+              onTap: () { Navigator.pop(ctx); _pickAndUploadFolder(context); },
             ),
+            const SizedBox(height: PfmSpacing.md),
           ],
         ),
       ),
     );
   }
 
-  /// 选择并上传文件
+  // ============================================================
+  // 文件选择与上传
+  // ============================================================
+
   Future<void> _pickAndUploadFiles(BuildContext context) async {
     final al = AppLocalizations.of(context)!;
     final tagsController = TextEditingController();
     bool overwrite = false;
 
-    // 先弹出对话框让用户输入标签和选择是否覆盖
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -793,10 +1050,10 @@ class _FileViewState extends State<_FileView> {
                 decoration: InputDecoration(
                   labelText: al.file_fileTag,
                   hintText: al.file_fileTagHint,
-                  prefixIcon: const Icon(Icons.label_outline),
+                  prefixIcon: const Icon(Icons.label_outline, size: 18),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: PfmSpacing.lg),
               SwitchListTile(
                 title: Text(al.file_overwriteSameName),
                 subtitle: Text(al.file_overwriteHint),
@@ -804,6 +1061,7 @@ class _FileViewState extends State<_FileView> {
                 onChanged: (value) {
                   setState(() => overwrite = value);
                 },
+                contentPadding: EdgeInsets.zero,
               ),
             ],
           ),
@@ -823,7 +1081,6 @@ class _FileViewState extends State<_FileView> {
 
     if (confirmed != true || !context.mounted) return;
 
-    // 用户确认后再选择文件
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -837,7 +1094,6 @@ class _FileViewState extends State<_FileView> {
             ? null
             : tagsController.text.trim();
 
-        // 收集所有文件路径，批量提交
         final filePaths = result.files
             .where((file) => file.path != null)
             .map((file) => file.path!)
@@ -866,7 +1122,6 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  /// 选择并上传文件夹
   Future<void> _pickAndUploadFolder(BuildContext context) async {
     final al = AppLocalizations.of(context)!;
     try {
@@ -876,7 +1131,6 @@ class _FileViewState extends State<_FileView> {
         final state = context.read<FileBloc>().state;
         final parentId = state.currentDirId;
 
-        // 显示进度对话框
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -885,29 +1139,21 @@ class _FileViewState extends State<_FileView> {
         );
 
         try {
-          // 递归遍历文件夹并上传
           await _uploadFolder(
             context: context,
             folderPath: result,
             parentDirId: parentId,
           );
 
-          // 关闭进度对话框
           if (context.mounted) {
             Navigator.of(context, rootNavigator: true).pop();
-
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(al.file_folderUploadAdded),
-                behavior: SnackBarBehavior.floating,
-              ),
+              SnackBar(content: Text(al.file_folderUploadAdded)),
             );
           }
         } catch (e) {
-          // 关闭进度对话框
           if (context.mounted) {
             Navigator.of(context, rootNavigator: true).pop();
-
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('${al.file_uploadFolderFailed}: $e'),
@@ -929,12 +1175,6 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  /// 递归上传文件夹
-  ///
-  /// [folderPath] 本地文件夹路径
-  /// [parentDirId] 服务器端父目录 ID
-  /// [tags] 标签（可选）
-  /// [overwrite] 是否覆盖同名文件
   Future<void> _uploadFolder({
     required BuildContext context,
     required String folderPath,
@@ -945,8 +1185,6 @@ class _FileViewState extends State<_FileView> {
     final folderName = p.basename(folderPath);
     final fmRepo = context.read<FmRepository>();
 
-    // 1. 在服务器端创建对应的文件夹（带重试）
-    // 不传递 enableEncryption，让后端从父文件夹继承
     final createResult = await _createDirWithRetry(
       fmRepo: fmRepo,
       name: folderName,
@@ -957,15 +1195,12 @@ class _FileViewState extends State<_FileView> {
       throw Exception('创建目录失败 "$folderName": ${createResult.message}');
     }
 
-    // 2. 从响应数据中获取目录 ID
     final respData = createResult.data;
     if (respData == null || !respData.hasId()) {
       throw Exception('创建目录失败 "$folderName"：未返回目录 ID');
     }
 
     final newDirId = respData.id;
-
-    // 3. 遍历本地文件夹，收集所有文件
     final dir = Directory(folderPath);
     List<FileSystemEntity> entities;
 
@@ -975,9 +1210,7 @@ class _FileViewState extends State<_FileView> {
       throw Exception('读取目录失败: $e');
     }
 
-    // 收集本目录下的文件路径
     final filePaths = <String>[];
-    // 子目录列表
     final subDirs = <String>[];
 
     for (final entity in entities) {
@@ -989,7 +1222,6 @@ class _FileViewState extends State<_FileView> {
       }
     }
 
-    // 批量提交本目录的文件
     if (filePaths.isNotEmpty) {
       GetIt.I.get<TransferBloc>().add(
         TransferAddBatchUploadEvent(
@@ -1001,13 +1233,9 @@ class _FileViewState extends State<_FileView> {
       );
     }
 
-    // 递归处理子目录
     for (final subDir in subDirs) {
       if (!context.mounted) return;
-
-      // 添加延迟以避免触发频率限制（每个端点限制 3 次/秒）
       await Future.delayed(const Duration(milliseconds: 350));
-
       await _uploadFolder(
         context: context,
         folderPath: subDir,
@@ -1018,8 +1246,6 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  /// 创建目录（带重试，处理频率限制）
-  /// [enableEncryption] 加密设置，null 表示从父文件夹继承
   Future<ApiResult<CreateDirRespData>> _createDirWithRetry({
     required FmRepository fmRepo,
     required String name,
@@ -1036,30 +1262,19 @@ class _FileViewState extends State<_FileView> {
         enableEncryption: enableEncryption,
       );
 
-      // 如果成功，直接返回
-      if (result.success) {
-        return result;
-      }
+      if (result.success) return result;
 
-      // 检查是否是频率限制错误
       final isRateLimitError =
           result.message != null && result.message!.contains('429');
 
-      if (!isRateLimitError) {
-        // 不是频率限制错误，直接返回失败结果
-        return result;
-      }
+      if (!isRateLimitError) return result;
 
-      // 频率限制错误，等待后重试
       retryCount++;
       if (retryCount < maxRetries) {
-        final waitTime = Duration(seconds: retryCount);
-
-        await Future.delayed(waitTime);
+        await Future.delayed(Duration(seconds: retryCount));
       }
     }
 
-    // 重试失败，返回最后一次结果
     return fmRepo.createDir(
       name: name,
       parentId: parentId,
@@ -1067,58 +1282,80 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
+  // ============================================================
+  // 批量操作
+  // ============================================================
+
   void _showBatchActionMenu(BuildContext context, FileState state) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(PfmRadius.xl),
+        ),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.select_all),
-              title: Text(al.file_selectAll),
+            Container(
+              margin: const EdgeInsets.only(top: PfmSpacing.md),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(PfmRadius.full),
+              ),
+            ),
+            const SizedBox(height: PfmSpacing.lg),
+            _MenuTile(
+              icon: Icons.select_all,
+              title: al.file_selectAll,
               onTap: () {
                 Navigator.pop(ctx);
                 context.read<FileBloc>().add(const FileSelectAllEvent());
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.drive_file_move),
-              title: Text(al.file_moveSelected(state.selectedFiles.length)),
+            _MenuTile(
+              icon: Icons.drive_file_move_outlined,
+              title: al.file_moveSelected(state.selectedFiles.length),
               onTap: () {
                 Navigator.pop(ctx);
                 _showMoveDialog(context, state.selectedFiles.toList());
               },
             ),
-            ListTile(
-              leading: Icon(
-                Icons.delete,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(
-                al.file_deleteSelected(state.selectedFiles.length),
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            _MenuTile(
+              icon: Icons.delete_outline,
+              title: al.file_deleteSelected(state.selectedFiles.length),
+              color: PfmColors.error,
               onTap: () {
                 Navigator.pop(ctx);
                 final ids = state.selectedFiles.map((f) => f.id).toList();
                 _showDeleteConfirm(context, ids);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: Text(al.file_deselect),
+            const Divider(height: 1),
+            _MenuTile(
+              icon: Icons.close,
+              title: al.file_deselect,
               onTap: () {
                 Navigator.pop(ctx);
                 context.read<FileBloc>().add(const FileSelectModeEvent());
               },
             ),
+            const SizedBox(height: PfmSpacing.md),
           ],
         ),
       ),
     );
   }
+
+  // ============================================================
+  // 对话框
+  // ============================================================
 
   void _showCreateDirDialog(BuildContext context) {
     final al = AppLocalizations.of(context)!;
@@ -1127,10 +1364,8 @@ class _FileViewState extends State<_FileView> {
     bool enableEncryption = false;
     List<int> selectedProviderIds = [];
 
-    // 从 Bloc 获取存储提供者列表
     final fileState = context.read<FileBloc>().state;
     final providers = fileState.storageProviders;
-    // 默认选中 defaultBound 为 true 的存储提供者
     selectedProviderIds = providers
         .where((p) => p.defaultBound)
         .map((p) => p.id)
@@ -1154,18 +1389,19 @@ class _FileViewState extends State<_FileView> {
                   ),
                   autofocus: true,
                 ),
-                const SizedBox(height: 16),
-                // 存储提供者选择
+                const SizedBox(height: PfmSpacing.lg),
                 if (providers.isNotEmpty) ...[
                   Text(
                     al.file_bindStorageProvider,
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: PfmTypography.titleSmall,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: PfmSpacing.sm),
                   ...providers.map(
                     (provider) => CheckboxListTile(
                       title: Text(provider.name),
-                      subtitle: Text(provider.enabled ? al.common_enabled : al.common_disabled),
+                      subtitle: Text(
+                        provider.enabled ? al.common_enabled : al.common_disabled,
+                      ),
                       value: selectedProviderIds.contains(provider.id),
                       enabled: provider.enabled,
                       onChanged: (checked) {
@@ -1182,9 +1418,8 @@ class _FileViewState extends State<_FileView> {
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: PfmSpacing.lg),
                 ],
-                // 加密选项
                 SwitchListTile(
                   title: Text(al.file_enableEncryption),
                   subtitle: Text(al.file_encryptionHint),
@@ -1192,9 +1427,9 @@ class _FileViewState extends State<_FileView> {
                   onChanged: (value) {
                     setState(() => enableEncryption = value);
                   },
+                  contentPadding: EdgeInsets.zero,
                 ),
-                const SizedBox(height: 16),
-                // 最大历史记录数
+                const SizedBox(height: PfmSpacing.lg),
                 TextField(
                   controller: maxHistoriesController,
                   decoration: InputDecoration(
@@ -1203,12 +1438,13 @@ class _FileViewState extends State<_FileView> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: PfmSpacing.xs),
                 Text(
                   al.file_maxHistoryDesc,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                if (enableEncryption) ...[const Divider()],
               ],
             ),
           ),
@@ -1220,7 +1456,6 @@ class _FileViewState extends State<_FileView> {
             FilledButton(
               onPressed: () {
                 if (nameController.text.isNotEmpty) {
-                  // 解析 maxHistories
                   int? maxHistories;
                   if (maxHistoriesController.text.isNotEmpty) {
                     maxHistories = int.tryParse(maxHistoriesController.text);
@@ -1285,11 +1520,8 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
-  /// 显示修改标签对话框
-  /// 注意：现在使用专门的 GetFileTags API 获取标签，提高了性能
   void _showTagsDialog(BuildContext context, File file) async {
     final al = AppLocalizations.of(context)!;
-    // 获取文件标签
     final fmRepo = context.read<FmRepository>();
     final tagsResult = await fmRepo.getFileTags(fileId: file.id);
 
@@ -1297,10 +1529,11 @@ class _FileViewState extends State<_FileView> {
     if (tagsResult.success && tagsResult.data != null) {
       currentTags = List<String>.from(tagsResult.data!);
     } else {
-      // 如果获取标签失败，显示错误信息
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${al.file_tagsLoadFailed}: ${tagsResult.message}')),
+          SnackBar(
+            content: Text('${al.file_tagsLoadFailed}: ${tagsResult.message}'),
+          ),
         );
       }
       return;
@@ -1316,7 +1549,6 @@ class _FileViewState extends State<_FileView> {
           controller: controller,
           decoration: InputDecoration(
             hintText: al.file_tagInputHint,
-            border: const OutlineInputBorder(),
           ),
           autofocus: true,
         ),
@@ -1327,7 +1559,6 @@ class _FileViewState extends State<_FileView> {
           ),
           FilledButton(
             onPressed: () async {
-              // 解析输入的标签
               final input = controller.text.trim();
               final newTags = input.isEmpty
                   ? <String>[]
@@ -1337,7 +1568,6 @@ class _FileViewState extends State<_FileView> {
                         .where((tag) => tag.isNotEmpty)
                         .toList();
 
-              // 更新文件标签
               final result = await fmRepo.updateFileTags(
                 fileId: file.id,
                 tags: newTags,
@@ -1345,14 +1575,16 @@ class _FileViewState extends State<_FileView> {
 
               if (context.mounted) {
                 if (result.success) {
-                  // 成功更新后刷新文件列表
                   _saveScrollAndRefresh();
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(al.file_tagUpdateSuccess)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(al.file_tagUpdateSuccess)),
+                  );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${al.file_tagUpdateFailed}: ${result.message}')),
+                    SnackBar(
+                      content:
+                          Text('${al.file_tagUpdateFailed}: ${result.message}'),
+                    ),
                   );
                 }
               }
@@ -1372,56 +1604,38 @@ class _FileViewState extends State<_FileView> {
       builder: (ctx) => FolderSettingsDialog(
         folder: folder,
         onUpdate: () {
-          // 刷新文件列表
           _saveScrollAndRefresh();
         },
       ),
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, List<String> ids) {
+  void _showDeleteConfirm(BuildContext context, List<String> ids) async {
     final al = AppLocalizations.of(context)!;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(al.file_confirmDelete),
-        content: Text(al.file_confirmDeleteMsg(ids.length)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(al.common_cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () {
-              context.read<FileBloc>().add(FileDeleteEvent(ids));
-              Navigator.pop(ctx);
-            },
-            child: Text(al.file_delete),
-          ),
-        ],
-      ),
+    final confirmed = await PfmDialogs.confirm(
+      context,
+      title: al.file_confirmDelete,
+      message: al.file_confirmDeleteMsg(ids.length),
+      confirmLabel: al.file_delete,
+      isDestructive: true,
     );
+    if (confirmed && context.mounted) {
+      context.read<FileBloc>().add(FileDeleteEvent(ids));
+    }
   }
 
-  /// 显示移动文件对话框
-  Future<void> _showMoveDialog(BuildContext context, List<File> files) async {
+  Future<void> _showMoveDialog(
+      BuildContext context, List<File> files) async {
     final al = AppLocalizations.of(context)!;
-    // 要排除的文件夹ID（不能移动到自己或子文件夹）
     final fileIds = files.map((f) => f.id).toList();
 
-    // 导航到选择文件夹页面
     final pickResult = await context.push<FolderPickResult>(
       FolderPickerRoute().location,
       extra: {'initialFolderId': '', 'excludeIds': fileIds},
     );
 
-    // 用户取消选择
     if (pickResult == null || !context.mounted) return;
 
-    // 用户选择了目标文件夹，执行移动
     final fmRepo = context.read<FmRepository>();
     final moveResult = await fmRepo.moveFile(
       fileIds: fileIds,
@@ -1435,23 +1649,26 @@ class _FileViewState extends State<_FileView> {
         final failedIds = data.failedIds;
 
         if (failedIds.isEmpty) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(al.file_moveSuccess(successCount))));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(al.file_moveSuccess(successCount))),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(al.file_movePartialSuccess(successCount, failedIds.length)),
+              content: Text(
+                al.file_movePartialSuccess(successCount, failedIds.length),
+              ),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
-        // 刷新文件列表
         _saveScrollAndRefresh();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${al.file_moveFailed}: ${moveResult.message ?? "未知错误"}'),
+            content: Text(
+              '${al.file_moveFailed}: ${moveResult.message ?? "未知错误"}',
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -1460,258 +1677,86 @@ class _FileViewState extends State<_FileView> {
   }
 }
 
-/// 文件列表项组件
-class _FileListTile extends StatelessWidget {
-  const _FileListTile({
-    required this.file,
-    required this.isSelected,
-    required this.isSelectMode,
+// ============================================================
+// 独立组件
+// ============================================================
+
+/// 面包屑项
+class _BreadcrumbItem extends StatelessWidget {
+  const _BreadcrumbItem({
+    required this.name,
+    required this.isLast,
     required this.onTap,
-    required this.onLongPress,
-    required this.onMenuPressed,
   });
 
-  final File file;
-  final bool isSelected;
-  final bool isSelectMode;
+  final String name;
+  final bool isLast;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final VoidCallback onMenuPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: _buildIcon(),
-      title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_formatFileInfo()),
-      trailing: isSelectMode
-          ? Checkbox(value: isSelected, onChanged: (_) => onTap())
-          : IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: onMenuPressed,
-            ),
-      onTap: onTap,
-      onLongPress: onLongPress,
-    );
-  }
-
-  Widget _buildIcon() {
-    IconData icon;
-    Color color;
-
-    switch (file.type) {
-      case pbenum.FileType.FOLDER:
-        icon = Icons.folder;
-        color = Colors.amber;
-        break;
-      case pbenum.FileType.IMAGE:
-        icon = Icons.image;
-        color = Colors.green;
-        break;
-      case pbenum.FileType.VIDEO:
-        icon = Icons.video_file;
-        color = Colors.red;
-        break;
-      case pbenum.FileType.AUDIO:
-        icon = Icons.audio_file;
-        color = Colors.purple;
-        break;
-      case pbenum.FileType.DOCUMENT:
-        icon = Icons.description;
-        color = Colors.blue;
-        break;
-      case pbenum.FileType.ARCHIVE:
-        icon = Icons.archive;
-        color = Colors.orange;
-        break;
-      default:
-        icon = Icons.insert_drive_file;
-        color = Colors.grey;
-    }
-
-    return Icon(icon, color: color, size: 32);
-  }
-
-  String _formatFileInfo() {
-    final size = file.size.toInt();
-    final updatedAt = file.updatedAt;
-
-    final sizeStr = _formatSize(size);
-    String dateStr = '';
-    if (updatedAt.seconds > 0) {
-      final date = DateTime.fromMillisecondsSinceEpoch(
-        updatedAt.seconds.toInt() * 1000,
-      );
-      dateStr =
-          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
-          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    }
-
-    return '$sizeStr · $dateStr';
-  }
-
-  String _formatSize(int size) {
-    if (size < 1024) return '$size B';
-    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    if (size < 1024 * 1024 * 1024) {
-      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-}
-
-/// 文件网格项组件
-class _FileGridTile extends StatelessWidget {
-  const _FileGridTile({
-    required this.file,
-    required this.isSelected,
-    required this.isSelectMode,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  final File file;
-  final bool isSelected;
-  final bool isSelectMode;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Card(
-        elevation: isSelected ? 2 : 0,
-        color: isSelected ? colorScheme.primaryContainer : null,
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 图标/缩略图区域（占满上方空间）
-            Expanded(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 图标或缩略图
-                  _buildIcon(),
-                  // 选择模式下的复选框
-                  if (isSelectMode)
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Checkbox(
-                          value: isSelected,
-                          onChanged: (_) => onTap(),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // 文件名区域
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              color: isSelected
-                  ? colorScheme.primaryContainer.withOpacity(0.5)
-                  : colorScheme.surfaceContainerHighest.withOpacity(0.3),
-              child: Text(
-                file.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
+    return InkWell(
+      onTap: isLast ? null : onTap,
+      borderRadius: BorderRadius.circular(PfmRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.sm,
+          vertical: PfmSpacing.xs,
+        ),
+        child: Text(
+          name,
+          style: PfmTypography.labelMedium.copyWith(
+            color: isLast
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant,
+            fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildIcon() {
-    // 图片类型使用缩略图
-    if (file.type == pbenum.FileType.IMAGE) {
-      return _buildThumbnail();
-    }
+/// 底部菜单项
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.color,
+  });
 
-    IconData icon;
-    Color color;
-    double size = 48;
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final Color? color;
 
-    switch (file.type) {
-      case pbenum.FileType.FOLDER:
-        icon = Icons.folder;
-        color = Colors.amber;
-        size = 56;
-        break;
-      case pbenum.FileType.VIDEO:
-        icon = Icons.video_file;
-        color = Colors.red;
-        break;
-      case pbenum.FileType.AUDIO:
-        icon = Icons.audio_file;
-        color = Colors.purple;
-        break;
-      case pbenum.FileType.DOCUMENT:
-        icon = Icons.description;
-        color = Colors.blue;
-        break;
-      case pbenum.FileType.ARCHIVE:
-        icon = Icons.archive;
-        color = Colors.orange;
-        break;
-      default:
-        icon = Icons.insert_drive_file;
-        color = Colors.grey;
-    }
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final effectiveColor = color ?? colorScheme.onSurface;
 
-    return Icon(icon, color: color, size: size);
-  }
-
-  Widget _buildThumbnail() {
-    final ls = GetIt.I.get<LocalStorage>();
-    final baseUrl = ls.fileServer ?? '';
-    // 网格视图使用小尺寸缩略图 (200)
-    final previewUrl =
-        '$baseUrl/api/file/stream/preview?file_id=${file.id}&size=small';
-    final token = ls.token?.accessToken;
-    final headers = <String, String>{};
-    if (token != null) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.grey[100],
-      child: Image.network(
-        previewUrl,
-        headers: headers,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => const Center(
-          child: Icon(Icons.broken_image, color: Colors.grey, size: 40),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.xxl,
+          vertical: PfmSpacing.md,
         ),
-        loadingBuilder: (_, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: effectiveColor),
+            const SizedBox(width: PfmSpacing.lg),
+            Text(
+              title,
+              style: PfmTypography.bodyLarge.copyWith(
+                color: effectiveColor,
+              ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -1729,28 +1774,29 @@ class _FileSearchDelegate extends SearchDelegate<String> {
     final al = AppLocalizations.of(context)!;
     return [
       IconButton(
-        icon: Icon(_isTagSearch ? Icons.label : Icons.search),
-        tooltip: _isTagSearch ? al.file_searchToggleFilename : al.file_searchToggleTag,
+        icon: Icon(_isTagSearch ? Icons.label : Icons.search, size: 20),
+        tooltip:
+            _isTagSearch ? al.file_searchToggleFilename : al.file_searchToggleTag,
         onPressed: () {
           _isTagSearch = !_isTagSearch;
-          // 触发 UI 重建
           showResults(context);
-          // 如果已有搜索词，立即重新搜索
           if (query.trim().isNotEmpty) {
             _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));
           }
         },
       ),
-      IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+      IconButton(
+        icon: const Icon(Icons.clear, size: 20),
+        onPressed: () => query = '',
+      ),
     ];
   }
 
   @override
   Widget buildLeading(BuildContext context) {
     return IconButton(
-      icon: const Icon(Icons.arrow_back),
+      icon: const Icon(Icons.arrow_back, size: 20),
       onPressed: () {
-        // 关闭搜索时清空搜索状态，恢复文件列表
         _bloc.add(const FileSearchEvent(''));
         close(context, '');
       },
@@ -1760,8 +1806,17 @@ class _FileSearchDelegate extends SearchDelegate<String> {
   @override
   Widget buildResults(BuildContext context) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (query.trim().isEmpty) {
-      return Center(child: Text(al.file_enterKeyword));
+      return Center(
+        child: Text(
+          al.file_enterKeyword,
+          style: PfmTypography.bodyMedium.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
 
     _bloc.add(FileSearchEvent(query, isTagSearch: _isTagSearch));
@@ -1773,26 +1828,57 @@ class _FileSearchDelegate extends SearchDelegate<String> {
           return const Center(child: CircularProgressIndicator());
         }
         if (state.status == FileStateStatus.failure) {
-          return Center(child: Text('${al.file_searchFailed}: ${state.msg}'));
+          return Center(
+            child: Text('${al.file_searchFailed}: ${state.msg}'),
+          );
         }
         if (state.files.isEmpty) {
-          return Center(child: Text(al.file_noMatchingFiles));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off,
+                  size: 48,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: PfmSpacing.lg),
+                Text(
+                  al.file_noMatchingFiles,
+                  style: PfmTypography.bodyMedium.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
         return ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: PfmSpacing.sm),
           itemCount: state.files.length,
           itemBuilder: (context, index) {
             final file = state.files[index];
             final fileName = file.hasName() ? file.name : al.file_unknownFile;
             final fileSize = file.hasSize() ? file.size.toInt() : 0;
             final fileId = file.hasId() ? file.id : '';
+            final iconData =
+                _FileViewState._getFileIconData(file.type);
+            final iconColors =
+                _FileViewState._getFileIconColors(file.type);
 
-            return ListTile(
-              leading: const Icon(Icons.insert_drive_file),
-              title: Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text(_formatFileSize(fileSize)),
-              onTap: () {
-                close(context, fileId);
-              },
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: PfmSpacing.md,
+                vertical: PfmSpacing.xs,
+              ),
+              child: PfmFileListTile(
+                name: fileName,
+                icon: iconData,
+                iconColor: iconColors.$1,
+                iconBackground: iconColors.$2,
+                subtitle: _formatFileSize(fileSize),
+                onTap: () => close(context, fileId),
+              ),
             );
           },
         );
@@ -1803,13 +1889,36 @@ class _FileSearchDelegate extends SearchDelegate<String> {
   @override
   Widget buildSuggestions(BuildContext context) {
     final al = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (query.trim().isEmpty) {
       return Center(
-        child: Text(_isTagSearch ? al.file_searchTagHint : al.file_searchFilenameHint),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _isTagSearch ? Icons.label_outline : Icons.search,
+              size: 48,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: PfmSpacing.lg),
+            Text(
+              _isTagSearch ? al.file_searchTagHint : al.file_searchFilenameHint,
+              style: PfmTypography.bodyMedium.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       );
     }
     return Center(
-      child: Text(_isTagSearch ? al.file_searchTagEnter : al.file_searchFilenameEnter),
+      child: Text(
+        _isTagSearch ? al.file_searchTagEnter : al.file_searchFilenameEnter,
+        style: PfmTypography.bodyMedium.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 
