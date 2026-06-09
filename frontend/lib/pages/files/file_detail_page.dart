@@ -284,141 +284,130 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(_getProviderIcon(loc.providerType), size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: Text(
-              providerName,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-          // 实际大小
-          if (storedSize != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                storedSize,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+          // 第一行：图标 + 名称 + 状态 + 下载按钮
+          Row(
+            children: [
+              Icon(_getProviderIcon(loc.providerType), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  providerName,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          // 加密标记
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: encrypted
-                  ? Theme.of(context).colorScheme.errorContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              encrypted ? al.detail_encrypted : al.detail_notEncrypted,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: encrypted
-                    ? Theme.of(context).colorScheme.onErrorContainer
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 分片标记
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: isChunked
-                  ? Theme.of(context).colorScheme.tertiaryContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              isChunked ? al.detail_chunks(chunkTotal) : al.detail_singleFile,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: isChunked
-                    ? Theme.of(context).colorScheme.onTertiaryContainer
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Telegram 缓存状态
-          if (cacheStatusText != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: loc.cacheStatus == CacheStatus.CACHED
-                    ? Colors.green.withValues(alpha: 0.2)
-                    : Theme.of(context).colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                cacheStatusText,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: loc.cacheStatus == CacheStatus.CACHED
+              Text(
+                statusText,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: loc.status == LocationStatus.PCOMPLETED
                       ? Colors.green
-                      : Theme.of(context).colorScheme.onSecondaryContainer,
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          // 状态
-          Text(
-            statusText,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: loc.status == LocationStatus.PCOMPLETED
-                  ? Colors.green
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+              if (loc.status == LocationStatus.PCOMPLETED)
+                IconButton(
+                  icon: const Icon(Icons.download, size: 20),
+                  onPressed: () async {
+                    final downloadDir = await getDownloadsDirectory();
+                    if (!mounted) return;
+                    final fileName = widget.file.name.isNotEmpty
+                        ? widget.file.name
+                        : 'unnamed';
+                    final initialPath = '${downloadDir!.path}/$fileName';
+                    // 生成唯一文件路径，避免覆盖
+                    final savePath = await FileUtils.getUniqueFilePath(initialPath);
+                    if (!context.mounted) return;
+                    context.read<TransferBloc>().add(
+                      TransferAddDownloadEvent(
+                        fileId: widget.file.id,
+                        filename: fileName,
+                        fileSize: widget.file.size.toInt(),
+                        savePath: savePath,
+                        providerId: loc.providerId,
+                      ),
+                    );
+                    final snackMsg = isTelegram && cacheStatusText != null
+                        ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
+                        : '已开始下载: $fileName';
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(snackMsg)));
+                  },
+                  tooltip: al.detail_download,
+                ),
+            ],
           ),
-          const SizedBox(width: 4),
-          // 下载按钮（仅在状态不是失败时显示）
-          if (loc.status == LocationStatus.PCOMPLETED)
-            IconButton(
-              icon: const Icon(Icons.download, size: 20),
-              onPressed: () async {
-                final downloadDir = await getDownloadsDirectory();
-                if (!mounted) return;
-                final fileName = widget.file.name.isNotEmpty
-                    ? widget.file.name
-                    : 'unnamed';
-                final initialPath = '${downloadDir!.path}/$fileName';
-                // 生成唯一文件路径，避免覆盖
-                final savePath = await FileUtils.getUniqueFilePath(initialPath);
-                if (!context.mounted) return;
-                context.read<TransferBloc>().add(
-                  TransferAddDownloadEvent(
-                    fileId: widget.file.id,
-                    filename: fileName,
-                    fileSize: widget.file.size.toInt(),
-                    savePath: savePath,
-                    providerId: loc.providerId,
-                  ),
-                );
-                final snackMsg = isTelegram && cacheStatusText != null
-                    ? '已添加到下载队列（Telegram 大文件请耐心等待缓存）'
-                    : '已开始下载: $fileName';
-                ScaffoldMessenger.of(
+          const SizedBox(height: 4),
+          // 第二行：标签自动换行
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              if (storedSize != null)
+                _buildBadge(context, storedSize),
+              _buildBadge(
+                context,
+                encrypted ? al.detail_encrypted : al.detail_notEncrypted,
+                isError: encrypted,
+              ),
+              _buildBadge(
+                context,
+                isChunked ? al.detail_chunks(chunkTotal) : al.detail_singleFile,
+                isTertiary: isChunked,
+              ),
+              if (cacheStatusText != null)
+                _buildBadge(
                   context,
-                ).showSnackBar(SnackBar(content: Text(snackMsg)));
-              },
-              tooltip: al.detail_download,
-            ),
+                  cacheStatusText,
+                  isGreen: loc.cacheStatus == CacheStatus.CACHED,
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 
   // ==================== 标签管理 ====================
+
+  /// 构建标签 badge
+  Widget _buildBadge(
+    BuildContext context,
+    String text, {
+    bool isError = false,
+    bool isTertiary = false,
+    bool isGreen = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    Color bgColor;
+    Color fgColor;
+    if (isError) {
+      bgColor = colorScheme.errorContainer;
+      fgColor = colorScheme.onErrorContainer;
+    } else if (isTertiary) {
+      bgColor = colorScheme.tertiaryContainer;
+      fgColor = colorScheme.onTertiaryContainer;
+    } else if (isGreen) {
+      bgColor = Colors.green.withValues(alpha: 0.2);
+      fgColor = Colors.green;
+    } else {
+      bgColor = colorScheme.surfaceContainerHighest;
+      fgColor = colorScheme.onSurfaceVariant;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fgColor),
+      ),
+    );
+  }
 
   Widget _buildTagsSection(BuildContext context) {
     final al = AppLocalizations.of(context)!;

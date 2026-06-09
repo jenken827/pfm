@@ -769,6 +769,7 @@ class _FileViewState extends State<_FileView> {
         fileType: file.type.value,
         fileSize: file.size.toInt(),
         parentId: file.parentId,
+        fileJson: file.toProto3Json() as Map<String, dynamic>?,
       );
     } catch (_) {}
   }

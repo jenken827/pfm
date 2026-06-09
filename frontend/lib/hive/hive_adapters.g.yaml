@@ -51,7 +51,7 @@ types:
         index: 4
   User:
     typeId: 4
-    nextIndex: 7
+    nextIndex: 8
     fields:
       id:
         index: 0
@@ -67,3 +67,5 @@ types:
         index: 5
       phone:
         index: 6
+      roles:
+        index: 7

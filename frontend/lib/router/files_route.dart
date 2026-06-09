@@ -13,6 +13,7 @@ part 'files_route.g.dart';
     TypedGoRoute<FileDetailRoute>(path: 'detail'),
     TypedGoRoute<FolderPickerRoute>(path: 'picker'),
     TypedGoRoute<TrashRoute>(path: 'trash'),
+    TypedGoRoute<FileTypeRoute>(path: 'type/:fileType'),
   ],
 )
 @immutable
@@ -83,5 +84,17 @@ class TrashRoute extends GoRouteData with $TrashRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const TrashPage();
+  }
+}
+
+/// 按文件类型浏览路由
+@immutable
+class FileTypeRoute extends GoRouteData with $FileTypeRoute {
+  final int fileType;
+  const FileTypeRoute({required this.fileType});
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return FileTypePage(fileType: fileType);
   }
 }

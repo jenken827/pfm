@@ -26,6 +26,8 @@ class PfmColors {
   static const Color warningSurface = Color(0xFFFEF3C7);
   static const Color error = Color(0xFFEF4444);
   static const Color errorSurface = Color(0xFFFEE2E2);
+  static const Color info = Color(0xFF3B82F6);
+  static const Color infoSurface = Color(0xFFDBEAFE);
 
   // 中性色 - 浅色模式
   static const Color lightBackground = Color(0xFFFAFAFA);
@@ -174,6 +176,14 @@ class PfmTypography {
   static const TextStyle bodyMedium = TextStyle(
     fontFamily: fontFamily,
     fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+  );
+
+  // 正文更小
+  static const TextStyle bodySmall = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 12,
     fontWeight: FontWeight.w400,
     height: 1.5,
   );

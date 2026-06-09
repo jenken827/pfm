@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/file.pb.dart';
-import 'package:pfm/proto/native/provider.pb.dart';
-import 'package:pfm/proto/native/upload.pb.dart';
-import 'package:pfm/router/files_route.dart';
-import 'package:pfm/pages/files/file_preview_page.dart';
-import 'package:pfm/pages/files/flyfish_viewer_page.dart';
 import 'package:pfm/services/recent_files_storage.dart';
-import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/design/components/components.dart';
 import 'package:pfm/utils/format.dart';
+import 'package:pfm/router/router.dart';
+import 'package:pfm/router/files_route.dart';
 
-/// 首页 - Clean Minimal 设计
+/// 首页 - 分类浏览 + 最近文件
 class HomeIndexPage extends StatefulWidget {
   const HomeIndexPage({super.key});
 
@@ -25,62 +22,14 @@ class HomeIndexPage extends StatefulWidget {
 }
 
 class _HomeIndexPageState extends State<HomeIndexPage> {
-  // 统计数据
-  int _totalFiles = 0;
-  String _storageUsage = '--';
-  int _activeTransfers = 0;
-  bool _loadingStats = true;
-
   // 最近文件
   List<Map<String, dynamic>> _recentFiles = [];
   bool _loadingRecent = true;
 
-  // 存储提供者
-  List<StorageProvider> _storageProviders = [];
-  bool _loadingProviders = true;
-
   @override
   void initState() {
     super.initState();
-    _loadAllData();
-  }
-
-  Future<void> _loadAllData() async {
-    await Future.wait([
-      _loadStats(),
-      _loadRecentFiles(),
-      _loadStorageProviders(),
-    ]);
-  }
-
-  Future<void> _loadStats() async {
-    final repository = GetIt.I.get<FmRepository>();
-
-    // 并行获取文件列表和上传记录
-    final results = await Future.wait([
-      repository.getFileList(parentId: '0', offset: 0, pageSize: 1),
-      repository.listUploadRecords(page: 1, pageSize: 100),
-    ]);
-
-    if (mounted) {
-      setState(() {
-        // 文件总数
-        final fileListResult = results[0] as ApiResult<FileListRespData>;
-        if (fileListResult.success && fileListResult.data != null) {
-          _totalFiles = fileListResult.data!.total;
-        }
-
-        // 传输中任务数
-        final uploadResult = results[1] as ApiResult<ListUploadRecordsResp>;
-        if (uploadResult.success && uploadResult.data != null) {
-          _activeTransfers = uploadResult.data!.records
-              .where((r) => r.status == LocationStatus.PUPLOADING || r.status == LocationStatus.PPENDING)
-              .length;
-        }
-
-        _loadingStats = false;
-      });
-    }
+    _loadRecentFiles();
   }
 
   Future<void> _loadRecentFiles() async {
@@ -92,28 +41,6 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         _loadingRecent = false;
       });
     }
-  }
-
-  Future<void> _loadStorageProviders() async {
-    final repository = GetIt.I.get<FmRepository>();
-    final result = await repository.listStorageProviders();
-
-    if (mounted) {
-      setState(() {
-        if (result.success && result.data != null) {
-          _storageProviders = result.data!.providers;
-          // 计算总存储使用量（这里简化处理，实际可能需要更复杂的逻辑）
-          _storageUsage = _formatStorageUsage(_storageProviders);
-        }
-        _loadingProviders = false;
-      });
-    }
-  }
-
-  String _formatStorageUsage(List<StorageProvider> providers) {
-    if (providers.isEmpty) return '0 B';
-    // 简化处理：显示提供者数量
-    return '${providers.length} 个存储';
   }
 
   @override
@@ -137,20 +64,12 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
                   _buildPageHeader(context, al, colorScheme),
                   const SizedBox(height: PfmSpacing.xxxl),
 
-                  // 统计卡片
-                  _buildStatsSection(context, al, colorScheme, isMobile),
+                  // 分类浏览
+                  _buildCategoryGrid(context, al, colorScheme, isMobile),
                   const SizedBox(height: PfmSpacing.xxxl),
 
-                  // 快捷操作
-                  _buildQuickActions(context, al, colorScheme, isMobile),
-                  const SizedBox(height: PfmSpacing.xxxl),
-
-                  // 最近文件
+                  // 最近浏览
                   _buildRecentFiles(context, al, colorScheme),
-                  const SizedBox(height: PfmSpacing.xxxl),
-
-                  // 存储空间
-                  _buildStorageSection(context, al, colorScheme),
                 ],
               ),
             ),
@@ -180,7 +99,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
             ),
             const SizedBox(height: PfmSpacing.xs),
             Text(
-              '这是您的文件管理概览',
+              al.home_categoryBrowse,
               style: PfmTypography.bodyMedium.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -192,10 +111,9 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
           icon: Icon(Icons.refresh, color: colorScheme.onSurfaceVariant),
           onPressed: () {
             setState(() {
-              _loadingStats = true;
-              _loadingProviders = true;
+              _loadingRecent = true;
             });
-            _loadAllData();
+            _loadRecentFiles();
           },
           tooltip: '刷新',
         ),
@@ -203,155 +121,142 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     );
   }
 
-  /// 构建统计卡片区域
-  Widget _buildStatsSection(
+  /// 构建分类浏览网格
+  Widget _buildCategoryGrid(
     BuildContext context,
     AppLocalizations al,
     ColorScheme colorScheme,
     bool isMobile,
   ) {
+    final categories = [
+      _CategoryItem(
+        icon: Icons.image_outlined,
+        label: al.fileType_image ?? '图片',
+        fileType: FileType.IMAGE,
+        color: PfmColors.primary,
+      ),
+      _CategoryItem(
+        icon: Icons.video_file_outlined,
+        label: al.fileType_video ?? '视频',
+        fileType: FileType.VIDEO,
+        color: PfmColors.warning,
+      ),
+      _CategoryItem(
+        icon: Icons.audio_file_outlined,
+        label: al.fileType_audio ?? '音频',
+        fileType: FileType.AUDIO,
+        color: PfmColors.success,
+      ),
+      _CategoryItem(
+        icon: Icons.description_outlined,
+        label: al.fileType_document ?? '文档',
+        fileType: FileType.DOCUMENT,
+        color: PfmColors.info,
+      ),
+      _CategoryItem(
+        icon: Icons.archive_outlined,
+        label: al.fileType_archive ?? '压缩包',
+        fileType: FileType.ARCHIVE,
+        color: PfmColors.error,
+      ),
+      _CategoryItem(
+        icon: Icons.font_download_outlined,
+        label: al.fileType_font ?? '字体',
+        fileType: FileType.FONT,
+        color: const Color(0xFF9C27B0), // Purple
+      ),
+      _CategoryItem(
+        icon: Icons.android_outlined,
+        label: al.fileType_application ?? '应用',
+        fileType: FileType.APPLICATION,
+        color: const Color(0xFF607D8B), // Blue Grey
+      ),
+      _CategoryItem(
+        icon: Icons.folder_outlined,
+        label: al.home_allFiles ?? '全部文件',
+        fileType: FileType.FILE_TYPE_UNKNOWN,
+        color: colorScheme.onSurfaceVariant,
+      ),
+    ];
+
     final crossAxisCount = isMobile ? 2 : 4;
 
-    return GridView.count(
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: crossAxisCount,
-      mainAxisSpacing: PfmSpacing.lg,
-      crossAxisSpacing: PfmSpacing.lg,
-      childAspectRatio: isMobile ? 1.5 : 1.8,
-      children: [
-        PfmStatCard(
-          label: al.home_totalFiles,
-          value: _loadingStats ? '...' : _formatNumber(_totalFiles),
-          change: _loadingStats ? '' : '总计 $_totalFiles',
-          changeColor: PfmColors.primary,
-        ),
-        PfmStatCard(
-          label: al.home_storageUsage,
-          value: _loadingStats ? '...' : _storageUsage,
-          change: '${_storageProviders.length} 个提供者',
-        ),
-        PfmStatCard(
-          label: al.home_activeTransfers,
-          value: _loadingStats ? '...' : '$_activeTransfers',
-          change: _activeTransfers > 0
-              ? '$_activeTransfers 个任务'
-              : '无任务',
-        ),
-        PfmStatCard(
-          label: al.home_backupStatus,
-          value: '正常',
-          changeColor: PfmColors.success,
-          change: '系统正常',
-        ),
-      ],
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        mainAxisSpacing: PfmSpacing.lg,
+        crossAxisSpacing: PfmSpacing.lg,
+        childAspectRatio: 1.2,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        return _buildCategoryCard(context, categories[index], colorScheme);
+      },
     );
   }
 
-  String _formatNumber(int number) {
-    if (number >= 1000000) {
-      return '${(number / 1000000).toStringAsFixed(1)}M';
-    } else if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(1)}K';
-    }
-    return number.toString();
-  }
-
-  /// 构建快捷操作区域
-  Widget _buildQuickActions(
+  /// 构建单个分类卡片
+  Widget _buildCategoryCard(
     BuildContext context,
-    AppLocalizations al,
+    _CategoryItem category,
     ColorScheme colorScheme,
-    bool isMobile,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        PfmSectionHeader(title: al.home_quickActions),
-        isMobile
-            ? Column(
-                children: [
-                  PfmQuickActionCard(
-                    title: al.home_uploadFile,
-                    description: al.home_uploadDesc,
-                    icon: Icons.upload_outlined,
-                    iconColor: PfmColors.primary,
-                    iconBackground: PfmColors.primarySurface,
-                    onTap: () {
-                      // TODO: 实现上传功能
-                    },
-                  ),
-                  const SizedBox(height: PfmSpacing.md),
-                  PfmQuickActionCard(
-                    title: al.home_backupNow,
-                    description: al.home_backupDesc,
-                    icon: Icons.shield_outlined,
-                    iconColor: PfmColors.success,
-                    iconBackground: PfmColors.successSurface,
-                    onTap: () {
-                      // TODO: 实现备份功能
-                    },
-                  ),
-                  const SizedBox(height: PfmSpacing.md),
-                  PfmQuickActionCard(
-                    title: al.home_shareFile,
-                    description: al.home_shareDesc,
-                    icon: Icons.share_outlined,
-                    iconColor: PfmColors.warning,
-                    iconBackground: PfmColors.warningSurface,
-                    onTap: () {
-                      // TODO: 实现分享功能
-                    },
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: PfmQuickActionCard(
-                      title: al.home_uploadFile,
-                      description: al.home_uploadDesc,
-                      icon: Icons.upload_outlined,
-                      iconColor: PfmColors.primary,
-                      iconBackground: PfmColors.primarySurface,
-                      onTap: () {
-                        // TODO: 实现上传功能
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: PfmSpacing.lg),
-                  Expanded(
-                    child: PfmQuickActionCard(
-                      title: al.home_backupNow,
-                      description: al.home_backupDesc,
-                      icon: Icons.shield_outlined,
-                      iconColor: PfmColors.success,
-                      iconBackground: PfmColors.successSurface,
-                      onTap: () {
-                        // TODO: 实现备份功能
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: PfmSpacing.lg),
-                  Expanded(
-                    child: PfmQuickActionCard(
-                      title: al.home_shareFile,
-                      description: al.home_shareDesc,
-                      icon: Icons.share_outlined,
-                      iconColor: PfmColors.warning,
-                      iconBackground: PfmColors.warningSurface,
-                      onTap: () {
-                        // TODO: 实现分享功能
-                      },
-                    ),
-                  ),
-                ],
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PfmRadius.lg),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(PfmRadius.lg),
+        onTap: () => _navigateToCategory(context, category),
+        child: Padding(
+          padding: const EdgeInsets.all(PfmSpacing.lg),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: category.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(PfmRadius.md),
+                ),
+                child: Icon(
+                  category.icon,
+                  size: 28,
+                  color: category.color,
+                ),
               ),
-      ],
+              const SizedBox(height: PfmSpacing.md),
+              Text(
+                category.label,
+                style: PfmTypography.titleSmall.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  /// 构建最近文件区域
+  /// 导航到分类页面
+  void _navigateToCategory(BuildContext context, _CategoryItem category) {
+    if (category.fileType == FileType.FILE_TYPE_UNKNOWN) {
+      // 全部文件 -> 切换到文件 tab
+      const FileListRoute().go(context);
+    } else {
+      // 按类型浏览 -> push 到文件类型页面（支持返回手势）
+      FileTypeRoute(fileType: category.fileType.value).push(context);
+    }
+  }
+
+  /// 构建最近浏览区域
   Widget _buildRecentFiles(
     BuildContext context,
     AppLocalizations al,
@@ -371,7 +276,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     );
   }
 
-  /// 构建空的最近文件提示
+  /// 构建空的最近浏览提示
   Widget _buildEmptyRecentFiles(
     BuildContext context,
     AppLocalizations al,
@@ -387,7 +292,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         child: Column(
           children: [
             Icon(
-              Icons.folder_open,
+              Icons.history,
               size: 48,
               color: colorScheme.onSurfaceVariant,
             ),
@@ -404,7 +309,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     );
   }
 
-  /// 构建最近文件列表
+  /// 构建最近浏览列表
   Widget _buildRecentFilesList(
     BuildContext context,
     AppLocalizations al,
@@ -432,28 +337,29 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     );
   }
 
-  /// 构建单个最近文件行
+  /// 构建单个最近浏览行
   Widget _buildRecentFileTile(
     BuildContext context,
     AppLocalizations al,
     ColorScheme colorScheme,
     Map<String, dynamic> file,
   ) {
-    final fileName = file['name'] as String? ?? '';
-    final fileSize = file['size'] as int? ?? 0;
-    final fileType = file['type'] as String? ?? '';
+    final fileName = file['fileName'] as String? ?? '';
+    final fileSize = file['fileSize'] as int? ?? 0;
+    final fileType = file['fileType'] as int? ?? 0;
+    final fileId = file['fileId'] as String? ?? '';
 
     return ListTile(
       leading: Container(
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: _getFileTypeColor(fileType).withValues(alpha: 0.1),
+          color: _getFileTypeColorByInt(fileType).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(PfmRadius.sm),
         ),
         child: Icon(
-          _getFileTypeIcon(fileType),
-          color: _getFileTypeColor(fileType),
+          _getFileTypeIconByInt(fileType),
+          color: _getFileTypeColorByInt(fileType),
           size: 20,
         ),
       ),
@@ -473,153 +379,60 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         Icons.chevron_right,
         color: colorScheme.onSurfaceVariant,
       ),
-      onTap: () {
-        // TODO: 打开文件详情
-      },
+      onTap: () => _onRecentFileTap(context, file, fileType),
     );
   }
 
-  /// 构建存储空间区域
-  Widget _buildStorageSection(
+  /// 点击最近浏览文件
+  Future<void> _onRecentFileTap(
     BuildContext context,
-    AppLocalizations al,
-    ColorScheme colorScheme,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        PfmSectionHeader(title: al.home_storageSpace),
-        const SizedBox(height: PfmSpacing.md),
-        _loadingProviders
-            ? const Center(child: CircularProgressIndicator())
-            : _storageProviders.isEmpty
-                ? _buildEmptyStorage(context, al, colorScheme)
-                : _buildStorageProvidersList(context, al, colorScheme),
-      ],
-    );
+    Map<String, dynamic> file,
+    int fileType,
+  ) async {
+    final fileJson = file['fileJson'] as Map<String, dynamic>?;
+    if (fileJson != null) {
+      try {
+        final protoFile = File()..mergeFromProto3Json(fileJson);
+        _navigateToFile(context, protoFile);
+        return;
+      } catch (_) {}
+    }
+    // 无 fileJson 时通过 API 获取文件信息
+    final fileId = file['fileId'] as String? ?? '';
+    if (fileId.isEmpty) {
+      FileTypeRoute(fileType: fileType).push(context);
+      return;
+    }
+    final repo = context.read<FmRepository>();
+    final result = await repo.getFileInfo(fileId);
+    if (result.success && result.data != null) {
+      final info = result.data!;
+      final protoFile = File()
+        ..id = info.id
+        ..name = info.name
+        ..parentId = info.parentId
+        ..type = info.type
+        ..size = info.size;
+      if (context.mounted) _navigateToFile(context, protoFile);
+    } else if (context.mounted) {
+      FileTypeRoute(fileType: fileType).push(context);
+    }
   }
 
-  /// 构建空的存储提示
-  Widget _buildEmptyStorage(
-    BuildContext context,
-    AppLocalizations al,
-    ColorScheme colorScheme,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(PfmSpacing.xxxxl),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(PfmRadius.lg),
-      ),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(
-              Icons.cloud_off,
-              size: 48,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: PfmSpacing.md),
-            Text(
-              '暂无存储提供者',
-              style: PfmTypography.bodyMedium.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: PfmSpacing.md),
-            OutlinedButton(
-              onPressed: () {
-                // TODO: 添加存储提供者
-              },
-              child: const Text('添加存储'),
-            ),
-          ],
-        ),
-      ),
-    );
+  /// 导航到文件详情或预览
+  void _navigateToFile(BuildContext context, File protoFile) {
+    final isPreviewable = protoFile.type == FileType.IMAGE ||
+        protoFile.type == FileType.VIDEO ||
+        protoFile.type == FileType.AUDIO ||
+        protoFile.type == FileType.DOCUMENT;
+    if (isPreviewable) {
+      context.push('/files/preview', extra: protoFile);
+    } else {
+      context.push('/files/detail', extra: protoFile);
+    }
   }
 
-  /// 构建存储提供者列表
-  Widget _buildStorageProvidersList(
-    BuildContext context,
-    AppLocalizations al,
-    ColorScheme colorScheme,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(PfmRadius.lg),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _storageProviders.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          color: colorScheme.outlineVariant,
-        ),
-        itemBuilder: (context, index) {
-          final provider = _storageProviders[index];
-          return _buildStorageProviderTile(context, al, colorScheme, provider);
-        },
-      ),
-    );
-  }
-
-  /// 构建单个存储提供者行
-  Widget _buildStorageProviderTile(
-    BuildContext context,
-    AppLocalizations al,
-    ColorScheme colorScheme,
-    StorageProvider provider,
-  ) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: _getProviderColor(provider.providerType).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(PfmRadius.sm),
-        ),
-        child: Icon(
-          _getProviderIcon(provider.providerType),
-          color: _getProviderColor(provider.providerType),
-          size: 20,
-        ),
-      ),
-      title: Text(
-        provider.name,
-        style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurface),
-      ),
-      subtitle: Text(
-        _getProviderTypeName(provider.providerType),
-        style: PfmTypography.bodyMedium.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
-      ),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: PfmSpacing.sm,
-          vertical: PfmSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: provider.enabled
-              ? PfmColors.success.withValues(alpha: 0.1)
-              : PfmColors.error.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(PfmRadius.full),
-        ),
-        child: Text(
-          provider.enabled ? '已启用' : '已禁用',
-          style: PfmTypography.labelSmall.copyWith(
-            color: provider.enabled ? PfmColors.success : PfmColors.error,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 获取文件类型图标
+  /// 获取文件类型图标（String 版本）
   IconData _getFileTypeIcon(String type) {
     switch (type.toLowerCase()) {
       case 'image':
@@ -632,8 +445,56 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         return Icons.description;
       case 'archive':
         return Icons.archive;
+      case 'font':
+        return Icons.font_download;
+      case 'application':
+        return Icons.android;
       default:
         return Icons.insert_drive_file;
+    }
+  }
+
+  /// 获取文件类型图标（int 版本）
+  IconData _getFileTypeIconByInt(int type) {
+    switch (type) {
+      case 2:
+        return Icons.image;
+      case 3:
+        return Icons.video_file;
+      case 4:
+        return Icons.audio_file;
+      case 1:
+        return Icons.description;
+      case 5:
+        return Icons.archive;
+      case 6:
+        return Icons.font_download;
+      case 7:
+        return Icons.android;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  /// 获取文件类型颜色（int 版本）
+  Color _getFileTypeColorByInt(int type) {
+    switch (type) {
+      case 2:
+        return PfmColors.primary;
+      case 3:
+        return PfmColors.warning;
+      case 4:
+        return PfmColors.success;
+      case 1:
+        return PfmColors.info;
+      case 5:
+        return PfmColors.error;
+      case 6:
+        return const Color(0xFF9C27B0);
+      case 7:
+        return const Color(0xFF607D8B);
+      default:
+        return PfmColors.primary;
     }
   }
 
@@ -647,53 +508,30 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
       case 'audio':
         return PfmColors.success;
       case 'document':
-        return PfmColors.warning;
+        return PfmColors.info;
       case 'archive':
         return PfmColors.error;
+      case 'font':
+        return const Color(0xFF9C27B0);
+      case 'application':
+        return const Color(0xFF607D8B);
       default:
         return PfmColors.primary;
     }
   }
+}
 
-  /// 获取存储提供者图标
-  IconData _getProviderIcon(StorageProviderType type) {
-    switch (type) {
-      case StorageProviderType.TELEGRAM:
-        return Icons.send;
-      case StorageProviderType.BAIDU_NETDISK:
-        return Icons.cloud;
-      case StorageProviderType.LOCAL:
-        return Icons.phone_android;
-      default:
-        return Icons.cloud;
-    }
-  }
+/// 分类项数据类
+class _CategoryItem {
+  final IconData icon;
+  final String label;
+  final FileType fileType;
+  final Color color;
 
-  /// 获取存储提供者颜色
-  Color _getProviderColor(StorageProviderType type) {
-    switch (type) {
-      case StorageProviderType.TELEGRAM:
-        return PfmColors.primary;
-      case StorageProviderType.BAIDU_NETDISK:
-        return PfmColors.warning;
-      case StorageProviderType.LOCAL:
-        return PfmColors.success;
-      default:
-        return PfmColors.primary;
-    }
-  }
-
-  /// 获取存储提供者类型名称
-  String _getProviderTypeName(StorageProviderType type) {
-    switch (type) {
-      case StorageProviderType.TELEGRAM:
-        return 'Telegram';
-      case StorageProviderType.BAIDU_NETDISK:
-        return '百度网盘';
-      case StorageProviderType.LOCAL:
-        return '本地存储';
-      default:
-        return '未知';
-    }
-  }
+  const _CategoryItem({
+    required this.icon,
+    required this.label,
+    required this.fileType,
+    required this.color,
+  });
 }

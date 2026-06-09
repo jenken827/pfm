@@ -35,6 +35,7 @@ class RecentFilesStorage {
     required int fileType,
     required int fileSize,
     String? parentId,
+    Map<String, dynamic>? fileJson,
   }) async {
     final userId = _currentUserId;
     if (userId == null) return;
@@ -46,6 +47,7 @@ class RecentFilesStorage {
       'fileType': fileType,
       'fileSize': fileSize,
       'parentId': parentId ?? '',
+      'fileJson': fileJson,
       'accessedAt': DateTime.now().millisecondsSinceEpoch,
     };
     await _box.put(key, record);

@@ -228,9 +228,10 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   Widget _buildLocationTile(FileLocationInfo location) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
-        title: Text(location.providerName),
+        title: Text(location.providerName, style: TextStyle(color: colorScheme.onSurface)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -257,7 +258,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 ),
                 if (location.progress.toInt() > 0) ...[
                   const SizedBox(width: 8),
-                  Text('进度: ${location.progress.toInt()}%'),
+                  Text('进度: ${location.progress.toInt()}%', style: TextStyle(color: colorScheme.onSurfaceVariant)),
                 ],
               ],
             ),
