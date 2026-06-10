@@ -193,7 +193,7 @@ func GetFileLocationsByBlake3Hash(hash string) ([]*native.FileLocationORM, error
 	ctx := context.Background()
 	var locations []*native.FileLocationORM
 
-	if err := GetDB().WithContext(ctx).Where("blake3_hash = ?", hash).Find(&locations).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Where("blake3_hash = ?", hash).Order("chunk_number ASC").Find(&locations).Error; err != nil {
 		return nil, err
 	}
 
@@ -205,7 +205,7 @@ func GetFileLocationsByProviderAndHash(providerIDs []uint32, blake3Hash string) 
 	ctx := context.Background()
 	var locations []*native.FileLocationORM
 
-	if err := GetDB().WithContext(ctx).Where("provider_id IN ? AND blake3_hash = ?", providerIDs, blake3Hash).Find(&locations).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Where("provider_id IN ? AND blake3_hash = ?", providerIDs, blake3Hash).Order("chunk_number ASC").Find(&locations).Error; err != nil {
 		return nil, err
 	}
 
@@ -238,7 +238,7 @@ func GetFileLocationsByFileHash(fileHash string) ([]*native.FileLocationORM, err
 // GetFileLocationByFileHashAndProvider 根据文件哈希和提供者查询
 func GetFileLocationByFileHashAndProvider(fileHash string, providerID uint32) (*native.FileLocationORM, error) {
 	ctx := context.Background()
-	location, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ? AND provider_id = ?", fileHash, providerID).First(ctx)
+	location, err := gorm.G[*native.FileLocationORM](db).Where("blake3_hash = ? AND provider_id = ?", fileHash, providerID).Order("chunk_number ASC").First(ctx)
 	if err != nil {
 		llog.L().Errorf("query file location failed: %v", err)
 		return nil, err

@@ -556,6 +556,7 @@
     "file_modified": "Modified"
 ,
     "permission_title": "Permissions",
+    "permission_subtitle": "Manage user directory permissions",
     "permission_refresh": "Refresh",
     "permission_retry": "Retry",
     "permission_noRoles": "No roles",

@@ -98,6 +98,9 @@ func fileRoute(mux *http.ServeMux) {
 	// 1. 注册 Connect RPC handler
 	mux.Handle(path, handler)
 
+	// 2. 相册备份子目录端点
+	mux.HandleFunc("/api/file/get-or-create-subfolder", api.GetOrCreateSubfolderHandler)
+
 	// 2. 创建 Vanguard Service 用于 RESTful 支持
 	service := vanguard.NewService(path, handler)
 	vanguardServices = append(vanguardServices, service)

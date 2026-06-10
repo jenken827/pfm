@@ -1,19 +1,20 @@
 package storage
 
 import (
+	"context"
 	"io"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/crypt"
 )
 
-// CryptEncryptor 基于crypt包的加密器实现
+// CryptEncryptor 基于 crypt.Cipher 的加密器
 type CryptEncryptor struct {
 	cipher *crypt.Cipher
 }
 
 // NewCryptEncryptor 创建加密器
-func NewCryptEncryptor(password, salt string) (types.Encryptor, error) {
+func NewCryptEncryptor(password, salt string) (*CryptEncryptor, error) {
 	cipher, err := crypt.NewCipher(password, salt)
 	if err != nil {
 		return nil, err
@@ -29,6 +30,11 @@ func (e *CryptEncryptor) Encrypt(in io.Reader) (io.ReadCloser, error) {
 // Decrypt 解密数据
 func (e *CryptEncryptor) Decrypt(in io.ReadCloser) (io.ReadCloser, error) {
 	return e.cipher.DecryptData(in)
+}
+
+// DecryptDataSeek 解密数据流（支持 Seek 操作）
+func (e *CryptEncryptor) DecryptDataSeek(ctx context.Context, open types.OpenRangeSeek, offset, limit int64) (types.ReadSeekCloser, error) {
+	return e.cipher.DecryptDataSeek(ctx, open, offset, limit)
 }
 
 // IsEncrypted 是否加密

@@ -93,6 +93,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   String _getCacheStatusText(CacheStatus status) {
     final al = AppLocalizations.of(context)!;
     switch (status) {
+      case CacheStatus.CACHE_STATUS_UNSPECIFIED:
       case CacheStatus.UNCACHED:
         return al.uploadRecord_cacheNotCached;
       case CacheStatus.CACHING:

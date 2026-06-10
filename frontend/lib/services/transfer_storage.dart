@@ -288,7 +288,7 @@ class TransferStorage {
   // ==================== Download Tasks ====================
 
   Future<void> addDownloadTask(DownloadTaskRecord task) async {
-    // 去重：检查是否已有相同文件的活跃任务
+    // 去重：检查是否已有相同文件的任务
     for (final key in _downloadBox.keys) {
       final raw = _downloadBox.get(key);
       if (raw == null) continue;
@@ -303,6 +303,11 @@ class TransferStorage {
           getLogger().info('Download task already exists for file ${task.fileId}, skip');
           return;
         }
+        // 已完成的任务也跳过，避免重复下载
+        if (s == DownloadStatus.completed.index) {
+          getLogger().info('File ${task.fileId} already downloaded, skip');
+          return;
+        }
       }
     }
     await _downloadBox.put(task.id, task.toJson());
@@ -315,6 +320,7 @@ class TransferStorage {
     int? downloadedBytes,
     int? speed,
     int? chunkTotal,
+    int? providerId,
   }) async {
     final raw = _downloadBox.get(id);
     if (raw == null) return;
@@ -330,6 +336,7 @@ class TransferStorage {
     if (downloadedBytes != null) existing['downloaded_bytes'] = downloadedBytes;
     if (speed != null) existing['speed'] = speed;
     if (chunkTotal != null) existing['chunk_total'] = chunkTotal;
+    if (providerId != null) existing['provider_id'] = providerId;
 
     await _downloadBox.put(id, existing);
   }
@@ -378,6 +385,18 @@ class TransferStorage {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (offset > 0) filtered.removeRange(0, offset.clamp(0, filtered.length));
     return filtered.take(limit).toList();
+  }
+
+  /// 统计指定状态的下载任务数量
+  Future<int> countDownloadTasksByStatus(DownloadStatus status) async {
+    int count = 0;
+    for (final raw in _downloadBox.values) {
+      final s = (raw as Map)['status'] as int? ?? 0;
+      if (s == status.index) {
+        count++;
+      }
+    }
+    return count;
   }
 
   Future<List<DownloadTaskRecord>> getPendingDownloadTasksAsync() async {

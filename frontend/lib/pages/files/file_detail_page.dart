@@ -325,6 +325,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
                         filename: fileName,
                         fileSize: widget.file.size.toInt(),
                         savePath: savePath,
+                        fileHash: widget.file.hash,
                         providerId: loc.providerId,
                       ),
                     );
@@ -855,6 +856,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   String _getCacheStatusText(CacheStatus status, AppLocalizations al) {
     switch (status) {
+      case CacheStatus.CACHE_STATUS_UNSPECIFIED:
       case CacheStatus.UNCACHED:
         return al.detail_cacheNotCached;
       case CacheStatus.CACHING:

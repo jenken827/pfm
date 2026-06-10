@@ -977,6 +977,7 @@ class _FileViewState extends State<_FileView> {
           filename: fileName,
           fileSize: file.size.toInt(),
           savePath: savePath,
+          fileHash: file.hash,
         ),
       );
       ScaffoldMessenger.of(context).showSnackBar(

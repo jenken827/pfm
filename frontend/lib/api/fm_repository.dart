@@ -1206,10 +1206,10 @@ class FmRepository {
   }
 
   /// 查询文件缓存状态
-  Future<ApiResult<GetFileCacheStatusResp>> getFileCacheStatus(
-    String fileHash,
-    int providerId,
-  ) async {
+  Future<ApiResult<GetFileCacheStatusResp>> getFileCacheStatus({
+    required String fileHash,
+    required int providerId,
+  }) async {
     try {
       final req = GetFileCacheStatusReq(
         fileHash: fileHash,
@@ -1732,6 +1732,36 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('按类型获取文件失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取有空位的子目录（相册备份用）
+  /// 查找 parentID 下以 prefix 开头的子目录，返回第一个文件数 < 500 的目录 ID
+  /// 如果都满了，自动创建新目录
+  Future<ApiResult<String>> getOrCreateSubfolder({
+    required String parentId,
+    String prefix = '00',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/file/get-or-create-subfolder',
+        data: {'parent_id': parentId, 'prefix': prefix},
+      );
+      final data = response.data as Map<String, dynamic>;
+      final folderId = data['folder_id'] as String?;
+      if (folderId == null || folderId.isEmpty) {
+        return ApiResult(success: false, message: '未返回目录ID');
+      }
+      return ApiResult(success: true, data: folderId);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取子目录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取子目录失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

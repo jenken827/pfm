@@ -74,8 +74,13 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 		return nil, fmt.Errorf("storage not found for provider %d", sourceProviderID)
 	}
 
-	// 5. Telegram 大文件预下载检查
-	if preDownloadResult := checkTelegramPreDownload(sourceStorage, sourceLocations, fileID, sourceProviderID); preDownloadResult != nil {
+	// 5. Telegram 大文件预下载检查（使用 file_location.Size）
+	var fileSizePtr *int64
+	if len(sourceLocations) > 0 && sourceLocations[0].Size != nil {
+		s := int64(*sourceLocations[0].Size)
+		fileSizePtr = &s
+	}
+	if preDownloadResult := checkTelegramPreDownload(sourceStorage, sourceLocations, fileID, sourceProviderID, fileSizePtr); preDownloadResult != nil {
 		return &FileStreamResult{
 			IsPreDownload:   true,
 			PreDownloadData: preDownloadResult,
@@ -325,20 +330,35 @@ func CheckFileIsImage(fileID string) bool {
 }
 
 // checkTelegramPreDownload 检查 Telegram 大文件预下载状态
-func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations []*native.FileLocationORM, fileID string, sourceProviderID uint32) map[string]any {
+// fileSize: 文件实际大小（来自 files 表），用于判断是否需要预下载。
+// 不能使用 sourceLocations[0].Size，因为 Telegram API 可能返回错误的值。
+func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations []*native.FileLocationORM, fileID string, sourceProviderID uint32, fileSize *int64) map[string]any {
+	llog.L().Infof("checkTelegramPreDownload ENTER: file_id=%s, storage_type=%v, fileSize=%v, locs=%d", fileID, sourceStorage.GetType(), fileSize, len(sourceLocations))
 	if sourceStorage.GetType() != native.StorageProviderType_TELEGRAM {
 		return nil
 	}
 
-	locSize := sourceLocations[0].Size
-	if locSize == nil || int64(*locSize) <= telegram.LargeFileSizeThreshold {
+	if fileSize == nil || *fileSize <= telegram.LargeFileSizeThreshold {
+		llog.L().Infof("checkTelegramPreDownload SKIP: fileSize too small or nil")
 		return nil
 	}
 
 	// 检查第一个分片的缓存状态（整体状态）
 	cacheStatus := sourceLocations[0].CacheStatus
 
-	// 只有未缓存或缓存失败时才触发预下载（避免重复触发）
+	// DEBUG: log path and cache status
+	pathVal := "<nil>"
+	if sourceLocations[0].Path != nil {
+		pathVal = *sourceLocations[0].Path
+	}
+	cacheVal := int32(-1)
+	if cacheStatus != nil {
+		cacheVal = *cacheStatus
+	}
+	llog.L().Infof("checkTelegramPreDownload: file_id=%s, path=%q, cache_status=%d, file_size=%d", fileID, pathVal, cacheVal, *fileSize)
+
+	// 只根据 cache_status 判断是否需要预下载
+	// 注意：Path 字段是存储提供者的地址（如 Telegram file path），不是本地缓存路径，不能用来判断缓存状态
 	shouldTriggerPreDownload := cacheStatus == nil ||
 		*cacheStatus == int32(native.CacheStatus_CACHE_STATUS_UNSPECIFIED) ||
 		*cacheStatus == int32(native.CacheStatus_UNCACHED)
@@ -352,8 +372,8 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 		actualStatus = native.CacheStatus(*cacheStatus)
 	}
 
-	llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, size=%d, cache_status=%v, triggering async download",
-		fileID, sourceProviderID, *locSize, actualStatus)
+	llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, file_size=%d, cache_status=%v, triggering async download",
+		fileID, sourceProviderID, *fileSize, actualStatus)
 
 	// 检查是否实现了 PreDownloader 接口
 	if preDownloader, ok := sourceStorage.(types.PreDownloader); ok {

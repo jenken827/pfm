@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:path/path.dart' as p;
+import 'package:pfm/api/api.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
@@ -277,6 +278,24 @@ class AlbumBackupService {
       final bgService = GetIt.I.get<BackgroundService>();
       const batchSize = 50;
       var batch = <UploadTaskRecord>[];
+
+      // 获取有空位的子目录 ID
+      String targetFolderId = _config.targetParentId;
+      try {
+        final repo = FmRepository();
+        final result = await repo.getOrCreateSubfolder(
+          parentId: _config.targetParentId,
+          prefix: '00',
+        );
+        if (result.success && result.data != null) {
+          targetFolderId = result.data!;
+          _logger.info('Using subfolder: $targetFolderId');
+        } else {
+          _logger.warning('Failed to get subfolder, using root: ${result.message}');
+        }
+      } catch (e) {
+        _logger.warning('Failed to get subfolder, using root: $e');
+      }
       var backupRecords = <Map<String, dynamic>>[];
       int failed = 0;
       int created = 0;
@@ -323,7 +342,7 @@ class AlbumBackupService {
             filename: fileName,
             filepath: filePath,
             fileSize: fileSize,
-            parentId: _config.targetParentId,
+            parentId: targetFolderId,
             status: UploadStatus.PENDING,
             tags: photo.id,  // 存储资产 ID
             createdAt: now,
@@ -457,7 +476,7 @@ class AlbumBackupService {
   }
 
   /// 创建上传任务记录（不调度）
-  Future<UploadTaskRecord> _createUploadTask(AssetEntity photo) async {
+  Future<UploadTaskRecord> _createUploadTask(AssetEntity photo, {String? targetFolderId}) async {
     // 获取文件
     final file = await photo.originFile;
     if (file == null) {
@@ -474,7 +493,7 @@ class AlbumBackupService {
       filename: fileName,
       filepath: file.path,
       fileSize: fileSize,
-      parentId: _config.targetParentId,
+      parentId: targetFolderId ?? _config.targetParentId,
       status: UploadStatus.PENDING,
       tags: photo.id,  // 存储资产 ID
       createdAt: DateTime.now(),

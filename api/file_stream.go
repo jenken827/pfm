@@ -110,6 +110,13 @@ func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	// 3.1 更新文件访问时间（异步，不阻塞响应）
 	go service.UpdateFileAccess(fileID)
 
+	// 3.2 处理 Telegram 大文件预下载状态
+	if result.IsPreDownload {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(result.PreDownloadData)
+		return
+	}
 	defer result.Reader.Close()
 
 	// 4. 流式传输文件

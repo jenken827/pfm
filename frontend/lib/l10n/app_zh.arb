@@ -860,6 +860,7 @@
     "file_modified": "修改时间"
 ,
     "permission_title": "权限管理",
+    "permission_subtitle": "管理用户目录权限",
     "permission_refresh": "刷新",
     "permission_retry": "重试",
     "permission_noRoles": "无角色",

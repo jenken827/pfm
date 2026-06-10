@@ -16,6 +16,9 @@ type ChunkOpener interface {
 	// offset: 分片内偏移（支持从中间位置开始读取）
 	// 返回的 ReadCloser 应该已经定位到 offset 位置
 	OpenChunk(ctx context.Context, loc *native.FileLocationORM, offset int64) (io.ReadCloser, error)
+	// OpenChunkRangeSeek 返回一个 OpenRangeSeek 函数，支持 Range 请求和 Seek 操作
+	// 用于加密文件的解密
+	OpenChunkRangeSeek(ctx context.Context, loc *native.FileLocationORM) OpenRangeSeek
 }
 
 // MultiChunkReader 多分片合并读取器
@@ -152,20 +155,22 @@ func (m *MultiChunkReader) openCurrentChunk() (io.ReadCloser, error) {
 	// 计算分片内偏移
 	chunkInternalOffset := m.offset - m.chunkOffset[m.currentIdx]
 
-	// 打开分片（从指定偏移位置开始）
+	// 如果需要解密
+	if m.encryptor != nil && m.encryptor.IsEncrypted() {
+		// 使用 DecryptDataSeek 处理加密文件
+		// 这会先读取 header，然后 seek 到正确的位置
+		openRangeSeek := m.opener.OpenChunkRangeSeek(m.ctx, loc)
+		decrypted, err := m.encryptor.DecryptDataSeek(m.ctx, openRangeSeek, chunkInternalOffset, -1)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt chunk failed: %w", err)
+		}
+		return decrypted, nil
+	}
+
+	// 非加密文件，直接打开
 	rc, err := m.opener.OpenChunk(m.ctx, loc, chunkInternalOffset)
 	if err != nil {
 		return nil, err
-	}
-
-	// 如果需要解密
-	if m.encryptor != nil && m.encryptor.IsEncrypted() {
-		decrypted, err := m.encryptor.Decrypt(rc)
-		if err != nil {
-			rc.Close()
-			return nil, fmt.Errorf("decrypt chunk failed: %w", err)
-		}
-		rc = decrypted
 	}
 
 	return rc, nil

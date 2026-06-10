@@ -653,3 +653,25 @@ func UpdateLastAccessedAt(fileID string) error {
 		Where("id = ?", fileID).
 		Update("last_accessed_at", time.Now()).Error
 }
+
+// CountChildrenByParentID 统计父目录下的直接子文件数（不含软删除）
+func CountChildrenByParentID(parentID string) (int64, error) {
+	ctx := context.Background()
+	var count int64
+	err := db.WithContext(ctx).
+		Model(&native.FileORM{}).
+		Where("parent_id = ? AND type != ?", parentID, native.FileType_FOLDER).
+		Count(&count).Error
+	return count, err
+}
+
+// GetSubfoldersByParentID 获取父目录下的所有子文件夹（不含软删除，按名称排序）
+func GetSubfoldersByParentID(parentID string) ([]*native.FileORM, error) {
+	ctx := context.Background()
+	var folders []*native.FileORM
+	err := db.WithContext(ctx).
+		Where("parent_id = ? AND type = ?", parentID, native.FileType_FOLDER).
+		Order("name ASC").
+		Find(&folders).Error
+	return folders, err
+}

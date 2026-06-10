@@ -182,6 +182,10 @@ class BackgroundService {
         }
       }
 
+      // 预下载轮询：检查 Telegram 大文件缓存状态，完成后自动触发下载
+      // 必须在下载调度之前执行，这样轮询改为 pending 的任务能被立即调度
+      await _pollPredownloadTasks();
+
       // 下载调度
       final canScheduleDownload = _maxDownloadConcurrency - _runningDownloads.length;
       if (canScheduleDownload > 0) {
@@ -207,6 +211,14 @@ class BackgroundService {
 
     if (uploadingCount == 0 && pendingCount == 0 && downloadingCount == 0 &&
         _runningUploads.isEmpty && _runningDownloads.isEmpty) {
+      // 还有预下载任务时不停止 timer
+      final predownloadCount = await _transferStorage.countDownloadTasksByStatus(
+        DownloadStatus.predownload,
+      );
+      if (predownloadCount > 0) {
+        getLogger().debug('timer: $predownloadCount predownload tasks, keeping timer');
+        return;
+      }
       getLogger().debug('timer: no active tasks, stopping timer');
       timer.cancel();
       _syncTimer = null;
@@ -325,6 +337,60 @@ class BackgroundService {
       _runningDownloads.remove(taskId);
       _updateForegroundNotification();
       await notifyDownloadTasksChanged();
+    }
+  }
+
+  /// 轮询预下载任务的缓存状态
+  ///
+  /// 检查所有 predownload 状态的下载任务，查询后端缓存状态。
+  /// 如果缓存完成（CACHED），自动将任务状态改为 pending，由 timer 调度下载。
+  Future<void> _pollPredownloadTasks() async {
+    final predownloadTasks = await _transferStorage.getDownloadTasksByStatus(
+      DownloadStatus.predownload,
+      limit: 10,
+    );
+    if (predownloadTasks.isEmpty) return;
+
+    final fmRepo = FmRepository();
+
+    for (final task in predownloadTasks) {
+      if (task.fileHash == null || task.providerId == null) {
+        _logger.warning('Predownload task missing fileHash/providerId: ${task.id}');
+        continue;
+      }
+
+      try {
+        final result = await fmRepo.getFileCacheStatus(
+          fileHash: task.fileHash!,
+          providerId: task.providerId!,
+        );
+
+        if (result.success && result.data != null) {
+          final cacheStatus = result.data!.cacheStatus;
+          _logger.info('Poll predownload ${task.id}: cacheStatus=$cacheStatus');
+
+          if (cacheStatus == CacheStatus.CACHED) {
+            // 缓存完成，自动触发下载
+            _logger.info('Cache ready for ${task.id}, resuming download');
+            await _transferStorage.updateDownloadTask(
+              task.id,
+              status: DownloadStatus.pending,
+              errorMessage: null,
+            );
+          } else if (cacheStatus == CacheStatus.UNCACHED) {
+            // 缓存失败，标记为失败
+            _logger.warning('Cache failed for ${task.id}');
+            await _transferStorage.updateDownloadTask(
+              task.id,
+              status: DownloadStatus.failed,
+              errorMessage: '缓存失败，请重试',
+            );
+          }
+          // CACHING 状态继续轮询
+        }
+      } catch (e) {
+        _logger.error('Poll predownload failed for ${task.id}: $e');
+      }
     }
   }
 
@@ -520,6 +586,7 @@ class BackgroundService {
     _logger.info('Resuming download task: $taskId');
     final task = await _transferStorage.getDownloadTaskAsync(taskId);
     if (task == null) return;
+    await _transferStorage.resumeDownloadTasks(taskId);
     await scheduleDownload(taskId, true);
   }
 

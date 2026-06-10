@@ -53,12 +53,6 @@ Future<void> downloadFile({
     // 创建 HTTP 客户端
     client = http.Client();
 
-    // 更新状态为下载中
-    await storage.updateDownloadTask(
-      task.id,
-      status: DownloadStatus.downloading,
-    );
-
     // 预下载检查：Telegram 大文件场景下，后端可能返回 202 等待缓存
     final preCheck = await _checkPreDownload(
       client: client,
@@ -66,14 +60,21 @@ Future<void> downloadFile({
       headers: headers,
     );
     if (preCheck != null) {
-      l.info('Pre-download detected: $preCheck, task: ${task.id}');
+      l.info('Pre-download detected: ${preCheck.message}, task: ${task.id}');
       await storage.updateDownloadTask(
         task.id,
         status: DownloadStatus.predownload,
-        errorMessage: preCheck,
+        errorMessage: preCheck.message,
+        providerId: preCheck.providerId,
       );
       return;
     }
+
+    // 更新状态为下载中
+    await storage.updateDownloadTask(
+      task.id,
+      status: DownloadStatus.downloading,
+    );
 
     // 判断使用单线程还是多线程
     const smallFileThreshold = 50 * 1024 * 1024; // 50MB
@@ -114,34 +115,53 @@ Future<void> downloadFile({
   }
 }
 
+/// 预下载检查结果
+class PreDownloadResult {
+  final String message;
+  final int providerId;
+  final String cacheStatus;
+
+  PreDownloadResult({
+    required this.message,
+    required this.providerId,
+    required this.cacheStatus,
+  });
+}
+
 /// 检查是否需要预下载
 ///
 /// 对于 Telegram 大文件（>20MB），后端可能返回 202 + {"status": "pre_download", ...}
 /// 表示文件正在缓存中，需要前端更新状态并提示用户手动重试。
 ///
-/// 返回 null 表示正常下载，返回字符串表示预下载原因（cache_status 描述）
-Future<String?> _checkPreDownload({
+/// 返回 null 表示正常下载，返回 PreDownloadResult 表示需要预下载
+Future<PreDownloadResult?> _checkPreDownload({
   required http.Client client,
   required String downloadUrl,
   required Map<String, String> headers,
 }) async {
-  // 发送 HEAD 请求探测，不下载 body
-  final resp = await client.head(Uri.parse(downloadUrl), headers: headers);
-  if (resp.statusCode != 200 && resp.statusCode != 206) {
-    // 非正常响应，尝试读取 body（可能是 202 JSON）
-    if (resp.statusCode == 202 || resp.body.isNotEmpty) {
-      try {
-        final body = jsonDecode(resp.body) as Map<String, dynamic>;
-        if (body['status'] == 'pre_download') {
-          final cacheStatus = body['cache_status'];
-          final providerId = body['provider_id'];
-          return 'provider=$providerId, cache_status=$cacheStatus';
-        }
-      } catch (_) {
-        // JSON 解析失败，忽略
+  // 用 GET + Range: bytes=0-0 探测（HEAD 请求没有 body，无法解析 202 JSON）
+  final resp = await client.get(
+    Uri.parse(downloadUrl),
+    headers: {...headers, 'Range': 'bytes=0-0'},
+  );
+  if (resp.statusCode == 202) {
+    // 202 = 预下载中，解析 body
+    try {
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (body['status'] == 'pre_download') {
+        final cacheStatus = body['cache_status'];
+        final providerId = body['provider_id'] as int;
+        return PreDownloadResult(
+          message: 'provider=$providerId, cache_status=$cacheStatus',
+          providerId: providerId,
+          cacheStatus: cacheStatus.toString(),
+        );
       }
+    } catch (_) {
+      // JSON 解析失败
     }
-    // 其他非正常状态码，抛出异常走原有失败流程
+  }
+  if (resp.statusCode != 200 && resp.statusCode != 206) {
     throw Exception('HTTP ${resp.statusCode}: ${resp.reasonPhrase}');
   }
   return null;
@@ -192,30 +212,30 @@ Future<void> _downloadSingleThread({
       deltaBytes = 0;
     });
 
-    final response = await client.get(
-      Uri.parse(downloadUrl),
-      headers: rangeHeaders,
-    );
+    final request = http.Request('GET', Uri.parse(downloadUrl));
+    request.headers.addAll(rangeHeaders);
+    final response = await client.send(request);
 
     if (response.statusCode != 200 && response.statusCode != 206) {
       throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
     }
 
-    final bodyBytes = response.bodyBytes;
-
-    // Seek 到起始位置并写入
+    // 流式写入，不一次性读入内存
     await raf.setPosition(downloadedBytes);
-    await raf.writeFrom(bodyBytes);
-    downloadedBytes += bodyBytes.length;
-    deltaBytes += bodyBytes.length;
+    await for (final chunk in response.stream) {
+      await raf.writeFrom(chunk);
+      downloadedBytes += chunk.length;
+      deltaBytes += chunk.length;
 
-    // 检查是否被取消或暂停
-    final currentTask = await storage.getDownloadTaskAsync(task.id);
-    if (currentTask == null ||
-        currentTask.status == DownloadStatus.canceled ||
-        currentTask.status == DownloadStatus.paused) {
-      l.info('Download cancelled or paused');
-      return;
+      // 检查是否被取消或暂停
+      final currentTask = await storage.getDownloadTaskAsync(task.id);
+      if (currentTask == null ||
+          currentTask.status == DownloadStatus.canceled ||
+          currentTask.status == DownloadStatus.paused) {
+        l.info('Download cancelled or paused');
+        syncTimer.cancel();
+        return;
+      }
     }
 
     // 更新完成状态
@@ -279,45 +299,52 @@ Future<void> _downloadMultiThread({
       deltaBytes = 0;
     });
 
-    // 当前写入位置（受保护，需要锁）
-    int currentOffset = downloadedBytes;
-    final offsetLock = _Lock();
+    // 写入锁：保护 setPosition + writeFrom 的原子性
+    final writeLock = _Lock();
 
-    // 使用多个线程并发下载
+    // 每个 worker 独立追踪自己的 chunk index，无需共享 currentOffset
+    // worker 0 下载 chunk 0, 3, 6, 9...
+    // worker 1 下载 chunk 1, 4, 7, 10...
+    // worker 2 下载 chunk 2, 5, 8, 11...
     final futures = <Future>[];
     for (int i = 0; i < task.workerCount; i++) {
       futures.add(
         _downloadWorker(
           workerIndex: i,
-          task: task,
+          workerCount: task.workerCount,
+          chunkSize: chunkSize,
+          fileSize: task.fileSize,
+          taskId: task.id,
           storage: storage,
           downloadUrl: downloadUrl,
           headers: headers,
           client: client,
           raf: raf,
-          getCurrentOffset: () async =>
-              offsetLock.synchronized(() async => currentOffset),
-          setCurrentOffset: (offset) async => offsetLock.synchronized(() async {
-            currentOffset = offset;
-          }),
+          writeLock: writeLock,
           onProgress: (bytes) async {
             deltaBytes += bytes;
-            downloadedBytes = await offsetLock.synchronized(
-              () async => currentOffset,
-            );
+            downloadedBytes += bytes;
           },
         ),
       );
     }
 
     await Future.wait(futures);
+
+    // 更新完成状态
+    await storage.updateDownloadTask(
+      task.id,
+      status: DownloadStatus.completed,
+      downloadedBytes: task.fileSize,
+    );
+
     syncTimer.cancel();
   } finally {
     await raf.close();
   }
 }
 
-/// 简单的锁实现，用于保护 currentOffset
+/// 简单的锁实现，用于保护写操作
 class _Lock {
   bool _locked = false;
   final _queue = <Completer<void>>[];
@@ -343,51 +370,47 @@ class _Lock {
       _synchronized(action);
 }
 
-/// 单个下载 worker 线程
+/// 单个下载 worker
+///
+/// 每个 worker 独立追踪 chunk index：
+/// - worker 0: chunk 0, 3, 6, 9, ...
+/// - worker 1: chunk 1, 4, 7, 10, ...
+/// - worker 2: chunk 2, 5, 8, 11, ...
 Future<void> _downloadWorker({
   required int workerIndex,
-  required DownloadTaskRecord task,
+  required int workerCount,
+  required int chunkSize,
+  required int fileSize,
+  required String taskId,
   required TransferStorage storage,
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
   required io.RandomAccessFile raf,
-  required Future<int> Function() getCurrentOffset,
-  required Future<void> Function(int offset) setCurrentOffset,
+  required _Lock writeLock,
   required Future<void> Function(int bytes) onProgress,
 }) async {
   final l = getLogger();
-  final chunkSize = task.chunkSize;
+
+  // 从断点恢复：计算本 worker 应该从哪个 chunk 开始
+  // downloadedBytes 可能不为 0（断点续传），需要跳过已下载的 chunk
+  int chunkIndex = workerIndex;
 
   while (true) {
-    // 获取下一个待下载的分片偏移量
-    final currentOffset = await getCurrentOffset();
-    if (currentOffset >= task.fileSize) break;
+    // 计算本 chunk 的起止位置
+    int offset = chunkIndex * chunkSize;
+    if (offset >= fileSize) break;
+
+    int end = min(offset + chunkSize - 1, fileSize - 1);
 
     // 检查是否被取消或暂停
-    final currentTask = await storage.getDownloadTaskAsync(task.id);
+    final currentTask = await storage.getDownloadTaskAsync(taskId);
     if (currentTask == null ||
         currentTask.status == DownloadStatus.canceled ||
         currentTask.status == DownloadStatus.paused) {
       l.info('Download cancelled or paused, worker $workerIndex stopping');
       return;
     }
-
-    // 每个 worker 跳跃式分配：worker 0 下载 0,3,6...，worker 1 下载 1,4,7...，worker 2 下载 2,5,8...
-    // 计算本 worker 本次下载的起始偏移量
-    int offset = currentOffset + workerIndex * chunkSize;
-
-    // 如果起始位置超过文件大小，跳过
-    if (offset >= task.fileSize) break;
-
-    // 计算结束位置
-    int end = min(offset + chunkSize - 1, task.fileSize - 1);
-
-    // 更新全局偏移量（跳过分片大小 * workerCount）
-    final nextOffset = currentOffset + chunkSize * task.workerCount;
-    await setCurrentOffset(
-      nextOffset > task.fileSize ? task.fileSize : nextOffset,
-    );
 
     // 发送 Range 请求
     final rangeHeaders = {...headers, 'Range': 'bytes=$offset-$end'};
@@ -405,15 +428,19 @@ Future<void> _downloadWorker({
 
       final bodyBytes = response.bodyBytes;
 
-      // 写入文件对应位置
-      await raf.setPosition(offset);
-      await raf.writeFrom(bodyBytes);
+      // 写入文件对应位置（需要锁保护，setPosition 和 writeFrom 不能被其他 worker 打断）
+      await writeLock.synchronized(() async {
+        await raf.setPosition(offset);
+        await raf.writeFrom(bodyBytes);
+      });
       await onProgress(bodyBytes.length);
     } catch (e) {
       l.error('Worker $workerIndex download error: $e');
       // 本次分片失败，继续下一个
-      continue;
     }
+
+    // 跳到下一个属于本 worker 的 chunk
+    chunkIndex += workerCount;
   }
 
   l.info('Worker $workerIndex finished');
