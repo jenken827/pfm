@@ -145,7 +145,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
   Color _getStatusColor(LocationStatus status) {
     switch (status) {
       case LocationStatus.PPENDING:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
       case LocationStatus.PUPLOADING:
         return Colors.blue;
       case LocationStatus.PCOMPLETED:
@@ -153,7 +153,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
       case LocationStatus.PFAILED:
         return Colors.red;
       default:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
     }
   }
 

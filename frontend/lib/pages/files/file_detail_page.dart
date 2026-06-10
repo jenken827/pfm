@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -366,6 +367,36 @@ class _FileDetailPageState extends State<FileDetailPage> {
                 ),
             ],
           ),
+          // 第三行：存储路径（可复制）
+          if (loc.storagePath.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.folder_open, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    loc.storagePath,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: loc.storagePath));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已复制存储路径'), duration: Duration(seconds: 1)),
+                    );
+                  },
+                  child: Icon(Icons.copy, size: 14, color: Theme.of(context).colorScheme.primary),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

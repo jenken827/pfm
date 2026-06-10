@@ -346,6 +346,8 @@ message ProviderLocationInfo {
   optional uint64 size = 8;
   // 缓存状态（仅 Telegram 使用）
   optional CacheStatus cache_status = 9;
+  // 存储路径
+  optional string storage_path = 10;
 }
 
 // FileShare 文件分享记录

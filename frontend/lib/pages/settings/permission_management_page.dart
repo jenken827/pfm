@@ -91,7 +91,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
         return ListTile(
           leading: CircleAvatar(
             backgroundColor:
-                hasRole ? Theme.of(context).colorScheme.primary : PfmColors.lightTextMuted,
+                hasRole ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             child: Text(
               user.userId.isNotEmpty ? user.userId[0].toUpperCase() : '?',
               style:
@@ -300,7 +300,7 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
           : _permissions.isEmpty
               ? Center(
                   child: Text(al.permission_noDirPermissions,
-                      style: TextStyle(color: PfmColors.lightTextMuted, fontSize: 16)))
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5), fontSize: 16)))
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
                   itemCount: _permissions.length,
@@ -328,7 +328,7 @@ class _UserPermissionDetailPageState extends State<UserPermissionDetailPage> {
                             if (perm.filePath.isNotEmpty)
                               Text(perm.filePath,
                                   style: TextStyle(
-                                      fontSize: 12, color: PfmColors.lightTextSecondary)),
+                                      fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                             const SizedBox(height: 4),
                             Wrap(
                               spacing: 4,
@@ -507,7 +507,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
             if (_crumbs.length > 1)
               Text(
                 _crumbs.map((c) => c.name).join(' / '),
-                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             const SizedBox(height: 8),
             // 权限
@@ -566,8 +566,8 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                 children: [
                   for (int i = 0; i < _crumbs.length; i++) ...[
                     if (i > 0)
-                      const Icon(Icons.chevron_right,
-                          size: 16, color: PfmColors.lightTextMuted),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                     InkWell(
                       onTap: () => _goTo(i),
                       child: Text(
@@ -576,7 +576,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                           fontSize: 13,
                           color: i == _crumbs.length - 1
                               ? Theme.of(context).colorScheme.primary
-                              : PfmColors.lightTextSecondary,
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                           fontWeight: i == _crumbs.length - 1
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -595,7 +595,7 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                 : _folders.isEmpty
                     ? Center(
                         child: Text(al.permission_noSubfolders,
-                            style: TextStyle(color: PfmColors.lightTextMuted)))
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5))))
                     : ListView.builder(
                         itemCount: _folders.length,
                         itemBuilder: (context, index) {
@@ -604,8 +604,8 @@ class _DirectoryPickerPageState extends State<DirectoryPickerPage> {
                             leading: Icon(Icons.folder,
                                 color: PfmColors.warning),
                             title: Text(folder.name),
-                            trailing: const Icon(Icons.chevron_right,
-                                color: PfmColors.lightTextMuted),
+                            trailing: Icon(Icons.chevron_right,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                             onTap: () => _enter(folder),
                           );
                         },

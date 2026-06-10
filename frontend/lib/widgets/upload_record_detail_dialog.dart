@@ -78,7 +78,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   Color _getStatusColor(LocationStatus status) {
     switch (status) {
       case LocationStatus.PPENDING:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
       case LocationStatus.PUPLOADING:
         return Colors.blue;
       case LocationStatus.PCOMPLETED:
@@ -86,7 +86,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
       case LocationStatus.PFAILED:
         return Colors.red;
       default:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
     }
   }
 
@@ -125,7 +125,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
       case CacheStatus.CACHED:
         return Colors.green;
       default:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
     }
   }
 
@@ -295,13 +295,13 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '消息: ${location.message}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ),
           ],
         ),
         trailing: location.encrypted == true
-            ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+            ? Icon(Icons.lock, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)
             : null,
       ),
     );

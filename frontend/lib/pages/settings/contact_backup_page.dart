@@ -69,16 +69,16 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.phone_android, size: 64, color: PfmColors.lightTextMuted),
+              Icon(Icons.phone_android, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
               const SizedBox(height: 16),
               Text(
                 al.contactBackup_mobileOnly,
-                style: TextStyle(fontSize: 18, color: PfmColors.lightTextSecondary),
+                style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_mobileOnlyDesc,
-                style: TextStyle(fontSize: 14, color: PfmColors.lightTextMuted),
+                style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
               ),
             ],
           ),
@@ -152,7 +152,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
     switch (_result.status) {
       case ContactBackupStatus.idle:
-        statusColor = PfmColors.lightTextMuted;
+        statusColor = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
         statusText = al.contactBackup_statusReady;
         statusIcon = Icons.contacts_outlined;
         break;
@@ -221,7 +221,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 14,
-                            color: PfmColors.lightTextSecondary,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -231,7 +231,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           al.contactBackup_totalContacts(_result.totalContacts),
                           style: TextStyle(
                             fontSize: 14,
-                            color: PfmColors.lightTextSecondary,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -254,7 +254,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ],
           ],
@@ -308,13 +308,13 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.description_outlined, color: PfmColors.lightTextSecondary),
+                Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 const SizedBox(width: 8),
                 Text(
                   al.contactBackup_howToRestore,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: PfmColors.lightTextSecondary,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -326,7 +326,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
             const SizedBox(height: 8),
             Text(
               al.contactRestore_supportedPlatforms,
-              style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         ),

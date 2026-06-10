@@ -669,7 +669,7 @@ class _FileViewState extends State<_FileView> {
       case pbenum.FileType.ARCHIVE:
         return (PfmColors.archive, PfmColors.archiveSurface);
       default:
-        return (PfmColors.lightTextMuted, PfmColors.lightSurfaceHover);
+        return (PfmColors.lightTextSecondary, PfmColors.lightSurfaceHover);
     }
   }
 

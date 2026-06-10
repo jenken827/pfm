@@ -235,7 +235,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
 
     switch (_result.status) {
       case AlbumBackupStatus.idle:
-        statusColor = PfmColors.lightTextMuted;
+        statusColor = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
         statusText = al.albumBackup_statusIdle;
         statusIcon = Icons.cloud_upload_outlined;
         break;
@@ -303,7 +303,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: PfmColors.lightTextSecondary,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -323,7 +323,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.albumBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: PfmColors.lightTextSecondary),
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ],
           ],

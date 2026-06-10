@@ -355,7 +355,7 @@ class _DownloadTaskItem extends StatelessWidget {
     switch (task.status) {
       case DownloadTaskStatus.pending:
         label = al.downloadTask_statusWaiting;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
       case DownloadTaskStatus.downloading:
         label = al.downloadTask_statusDownloading;
@@ -371,7 +371,7 @@ class _DownloadTaskItem extends StatelessWidget {
         break;
       case DownloadTaskStatus.cancelled:
         label = al.downloadTask_statusCanceled;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
       case DownloadTaskStatus.failed:
         label = al.downloadTask_statusFailed;

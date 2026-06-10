@@ -46,10 +46,10 @@ class _ClientBackupPageView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.phone_android_outlined, size: 48, color: PfmColors.lightTextMuted),
+                  Icon(Icons.phone_android_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                   const SizedBox(height: 12),
                   Text(al.clientBackup_noTasks,
-                      style: TextStyle(color: PfmColors.lightTextSecondary)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ],
               ),
             );
@@ -102,7 +102,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
                   size: 20,
                   color: config.enabled
                       ? Theme.of(context).colorScheme.primary
-                      : PfmColors.lightTextMuted,
+                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -251,12 +251,12 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: PfmColors.lightTextSecondary),
+          Icon(icon, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: PfmColors.lightTextSecondary, fontSize: 12),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

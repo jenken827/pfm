@@ -115,7 +115,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
           const SizedBox(height: 16),
           Text(
             al.flyfish_willOpenInBrowser,
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(

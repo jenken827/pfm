@@ -204,7 +204,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
                 al.folderSettings_maxHistoryDesc,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 16),

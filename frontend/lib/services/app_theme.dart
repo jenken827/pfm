@@ -36,12 +36,12 @@ final class AppTheme {
         ),
         margin: EdgeInsets.zero,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: PfmColors.lightSurface,
         foregroundColor: PfmColors.lightTextPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: PfmTypography.titleLarge,
+        titleTextStyle: PfmTypography.titleLarge.copyWith(color: PfmColors.lightTextPrimary),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: PfmColors.lightSurface,
@@ -127,10 +127,10 @@ final class AppTheme {
           textStyle: PfmTypography.labelLarge,
         ),
       ),
-      listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
-        titleTextStyle: PfmTypography.bodyLarge,
-        subtitleTextStyle: PfmTypography.bodyMedium,
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
+        titleTextStyle: PfmTypography.bodyLarge.copyWith(color: PfmColors.lightTextPrimary),
+        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.lightTextSecondary),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: PfmColors.lightSurface,
@@ -154,7 +154,7 @@ final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.full),
         ),
-        labelStyle: PfmTypography.labelMedium,
+        labelStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.lightTextPrimary),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: PfmColors.lightSurface,
@@ -193,12 +193,12 @@ final class AppTheme {
         ),
         margin: EdgeInsets.zero,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: PfmColors.darkSurface,
         foregroundColor: PfmColors.darkTextPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: PfmTypography.titleLarge,
+        titleTextStyle: PfmTypography.titleLarge.copyWith(color: PfmColors.darkTextPrimary),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: PfmColors.darkSurface,
@@ -284,10 +284,10 @@ final class AppTheme {
           textStyle: PfmTypography.labelLarge,
         ),
       ),
-      listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
-        titleTextStyle: PfmTypography.bodyLarge,
-        subtitleTextStyle: PfmTypography.bodyMedium,
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
+        titleTextStyle: PfmTypography.bodyLarge.copyWith(color: PfmColors.darkTextPrimary),
+        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.darkTextSecondary),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: PfmColors.darkSurface,
@@ -311,7 +311,7 @@ final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.full),
         ),
-        labelStyle: PfmTypography.labelMedium,
+        labelStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.darkTextPrimary),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: PfmColors.darkSurface,

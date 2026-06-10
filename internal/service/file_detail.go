@@ -91,6 +91,7 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 		chunkCount  int
 		size        uint64
 		cacheStatus native.CacheStatus
+		storagePath string
 	}
 
 	groupMap := make(map[uint32]*providerGroup)
@@ -101,6 +102,8 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 		}
 
 		providerID := *loc.ProviderId
+		llog.L().Infof("groupLocationsByProvider: loc_id=%v, provider_id=%d, path=%v, chunk=%v",
+			loc.Id, providerID, loc.Path, loc.ChunkNumber)
 		group, exists := groupMap[providerID]
 		if !exists {
 			encrypted := loc.Encrypted != nil && *loc.Encrypted
@@ -132,6 +135,12 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 		if loc.ChunkNumber != nil && *loc.ChunkNumber == 0 && loc.Size != nil {
 			group.size = *loc.Size
 		}
+
+		// storagePath 取第一个分片的 path
+		if group.storagePath == "" && loc.Path != nil && *loc.Path != "" && *loc.Path != "/" {
+			llog.L().Infof("groupLocationsByProvider: provider_id=%d, storagePath=%q", providerID, *loc.Path)
+			group.storagePath = *loc.Path
+		}
 	}
 
 	var result []*native.ProviderLocationInfo
@@ -157,6 +166,7 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			Status:       &group.status,
 			Size:         &group.size,
 			CacheStatus:  &group.cacheStatus,
+			StoragePath:  &group.storagePath,
 		}
 		result = append(result, info)
 	}

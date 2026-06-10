@@ -98,7 +98,7 @@ class UploadTaskList extends StatelessWidget {
               Theme.of(context).colorScheme.primary,
             ),
           if (pendingCount > 0)
-            _buildStatusChip(context, al.uploadTask_waiting(pendingCount), Colors.grey),
+            _buildStatusChip(context, al.uploadTask_waiting(pendingCount), Theme.of(context).colorScheme.onSurfaceVariant),
           if (failedCount > 0)
             _buildStatusChip(context, al.uploadTask_failed(failedCount), Colors.red),
           if (completedCount > 0)
@@ -384,7 +384,7 @@ class _UploadTaskItem extends StatelessWidget {
     switch (task.status) {
       case UploadStatus.PENDING:
         label = al.uploadTask_statusWaiting;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
       case UploadStatus.UPLOADING:
         label = al.uploadTask_statusUploading;
@@ -400,7 +400,7 @@ class _UploadTaskItem extends StatelessWidget {
         break;
       case UploadStatus.CANCELED:
         label = al.uploadTask_statusCanceled;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
       case UploadStatus.FAILED:
         label = al.uploadTask_statusFailed;
@@ -408,11 +408,11 @@ class _UploadTaskItem extends StatelessWidget {
         break;
       case UploadStatus.HASHING:
         label = al.uploadTask_statusHashing;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
       default:
         label = al.common_unknown;
-        color = Colors.grey;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
     }
 
