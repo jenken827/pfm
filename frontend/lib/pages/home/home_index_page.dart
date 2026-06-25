@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/file.pb.dart';
+import 'package:pfm/proto/native/permission.pb.dart';
 import 'package:pfm/services/recent_files_storage.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/design/design_tokens.dart';
@@ -26,10 +27,28 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
   List<Map<String, dynamic>> _recentFiles = [];
   bool _loadingRecent = true;
 
+  // 存储空间
+  UserSpace? _userSpace;
+  bool _loadingSpace = true;
+
   @override
   void initState() {
     super.initState();
     _loadRecentFiles();
+    _loadUserSpace();
+  }
+
+  Future<void> _loadUserSpace() async {
+    final repo = FmRepository();
+    final result = await repo.getUserSpace();
+    if (mounted && result.success && result.data != null) {
+      setState(() {
+        _userSpace = result.data!.space;
+        _loadingSpace = false;
+      });
+    } else if (mounted) {
+      setState(() => _loadingSpace = false);
+    }
   }
 
   Future<void> _loadRecentFiles() async {
@@ -63,6 +82,12 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
                   // 页面标题
                   _buildPageHeader(context, al, colorScheme),
                   const SizedBox(height: PfmSpacing.xxxl),
+
+                  // 存储空间
+                  if (_userSpace != null) ...[
+                    _buildStorageCard(context, al, colorScheme),
+                    const SizedBox(height: PfmSpacing.xxxl),
+                  ],
 
                   // 分类浏览
                   _buildCategoryGrid(context, al, colorScheme, isMobile),
@@ -118,6 +143,69 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
           tooltip: '刷新',
         ),
       ],
+    );
+  }
+
+  /// 构建存储空间卡片
+  Widget _buildStorageCard(
+    BuildContext context,
+    AppLocalizations al,
+    ColorScheme colorScheme,
+  ) {
+    final space = _userSpace!;
+    final usedBytes = space.usedBytes.toInt();
+    final quotaBytes = space.quotaBytes.toInt();
+    final isUnlimited = quotaBytes == 0;
+    final ratio = isUnlimited ? 0.0 : (usedBytes / quotaBytes).clamp(0.0, 1.0);
+    final usedStr = formatCapacityString(usedBytes);
+    final quotaStr = isUnlimited ? '不限' : formatCapacityString(quotaBytes);
+    final barColor = ratio > 0.9
+        ? PfmColors.error
+        : ratio > 0.7
+            ? PfmColors.warning
+            : colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.all(PfmSpacing.lg),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(PfmRadius.lg),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cloud_outlined,
+                  size: 18, color: colorScheme.primary),
+              const SizedBox(width: PfmSpacing.sm),
+              Text(
+                al.home_storageSpace ?? '存储空间',
+                style: PfmTypography.titleSmall
+                    .copyWith(color: colorScheme.onSurface),
+              ),
+              const Spacer(),
+              Text(
+                '$usedStr / $quotaStr',
+                style: PfmTypography.labelSmall
+                    .copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          const SizedBox(height: PfmSpacing.md),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: isUnlimited ? null : ratio,
+              minHeight: 8,
+              backgroundColor:
+                  colorScheme.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

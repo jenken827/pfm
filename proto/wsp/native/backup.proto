@@ -21,10 +21,10 @@ message BackupTask {
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
 
-  // 任务名称
+  // 任务名称（同一用户下唯一）
   optional string name = 4 [(gorm.field).tag = {
-    not_null: true
-    unique_index: "idx_bt_name"
+    not_null: true,
+    index: "idx_bt_name,length:64"
   }];
 
   // 源路径（服务器本地文件系统路径）
@@ -79,6 +79,13 @@ message BackupTask {
 
   // 备份总大小统计
   optional uint64 backed_up_size = 16 [(gorm.field).tag = {default: "0"}];
+
+  // 任务所有者（Casdoor 用户名），各用户只能管理自己的任务
+  optional string owner_id = 17 [(gorm.field).tag = {
+    not_null: true,
+    default: "''",
+    index: "idx_bt_owner,length:64"
+  }];
 }
 
 // BackupFileRecord 备份文件记录（用于增量判断）

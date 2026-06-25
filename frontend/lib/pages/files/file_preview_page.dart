@@ -661,12 +661,8 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       if (result.success && result.data != null) {
         final shareUrl = result.data!.shareUrl;
 
-        // 复制到剪贴板
-        await Clipboard.setData(ClipboardData(text: shareUrl));
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(al.preview_shareLinkCopied)));
+          _showShareSheet(context, shareUrl, al);
         }
       } else if (context.mounted) {
         ScaffoldMessenger.of(
@@ -680,6 +676,20 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         ).showSnackBar(SnackBar(content: Text('${al.preview_shareFailed}: $e')));
       }
     }
+  }
+
+  /// 显示分享底部弹窗：分享链接 + 保存到我的网盘
+  void _showShareSheet(BuildContext context, String shareUrl, AppLocalizations al) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return _ShareBottomSheet(
+          shareUrl: shareUrl,
+          al: al,
+        );
+      },
+    );
   }
 
   Future<void> _renameFile(BuildContext context) async {
@@ -786,6 +796,252 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           ).showSnackBar(SnackBar(content: Text('${al.preview_deleteFailed}: $e')));
         }
       }
+    }
+  }
+}
+
+/// 分享底部弹窗：显示分享链接 + 保存到我的网盘按钮
+class _ShareBottomSheet extends StatefulWidget {
+  const _ShareBottomSheet({
+    required this.shareUrl,
+    required this.al,
+  });
+
+  final String shareUrl;
+  final AppLocalizations al;
+
+  @override
+  State<_ShareBottomSheet> createState() => _ShareBottomSheetState();
+}
+
+class _ShareBottomSheetState extends State<_ShareBottomSheet> {
+  bool _isSaving = false;
+  String _statusText = '';
+  int _completed = 0;
+  int _total = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 标题
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.al.preview_shareTitle,
+            style: Theme.of(context).textTheme.titleLarge,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+
+          // 分享链接
+          Text(
+            widget.al.preview_shareLinkLabel,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.shareUrl,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 20),
+                  tooltip: widget.al.preview_shareLinkCopiedToClipboard,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: widget.shareUrl));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(widget.al.preview_shareLinkCopiedToClipboard)),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 保存到我的网盘按钮
+          if (_isSaving) ...[
+            // 进度显示
+            if (_total > 0) ...[
+              LinearProgressIndicator(
+                value: _total > 0 ? _completed / _total : null,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.al.preview_saveToDiskProgress(_completed, _total),
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ] else ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text(
+                _statusText.isNotEmpty ? _statusText : widget.al.preview_savingToDisk,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ] else ...[
+            FilledButton.icon(
+              onPressed: () => _startSave(context),
+              icon: const Icon(Icons.save_alt),
+              label: Text(widget.al.preview_saveToMyDisk),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startSave(BuildContext context) async {
+    setState(() {
+      _isSaving = true;
+      _statusText = widget.al.preview_savingToDisk;
+    });
+
+    try {
+      final repo = FmRepository();
+
+      // 从 shareUrl 中提取 shareCode（URL 最后一段路径）
+      final uri = Uri.parse(widget.shareUrl);
+      final shareCode =
+          uri.pathSegments.isNotEmpty ? uri.pathSegments.last : widget.shareUrl;
+
+      // 调用保存接口
+      final saveResult = await repo.saveShareToMySpace(
+        shareCode: shareCode,
+        targetParentId: '', // 空字符串表示保存到根目录
+      );
+
+      if (!saveResult.success || saveResult.data == null) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(saveResult.message ?? widget.al.preview_saveToDiskFailed),
+            ),
+          );
+        }
+        return;
+      }
+
+      final taskId = saveResult.data!.taskId;
+      if (taskId.isEmpty) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.al.preview_saveToDiskSuccess)),
+          );
+        }
+        return;
+      }
+
+      // 轮询异步任务进度
+      await _pollAsyncTask(context, taskId, repo);
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${widget.al.preview_saveToDiskFailed}: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pollAsyncTask(
+    BuildContext context,
+    String taskId,
+    FmRepository repo,
+  ) async {
+    const maxAttempts = 150; // 最多轮询 5 分钟
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      try {
+        final progressResult = await repo.getAsyncTaskProgress(taskId);
+
+        if (!progressResult.success || progressResult.data == null) {
+          continue; // 网络异常时重试
+        }
+
+        final status = progressResult.data!.status;
+        final total = progressResult.data!.total;
+        final completed = progressResult.data!.completed;
+
+        // 更新进度
+        if (mounted) {
+          setState(() {
+            _total = total;
+            _completed = completed;
+          });
+        }
+
+        if (status == 'SUCCESS') {
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(widget.al.preview_saveToDiskSuccess)),
+            );
+          }
+          return;
+        } else if (status == 'FAILED') {
+          final errorMsg = progressResult.data!.error;
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  errorMsg.isNotEmpty
+                      ? '${widget.al.preview_saveToDiskFailed}: $errorMsg'
+                      : widget.al.preview_saveToDiskFailed,
+                ),
+              ),
+            );
+          }
+          return;
+        }
+        // PENDING / RUNNING：继续轮询
+      } catch (e) {
+        // 网络异常时继续重试
+      }
+    }
+
+    // 超时
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.al.preview_saveToDiskFailed)),
+      );
     }
   }
 }

@@ -250,6 +250,10 @@ func scanDirectory(rootPath string, recursive bool, ignoreRules string) ([]*Back
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if os.IsPermission(err) && info != nil && info.IsDir() {
+				llog.L().Warnf("scanDirectory: permission denied, skipping directory: %s", path)
+				return filepath.SkipDir
+			}
 			return err
 		}
 		if info.IsDir() {
@@ -323,14 +327,14 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 	}
 
 	// 2. 确保目标目录结构存在
-	targetParentID, err := ensureDirStructure(ctx, *task.TargetDirId, candidate.RelativePath)
+	targetParentID, err := ensureDirStructure(ctx, *task.TargetDirId, candidate.RelativePath, derefStr(task.OwnerId))
 	if err != nil {
 		llog.L().Errorf("ensure dir structure failed: %s, err: %v", candidate.RelativePath, err)
 		return
 	}
 
 	// 3. 检查是否已存在同名文件
-	existingFile, _ := db.GetFileByParentAndName(targetParentID, filepath.Base(candidate.RelativePath))
+	existingFile, _ := db.GetFileByParentAndName(targetParentID, filepath.Base(candidate.RelativePath), derefStr(task.OwnerId))
 
 	var fileID string
 	if existingFile != nil && existingFile.Hash != nil && *existingFile.Hash == hash {
@@ -357,6 +361,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 			Type:     utils.Int32Ptr(fileType),
 			Mime:     &mime,
 			IsReady:  utils.BoolPtr(false), // 上传完成前标记为未就绪
+			OwnerId:  utils.StringPtr(derefStr(task.OwnerId)),
 		}
 		if err := db.CreateFile(newFile); err != nil {
 			llog.L().Errorf("create file failed: %s, err: %v", candidate.RelativePath, err)
@@ -432,7 +437,7 @@ func (s *BackupScheduler) updateBackupFileRecord(task *native.BackupTaskORM, can
 
 // ensureDirStructure 确保目标目录结构存在
 // 创建子目录时逐层继承父目录的加密属性
-func ensureDirStructure(ctx context.Context, targetParentID, relativePath string) (string, error) {
+func ensureDirStructure(ctx context.Context, targetParentID, relativePath, ownerID string) (string, error) {
 	dir := filepath.Dir(relativePath)
 	llog.L().Debugf("ensureDirStructure: relativePath=%s, dir=%s, targetParentID=%s", relativePath, dir, targetParentID)
 	if dir == "." || dir == "" {
@@ -450,7 +455,7 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 	currentParentID := targetParentID
 
 	for _, part := range parts {
-		existing, err := db.GetFileByParentAndName(currentParentID, part)
+		existing, err := db.GetFileByParentAndName(currentParentID, part, ownerID)
 		if err == nil && existing != nil {
 			// 检查已存在目录的属性是否需要从父目录继承更新
 			parentDir, err := db.GetFileByID(currentParentID)
@@ -514,10 +519,11 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 			IsReady:          utils.BoolPtr(true),
 			EnableEncryption: parentEncrypt,  // 继承父目录的加密属性
 			BoundProviderIds: parentProviders, // 继承父目录绑定的存储提供者
+			OwnerId:          &ownerID,
 		}
 		if err := db.CreateFile(newDir); err != nil {
 			// 并发竞态：其他 goroutine 可能刚创建了同一目录，重试查找
-			existing, retryErr := db.GetFileByParentAndName(currentParentID, part)
+			existing, retryErr := db.GetFileByParentAndName(currentParentID, part, ownerID)
 			if retryErr == nil && existing != nil {
 				llog.L().Debugf("ensureDirStructure: directory '%s' created by concurrent goroutine, using existing", part)
 				currentParentID = *existing.Id
@@ -529,6 +535,14 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath string
 	}
 
 	return currentParentID, nil
+}
+
+// derefStr 解引用 *string，nil 时返回空字符串
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // computeFileHash 计算文件 blake3 hash

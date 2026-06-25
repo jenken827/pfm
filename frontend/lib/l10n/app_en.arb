@@ -556,7 +556,7 @@
     "file_modified": "Modified"
 ,
     "permission_title": "Permissions",
-    "permission_subtitle": "Manage user directory permissions",
+    "permission_subtitle": "Manage user storage quotas",
     "permission_refresh": "Refresh",
     "permission_retry": "Retry",
     "permission_noRoles": "No roles",
@@ -580,4 +580,19 @@
     "permission_createDir": "Create Folder",
     "permission_delete": "Delete",
     "permission_move": "Move",
-    "permission_rename": "Rename"}
+    "permission_rename": "Rename",
+    "preview_shareTitle": "Share",
+    "preview_shareLinkLabel": "Share Link",
+    "preview_shareLinkCopiedToClipboard": "Share link copied to clipboard",
+    "preview_saveToMyDisk": "Save to My Disk",
+    "preview_savingToDisk": "Saving to your disk...",
+    "preview_saveToDiskSuccess": "File saved to your disk successfully",
+    "preview_saveToDiskFailed": "Failed to save to your disk",
+    "preview_saveToDiskProgress": "Saving: {completed}/{total}",
+    "@preview_saveToDiskProgress": {
+        "placeholders": {
+            "completed": { "type": "int" },
+            "total": { "type": "int" }
+        }
+    }
+}

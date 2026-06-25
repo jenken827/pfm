@@ -11,87 +11,202 @@ import "native/enum.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// 权限位掩码枚举（用于 proto3_json 传输，实际位掩码用 uint32）
+// ===== 废弃消息（保留用于 DB 兼容，不再用于新功能） =====
+
+// 权限位掩码枚举（废弃：不再使用 bitmask 权限模型）
 enum FilePermissionBit {
     FILE_PERMISSION_BIT_UNSPECIFIED = 0;
-    FILE_PERMISSION_BIT_READ     = 1;   // 查看/下载
-    FILE_PERMISSION_BIT_UPLOAD   = 2;   // 上传文件
-    FILE_PERMISSION_BIT_MKDIR    = 4;   // 创建子目录
-    FILE_PERMISSION_BIT_DELETE   = 8;   // 删除
-    FILE_PERMISSION_BIT_MOVE     = 16;  // 移动
-    FILE_PERMISSION_BIT_RENAME   = 32;  // 重命名
+    FILE_PERMISSION_BIT_READ     = 1;
+    FILE_PERMISSION_BIT_UPLOAD   = 2;
+    FILE_PERMISSION_BIT_MKDIR    = 4;
+    FILE_PERMISSION_BIT_DELETE   = 8;
+    FILE_PERMISSION_BIT_MOVE     = 16;
+    FILE_PERMISSION_BIT_RENAME   = 32;
 }
 
-// 目录权限记录
+// 目录权限记录（废弃：已改用 owner_id 隔离模型）
 message DirectoryPermission {
     option (gorm.opts).ormable = true;
     optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
     optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
     optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-
-    // Casdoor 用户名（如 pfm_user1）
     optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique_index: "idx_dp_user_file, length:64"}];
-    // 目录 ID（关联 files.id）
     optional string file_id = 5 [(gorm.field).tag = {not_null: true, unique_index: "idx_dp_user_file, length:36"}];
-    // 权限位掩码组合值
     optional uint32 permissions = 6 [(gorm.field).tag = {not_null: true, default: "0"}];
-    // 子目录是否继承此权限
     optional bool inherit = 7 [(gorm.field).tag = {not_null: true, default: "true"}];
-    // 授权者（管理员用户名）
     optional string granted_by = 8 [(gorm.field).tag = {default: "''"}];
-    // 别名（用于解决同名目录展示冲突，最大32字符）
     optional string alias = 9 [(gorm.field).tag = {size:32, default: "''"}];
 }
 
-// 权限审计日志
+// 权限审计日志（废弃：旧权限模型遗留）
 message PermissionAuditLog {
     option (gorm.opts).ormable = true;
     optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
     optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    // 操作者（管理员用户名）
     optional string operator = 3 [(gorm.field).tag = {not_null: true}];
-    // 被操作的用户
     optional string target_user = 4 [(gorm.field).tag = {not_null: true}];
-    // 目录 ID
     optional string file_id = 5 [(gorm.field).tag = {not_null: true}];
-    // 操作类型：GRANT / REVOKE / UPDATE
     optional string action = 6 [(gorm.field).tag = {not_null: true}];
-    // 原权限值
     optional uint32 old_permissions = 7;
-    // 新权限值
     optional uint32 new_permissions = 8;
+}
+
+// ===== 新模型 =====
+
+// 管理员用户表（本地管理员判定）
+message AdminUser {
+    option (gorm.opts).ormable = true;
+    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
+    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+    // Casdoor 用户名
+    optional string user_id = 3 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
+}
+
+// 用户空间（每个用户独立的网盘根目录和配额）
+message UserSpace {
+    option (gorm.opts).ormable = true;
+    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
+    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+    optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+    // Casdoor 用户名
+    optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
+    // 该用户的根目录 file_id（关联 files.id）
+    optional string root_file_id = 5 [(gorm.field).tag = {not_null: true, type: "char(36)"}];
+    // 存储配额（字节，0 = 不限制）
+    optional uint64 quota_bytes = 6 [(gorm.field).tag = {not_null: true, default: "0"}];
+    // 已用存储（字节，定时统计更新）
+    optional uint64 used_bytes = 7 [(gorm.field).tag = {not_null: true, default: "0"}];
 }
 
 // ===== 请求/响应消息 =====
 
-// 授予目录权限
-message GrantDirectoryPermissionReq {
+// 获取当前用户的空间信息
+message GetUserSpaceResp {
+    optional UserSpace space = 1;
+}
+
+// 管理员更新用户空间配额
+message UpdateUserSpaceReq {
     optional string user_id = 1 [(buf.validate.field).required = true];
-    optional string file_id = 2 [(buf.validate.field).required = true];
-    // 权限值（位掩码）
-    optional uint32 permissions = 3 [(buf.validate.field).required = true];
+    optional uint64 quota_bytes = 2;
+}
+
+// 管理员列出所有用户空间
+message ListUserSpacesReq {
+    optional uint32 page = 1;
+    optional uint32 page_size = 2;
+}
+
+message ListUserSpacesResp {
+    repeated UserSpace spaces = 1;
+    optional uint32 total = 2;
+}
+
+// 保存分享到我的网盘
+message SaveShareToMySpaceReq {
+    optional string share_code = 1 [(buf.validate.field).required = true];
+    // 保存到的目标父目录ID（用户自己目录树中的位置）
+    optional string target_parent_id = 2 [(buf.validate.field).required = true];
+    // 自定义名称（可选，为空则使用原名）
+    optional string display_name = 3;
+}
+
+// 异步任务进度查询
+message AsyncTaskProgressReq {
+    optional string task_id = 1 [(buf.validate.field).required = true];
+}
+
+message AsyncTaskProgressResp {
+    optional string task_id = 1;
+    // PENDING / RUNNING / SUCCESS / FAILED
+    optional string status = 2;
+    // 总数
+    optional uint32 total = 3;
+    // 已完成数
+    optional uint32 completed = 4;
+    // 错误信息
+    optional string error = 5;
+}
+
+// 获取用户列表（管理员用）
+message ListUsersReq {}
+
+message ListUsersResp {
+    repeated CasdoorUserInfo users = 1;
+}
+
+message CasdoorUserInfo {
+    optional string user_id = 1;
+    optional string display_name = 2;
+    optional string email = 3;
+    optional string avatar = 4;
+    repeated string roles = 5;
+    optional string created_time = 6;
+}
+
+// 获取当前用户角色响应
+message GetMyRolesResp {
+    repeated string roles = 1;
+    optional bool is_admin = 2;
+}
+
+// ===== 服务定义 =====
+
+// 用户空间服务（替代旧的 PermissionService）
+service UserSpaceService {
+    // 获取当前用户的空间信息（含根目录、配额、已用）
+    rpc GetUserSpace(google.protobuf.Empty) returns (BaseResp);
+    // 保存分享到我的网盘（异步）
+    rpc SaveShareToMySpace(SaveShareToMySpaceReq) returns (BaseResp);
+    // 查询异步任务进度
+    rpc GetAsyncTaskProgress(AsyncTaskProgressReq) returns (BaseResp);
+    // 获取用户列表
+    rpc ListUsers(ListUsersReq) returns (BaseResp);
+    // 获取当前用户角色
+    rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
+    // 管理员：列出所有用户空间
+    rpc ListUserSpaces(ListUserSpacesReq) returns (BaseResp);
+    // 管理员：更新用户空间配额
+    rpc UpdateUserSpace(UpdateUserSpaceReq) returns (BaseResp);
+}
+
+// 旧权限服务（废弃，保留用于 DB 兼容，所有方法返回 UNIMPLEMENTED）
+service PermissionService {
+    rpc GrantDirectoryPermission(GrantDirectoryPermissionReq) returns (BaseResp);
+    rpc RevokeDirectoryPermission(RevokeDirectoryPermissionReq) returns (BaseResp);
+    rpc UpdateDirectoryPermission(UpdateDirectoryPermissionReq) returns (BaseResp);
+    rpc GetUserPermissions(GetUserPermissionsReq) returns (BaseResp);
+    rpc GetDirectoryPermissions(GetDirectoryPermissionsReq) returns (BaseResp);
+    rpc BatchGrantPermission(BatchGrantPermissionReq) returns (BaseResp);
+    rpc GetAccessibleDirectories(GetAccessibleDirectoriesReq) returns (BaseResp);
+    rpc ListUsers(ListUsersReq) returns (BaseResp);
+    rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
+}
+
+// ===== 废弃请求消息（保留用于旧 service 签名兼容） =====
+
+message GrantDirectoryPermissionReq {
+    optional string user_id = 1;
+    optional string file_id = 2;
+    optional uint32 permissions = 3;
     optional bool inherit = 4;
-    // 别名（可选，用于解决同名目录冲突）
     optional string alias = 5;
 }
 
-// 撤销目录权限
 message RevokeDirectoryPermissionReq {
-    optional string user_id = 1 [(buf.validate.field).required = true];
-    optional string file_id = 2 [(buf.validate.field).required = true];
+    optional string user_id = 1;
+    optional string file_id = 2;
 }
 
-// 更新目录权限
 message UpdateDirectoryPermissionReq {
-    optional string user_id = 1 [(buf.validate.field).required = true];
-    optional string file_id = 2 [(buf.validate.field).required = true];
+    optional string user_id = 1;
+    optional string file_id = 2;
     optional uint32 permissions = 3;
     optional bool inherit = 4;
 }
 
-// 获取用户的目录权限列表
 message GetUserPermissionsReq {
-    optional string user_id = 1 [(buf.validate.field).required = true];
+    optional string user_id = 1;
 }
 
 message GetUserPermissionsResp {
@@ -102,19 +217,17 @@ message DirectoryPermissionInfo {
     optional uint32 id = 1;
     optional string user_id = 2;
     optional string file_id = 3;
-    optional string file_name = 4;  // 目录名（展示用）
-    optional string file_path = 5;  // 目录路径（展示用）
+    optional string file_name = 4;
+    optional string file_path = 5;
     optional uint32 permissions = 6;
     optional bool inherit = 7;
     optional string granted_by = 8;
     optional google.protobuf.Timestamp created_at = 9;
-    optional string alias = 10;  // 别名（展示用，解决同名冲突）
+    optional string alias = 10;
 }
 
-// 获取目录的权限列表（哪些用户有权限）
 message GetDirectoryPermissionsReq {
-    optional string file_id = 1 [(buf.validate.field).required = true];
-    // 是否递归获取子目录权限
+    optional string file_id = 1;
     optional bool recursive = 2;
 }
 
@@ -122,18 +235,14 @@ message GetDirectoryPermissionsResp {
     repeated DirectoryPermissionInfo permissions = 1;
 }
 
-// 批量授予权限（分配目录给用户）
 message BatchGrantPermissionReq {
-    optional string user_id = 1 [(buf.validate.field).required = true];
-    // 目录ID列表
+    optional string user_id = 1;
     repeated string file_ids = 2;
-    optional uint32 permissions = 3 [(buf.validate.field).required = true];
+    optional uint32 permissions = 3;
     optional bool inherit = 4;
-    // 是否同时授权所有子目录
     optional bool include_children = 5;
 }
 
-// 获取用户可访问的目录列表（用于构建目录树）
 message GetAccessibleDirectoriesReq {
     optional string user_id = 1;
 }
@@ -147,49 +256,5 @@ message AccessibleDirectory {
     optional string file_name = 2;
     optional string parent_id = 3;
     optional uint32 permissions = 4;
-    optional bool is_inherited = 5;  // 权限是否从父目录继承
-}
-
-// 获取用户列表（管理员用）
-message ListUsersReq {}
-
-message ListUsersResp {
-    repeated CasdoorUserInfo users = 1;
-}
-
-message CasdoorUserInfo {
-    optional string user_id = 1;    // Casdoor 用户名
-    optional string display_name = 2;
-    optional string email = 3;
-    optional string avatar = 4;
-    repeated string roles = 5;      // 角色列表
-    optional string created_time = 6;
-}
-
-// 获取当前用户角色响应
-message GetMyRolesResp {
-    repeated string roles = 1;      // 角色名称列表
-    optional bool is_admin = 2;     // 是否管理员
-}
-
-// 权限服务
-service PermissionService {
-    // 授予目录权限
-    rpc GrantDirectoryPermission(GrantDirectoryPermissionReq) returns (BaseResp);
-    // 撤销目录权限
-    rpc RevokeDirectoryPermission(RevokeDirectoryPermissionReq) returns (BaseResp);
-    // 更新目录权限
-    rpc UpdateDirectoryPermission(UpdateDirectoryPermissionReq) returns (BaseResp);
-    // 获取用户的目录权限列表
-    rpc GetUserPermissions(GetUserPermissionsReq) returns (BaseResp);
-    // 获取目录的权限列表
-    rpc GetDirectoryPermissions(GetDirectoryPermissionsReq) returns (BaseResp);
-    // 批量授予权限
-    rpc BatchGrantPermission(BatchGrantPermissionReq) returns (BaseResp);
-    // 获取用户可访问的目录列表
-    rpc GetAccessibleDirectories(GetAccessibleDirectoriesReq) returns (BaseResp);
-    // 获取用户列表（管理员用）
-    rpc ListUsers(ListUsersReq) returns (BaseResp);
-    // 获取当前用户角色
-    rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
+    optional bool is_inherited = 5;
 }

@@ -30,6 +30,7 @@ func route(mux *http.ServeMux) {
 	storageProviderRoute(mux)
 	backupRoute(mux)           // 备份服务路由
 	permissionRoute(mux)       // 权限服务路由
+	userSpaceRoute(mux)        // 用户空间服务路由
 	fileStreamRoute(mux)       // 文件流式传输路由
 	publicDownloadRoute(mux)   // 公共下载路由
 
@@ -182,6 +183,20 @@ func permissionRoute(mux *http.ServeMux) {
 	perm := &api.PermissionServer{}
 	path, handler := nativeconnect.NewPermissionServiceHandler(
 		perm,
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
+	)
+
+	mux.Handle(path, handler)
+
+	service := vanguard.NewService(path, handler)
+	vanguardServices = append(vanguardServices, service)
+}
+
+// userSpaceRoute 用户空间服务路由
+func userSpaceRoute(mux *http.ServeMux) {
+	us := &api.UserSpaceServer{}
+	path, handler := nativeconnect.NewUserSpaceServiceHandler(
+		us,
 		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 

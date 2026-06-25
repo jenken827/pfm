@@ -56,8 +56,8 @@ func GetFileByHash(hash string) (*native.FileORM, error) {
 }
 
 // GetFileByParentAndName 获取文件
-func GetFileByParentAndName(parentID string, name string) (*native.FileORM, error) {
-	file, err := gorm.G[*native.FileORM](db).Where("parent_id=? AND name=?", parentID, name).First(context.Background())
+func GetFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, error) {
+	file, err := gorm.G[*native.FileORM](db).Where("parent_id=? AND name=? AND owner_id=?", parentID, name, ownerID).First(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func RestoreFromTrash(ids []string) error {
 
 // GetTrashList 获取回收站文件列表（分页）
 // 只显示顶级被删除的文件：parent_id 指向未删除的文件夹
-func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
+func GetTrashList(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, error) {
 	ctx := context.Background()
 
 	// 默认每页500条
@@ -101,7 +101,7 @@ func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
 	var total int64
 	if err := db.WithContext(ctx).Model(&native.FileORM{}).
 		Unscoped(). // 查询包含软删除的记录
-		Where("deleted_at IS NOT NULL").
+		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
 		Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -111,7 +111,7 @@ func GetTrashList(offset, pageSize uint32) ([]*native.FileORM, int64, error) {
 	var files []*native.FileORM
 	if err := db.WithContext(ctx).
 		Unscoped(). // 查询包含软删除的记录
-		Where("deleted_at IS NOT NULL").
+		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
 		Offset(int(offset)).
 		Limit(int(pageSize)).
 		Order("deleted_at DESC").
@@ -174,11 +174,11 @@ func GetAllChildrenIDs(parentIDs []string) ([]string, error) {
 }
 
 // EmptyTrash 清空回收站
-func EmptyTrash() error {
+func EmptyTrash(ownerID string) error {
 	ctx := context.Background()
 	return db.WithContext(ctx).
 		Unscoped(). // 永久删除，绕过软删除
-		Where("deleted_at IS NOT NULL").
+		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
 		Delete(&native.FileORM{}).Error
 }
 
@@ -187,7 +187,7 @@ func EmptyTrash() error {
 // parentID: 父目录ID
 // offset: 偏移量
 // pageSize: 每页数量，如果为0则使用默认值500
-func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+func GetFileList(parentID string, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
 	var total int64
 	var err error
@@ -199,14 +199,14 @@ func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, i
 	}
 
 	// 获取总数
-	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID)
+	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID)
 	if total, err = gdb.Count(ctx, "*"); err != nil {
 		return nil, 0, false, err
 	}
 
 	// 分页查询
 	if files, err = gorm.G[*native.FileORM](db).
-		Where("parent_id = ?", parentID).
+		Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID).
 		Offset(int(offset)).
 		Limit(int(pageSize)).
 		Find(ctx); err != nil {
@@ -220,7 +220,7 @@ func GetFileList(parentID string, offset, pageSize uint32) ([]*native.FileORM, i
 }
 
 // SearchFiles 按文件名搜索文件（排除已删除和文件夹）
-func SearchFiles(keyword string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+func SearchFiles(keyword string, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
 	var total int64
 	ctx := context.Background()
@@ -231,7 +231,7 @@ func SearchFiles(keyword string, offset, pageSize uint32) ([]*native.FileORM, in
 
 	folderType := int32(native.FileType_FOLDER)
 	query := db.WithContext(ctx).
-		Where("name LIKE ? AND type != ?", "%"+keyword+"%", folderType)
+		Where("name LIKE ? AND type != ? AND owner_id = ?", "%"+keyword+"%", folderType, ownerID)
 
 	// 获取总数
 	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
@@ -290,11 +290,11 @@ func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileOR
 }
 
 // GetFileChildren 获取指定目录下的所有子文件（不含软删除）
-func GetFileChildren(parentID string) ([]*native.FileORM, error) {
+func GetFileChildren(parentID string, ownerID string) ([]*native.FileORM, error) {
 	var children []*native.FileORM
 	ctx := context.Background()
 	if err := db.WithContext(ctx).
-		Where("parent_id = ?", parentID).
+		Where("parent_id = ? AND owner_id = ?", parentID, ownerID).
 		Find(&children).Error; err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func GetFileChildren(parentID string) ([]*native.FileORM, error) {
 }
 
 // GetFolderList 获取指定目录下的所有文件夹
-func GetFolderList(parentID string) ([]*native.FileORM, error) {
+func GetFolderList(parentID string, ownerID string) ([]*native.FileORM, error) {
 	var folders []*native.FileORM
 	var err error
 	ctx := context.Background()
@@ -310,7 +310,7 @@ func GetFolderList(parentID string) ([]*native.FileORM, error) {
 	// 查询文件夹类型（FileType_FOLDER = 2）
 	folderType := int32(native.FileType_FOLDER)
 	if folders, err = gorm.G[*native.FileORM](db).
-		Where("parent_id = ?", parentID).
+		Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID).
 		Where("type = ?", folderType).
 		Order("name ASC").
 		Find(ctx); err != nil {
@@ -481,12 +481,15 @@ func UpdateFileSimple(file *native.FileORM) error {
 
 // UpdateFileIsReady 更新文件is_ready状态
 // 通过parent_id和file_name定位文件，设置is_ready为true
-func UpdateFileIsReady(parentID, fileName string) error {
+func UpdateFileIsReady(parentID, fileName, ownerID string) error {
 	ctx := context.Background()
 	isReady := true
-	_, err := gorm.G[*native.FileORM](db).
-		Where("parent_id = ? AND name = ?", parentID, fileName).
-		Update(ctx, "is_ready", isReady)
+	q := gorm.G[*native.FileORM](db).
+		Where("parent_id = ? AND name = ?", parentID, fileName)
+	if ownerID != "" {
+		q = q.Where("owner_id = ?", ownerID)
+	}
+	_, err := q.Update(ctx, "is_ready", isReady)
 	return err
 }
 
@@ -582,7 +585,7 @@ func CountActiveFilesByHashExcludingIDs(hash string, excludeIDs []string) (int64
 }
 
 // GetRecentFiles 获取最近使用的文件（排除已删除和文件夹）
-func GetRecentFiles(offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
 	var total int64
 	ctx := context.Background()
@@ -593,7 +596,7 @@ func GetRecentFiles(offset, pageSize uint32) ([]*native.FileORM, int64, bool, er
 
 	folderType := int32(native.FileType_FOLDER)
 	query := db.WithContext(ctx).
-		Where("type != ? AND last_accessed_at IS NOT NULL", folderType)
+		Where("type != ? AND last_accessed_at IS NOT NULL AND owner_id = ?", folderType, ownerID)
 
 	// 获取总数
 	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
@@ -614,7 +617,7 @@ func GetRecentFiles(offset, pageSize uint32) ([]*native.FileORM, int64, bool, er
 }
 
 // GetFilesByType 按文件类型获取文件列表（排除已删除）
-func GetFilesByType(fileType native.FileType, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
+func GetFilesByType(fileType native.FileType, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
 	var total int64
 	ctx := context.Background()
@@ -625,7 +628,7 @@ func GetFilesByType(fileType native.FileType, offset, pageSize uint32) ([]*nativ
 
 	typeVal := int32(fileType)
 	query := db.WithContext(ctx).
-		Where("type = ?", typeVal)
+		Where("type = ? AND owner_id = ?", typeVal, ownerID)
 
 	// 获取总数
 	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
@@ -655,22 +658,22 @@ func UpdateLastAccessedAt(fileID string) error {
 }
 
 // CountChildrenByParentID 统计父目录下的直接子文件数（不含软删除）
-func CountChildrenByParentID(parentID string) (int64, error) {
+func CountChildrenByParentID(parentID string, ownerID string) (int64, error) {
 	ctx := context.Background()
 	var count int64
 	err := db.WithContext(ctx).
 		Model(&native.FileORM{}).
-		Where("parent_id = ? AND type != ?", parentID, native.FileType_FOLDER).
+		Where("parent_id = ? AND type != ? AND owner_id = ?", parentID, native.FileType_FOLDER, ownerID).
 		Count(&count).Error
 	return count, err
 }
 
 // GetSubfoldersByParentID 获取父目录下的所有子文件夹（不含软删除，按名称排序）
-func GetSubfoldersByParentID(parentID string) ([]*native.FileORM, error) {
+func GetSubfoldersByParentID(parentID string, ownerID string) ([]*native.FileORM, error) {
 	ctx := context.Background()
 	var folders []*native.FileORM
 	err := db.WithContext(ctx).
-		Where("parent_id = ? AND type = ?", parentID, native.FileType_FOLDER).
+		Where("parent_id = ? AND type = ? AND owner_id = ?", parentID, native.FileType_FOLDER, ownerID).
 		Order("name ASC").
 		Find(&folders).Error
 	return folders, err

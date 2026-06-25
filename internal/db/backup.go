@@ -158,8 +158,9 @@ func GetBackupTaskBySourcePathExcludeID(sourcePath string, excludeID uint64) (*n
 	return record, nil
 }
 
-// ListBackupTasks 获取备份任务列表（分页）
-func ListBackupTasks(page, pageSize uint32, enabled *bool) ([]*native.BackupTaskORM, int64, error) {
+// ListBackupTasks 获取备份任务列表（分页），支持 ownerID 过滤
+// ownerID 为空时不过滤（管理员模式）
+func ListBackupTasks(page, pageSize uint32, enabled *bool, ownerID string) ([]*native.BackupTaskORM, int64, error) {
 	ctx := context.Background()
 
 	if pageSize == 0 {
@@ -170,6 +171,9 @@ func ListBackupTasks(page, pageSize uint32, enabled *bool) ([]*native.BackupTask
 	query := db.WithContext(ctx).Model(&native.BackupTaskORM{})
 	if enabled != nil {
 		query = query.Where("enabled = ?", *enabled)
+	}
+	if ownerID != "" {
+		query = query.Where("owner_id = ?", ownerID)
 	}
 
 	var total int64

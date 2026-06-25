@@ -55,16 +55,19 @@
 
 | 方法 | 说明 |
 |------|------|
-| `CheckPermission(userID, fileID, requiredPerm) bool` | 检查用户对文件/目录的权限（沿 parent_id 链向上查找，支持继承） |
-| `CheckPermissionWithDetails(userID, fileID, requiredPerm) (bool, string)` | 检查权限并返回来源详情（调试用） |
-| `GetUserAccessibleDirectories(userID) (map[string]uint32, error)` | 获取用户可访问的目录及权限位掩码 |
-| `GrantDirectoryPermission(ctx, req, operator) *Err` | 授予目录权限 |
-| `RevokeDirectoryPermission(ctx, req, operator) *Err` | 撤销目录权限 |
-| `UpdateDirectoryPermission(ctx, req, operator) *Err` | 更新目录权限 |
-| `GetUserPermissions(ctx, req) (*GetUserPermissionsResp, *Err)` | 获取用户的目录权限列表 |
-| `GetDirectoryPermissions(ctx, req) (*GetDirectoryPermissionsResp, *Err)` | 获取目录的权限列表（支持递归） |
-| `BatchGrantPermission(ctx, req, operator) *Err` | 批量授予权限（支持递归子目录） |
-| `GetAccessibleDirectories(ctx, req) (*GetAccessibleDirectoriesResp, *Err)` | 获取用户可访问的目录列表 |
+| `CheckOwnership(ctx, fileID) bool` | 检查用户是否为文件所有者（或管理员） |
+| `CheckOwnershipOrAdmin(ctx, fileID) bool` | 同上，语义别名 |
+| `CheckPermission(userID, fileID, requiredPerm) bool` | **已废弃** 旧权限检查 |
+| `GrantDirectoryPermission(ctx, req, operator) *Err` | **已废弃** 旧权限授予 |
+
+### user_space.go (新增)
+
+| 方法 | 说明 |
+|------|------|
+| `GetUserSpaceByUserID(userID) (*UserSpaceORM, error)` | 获取用户空间信息 |
+| `CreateUserSpace(space) error` | 创建用户空间 |
+| `UpdateUserSpace(space) error` | 更新用户空间（配额等） |
+| `ListUserSpaces(offset, pageSize) ([]*UserSpaceORM, int64, error)` | 列出所有用户空间 |
 
 ## internal/db/
 
@@ -126,6 +129,16 @@
 | `DeleteDirectoryPermission(userID, fileID) error` | 删除目录权限 |
 | `GetAllDirectoryPermissions() ([]*DirectoryPermissionORM, error)` | 获取所有目录权限（管理员用） |
 | `CreateAuditLog(log) error` | 创建权限审计日志 |
+
+### admin_user.go
+
+| 方法 | 说明 |
+|------|------|
+| `IsAdmin(userID) bool` | 检查用户是否为管理员 |
+| `GetAdminUser(userID) (*AdminUserORM, error)` | 获取管理员记录 |
+| `ListAdminUsers() ([]*AdminUserORM, error)` | 获取所有管理员 |
+| `AddAdminUser(userID) error` | 添加管理员 |
+| `RemoveAdminUser(userID) error` | 移除管理员 |
 
 ## internal/storage/
 

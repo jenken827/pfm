@@ -2050,4 +2050,214 @@ class FmRepository {
       return ApiResult(success: false, message: e.toString());
     }
   }
+
+  // ==================== UserSpace Service ====================
+
+  /// 获取当前用户的空间信息
+  Future<ApiResult<GetUserSpaceResp>> getUserSpace() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/GetUserSpace',
+        data: {},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetUserSpaceResp>(
+        data,
+        GetUserSpaceResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户空间信息失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户空间信息失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 保存分享到我的空间
+  Future<ApiResult<AsyncTaskProgressResp>> saveShareToMySpace({
+    required String shareCode,
+    required String targetParentId,
+    String? displayName,
+  }) async {
+    try {
+      final req = SaveShareToMySpaceReq()
+        ..shareCode = shareCode
+        ..targetParentId = targetParentId;
+      if (displayName != null) req.displayName = displayName;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/SaveShareToMySpace',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<AsyncTaskProgressResp>(
+        data,
+        AsyncTaskProgressResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('保存分享到空间失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('保存分享到空间失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取异步任务进度
+  Future<ApiResult<AsyncTaskProgressResp>> getAsyncTaskProgress(
+    String taskId,
+  ) async {
+    try {
+      final req = AsyncTaskProgressReq()..taskId = taskId;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/GetAsyncTaskProgress',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<AsyncTaskProgressResp>(
+        data,
+        AsyncTaskProgressResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取异步任务进度失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取异步任务进度失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 列出用户空间列表
+  Future<ApiResult<ListUserSpacesResp>> listUserSpaces({
+    int page = 0,
+    int pageSize = 0,
+  }) async {
+    try {
+      final req = ListUserSpacesReq();
+      if (page > 0) req.page = page;
+      if (pageSize > 0) req.pageSize = pageSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/ListUserSpaces',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListUserSpacesResp>(
+        data,
+        ListUserSpacesResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('列出用户空间失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('列出用户空间失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新用户空间配额
+  Future<ApiResult<void>> updateUserSpace({
+    required String userId,
+    required int quotaBytes,
+  }) async {
+    try {
+      final req = UpdateUserSpaceReq()
+        ..userId = userId
+        ..quotaBytes = Int64(quotaBytes);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/UpdateUserSpace',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('更新用户空间失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新用户空间失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取用户列表（UserSpace 版本）
+  Future<ApiResult<ListUsersResp>> listUsersNew() async {
+    try {
+      final req = ListUsersReq();
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/ListUsers',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListUsersResp>(
+        data,
+        ListUsersResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取当前用户角色（UserSpace 版本）
+  Future<ApiResult<GetMyRolesResp>> getMyRolesNew() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/GetMyRoles',
+        data: {},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetMyRolesResp>(
+        data,
+        GetMyRolesResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取用户角色失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取用户角色失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
 }

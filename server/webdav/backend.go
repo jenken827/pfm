@@ -53,7 +53,7 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 	parts := strings.Split(name, "/")
 	var current *native.FileORM
 	for _, part := range parts {
-		files, _, _, err := db.GetFileList(parentID, 0, 10000)
+		files, _, _, err := db.GetFileList(parentID, 0, 10000, "")
 		if err != nil {
 			return nil, fmt.Errorf("list files failed: %w", err)
 		}
@@ -132,7 +132,7 @@ func (b *Backend) ReadDir(ctx context.Context, name string, recursive bool) ([]g
 		return nil, gowebdav.NewHTTPError(405, fmt.Errorf("not a directory"))
 	}
 
-	files, _, _, err := db.GetFileList(*file.Id, 0, 10000)
+	files, _, _, err := db.GetFileList(*file.Id, 0, 10000, "")
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 	}
 
 	// 检查是否已存在
-	existingFiles, _, _, _ := db.GetFileList(*parentFile.Id, 0, 10000)
+	existingFiles, _, _, _ := db.GetFileList(*parentFile.Id, 0, 10000, "")
 	var existing *native.FileORM
 	for _, f := range existingFiles {
 		if f.Name != nil && *f.Name == fileName {
@@ -288,7 +288,7 @@ func (b *Backend) Move(ctx context.Context, name, dest string, options *gowebdav
 	}
 
 	// 检查目标是否已存在
-	destFiles, _, _, _ := db.GetFileList(*destFile.Id, 0, 10000)
+	destFiles, _, _, _ := db.GetFileList(*destFile.Id, 0, 10000, "")
 	created := true
 	for _, f := range destFiles {
 		if f.Name != nil && *f.Name == destName {

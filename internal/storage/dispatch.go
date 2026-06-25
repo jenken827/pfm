@@ -392,7 +392,7 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 
 	// 上传成功，立即更新文件状态为就绪
 	if parentID != "" && fileName != "" {
-		if updateErr := db.UpdateFileIsReady(parentID, fileName); updateErr != nil {
+		if updateErr := db.UpdateFileIsReady(parentID, fileName, ""); updateErr != nil {
 			llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
 		} else {
 			llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d", parentID, fileName, tid)

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/hive/hive.dart';
@@ -60,6 +61,9 @@ void main() async {
   // 初始化前台服务（Android 保活）
   await ForegroundServiceManager.init();
   
+  // 清理可能残留的 Hive 锁文件（应用被强杀/系统杀死后锁文件未释放会导致 openBox 永久卡住）
+  await _cleanupStaleHiveLocks();
+
   if (kReleaseMode) {
     await Hive.initFlutter('pfm');
   } else {
@@ -110,4 +114,29 @@ void main() async {
 /// 判断是否为桌面平台
 bool _isDesktop() {
   return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+}
+
+/// 清理残留的 Hive 锁文件
+///
+/// 应用被强杀或系统 OOM 杀死时，Hive 的 .lock 文件可能未释放，
+/// 导致下次启动时 Hive.openBox() 永久阻塞（卡在 splash）。
+/// 此函数在 Hive.initFlutter 之前删除所有残留锁文件。
+Future<void> _cleanupStaleHiveLocks() async {
+  try {
+    final appDir = await getApplicationDocumentsDirectory();
+    for (final dirName in ['pfm', 'pfm_dev']) {
+      final hiveDir = Directory('${appDir.path}/$dirName');
+      if (!await hiveDir.exists()) continue;
+
+      await for (final entity in hiveDir.list()) {
+        if (entity is File && entity.path.endsWith('.lock')) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {
+    // 清理失败不影响正常启动
+  }
 }

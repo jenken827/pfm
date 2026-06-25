@@ -87,7 +87,7 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 		}
 
 		// 3. 检查目标文件夹中是否存在同名文件
-		existingFile, err := db.GetFileByParentAndName(targetParentID, *file.Name)
+		existingFile, err := db.GetFileByParentAndName(targetParentID, *file.Name, getCurrentUserIDFromCtx(ctx))
 		if err != nil && err.Error() != "record not found" {
 			failedIDs = append(failedIDs, fileID)
 			failedReasons[fileID] = "check existing file failed"

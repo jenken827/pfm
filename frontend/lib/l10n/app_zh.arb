@@ -860,7 +860,7 @@
     "file_modified": "修改时间"
 ,
     "permission_title": "权限管理",
-    "permission_subtitle": "管理用户目录权限",
+    "permission_subtitle": "管理用户存储配额",
     "permission_refresh": "刷新",
     "permission_retry": "重试",
     "permission_noRoles": "无角色",
@@ -884,4 +884,19 @@
     "permission_createDir": "创建目录",
     "permission_delete": "删除",
     "permission_move": "移动",
-    "permission_rename": "重命名"}
+    "permission_rename": "重命名",
+    "preview_shareTitle": "分享",
+    "preview_shareLinkLabel": "分享链接",
+    "preview_shareLinkCopiedToClipboard": "分享链接已复制到剪贴板",
+    "preview_saveToMyDisk": "保存到我的网盘",
+    "preview_savingToDisk": "正在保存到网盘...",
+    "preview_saveToDiskSuccess": "文件已成功保存到网盘",
+    "preview_saveToDiskFailed": "保存到网盘失败",
+    "preview_saveToDiskProgress": "保存中：{completed}/{total}",
+    "@preview_saveToDiskProgress": {
+        "placeholders": {
+            "completed": { "type": "int" },
+            "total": { "type": "int" }
+        }
+    }
+}

@@ -27,6 +27,9 @@ const (
 
 // CheckPermission 检查用户对指定文件/目录的权限
 // 覆盖语义：找到最近的祖先权限记录即返回，不再继续向上合并
+//
+// Deprecated: 已弃用，改用 CheckOwnership / CheckOwnershipOrAdmin 基于 owner_id 的权限模型。
+// 保留此函数用于向后兼容。
 func CheckPermission(userID, fileID string, requiredPerm uint32) bool {
 	currentID := fileID
 	for currentID != "" && currentID != "0" {
@@ -55,6 +58,33 @@ func CheckPermission(userID, fileID string, requiredPerm uint32) bool {
 	}
 	llog.L().Infof("CheckPermission: user=%s, file=%s, empty fileID", userID, fileID)
 	return false
+}
+
+// CheckOwnership 检查当前用户是否为文件所有者（或管理员）
+// 从 context 获取当前用户 ID，检查 file.owner_id == userID
+func CheckOwnership(ctx context.Context, fileID string) bool {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return false
+	}
+	// 管理员跳过
+	if db.IsAdmin(userID) {
+		return true
+	}
+	file, err := db.GetFileByID(fileID)
+	if err != nil || file == nil {
+		return false
+	}
+	if file.OwnerId != nil && *file.OwnerId == userID {
+		return true
+	}
+	return false
+}
+
+// CheckOwnershipOrAdmin 检查当前用户是否为文件所有者或管理员
+// 与 CheckOwnership 行为完全一致，保留语义别名
+func CheckOwnershipOrAdmin(ctx context.Context, fileID string) bool {
+	return CheckOwnership(ctx, fileID)
 }
 
 // CheckPermissionWithDetails 检查权限并返回详细信息（用于调试和日志）
@@ -352,15 +382,15 @@ func GetDirectoryPermissions(ctx context.Context, req *native.GetDirectoryPermis
 
 	// 递归获取子目录权限
 	if req.Recursive != nil && *req.Recursive {
-		appendChildrenPermissions(fileID, result)
+		appendChildrenPermissions(fileID, result, "")
 	}
 
 	return result, nil
 }
 
 // appendChildrenPermissions 递归添加子目录权限
-func appendChildrenPermissions(parentID string, result *native.GetDirectoryPermissionsResp) {
-	children, err := db.GetFileChildren(parentID)
+func appendChildrenPermissions(parentID string, result *native.GetDirectoryPermissionsResp, ownerID string) {
+	children, err := db.GetFileChildren(parentID, ownerID)
 	if err != nil {
 		return
 	}
@@ -400,7 +430,7 @@ func appendChildrenPermissions(parentID string, result *native.GetDirectoryPermi
 		}
 
 		// 递归处理子目录
-		appendChildrenPermissions(*child.Id, result)
+		appendChildrenPermissions(*child.Id, result, ownerID)
 	}
 }
 
@@ -437,7 +467,7 @@ func BatchGrantPermission(ctx context.Context, req *native.BatchGrantPermissionR
 
 // grantChildrenRecursive 递归授予子目录权限
 func grantChildrenRecursive(ctx context.Context, userID, parentID string, permissions uint32, inherit bool, operator string) {
-	children, err := db.GetFileChildren(parentID)
+	children, err := db.GetFileChildren(parentID, userID)
 	if err != nil {
 		return
 	}

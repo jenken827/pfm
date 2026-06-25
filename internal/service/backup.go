@@ -16,6 +16,12 @@ import (
 
 // CreateBackupTask 创建备份任务
 func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *models.Err {
+	// 获取当前用户作为 owner
+	ownerID := getCurrentUserIDFromCtx(ctx)
+	if ownerID == "" {
+		return &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
+	}
+
 	// 1. 参数基础校验
 	if req.Name == nil || *req.Name == "" {
 		return &models.Err{E: errors.New("task name is required"), C: native.RespCode_PARAMS_ERROR}
@@ -75,6 +81,7 @@ func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *mod
 		SourcePath:     req.SourcePath,
 		TargetDirId:    req.TargetDirId,
 		IgnoreRules:    req.IgnoreRules,
+		OwnerId:        &ownerID,
 	}
 
 	orm.Strategy = utils.Int32Ptr(int32(strategy))
@@ -113,6 +120,11 @@ func UpdateBackupTask(ctx context.Context, req *native.UpdateBackupTaskReq) *mod
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
 		return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
+	}
+
+	// 所有权检查
+	if !checkBackupTaskOwnership(ctx, task) {
+		return &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
 	}
 
 	// 先从调度器移除
@@ -199,6 +211,17 @@ func UpdateBackupTask(ctx context.Context, req *native.UpdateBackupTaskReq) *mod
 
 // DeleteBackupTask 删除备份任务
 func DeleteBackupTask(ctx context.Context, req *native.DeleteBackupTaskReq) *models.Err {
+	// 所有权检查：验证每个任务都属于当前用户
+	for _, id := range req.Ids {
+		task, err := db.GetBackupTaskByID(id)
+		if err != nil {
+			return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
+		}
+		if !checkBackupTaskOwnership(ctx, task) {
+			return &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
+		}
+	}
+
 	// 先从调度器移除
 	for _, id := range req.Ids {
 		backup.GetScheduler().RemoveTask(id)
@@ -214,13 +237,24 @@ func DeleteBackupTask(ctx context.Context, req *native.DeleteBackupTaskReq) *mod
 
 // ListBackupTasks 获取备份任务列表
 func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*native.ListBackupTasksRespData, *models.Err) {
+	ownerID := getCurrentUserIDFromCtx(ctx)
+	if ownerID == "" {
+		return nil, &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
+	}
+
 	page := req.GetPage()
 	pageSize := req.GetPageSize()
 	if page == 0 {
 		page = 1
 	}
 
-	tasks, total, err := db.ListBackupTasks(page, pageSize, req.Enabled)
+	// 管理员可查看所有任务，普通用户只能查看自己的
+	filterOwnerID := ownerID
+	if db.IsAdmin(ownerID) {
+		filterOwnerID = "" // 空字符串表示不过滤
+	}
+
+	tasks, total, err := db.ListBackupTasks(page, pageSize, req.Enabled, filterOwnerID)
 	if err != nil {
 		llog.L().Errorf("list backup tasks failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -248,6 +282,11 @@ func GetBackupTask(ctx context.Context, req *native.GetBackupTaskReq) (*native.G
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
 		return nil, &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
+	}
+
+	// 所有权检查
+	if !checkBackupTaskOwnership(ctx, task) {
+		return nil, &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
 	}
 
 	pb, pbErr := task.ToPB(ctx)
@@ -281,6 +320,11 @@ func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Er
 		return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
 	}
 
+	// 所有权检查
+	if !checkBackupTaskOwnership(ctx, task) {
+		return &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
+	}
+
 	// 防重复触发：任务正在运行中
 	if task.LastRunStatus != nil && *task.LastRunStatus == int32(native.BackupRunStatus_BACKUP_RUN_STATUS_RUNNING) {
 		return &models.Err{E: errors.New("backup task is already running"), C: native.RespCode_PARAMS_ERROR}
@@ -295,6 +339,21 @@ func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Er
 	llog.L().Infof("TriggerBackup: calling scheduler.TriggerBackup, task_id: %d", *task.Id)
 	backup.GetScheduler().TriggerBackup(*task.Id)
 	return nil
+}
+
+// checkBackupTaskOwnership 检查当前用户是否为备份任务的所有者（或管理员）
+func checkBackupTaskOwnership(ctx context.Context, task *native.BackupTaskORM) bool {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return false
+	}
+	if db.IsAdmin(userID) {
+		return true
+	}
+	if task.OwnerId != nil && *task.OwnerId == userID {
+		return true
+	}
+	return false
 }
 
 // ListBackupFiles 获取备份文件记录

@@ -122,14 +122,14 @@ func validateAndGetParent(parentID string) (*native.FileORM, []uint32, *models.E
 }
 
 // checkFileExists 检查文件是否已存在（通过hash和同名）
-func checkFileExists(parentID, fileName, fileHash string) (*native.FileORM, *native.FileORM, *models.Err) {
+func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.FileORM, *native.FileORM, *models.Err) {
 	existingFile, err := db.GetFileByHash(fileHash)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		llog.L().Errorf("check file exists by hash failed: %v", err)
 		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	sameNameFile, err := db.GetFileByParentAndName(parentID, fileName)
+	sameNameFile, err := db.GetFileByParentAndName(parentID, fileName, ownerID)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		llog.L().Errorf("check same name file failed: %v", err)
 		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -333,6 +333,8 @@ func handleInstantUpload(
 		Mime:     existingFile.Mime,
 		IsReady:  utils.BoolPtr(true), // 秒传：文件已存在，标记为就绪
 	}
+	ownerID := getCurrentUserIDFromCtx(ctx)
+	newFileRecord.OwnerId = &ownerID
 	if createErr := db.CreateFile(newFileRecord); createErr != nil {
 		llog.L().Errorf("create file record failed: %v", createErr)
 		return true, nil, &models.Err{E: createErr, C: native.RespCode_DB_ERROR}
@@ -515,7 +517,8 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 检查文件是否已存在
-	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash)
+	userID := getCurrentUserIDFromCtx(ctx)
+	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -847,6 +850,13 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	filetype, mime := GetFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, 0), *uploadRecord.FileName)
 
 	// 3. 创建文件记录
+	// 从父目录获取 owner_id（goroutine 中无用户上下文）
+	ownerID := ""
+	if uploadRecord.ParentId != nil {
+		if parent, pErr := db.GetFileByID(*uploadRecord.ParentId); pErr == nil && parent != nil && parent.OwnerId != nil {
+			ownerID = *parent.OwnerId
+		}
+	}
 	fileRecord := &native.FileORM{
 		Name:     uploadRecord.FileName,
 		ParentId: uploadRecord.ParentId,
@@ -856,6 +866,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		Mime:     &mime,
 		IsReady:  utils.BoolPtr(false), // 文件创建时标记为未就绪
 	}
+	fileRecord.OwnerId = &ownerID
 
 	// 处理文件记录（新建或覆盖）
 	overwriteID := ""
@@ -968,7 +979,8 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	// 检查文件是否已存在
-	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash)
+	userID := getCurrentUserIDFromCtx(ctx)
+	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
 	if mErr != nil {
 		return nil, mErr
 	}

@@ -7,14 +7,15 @@ import (
 	"connectrpc.com/connect"
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
 
-// adminRoleName 管理员角色名
-const adminRoleName = "pfm_admin"
+// adminRoleName 管理员角色名（已弃用，改用本地 admin_users 表）
+// const adminRoleName = "pfm_admin"
 
 // getUserFromCtx 从 context 获取当前用户
 func getUserFromCtx(ctx context.Context) *casdoorsdk.User {
@@ -29,53 +30,33 @@ func getUserFromCtx(ctx context.Context) *casdoorsdk.User {
 	return &claims.User
 }
 
-// isAdmin 检查是否为管理员
+// isAdmin 检查是否为管理员（查询本地 admin_users 表）
 func isAdmin(ctx context.Context) bool {
 	user := getUserFromCtx(ctx)
 	if user == nil {
 		return false
 	}
-	for _, role := range user.Roles {
-		if role.Name == adminRoleName {
-			return true
-		}
-	}
-	return false
+	return db.IsAdmin(user.Name)
 }
 
 // PermInterceptor 权限检查拦截器
-// 管理员跳过权限检查，普通用户需要检查目录权限
+// 基于 owner_id 的权限模型：文件所有者或管理员可访问
 func PermInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (connect.AnyResponse, error) {
-			// 管理员跳过权限检查
-			if isAdmin(ctx) {
-				return next(ctx, req)
-			}
-
-			// 获取当前用户名
-			user := getUserFromCtx(ctx)
-			if user == nil {
-				return response.ErrResp(&models.Err{
-					E: errors.New("no user in context"),
-					C: native.RespCode_TOKEN_INVALID,
-				})
-			}
-			userID := user.Name
-
 			// 从请求中提取 file_id（根据不同的 RPC 方法）
 			procedure := req.Spec().Procedure
 			fileID := extractFileIDFromRequest(req, procedure)
 
 			if fileID != "" {
-				allowed := service.CheckPermission(userID, fileID, service.PermRead)
-				if !allowed {
+				// 基于 owner_id 的权限检查：所有者或管理员可访问
+				if !service.CheckOwnershipOrAdmin(ctx, fileID) {
 					return response.ErrResp(&models.Err{
-						E: errors.New("permission denied"),
-						C: native.RespCode_PARAMS_ERROR,
+						E: errors.New("permission denied: not file owner"),
+						C: native.RespCode_PERMISSION_DENIED,
 					})
 				}
 			}
@@ -94,37 +75,24 @@ func extractFileIDFromRequest(req connect.AnyRequest, procedure string) string {
 }
 
 // RequirePermission 要求特定权限的拦截器
+// 基于 owner_id 的权限模型：文件所有者或管理员可访问
 func RequirePermission(perm uint32) connect.UnaryInterceptorFunc {
+	_ = perm // owner_id 模型下不再使用具体权限位
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (connect.AnyResponse, error) {
-			// 管理员跳过权限检查
-			if isAdmin(ctx) {
-				return next(ctx, req)
-			}
-
-			// 获取当前用户名
-			user := getUserFromCtx(ctx)
-			if user == nil {
-				return response.ErrResp(&models.Err{
-					E: errors.New("no user in context"),
-					C: native.RespCode_TOKEN_INVALID,
-				})
-			}
-			userID := user.Name
-
 			// 从请求中提取 file_id
 			procedure := req.Spec().Procedure
 			fileID := extractFileIDFromRequest(req, procedure)
 
 			if fileID != "" {
-				allowed := service.CheckPermission(userID, fileID, perm)
-				if !allowed {
+				// 基于 owner_id 的权限检查：所有者或管理员可访问
+				if !service.CheckOwnershipOrAdmin(ctx, fileID) {
 					return response.ErrResp(&models.Err{
-						E: errors.New("permission denied"),
-						C: native.RespCode_PARAMS_ERROR,
+						E: errors.New("permission denied: not file owner"),
+						C: native.RespCode_PERMISSION_DENIED,
 					})
 				}
 			}

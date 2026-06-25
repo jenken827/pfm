@@ -20,33 +20,51 @@ import (
 	"gorm.io/gorm"
 )
 
+// checkOwnership 检查当前用户是否拥有指定文件（或为管理员）
+func checkOwnership(ctx context.Context, fileID string) bool {
+	if isAdminUser(ctx) {
+		return true
+	}
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return false
+	}
+	file, err := db.GetFileByID(fileID)
+	if err != nil || file == nil {
+		return false
+	}
+	return file.OwnerId != nil && *file.OwnerId == userID
+}
+
 // GetFileList 获取文件列表
 func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, bool, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	parentID := req.GetParentId()
 	llog.L().Infof("GetFileList: user=%s, parentId=%s", userID, parentID)
 
-	// 权限检查：检查对父目录的读权限
-	allowed := checkFilePermission(ctx, parentID, PermRead)
-	llog.L().Infof("GetFileList: user=%s, parentId=%s, allowed=%v", userID, parentID, allowed)
-	if !allowed {
-		// 非管理员查询根目录无权限时，返回用户有权限的目录
-		if parentID == "" && !isAdminUser(ctx) {
-			llog.L().Infof("GetFileList: user=%s, root fallback to getAccessibleFilesAsRoot", userID)
-			return getAccessibleFilesAsRoot(ctx, req.GetOffset(), req.GetPageSize())
-		}
-		llog.L().Infof("GetFileList: user=%s, permission denied for parentId=%s", userID, parentID)
+	if userID == "" {
+		return nil, 0, false, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 查询根目录时，使用 user_space 获取用户的根目录
+	if parentID == "" || parentID == "0" {
+		llog.L().Infof("GetFileList: user=%s, root fallback to getUserRootFiles", userID)
+		return getUserRootFiles(ctx, req.GetOffset(), req.GetPageSize())
+	}
+
+	// 非根目录：检查目录所有权
+	if !checkOwnership(ctx, parentID) {
+		llog.L().Infof("GetFileList: user=%s, ownership check failed for parentId=%s", userID, parentID)
 		return nil, 0, false, &models.Err{
-			E: fmt.Errorf("permission denied: no read access to directory %s", parentID),
+			E: fmt.Errorf("permission denied: not owner of directory %s", parentID),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
 
-	// 获取分页参数
 	offset := req.GetOffset()
 	pageSize := req.GetPageSize()
 
-	files, total, hasMore, err := db.GetFileList(parentID, offset, pageSize)
+	files, total, hasMore, err := db.GetFileList(parentID, offset, pageSize, userID)
 	if err != nil {
 		llog.L().Errorf("GetFileList failed, err: %v", err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -55,22 +73,29 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 	llog.L().Infof("GetFileList: user=%s, parentId=%s, returned %d files", userID, parentID, len(files))
 	return files, total, hasMore, nil
 }
-
 // GetFolderList 获取文件夹列表（用于移动文件选择目标文件夹）
 func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.FileORM, *models.Err) {
-	// 权限检查：检查对父目录的读权限
-	if !checkFilePermission(ctx, req.GetParentId(), PermRead) {
-		// 非管理员查询根目录无权限时，返回用户有权限的目录
-		if req.GetParentId() == "" && !isAdminUser(ctx) {
-			return getAccessibleFoldersAsRoot(ctx)
-		}
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	parentID := req.GetParentId()
+
+	// 查询根目录时，使用 user_space 获取用户的根目录文件夹
+	if parentID == "" || parentID == "0" {
+		return getUserRootFolders(ctx)
+	}
+
+	// 非根目录：检查目录所有权
+	if !checkOwnership(ctx, parentID) {
 		return nil, &models.Err{
-			E: fmt.Errorf("permission denied: no read access to directory %s", req.GetParentId()),
+			E: fmt.Errorf("permission denied: not owner of directory %s", parentID),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
 
-	folders, err := db.GetFolderList(req.GetParentId())
+	folders, err := db.GetFolderList(parentID, userID)
 	if err != nil {
 		llog.L().Errorf("GetFolderList failed, err: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -79,8 +104,8 @@ func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.Fi
 	return folders, nil
 }
 
-// getAccessibleFilesAsRoot 非管理员用户查询根目录时，返回有权限的文件/目录
-func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*native.FileORM, int64, bool, *models.Err) {
+// getUserRootFiles 获取用户的根目录文件列表（根目录是虚拟的，直接查 parent_id='' + owner_id）
+func getUserRootFiles(ctx context.Context, offset, pageSize uint32) ([]*native.FileORM, int64, bool, *models.Err) {
 	if pageSize == 0 {
 		pageSize = 500
 	}
@@ -89,138 +114,48 @@ func getAccessibleFilesAsRoot(ctx context.Context, offset, pageSize uint32) ([]*
 		return nil, 0, false, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	perms, err := db.GetUserDirectoryPermissions(userID)
+	files, total, hasMore, err := db.GetFileList("", offset, pageSize, userID)
 	if err != nil {
-		llog.L().Errorf("getAccessibleFilesAsRoot: GetUserDirectoryPermissions failed, user=%s, err=%v", userID, err)
+		llog.L().Errorf("getUserRootFiles: GetFileList failed, user=%s, err=%v", userID, err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
-	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, totalPerms=%d", userID, len(perms))
 
-	// 只保留有读权限的
-	var readPerms []*native.DirectoryPermissionORM
-	for _, p := range perms {
-		if p.Permissions != nil && *p.Permissions&PermRead != 0 && p.FileId != nil {
-			readPerms = append(readPerms, p)
-		}
-	}
-	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, readPerms=%d", userID, len(readPerms))
-
-	// 过滤为顶层目录
-	topPerms := filterTopLevel(readPerms)
-	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, topPerms=%d", userID, len(topPerms))
-
-	var allFiles []*native.FileORM
-	for _, p := range topPerms {
-		file, err := db.GetFileByID(*p.FileId)
-		if err != nil || file == nil {
-			llog.L().Infof("getAccessibleFilesAsRoot: skip fileId=%s (not found)", *p.FileId)
-			continue
-		}
-		// 应用别名
-		if p.Alias != nil && *p.Alias != "" {
-			file.Name = p.Alias
-		}
-		allFiles = append(allFiles, file)
-	}
-
-	llog.L().Infof("getAccessibleFilesAsRoot: user=%s, returning %d files", userID, len(allFiles))
-
-	total := int64(len(allFiles))
-	start := int(offset)
-	if start >= len(allFiles) {
-		return []*native.FileORM{}, total, false, nil
-	}
-	end := start + int(pageSize)
-	if end > len(allFiles) {
-		end = len(allFiles)
-	}
-	hasMore := end < len(allFiles)
-	return allFiles[start:end], total, hasMore, nil
+	llog.L().Infof("getUserRootFiles: user=%s, returned %d files", userID, len(files))
+	return files, total, hasMore, nil
 }
 
-// getAccessibleFoldersAsRoot 非管理员用户查询根目录文件夹时，返回有权限的目录
-func getAccessibleFoldersAsRoot(ctx context.Context) ([]*native.FileORM, *models.Err) {
+// getUserRootFolders 获取用户的根目录文件夹列表（从 user_space 获取根目录，列出其子文件夹）
+func getUserRootFolders(ctx context.Context) ([]*native.FileORM, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	perms, err := db.GetUserDirectoryPermissions(userID)
+	folders, err := db.GetFolderList("", userID)
 	if err != nil {
+		llog.L().Errorf("getUserRootFolders: GetFolderList failed, user=%s, err=%v", userID, err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	// 只保留有读权限的
-	var readPerms []*native.DirectoryPermissionORM
-	for _, p := range perms {
-		if p.Permissions != nil && *p.Permissions&PermRead != 0 && p.FileId != nil {
-			readPerms = append(readPerms, p)
-		}
-	}
-
-	// 过滤为顶层目录
-	topPerms := filterTopLevel(readPerms)
-
-	var folders []*native.FileORM
-	for _, p := range topPerms {
-		file, err := db.GetFileByID(*p.FileId)
-		if err != nil || file == nil {
-			continue
-		}
-		// 应用别名
-		if p.Alias != nil && *p.Alias != "" {
-			file.Name = p.Alias
-		}
-		folders = append(folders, file)
 	}
 
 	return folders, nil
 }
 
-// filterTopLevel 过滤出顶层目录（排除有祖先也在授权列表中的目录）
-func filterTopLevel(perms []*native.DirectoryPermissionORM) []*native.DirectoryPermissionORM {
-	// 构建授权目录 ID 集合
-	authIDs := make(map[string]bool)
-	for _, p := range perms {
-		if p.FileId != nil {
-			authIDs[*p.FileId] = true
-		}
-	}
 
-	var result []*native.DirectoryPermissionORM
-	for _, p := range perms {
-		if p.FileId == nil {
-			continue
-		}
-		if !hasAncestorInSet(*p.FileId, authIDs) {
-			result = append(result, p)
-		}
-	}
-	return result
-}
-
-// hasAncestorInSet 检查目录是否有祖先在指定集合中
-func hasAncestorInSet(fileID string, authIDs map[string]bool) bool {
-	currentID := fileID
-	for {
-		file, err := db.GetFileByID(currentID)
-		if err != nil || file == nil || file.ParentId == nil || *file.ParentId == "" || *file.ParentId == "0" {
-			return false
-		}
-		parentID := *file.ParentId
-		if authIDs[parentID] {
-			return true
-		}
-		currentID = parentID
-	}
-}
 
 // CreateDir 创建文件夹
 func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.Err) {
-	// 权限检查：检查对父目录的创建目录权限
-	if !checkFilePermission(ctx, req.GetParentId(), PermMkdir) {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
 		return "", &models.Err{
-			E: fmt.Errorf("permission denied: no mkdir access to directory %s", req.GetParentId()),
+			E: fmt.Errorf("unauthorized"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 所有权检查：检查对父目录的所有权
+	if !checkOwnership(ctx, req.GetParentId()) {
+		return "", &models.Err{
+			E: fmt.Errorf("permission denied: not owner of directory %s", req.GetParentId()),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
@@ -274,6 +209,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		EnableEncryption: enableEncryption,
 		BoundProviderIds: &boundProviderIds,
+		OwnerId:          &userID,
 	}
 	e := db.CreateFile(f)
 	if e != nil {
@@ -406,11 +342,11 @@ func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 		return nil
 	}
 
-	// 权限检查：检查对每个文件的删除权限
+	// 所有权检查：检查当前用户是否拥有每个文件
 	for _, id := range ids {
-		if !checkFilePermission(ctx, id, PermDelete) {
+		if !checkOwnership(ctx, id) {
 			return &models.Err{
-				E: fmt.Errorf("permission denied: no delete access to file %s", id),
+				E: fmt.Errorf("permission denied: not owner of file %s", id),
 				C: native.RespCode_PARAMS_ERROR,
 			}
 		}
@@ -437,11 +373,11 @@ func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 
 // RenameFile 重命名文件
 func RenameFile(ctx context.Context, req *native.RenameFileReq) *models.Err {
-	// 权限检查：检查对每个文件的重命名权限
+	// 所有权检查：检查当前用户是否拥有每个文件
 	for _, obj := range req.RenameObjs {
-		if !checkFilePermission(ctx, obj.GetId(), PermRename) {
+		if !checkOwnership(ctx, obj.GetId()) {
 			return &models.Err{
-				E: fmt.Errorf("permission denied: no rename access to file %s", obj.GetId()),
+				E: fmt.Errorf("permission denied: not owner of file %s", obj.GetId()),
 				C: native.RespCode_PARAMS_ERROR,
 			}
 		}
@@ -552,7 +488,11 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 		// 检查同名冲突并自动重命名
 		newName := ""
 		if file.Name != nil {
-			newName = resolveNameConflict(parentID, *file.Name)
+			fileOwnerID := ""
+			if file.OwnerId != nil {
+				fileOwnerID = *file.OwnerId
+			}
+			newName = resolveNameConflict(parentID, *file.Name, fileOwnerID)
 		}
 
 		selectedRestore = append(selectedRestore, restoreItem{
@@ -618,8 +558,8 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 
 // resolveNameConflict 检查目标目录中是否有同名文件，有则自动重命名
 // 返回新名称（冲突时），无冲突返回空字符串
-func resolveNameConflict(parentID, name string) string {
-	existing, err := db.GetFileByParentAndName(parentID, name)
+func resolveNameConflict(parentID, name, ownerID string) string {
+	existing, err := db.GetFileByParentAndName(parentID, name, ownerID)
 	if err != nil || existing == nil {
 		return "" // 无冲突
 	}
@@ -631,7 +571,7 @@ func resolveNameConflict(parentID, name string) string {
 	// 尝试 "name (1).ext", "name (2).ext", ...
 	for i := 1; i <= 999; i++ {
 		newName := fmt.Sprintf("%s (%d)%s", baseName, i, ext)
-		conflict, err := db.GetFileByParentAndName(parentID, newName)
+		conflict, err := db.GetFileByParentAndName(parentID, newName, ownerID)
 		if err != nil || conflict == nil {
 			return newName
 		}
@@ -1015,7 +955,7 @@ func permanentlyDeleteFiles(allFileIDs []string, logLabel string) {
 // EmptyTrash 清空回收站
 func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	// 1. 获取所有回收站文件
-	files, _, err := db.GetTrashList(0, 10000) // 获取所有文件
+	files, _, err := db.GetTrashList(0, 10000, getCurrentUserIDFromCtx(ctx)) // 获取所有文件
 	if err != nil {
 		llog.L().Errorf("get trash list failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -1048,7 +988,7 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 
 // GetTrashList 获取回收站文件列表
 func GetTrashList(ctx context.Context) (*native.TrashListRespData, *models.Err) {
-	files, total, err := db.GetTrashList(0, 500)
+	files, total, err := db.GetTrashList(0, 500, getCurrentUserIDFromCtx(ctx))
 	if err != nil {
 		llog.L().Errorf("get trash list failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -1098,7 +1038,7 @@ func SearchFiles(ctx context.Context, req *native.SearchFilesReq) ([]*native.Fil
 	if searchType == native.SearchType_TAG {
 		files, total, hasMore, err = db.SearchFilesByTag(keyword, offset, pageSize)
 	} else {
-		files, total, hasMore, err = db.SearchFiles(keyword, offset, pageSize)
+		files, total, hasMore, err = db.SearchFiles(keyword, offset, pageSize, getCurrentUserIDFromCtx(ctx))
 	}
 
 	if err != nil {
@@ -1246,7 +1186,7 @@ func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*nati
 		pageSize = 20
 	}
 
-	files, total, hasMore, err := db.GetRecentFiles(offset, pageSize)
+	files, total, hasMore, err := db.GetRecentFiles(offset, pageSize, getCurrentUserIDFromCtx(ctx))
 	if err != nil {
 		llog.L().Errorf("GetRecentFiles failed, err: %v", err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -1279,7 +1219,7 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 
 	// 管理员不过滤
 	if isAdminUser(ctx) {
-		files, total, hasMore, err := db.GetFilesByType(fileType, offset, pageSize)
+		files, total, hasMore, err := db.GetFilesByType(fileType, offset, pageSize, getCurrentUserIDFromCtx(ctx))
 		if err != nil {
 			llog.L().Errorf("GetFilesByType failed, type: %v, err: %v", fileType, err)
 			return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -1292,7 +1232,7 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 	if fetchLimit > 200 {
 		fetchLimit = 200
 	}
-	allFiles, _, _, err := db.GetFilesByType(fileType, 0, fetchLimit)
+	allFiles, _, _, err := db.GetFilesByType(fileType, 0, fetchLimit, getCurrentUserIDFromCtx(ctx))
 	if err != nil {
 		llog.L().Errorf("GetFilesByType failed, type: %v, err: %v", fileType, err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}

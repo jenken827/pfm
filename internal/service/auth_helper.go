@@ -6,11 +6,12 @@ import (
 
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
-// getCurrentUserIDFromCtx 从 context 获取当前用户 ID
+// getCurrentUserIDFromCtx 从 context 获取当前用户 ID（Casdoor UUID，稳定不变）
 // 如果未登录返回空字符串
 func getCurrentUserIDFromCtx(ctx context.Context) string {
 	val := ctx.Value(globals.ContextUserKey)
@@ -21,26 +22,16 @@ func getCurrentUserIDFromCtx(ctx context.Context) string {
 	if !ok || claims == nil {
 		return ""
 	}
-	return claims.User.Name
+	return claims.User.Id
 }
 
-// isAdminUser 检查当前用户是否为管理员
+// isAdminUser 检查当前用户是否为管理员（查询本地 admin_users 表）
 func isAdminUser(ctx context.Context) bool {
-	val := ctx.Value(globals.ContextUserKey)
-	if val == nil {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
 		return false
 	}
-	claims, ok := val.(*casdoorsdk.Claims)
-	if !ok || claims == nil {
-		return false
-	}
-
-	for _, role := range claims.User.Roles {
-		if role.Name == "pfm_admin" {
-			return true
-		}
-	}
-	return false
+	return db.IsAdmin(userID)
 }
 
 // checkFilePermission 检查当前用户对文件的权限

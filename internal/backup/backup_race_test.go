@@ -86,7 +86,7 @@ func verifyDirectoriesCreated(t *testing.T, targetDirID string, paths []string) 
 	
 	// 验证每个目录都存在
 	for dir := range dirSet {
-		_, err := db.GetFileByParentAndName(targetDirID, dir)
+		_, err := db.GetFileByParentAndName(targetDirID, dir, "")
 		if err != nil {
 			t.Errorf("Directory %s not found", dir)
 		}

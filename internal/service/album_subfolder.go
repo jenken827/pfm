@@ -19,8 +19,9 @@ const maxFilesPerSubfolder = 500
 // 查找 parentID 下以 prefix 开头的子目录，返回第一个文件数 < maxFiles 的目录 ID
 // 如果没有合适的目录，创建一个新的（编号递增）
 func GetOrCreateSubfolder(ctx context.Context, parentID string, prefix string) (string, *models.Err) {
+	userID := getCurrentUserIDFromCtx(ctx)
 	// 获取所有子文件夹
-	folders, err := db.GetSubfoldersByParentID(parentID)
+	folders, err := db.GetSubfoldersByParentID(parentID, userID)
 	if err != nil {
 		llog.L().Errorf("get subfolders failed: %v", err)
 		return "", &models.Err{E: err, C: native.RespCode_DB_ERROR}
@@ -33,7 +34,7 @@ func GetOrCreateSubfolder(ctx context.Context, parentID string, prefix string) (
 		}
 		name := *folder.Name
 		if len(name) >= len(prefix) && name[:len(prefix)] == prefix {
-			count, err := db.CountChildrenByParentID(*folder.Id)
+			count, err := db.CountChildrenByParentID(*folder.Id, userID)
 			if err != nil {
 				llog.L().Errorf("count children failed: %v", err)
 				continue
