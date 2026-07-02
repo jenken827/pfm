@@ -84,41 +84,25 @@ func parseAndCreateTags(fileID string, tagsStr *string) {
 	}
 }
 
-// validateAndGetParent 验证父文件夹并获取存储提供者列表
-func validateAndGetParent(parentID string) (*native.FileORM, []uint32, *models.Err) {
+// validateAndGetParent 验证父文件夹存在且为文件夹类型
+func validateAndGetParent(parentID string) (*native.FileORM, *models.Err) {
 	parentFile, err := db.GetFileByID(parentID)
 	if err != nil {
 		llog.L().Errorf("get parent folder failed: %v", err)
-		return nil, nil, &models.Err{
+		return nil, &models.Err{
 			E: errors.New("parent folder not found"),
 			C: native.RespCode_DB_ERROR,
 		}
 	}
 
-	if parentFile.BoundProviderIds == nil || *parentFile.BoundProviderIds == "" {
-		return nil, nil, &models.Err{
-			E: errors.New("parent folder has no bound storage providers"),
+	if parentFile.Type == nil || native.FileType(*parentFile.Type) != native.FileType_FOLDER {
+		return nil, &models.Err{
+			E: errors.New("parent is not a folder"),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
 
-	var providerIds []uint32
-	if err := json.Unmarshal([]byte(*parentFile.BoundProviderIds), &providerIds); err != nil {
-		llog.L().Errorf("invalid bound_provider_ids format: %v", err)
-		return nil, nil, &models.Err{
-			E: errors.New("invalid bound_provider_ids format"),
-			C: native.RespCode_INTERNAL_ERROR,
-		}
-	}
-
-	if len(providerIds) == 0 {
-		return nil, nil, &models.Err{
-			E: errors.New("parent folder has no bound storage providers"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	return parentFile, providerIds, nil
+	return parentFile, nil
 }
 
 // checkFileExists 检查文件是否已存在（通过hash和同名）
@@ -510,8 +494,14 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		return resumeExistingUpload(record, chunks, blake3Hash)
 	}
 
-	// 验证父文件夹并获取存储提供者列表
-	parentFile, providerIds, mErr := validateAndGetParent(*req.ParentId)
+	// 验证父文件夹
+	_, mErr := validateAndGetParent(*req.ParentId)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 从 context 获取绑定的存储提供者
+	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -538,7 +528,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 文件不存在，创建新的上传任务
-	return createNewUploadTask(req, blake3Hash, parentFile, sameNameFile)
+	return createNewUploadTask(req, blake3Hash, providerIds, sameNameFile)
 }
 
 // resumeExistingUpload 处理断点续传
@@ -571,7 +561,7 @@ func resumeExistingUpload(record *native.UploadRecordORM, chunks []*native.Uploa
 }
 
 // createNewUploadTask 创建新的上传任务
-func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFile *native.FileORM, sameNameFile *native.FileORM) (*native.InitUploadRespData, *models.Err) {
+func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, providerIds []uint32, sameNameFile *native.FileORM) (*native.InitUploadRespData, *models.Err) {
 	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
 	if mErr != nil {
 		return nil, mErr
@@ -594,6 +584,10 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFil
 	}
 
 	tp := utils.GetFileTempPath(blake3Hash, *req.Name)
+	// 将 provider IDs 转为 JSON 字符串存储
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
+
 	ur := &native.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
@@ -604,7 +598,7 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, parentFil
 		TempPath:          &tp,
 		OverwriteId:       &overwriteID,
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
-		TargetProviderIds: parentFile.BoundProviderIds,
+		TargetProviderIds: &targetProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 		Tags:              req.Tags,
 	}
@@ -972,8 +966,14 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	blake3Hash := *req.Hash
 	llog.L().Infof("small file upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
 
-	// 验证父文件夹并获取存储提供者列表
-	parentFile, providerIds, mErr := validateAndGetParent(*req.ParentId)
+	// 验证父文件夹
+	_, mErr := validateAndGetParent(*req.ParentId)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	// 从 context 获取绑定的存储提供者
+	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -1029,12 +1029,14 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	// 触发后台存储上传：优先复用 initUpload 已创建的 upload record
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
 	if req.UploadId != nil && *req.UploadId > 0 {
-		if err := reuseAndDispatchUpload(*req.UploadId, tempPath, *req.Name, *req.ParentId, overwriteID, parentFile.BoundProviderIds); err != nil {
+		if err := reuseAndDispatchUpload(*req.UploadId, tempPath, *req.Name, *req.ParentId, overwriteID, &targetProviderIds); err != nil {
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 	} else {
-		if err := smallFileUploadToProviders(blake3Hash, req, parentFile, tempPath, overwriteID); err != nil {
+		if err := smallFileUploadToProviders(blake3Hash, req, providerIds, tempPath, overwriteID); err != nil {
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 	}
@@ -1112,7 +1114,10 @@ func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blak
 }
 
 // smallFileUploadToProviders 创建上传记录并触发后台存储上传
-func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, parentFile *native.FileORM, tempPath, overwriteID string) error {
+func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, providerIds []uint32, tempPath, overwriteID string) error {
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
+
 	uploadRecord := &native.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
@@ -1121,7 +1126,7 @@ func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, p
 		TempPath:          &tempPath,
 		OverwriteId:       &overwriteID,
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
-		TargetProviderIds: parentFile.BoundProviderIds,
+		TargetProviderIds: &targetProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 	}
 

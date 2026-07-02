@@ -331,10 +331,6 @@ func UpdateDir(orm *native.FileORM) error {
 		fields = append(fields, "enable_encryption")
 	}
 
-	if orm.BoundProviderIds != nil {
-		fields = append(fields, "bound_provider_ids")
-	}
-
 	if len(fields) == 0 {
 		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
 		return err
@@ -348,8 +344,6 @@ func UpdateDir(orm *native.FileORM) error {
 			updateMap["name"] = *orm.Name
 		case "enable_encryption":
 			updateMap["enable_encryption"] = *orm.EnableEncryption
-		case "bound_provider_ids":
-			updateMap["bound_provider_ids"] = *orm.BoundProviderIds
 		}
 	}
 
@@ -426,8 +420,6 @@ func UpdateFile(file *native.FileORM, updateFields []string) error {
 			updateMap["is_ready"] = *file.IsReady
 		case "enable_encryption":
 			updateMap["enable_encryption"] = *file.EnableEncryption
-		case "bound_provider_ids":
-			updateMap["bound_provider_ids"] = *file.BoundProviderIds
 		case "max_histories":
 			updateMap["max_histories"] = *file.MaxHistories
 		}

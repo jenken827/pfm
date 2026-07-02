@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -370,12 +371,21 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		fileID = *newFile.Id
 	}
 
-	// 5. 获取目标目录绑定的存储提供者
+	// 5. 获取目标目录的 owner_id，通过 UserSpace 获取绑定的存储提供者
 	targetDir, err := db.GetFileByID(*task.TargetDirId)
-	if err != nil || targetDir == nil || targetDir.BoundProviderIds == nil || *targetDir.BoundProviderIds == "" {
-		llog.L().Errorf("get target dir or bound providers failed, target_dir_id: %s, err: %v", *task.TargetDirId, err)
+	if err != nil || targetDir == nil || targetDir.OwnerId == nil || *targetDir.OwnerId == "" {
+		llog.L().Errorf("get target dir or owner failed, target_dir_id: %s, err: %v", *task.TargetDirId, err)
 		return
 	}
+
+	providerIds, err := db.GetBoundProviderIdsByOwnerID(*targetDir.OwnerId)
+	if err != nil {
+		llog.L().Errorf("get bound providers for owner %s failed: %v", *targetDir.OwnerId, err)
+		return
+	}
+
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
 
 	// 6. 创建 UploadRecord 并通过 storage.Dispatch 上传到所有目标存储提供者
 	// 备份源文件在本地，将其路径作为 TempPath，走普通上传流程
@@ -389,7 +399,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		TempPath:          &candidate.AbsPath,            // 源文件路径作为临时文件路径
 		OverwriteId:       utils.StringPtr(""),           // 空字符串表示不覆盖
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
-		TargetProviderIds: targetDir.BoundProviderIds,    // 目标目录绑定的所有 provider
+		TargetProviderIds: &targetProviderIds,             // 从 UserSpace 获取的 provider
 		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP), // 自动备份任务
 	}
 
@@ -399,7 +409,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 	}
 
 	llog.L().Infof("backup file dispatching, file: %s, hash: %s, target_dir: %s, providers: %s",
-		candidate.RelativePath, hash, *task.TargetDirId, *targetDir.BoundProviderIds)
+		candidate.RelativePath, hash, *task.TargetDirId, targetProviderIds)
 	go storage.Dispatch(context.Background(), uploadRecord)
 
 	// 7. 更新 BackupFileRecord
@@ -471,19 +481,6 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 					fieldsToUpdate = append(fieldsToUpdate, "enable_encryption")
 				}
 
-				// 检查绑定的存储提供者
-				if parentDir.BoundProviderIds != nil && *parentDir.BoundProviderIds != "" && *parentDir.BoundProviderIds != "[]" &&
-					(existing.BoundProviderIds == nil || *existing.BoundProviderIds == "" || *existing.BoundProviderIds == "[]") {
-					existingProviders := ""
-					if existing.BoundProviderIds != nil {
-						existingProviders = *existing.BoundProviderIds
-					}
-					llog.L().Infof("ensureDirStructure: updating folder '%s' providers from '%s' to '%s'",
-						part, existingProviders, *parentDir.BoundProviderIds)
-					existing.BoundProviderIds = parentDir.BoundProviderIds
-					fieldsToUpdate = append(fieldsToUpdate, "bound_provider_ids")
-				}
-
 				if len(fieldsToUpdate) > 0 {
 					db.UpdateFile(existing, fieldsToUpdate)
 				}
@@ -492,9 +489,8 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 			continue
 		}
 
-		// 从当前父目录获取加密设置和绑定的存储提供者（逐层继承）
+		// 从当前父目录获取加密设置（逐层继承）
 		var parentEncrypt *bool
-		var parentProviders *string
 		parentDir, err := db.GetFileByID(currentParentID)
 		if err == nil && parentDir != nil {
 			if parentDir.EnableEncryption != nil {
@@ -505,11 +501,6 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 				llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
 					part, currentParentID)
 			}
-			if parentDir.BoundProviderIds != nil && *parentDir.BoundProviderIds != "" && *parentDir.BoundProviderIds != "[]" {
-				parentProviders = parentDir.BoundProviderIds
-				llog.L().Infof("ensureDirStructure: creating folder '%s', parent providers=%s, parentID=%s",
-					part, *parentProviders, currentParentID)
-			}
 		}
 
 		newDir := &native.FileORM{
@@ -518,7 +509,6 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 			Type:             utils.EnumPtr(native.FileType_FOLDER),
 			IsReady:          utils.BoolPtr(true),
 			EnableEncryption: parentEncrypt,  // 继承父目录的加密属性
-			BoundProviderIds: parentProviders, // 继承父目录绑定的存储提供者
 			OwnerId:          &ownerID,
 		}
 		if err := db.CreateFile(newDir); err != nil {

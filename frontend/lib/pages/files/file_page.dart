@@ -1364,14 +1364,6 @@ class _FileViewState extends State<_FileView> {
     final nameController = TextEditingController();
     final maxHistoriesController = TextEditingController();
     bool enableEncryption = false;
-    List<int> selectedProviderIds = [];
-
-    final fileState = context.read<FileBloc>().state;
-    final providers = fileState.storageProviders;
-    selectedProviderIds = providers
-        .where((p) => p.defaultBound)
-        .map((p) => p.id)
-        .toList();
 
     showDialog(
       context: context,
@@ -1392,36 +1384,6 @@ class _FileViewState extends State<_FileView> {
                   autofocus: true,
                 ),
                 const SizedBox(height: PfmSpacing.lg),
-                if (providers.isNotEmpty) ...[
-                  Text(
-                    al.file_bindStorageProvider,
-                    style: PfmTypography.titleSmall,
-                  ),
-                  const SizedBox(height: PfmSpacing.sm),
-                  ...providers.map(
-                    (provider) => CheckboxListTile(
-                      title: Text(provider.name),
-                      subtitle: Text(
-                        provider.enabled ? al.common_enabled : al.common_disabled,
-                      ),
-                      value: selectedProviderIds.contains(provider.id),
-                      enabled: provider.enabled,
-                      onChanged: (checked) {
-                        setState(() {
-                          if (checked == true) {
-                            selectedProviderIds.add(provider.id);
-                          } else {
-                            selectedProviderIds.remove(provider.id);
-                          }
-                        });
-                      },
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const SizedBox(height: PfmSpacing.lg),
-                ],
                 SwitchListTile(
                   title: Text(al.file_enableEncryption),
                   subtitle: Text(al.file_encryptionHint),
@@ -1472,9 +1434,6 @@ class _FileViewState extends State<_FileView> {
                     FileCreateDirEvent(
                       name: nameController.text,
                       enableEncryption: enableEncryption,
-                      providerIds: selectedProviderIds.isEmpty
-                          ? null
-                          : selectedProviderIds,
                       maxHistories: maxHistories,
                     ),
                   );

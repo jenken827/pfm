@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"gorm.io/gorm"
@@ -57,4 +59,24 @@ func ListUserSpaces(offset, pageSize uint32) ([]*native.UserSpaceORM, int64, err
 	}
 
 	return spaces, total, nil
+}
+
+// GetBoundProviderIdsByOwnerID 通过 owner_id 查询 UserSpace 获取绑定的存储提供者
+// 用于后台协程（无 context 的场景，如上传调度）及其他包调用
+func GetBoundProviderIdsByOwnerID(ownerID string) ([]uint32, error) {
+	space, err := GetUserSpaceByUserID(ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("用户 %s 未配置 UserSpace: %w", ownerID, err)
+	}
+	if space.BoundProviderIds == nil || *space.BoundProviderIds == "" {
+		return nil, fmt.Errorf("用户 %s 未绑定存储提供者", ownerID)
+	}
+	var ids []uint32
+	if err := json.Unmarshal([]byte(*space.BoundProviderIds), &ids); err != nil {
+		return nil, fmt.Errorf("解析 bound_provider_ids 失败: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("用户 %s 未绑定存储提供者", ownerID)
+	}
+	return ids, nil
 }

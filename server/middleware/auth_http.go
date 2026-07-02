@@ -27,6 +27,7 @@ func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*casdoorsdk.Cla
 	// 设置用户信息到 context
 	ctx := r.Context()
 	ctx = context.WithValue(ctx, globals.ContextUserKey, claims)
+	ctx = injectUserSpace(ctx, claims.User.Id)
 	*r = *r.WithContext(ctx)
 
 	return claims, nil

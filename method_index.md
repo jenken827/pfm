@@ -60,14 +60,26 @@
 | `CheckPermission(userID, fileID, requiredPerm) bool` | **已废弃** 旧权限检查 |
 | `GrantDirectoryPermission(ctx, req, operator) *Err` | **已废弃** 旧权限授予 |
 
-### user_space.go (新增)
+### share_save.go (UserSpace 管理)
 
 | 方法 | 说明 |
 |------|------|
-| `GetUserSpaceByUserID(userID) (*UserSpaceORM, error)` | 获取用户空间信息 |
-| `CreateUserSpace(space) error` | 创建用户空间 |
-| `UpdateUserSpace(space) error` | 更新用户空间（配额等） |
-| `ListUserSpaces(offset, pageSize) ([]*UserSpaceORM, int64, error)` | 列出所有用户空间 |
+| `GetUserSpace(ctx) (*UserSpace, error)` | 获取当前用户的空间信息 |
+| `ListUserSpaces(ctx, req) (*ListUserSpacesResp, *Err)` | 管理员：列出所有用户空间 |
+| `UpdateUserSpace(ctx, req) *Err` | 管理员：更新用户空间配额 |
+| `AssignRootDir(ctx, req) (*AssignRootDirResp, *Err)` | 管理员：为用户分配根目录及存储提供者 |
+
+### auth_helper.go
+
+| 方法 | 说明 |
+|------|------|
+| `getCurrentUserIDFromCtx(ctx) string` | 从 context 获取当前用户 ID |
+| `isAdminUser(ctx) bool` | 检查当前用户是否为管理员 |
+| `getUserContext(ctx) *UserContext` | 从 context 获取完整用户空间信息 |
+| `getBoundProviderIdsFromCtx(ctx) ([]uint32, *Err)` | 从 context 获取绑定的存储提供者 |
+| `getRootFileIDFromCtx(ctx) (string, *Err)` | 从 context 获取用户根目录 ID |
+| `GetBoundProviderIdsByOwnerID(ownerID) ([]uint32, error)` | 通过 owner_id 获取绑定的存储提供者（导出） |
+| `RequireAdmin(ctx) *Err` | 检查管理员权限，非管理员返回错误 |
 
 ## internal/db/
 

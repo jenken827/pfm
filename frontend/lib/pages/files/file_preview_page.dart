@@ -55,6 +55,12 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   int _currentPage = 0;
   bool _showOriginal = false; // 是否显示原图
 
+  static const List<double> _zoomLevels = [1.0, 2.0, 4.0];
+  double _zoomLevel = 1.0;
+
+  /// 是否已放大（超过默认缩放比例）
+  bool get _isZoomed => _zoomLevel > 1.05;
+
   // 视频播放器
   Player? _videoPlayer;
   VideoController? _videoController;
@@ -230,11 +236,14 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         PageView.builder(
           controller: _pageController,
           itemCount: _images!.length,
+          physics: _isZoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
           onPageChanged: (index) {
             setState(() {
               _currentPage = index;
               _currentFile = _images![index];
             });
+            // 切换页面时重置缩放
+            _zoomLevel = 1.0;
           },
           itemBuilder: (context, index) {
             return _buildSingleImageView(context, _images![index], headers);
@@ -305,28 +314,32 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
     return Stack(
       children: [
-        Center(
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.network(
-              previewUrl,
-              headers: headers,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                              loadingProgress.expectedTotalBytes!
-                        : null,
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
-              },
+        ClipRect(
+          child: SizedBox.expand(
+            child: Center(
+              child: Transform.scale(
+                scale: _zoomLevel,
+                alignment: Alignment.center,
+                child: Image.network(
+                  previewUrl,
+                  headers: headers,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                            : null,
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
+                  },
+                ),
+              ),
             ),
           ),
         ),
@@ -346,7 +359,71 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
         ),
+        // 缩放控制按钮 - 底部居中
+        Positioned(
+          bottom: 32,
+          left: 0,
+          right: 0,
+          child: Center(child: _buildZoomControls()),
+        ),
       ],
+    );
+  }
+
+  /// 构建缩放控制按钮组
+  Widget _buildZoomControls() {
+    final currentIndex = _zoomLevels.indexOf(_zoomLevel);
+    final canZoomIn = currentIndex < _zoomLevels.length - 1;
+    final canZoomOut = _zoomLevel > 1.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.remove, color: Colors.white),
+            onPressed: canZoomOut
+                ? () {
+                    setState(() {
+                      final idx = _zoomLevels.indexOf(_zoomLevel);
+                      if (idx > 0) {
+                        _zoomLevel = _zoomLevels[idx - 1];
+                      }
+                    });
+                  }
+                : null,
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              '${_zoomLevel.toStringAsFixed(1)}x',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white),
+            onPressed: canZoomIn
+                ? () {
+                    setState(() {
+                      final idx = _zoomLevels.indexOf(_zoomLevel);
+                      if (idx < _zoomLevels.length - 1) {
+                        _zoomLevel = _zoomLevels[idx + 1];
+                      }
+                    });
+                  }
+                : null,
+          ),
+        ],
+      ),
     );
   }
 

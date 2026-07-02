@@ -46,10 +46,14 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 		return nil, 0, false, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	// 查询根目录时，使用 user_space 获取用户的根目录
+	// 查询根目录时，从 context 获取用户根目录 ID
 	if parentID == "" || parentID == "0" {
-		llog.L().Infof("GetFileList: user=%s, root fallback to getUserRootFiles", userID)
-		return getUserRootFiles(ctx, req.GetOffset(), req.GetPageSize())
+		rootID, mErr := getRootFileIDFromCtx(ctx)
+		if mErr != nil {
+			return nil, 0, false, mErr
+		}
+		parentID = rootID
+		llog.L().Infof("GetFileList: user=%s, resolved root to %s", userID, parentID)
 	}
 
 	// 非根目录：检查目录所有权
@@ -82,9 +86,13 @@ func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.Fi
 
 	parentID := req.GetParentId()
 
-	// 查询根目录时，使用 user_space 获取用户的根目录文件夹
+	// 查询根目录时，从 context 获取用户根目录 ID
 	if parentID == "" || parentID == "0" {
-		return getUserRootFolders(ctx)
+		rootID, mErr := getRootFileIDFromCtx(ctx)
+		if mErr != nil {
+			return nil, mErr
+		}
+		parentID = rootID
 	}
 
 	// 非根目录：检查目录所有权
@@ -104,44 +112,6 @@ func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.Fi
 	return folders, nil
 }
 
-// getUserRootFiles 获取用户的根目录文件列表（根目录是虚拟的，直接查 parent_id='' + owner_id）
-func getUserRootFiles(ctx context.Context, offset, pageSize uint32) ([]*native.FileORM, int64, bool, *models.Err) {
-	if pageSize == 0 {
-		pageSize = 500
-	}
-	userID := getCurrentUserIDFromCtx(ctx)
-	if userID == "" {
-		return nil, 0, false, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
-	}
-
-	files, total, hasMore, err := db.GetFileList("", offset, pageSize, userID)
-	if err != nil {
-		llog.L().Errorf("getUserRootFiles: GetFileList failed, user=%s, err=%v", userID, err)
-		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	llog.L().Infof("getUserRootFiles: user=%s, returned %d files", userID, len(files))
-	return files, total, hasMore, nil
-}
-
-// getUserRootFolders 获取用户的根目录文件夹列表（从 user_space 获取根目录，列出其子文件夹）
-func getUserRootFolders(ctx context.Context) ([]*native.FileORM, *models.Err) {
-	userID := getCurrentUserIDFromCtx(ctx)
-	if userID == "" {
-		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
-	}
-
-	folders, err := db.GetFolderList("", userID)
-	if err != nil {
-		llog.L().Errorf("getUserRootFolders: GetFolderList failed, user=%s, err=%v", userID, err)
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	return folders, nil
-}
-
-
-
 // CreateDir 创建文件夹
 func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
@@ -160,39 +130,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		}
 	}
 
-	providerIds := req.ProviderIds
-
-	// 如果客户端未传 provider_ids，按优先级选择存储提供者
-	if len(providerIds) == 0 {
-		var mErr *models.Err
-		providerIds, mErr = getInheritedProviderIds(req.ParentId)
-		if mErr != nil {
-			return "", mErr
-		}
-	} else {
-		// 验证提供者是否存在且启用（批量查询）
-		providers, err := db.GetEnabledProvidersByIds(providerIds)
-		if err != nil {
-			llog.L().Errorf("query providers failed: %v", err)
-			return "", &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		// 验证所有提供的ID都有效
-		if len(providers) != len(providerIds) {
-			return "", &models.Err{
-				E: errors.New("some providers are invalid or disabled"),
-				C: native.RespCode_PARAMS_ERROR,
-			}
-		}
-	}
-
-	// 转换为JSON字符串存储
-	providerIdsJSON, err := json.Marshal(providerIds)
-	if err != nil {
-		llog.L().Errorf("marshal provider_ids failed: %v", err)
-		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-	}
-	boundProviderIds := string(providerIdsJSON)
-
 	// 处理加密设置：如果前端未传递，则从父文件夹继承
 	enableEncryption := req.EnableEncryption
 	if enableEncryption == nil {
@@ -208,7 +145,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		ParentId:         req.ParentId,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		EnableEncryption: enableEncryption,
-		BoundProviderIds: &boundProviderIds,
 		OwnerId:          &userID,
 	}
 	e := db.CreateFile(f)
@@ -221,48 +157,6 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		return "", &models.Err{E: errors.New("failed to get created directory ID"), C: native.RespCode_INTERNAL_ERROR}
 	}
 	return *f.Id, nil
-}
-
-// getInheritedProviderIds 获取继承的存储提供者ID列表
-// 优先级：父文件夹绑定 > 默认绑定
-func getInheritedProviderIds(parentID *string) ([]uint32, *models.Err) {
-	// 1. 尝试从父文件夹获取绑定的存储提供者
-	if parentID != nil && *parentID != "" {
-		parentFile, err := db.GetFileByID(*parentID)
-		if err == nil && parentFile != nil && parentFile.BoundProviderIds != nil && *parentFile.BoundProviderIds != "" {
-			// 解析父文件夹的绑定
-			var providerIds []uint32
-			if err := json.Unmarshal([]byte(*parentFile.BoundProviderIds), &providerIds); err == nil && len(providerIds) > 0 {
-				// 验证这些提供者是否仍然有效
-				providers, dbErr := db.GetEnabledProvidersByIds(providerIds)
-				if dbErr == nil && len(providers) > 0 {
-					llog.L().Infof("using parent folder's bound providers: %v", providerIds)
-					return providerIds, nil
-				}
-			}
-		}
-	}
-
-	// 2. 父文件夹没有绑定或无效，使用默认绑定的存储提供者
-	defaultProviders, err := db.GetDefaultBoundEnabledProviders()
-	if err != nil {
-		llog.L().Errorf("get default bound providers failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-	if len(defaultProviders) == 0 {
-		return nil, &models.Err{
-			E: errors.New("no default bound provider available, please specify provider_ids or set default_bound in storage providers"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	// 提取ID列表
-	providerIds := make([]uint32, len(defaultProviders))
-	for i, p := range defaultProviders {
-		providerIds[i] = *p.Id
-	}
-	llog.L().Infof("using default bound providers: %v", providerIds)
-	return providerIds, nil
 }
 
 // getInheritedEncryption 获取继承的加密设置
@@ -297,36 +191,6 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		EnableEncryption: req.EnableEncryption,
 	}
 	llog.L().Infof("update dir req:%+v", req)
-
-	// 如果提供了 provider_ids，更新绑定关系
-	if len(req.ProviderIds) > 0 {
-		providerIds := req.ProviderIds
-
-		// 批量查询验证提供者是否存在且启用
-		providers, err := db.GetEnabledProvidersByIds(providerIds)
-		if err != nil {
-			llog.L().Errorf("query providers failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		llog.L().Infof("update dir providers:%+v", providers)
-
-		// 验证所有提供的ID都有效
-		if len(providers) != len(providerIds) {
-			return &models.Err{
-				E: errors.New("some providers are invalid or disabled"),
-				C: native.RespCode_PARAMS_ERROR,
-			}
-		}
-
-		// 转换为JSON字符串存储
-		providerIdsJSON, err := json.Marshal(providerIds)
-		if err != nil {
-			llog.L().Errorf("marshal provider_ids failed: %v", err)
-			return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
-		}
-		boundProviderIds := string(providerIdsJSON)
-		orm.BoundProviderIds = &boundProviderIds
-	}
 
 	if err := db.UpdateDir(&orm); err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}

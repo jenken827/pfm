@@ -61,3 +61,49 @@ func RequireAdmin(ctx context.Context) *models.Err {
 		C: native.RespCode_PERMISSION_DENIED,
 	}
 }
+
+// getUserContext 从 context 获取完整用户空间信息
+// 如果用户未配置 UserSpace，返回 nil
+func getUserContext(ctx context.Context) *models.UserContext {
+	val := ctx.Value(globals.ContextUserSpaceKey)
+	if val == nil {
+		return nil
+	}
+	uc, ok := val.(*models.UserContext)
+	if !ok {
+		return nil
+	}
+	return uc
+}
+
+// getBoundProviderIdsFromCtx 从 context 获取绑定的存储提供者
+// 返回错误表示用户根目录未配置
+func getBoundProviderIdsFromCtx(ctx context.Context) ([]uint32, *models.Err) {
+	uc := getUserContext(ctx)
+	if uc == nil || len(uc.BoundProviderIds) == 0 {
+		return nil, &models.Err{
+			E: fmt.Errorf("根目录未配置，请联系管理员"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+	return uc.BoundProviderIds, nil
+}
+
+// getRootFileIDFromCtx 从 context 获取用户根目录 ID
+// 返回错误表示用户根目录未配置
+func getRootFileIDFromCtx(ctx context.Context) (string, *models.Err) {
+	uc := getUserContext(ctx)
+	if uc == nil || uc.RootFileID == "" {
+		return "", &models.Err{
+			E: fmt.Errorf("根目录未配置，请联系管理员"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+	return uc.RootFileID, nil
+}
+
+// GetBoundProviderIdsByOwnerID 通过 owner_id 查询 UserSpace 获取绑定的存储提供者
+// 用于后台协程（无 context 的场景，如上传调度）及其他包调用
+func GetBoundProviderIdsByOwnerID(ownerID string) ([]uint32, error) {
+	return db.GetBoundProviderIdsByOwnerID(ownerID)
+}

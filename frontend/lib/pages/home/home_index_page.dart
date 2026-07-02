@@ -197,11 +197,13 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: isUnlimited ? null : ratio,
+              value: isUnlimited ? 1.0 : ratio,
               minHeight: 8,
               backgroundColor:
                   colorScheme.surfaceContainerHighest,
-              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isUnlimited ? colorScheme.primary : barColor,
+              ),
             ),
           ),
         ],

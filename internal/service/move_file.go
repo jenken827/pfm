@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,7 +14,7 @@ import (
 // MoveFile 移动文件到目标文件夹
 // 检查：
 // 1. 目标文件夹中是否存在同名文件
-// 2. 源和目标文件夹的存储提供者绑定是否一致，如果不一致触发同步
+// 2. 文件是否已在所有绑定的存储提供者上，如果缺失则触发同步
 func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, map[string]string, *models.Err) {
 	successCount := uint32(0)
 	var failedIDs []string
@@ -49,8 +48,8 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 		}
 	}
 
-	// 解析目标文件夹绑定的存储提供者
-	targetProviderIDs, mErr := parseProviderIDs(targetFolder.BoundProviderIds)
+	// 从 context 获取用户绑定的存储提供者
+	providerIDs, mErr := getBoundProviderIdsFromCtx(ctx)
 	if mErr != nil {
 		return 0, nil, nil, mErr
 	}
@@ -99,54 +98,27 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 			continue
 		}
 
-		// 4. 检查源和目标文件夹的存储提供者绑定
-		sourceParentID := *file.ParentId
-		if sourceParentID != "0" && sourceParentID != targetParentID {
-			// 获取源文件夹
-			sourceParent, err := db.GetFileByID(sourceParentID)
-			if err != nil {
-				failedIDs = append(failedIDs, fileID)
-				failedReasons[fileID] = "source folder not found"
-				continue
-			}
-
-			// 比较存储提供者绑定
-			sourceProviderIDs, mErr := parseProviderIDs(sourceParent.BoundProviderIds)
-			if mErr != nil {
-				failedIDs = append(failedIDs, fileID)
-				failedReasons[fileID] = mErr.E.Error()
-				continue
-			}
-
-			// 如果存储提供者不一致，触发同步
-			if !providerIDsEqual(sourceProviderIDs, targetProviderIDs) {
-				// 获取文件所有位置信息
-				locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
-				if err != nil {
-					failedIDs = append(failedIDs, fileID)
-					failedReasons[fileID] = "get file locations failed"
-					continue
-				}
-
-				// 计算需要同步的目标提供者
+		// 4. 检查文件是否缺少存储副本，如果缺失则触发同步
+		if file.Hash != nil && *file.Hash != "" {
+			locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
+			if err == nil {
 				var needSyncProviderIDs []uint32
-				for _, targetPID := range targetProviderIDs {
+				for _, pid := range providerIDs {
 					found := false
 					for _, loc := range locations {
-						if loc.ProviderId != nil && *loc.ProviderId == targetPID {
+						if loc.ProviderId != nil && *loc.ProviderId == pid &&
+							loc.Status != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
 							found = true
 							break
 						}
 					}
 					if !found {
-						needSyncProviderIDs = append(needSyncProviderIDs, targetPID)
+						needSyncProviderIDs = append(needSyncProviderIDs, pid)
 					}
 				}
 
-				// 如果需要同步，创建同步任务
 				if len(needSyncProviderIDs) > 0 {
 					llog.L().Infof("move file %s needs sync to providers: %v", fileID, needSyncProviderIDs)
-					// 同步任务会在后台执行，不阻塞移动操作
 					createSyncTask(file.Name, file.Size, &targetParentID, *file.Hash, needSyncProviderIDs)
 				}
 			}
@@ -165,47 +137,6 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 	}
 
 	return successCount, failedIDs, failedReasons, nil
-}
-
-// parseProviderIDs 解析存储提供者ID列表
-func parseProviderIDs(boundProviderIDs *string) ([]uint32, *models.Err) {
-	if boundProviderIDs == nil || *boundProviderIDs == "" {
-		return nil, &models.Err{
-			E: errors.New("folder has no bound storage providers"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	var providerIDs []uint32
-	if err := json.Unmarshal([]byte(*boundProviderIDs), &providerIDs); err != nil {
-		llog.L().Errorf("parse provider ids failed: %v", err)
-		return nil, &models.Err{
-			E: errors.New("invalid provider_ids format"),
-			C: native.RespCode_PARAMS_ERROR,
-		}
-	}
-
-	return providerIDs, nil
-}
-
-// providerIDsEqual 比较两个存储提供者ID列表是否相等
-func providerIDsEqual(a, b []uint32) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	aMap := make(map[uint32]bool)
-	for _, id := range a {
-		aMap[id] = true
-	}
-
-	for _, id := range b {
-		if !aMap[id] {
-			return false
-		}
-	}
-
-	return true
 }
 
 // isDescendant 检查 targetID 是否是 fileID 的后代

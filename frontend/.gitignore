@@ -62,3 +62,6 @@ lib/proto/
 # Android build artifacts
 /android/build/
 /android/gradle.properties
+
+# Lock file (generated, varies by environment)
+pubspec.lock

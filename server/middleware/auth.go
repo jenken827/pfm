@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
+	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -70,7 +72,41 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 
 			// Set user info to context
 			ctx = context.WithValue(ctx, globals.ContextUserKey, claims)
+
+			// 注入 UserSpace 信息到 context
+			ctx = injectUserSpace(ctx, claims.User.Id)
+
 			return next(ctx, req)
 		}
 	}
+}
+
+// injectUserSpace 查询用户空间信息并注入 context
+// 如果用户没有 UserSpace（未配置根目录），不阻断请求，service 层自行判断
+func injectUserSpace(ctx context.Context, userID string) context.Context {
+	space, err := db.GetUserSpaceByUserID(userID)
+	if err != nil {
+		llog.L().Debugf("user %s has no UserSpace: %v", userID, err)
+		return ctx
+	}
+
+	var providerIds []uint32
+	if space.BoundProviderIds != nil && *space.BoundProviderIds != "" {
+		if err := json.Unmarshal([]byte(*space.BoundProviderIds), &providerIds); err != nil {
+			llog.L().Warnf("invalid bound_provider_ids for user %s: %v", userID, err)
+		}
+	}
+
+	rootFileID := ""
+	if space.RootFileId != nil {
+		rootFileID = *space.RootFileId
+	}
+
+	uc := &models.UserContext{
+		UserID:           userID,
+		IsAdmin:          db.IsAdmin(userID),
+		RootFileID:       rootFileID,
+		BoundProviderIds: providerIds,
+	}
+	return context.WithValue(ctx, globals.ContextUserSpaceKey, uc)
 }

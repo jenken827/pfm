@@ -61,27 +61,22 @@ message File {
     default: "false"
   }];
 
-  // 绑定的存储提供者ID列表
-  optional string bound_provider_ids = 12 [(gorm.field).tag = {
-    not_null: true
-    default: "[]"
-  }];
   // 文件是否就绪（至少一个存储提供者上传成功）
-  optional bool is_ready = 13 [(gorm.field).tag = {
+  optional bool is_ready = 12 [(gorm.field).tag = {
     not_null: true
     default: "false"
   }];
   // 最大历史记录数（仅文件夹有效，0表示不保留历史）
-  optional uint32 max_histories = 14 [(gorm.field).tag = {
+  optional uint32 max_histories = 13 [(gorm.field).tag = {
     not_null: true
     default: "0"
   }];
   // 最后访问时间（用于"最近使用"功能）
-  optional google.protobuf.Timestamp last_accessed_at = 15 [(gorm.field).tag = {
+  optional google.protobuf.Timestamp last_accessed_at = 14 [(gorm.field).tag = {
     index: "idx_f_laa"
   }];
   // 文件所有者（Casdoor 用户名），用户只能操作 owner_id=自己的文件
-  optional string owner_id = 16 [(gorm.field).tag = {
+  optional string owner_id = 15 [(gorm.field).tag = {
     not_null: true,
     default: "''",
     index: "idx_f_npoi,idx_f_owner,length:64"
@@ -246,10 +241,8 @@ message CreateDirReq {
   optional string name = 1 [(buf.validate.field).required = true];
   optional string parent_id = 2 [(buf.validate.field).required = true];
   optional bool enable_encryption = 3;
-  // 绑定的存储提供者ID列表（可选，不传则使用默认绑定）
-  repeated uint32 provider_ids = 4;
   // 最大历史记录数（0表示不限制）
-  optional uint32 max_histories = 5;
+  optional uint32 max_histories = 4;
 }
 
 // 创建目录响应数据
@@ -266,10 +259,8 @@ message UpdateDirReq {
   ];
   optional string name = 2;
   optional bool enable_encryption = 3;
-  // 更新绑定的存储提供者ID列表
-  repeated uint32 provider_ids = 4;
   // 最大历史记录数（0表示不限制）
-  optional uint32 max_histories = 5;
+  optional uint32 max_histories = 4;
 }
 
 // 删除文件请求

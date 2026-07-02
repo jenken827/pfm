@@ -95,4 +95,13 @@ func (s *UserSpaceServer) UpdateUserSpace(ctx context.Context, req *connect.Requ
 	return response.SuccessResp(nil)
 }
 
+// AssignRootDir 管理员：为用户分配根目录
+func (s *UserSpaceServer) AssignRootDir(ctx context.Context, req *connect.Request[native.AssignRootDirReq]) (*connect.Response[native.BaseResp], error) {
+	resp, err := service.AssignRootDir(ctx, req.Msg)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(resp)
+}
+
 func strPtr(s string) *string { return &s }

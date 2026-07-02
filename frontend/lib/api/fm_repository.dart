@@ -278,14 +278,12 @@ class FmRepository {
     required String name,
     required String parentId,
     bool? enableEncryption,
-    List<int>? providerIds,
     int? maxHistories,
   }) async {
     try {
       final req = CreateDirReq(
         name: name,
         parentId: parentId,
-        providerIds: providerIds,
         maxHistories: maxHistories,
       );
       // 只有明确设置了加密属性才传递
@@ -321,14 +319,12 @@ class FmRepository {
     required String id,
     String? name,
     bool? enableEncryption,
-    List<int>? providerIds,
     int? maxHistories,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
       if (enableEncryption != null) req.enableEncryption = enableEncryption;
-      if (providerIds != null) req.providerIds.addAll(providerIds);
       if (maxHistories != null) req.maxHistories = maxHistories;
 
       final response = await _dio.post(

@@ -78,7 +78,7 @@ class _AboutPageState extends State<AboutPage> {
                     iconBackground: PfmColors.archiveSurface,
                     iconColor: PfmColors.archive,
                     title: al.about_buildNumber,
-                    subtitle: '${_packageInfo?.buildNumber}-{{commit-hash}}',
+                    subtitle: '${_packageInfo?.buildNumber}-ac0fc3d9',
                   ),
                   const Divider(height: 1, indent: 56),
                   _buildInfoTile(

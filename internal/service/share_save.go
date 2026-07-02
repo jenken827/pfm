@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -320,6 +321,86 @@ func UpdateUserSpace(ctx context.Context, req *native.UpdateUserSpaceReq) *model
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return nil
+}
+
+// AssignRootDir 管理员：为用户分配根目录（首次创建或重新绑定存储提供者）
+func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.AssignRootDirResp, *models.Err) {
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return nil, mErr
+	}
+
+	targetUserID := req.GetUserId()
+	providerIds := req.GetProviderIds()
+
+	if len(providerIds) == 0 {
+		return nil, &models.Err{
+			E: fmt.Errorf("至少需要指定一个存储提供者"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 验证提供者是否存在且启用
+	providers, err := db.GetEnabledProvidersByIds(providerIds)
+	if err != nil {
+		llog.L().Errorf("query providers failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	if len(providers) != len(providerIds) {
+		return nil, &models.Err{
+			E: fmt.Errorf("部分存储提供者无效或已禁用"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 将 provider IDs 序列化为 JSON
+	providerIdsJSON, err := json.Marshal(providerIds)
+	if err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+	}
+	boundProviderIds := string(providerIdsJSON)
+
+	// 查询该用户是否已有 UserSpace
+	existingSpace, err := db.GetUserSpaceByUserID(targetUserID)
+	if err == nil && existingSpace != nil {
+		// 已有 UserSpace，更新 bound_provider_ids
+		existingSpace.BoundProviderIds = &boundProviderIds
+		if err := db.UpdateUserSpace(existingSpace); err != nil {
+			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+		llog.L().Infof("updated bound_provider_ids for user %s: %s", targetUserID, boundProviderIds)
+		return &native.AssignRootDirResp{RootFileId: existingSpace.RootFileId}, nil
+	}
+
+	// 没有 UserSpace，创建根目录 File + UserSpace 记录
+	rootFileID := uuid.New().String()
+	rootFile := &native.FileORM{
+		Id:               &rootFileID,
+		Name:             &rootFileID, // name = UUID
+		ParentId:         utils.StringPtr(""),
+		Type:             utils.EnumPtr(native.FileType_FOLDER),
+		IsReady:          utils.BoolPtr(true),
+		EnableEncryption: utils.BoolPtr(false),
+		OwnerId:          &targetUserID,
+	}
+	if err := db.CreateFile(rootFile); err != nil {
+		llog.L().Errorf("create root dir failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	newSpace := &native.UserSpaceORM{
+		UserId:           &targetUserID,
+		RootFileId:       &rootFileID,
+		BoundProviderIds: &boundProviderIds,
+		QuotaBytes:       utils.Uint64Ptr(0),
+		UsedBytes:        utils.Uint64Ptr(0),
+	}
+	if err := db.CreateUserSpace(newSpace); err != nil {
+		llog.L().Errorf("create user space failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	llog.L().Infof("created root dir %s for user %s with providers: %s", rootFileID, targetUserID, boundProviderIds)
+	return &native.AssignRootDirResp{RootFileId: &rootFileID}, nil
 }
 
 func uint32Ptr(v uint32) *uint32 { return &v }

@@ -1,11 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
-import 'package:pfm/proto/native/provider.pb.dart';
 
 /// 文件夹设置对话框
 class FolderSettingsDialog extends StatefulWidget {
@@ -26,10 +23,7 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   late TextEditingController _nameController;
   late TextEditingController _maxHistoriesController;
   bool _enableEncryption = false;
-  List<int> _selectedProviderIds = [];
-  List<StorageProvider> _storageProviders = [];
   bool _isLoading = false;
-  bool _isLoadingProviders = true;
 
   @override
   void initState() {
@@ -45,47 +39,6 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
     // 初始化加密配置
     _enableEncryption = widget.folder.enableEncryption;
 
-    // 初始化绑定的存储提供者（JSON 数组格式）
-    if (widget.folder.boundProviderIds.isNotEmpty) {
-      try {
-        final providerIds = jsonDecode(widget.folder.boundProviderIds) as List;
-        _selectedProviderIds = providerIds.map((id) => id as int).toList();
-      } catch (e) {
-        // 解析失败，使用空列表
-        _selectedProviderIds = [];
-      }
-    }
-
-    // 加载存储提供者列表
-    _loadStorageProviders();
-  }
-
-  Future<void> _loadStorageProviders() async {
-    try {
-      final repository = context.read<FmRepository>();
-      final result = await repository.listStorageProviders();
-
-      if (result.success && mounted) {
-        setState(() {
-          _storageProviders = result.data!.providers;
-          _isLoadingProviders = false;
-
-          // 过滤掉已删除的存储提供者
-          final availableIds = _storageProviders
-              .map((p) => p.id.toInt())
-              .toSet();
-          _selectedProviderIds = _selectedProviderIds
-              .where((id) => availableIds.contains(id))
-              .toList();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingProviders = false;
-        });
-      }
-    }
   }
 
   @override
@@ -124,7 +77,6 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
         id: widget.folder.id,
         name: _nameController.text,
         enableEncryption: _enableEncryption,
-        providerIds: _selectedProviderIds,
         maxHistories: maxHistories,
       );
 
@@ -207,44 +159,6 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // 绑定的存储提供者
-              Text(
-                al.folderSettings_boundProviders,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              if (_isLoadingProviders)
-                const Center(child: CircularProgressIndicator())
-              else if (_storageProviders.isEmpty)
-                Text(al.folderSettings_noProviders)
-              else
-                Column(
-                  children: _storageProviders.map((provider) {
-                    final providerId = provider.id.toInt();
-                    final isSelected = _selectedProviderIds.contains(providerId);
-                    
-                    return CheckboxListTile(
-                      title: Text(provider.name),
-                      subtitle: Text('ID: $providerId'),
-                      value: isSelected,
-                      onChanged: (value) {
-                        setState(() {
-                          if (value == true) {
-                            _selectedProviderIds.add(providerId);
-                          } else {
-                            _selectedProviderIds.remove(providerId);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
             ],
           ),
         ),

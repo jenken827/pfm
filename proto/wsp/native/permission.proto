@@ -72,10 +72,15 @@ message UserSpace {
     optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
     // 该用户的根目录 file_id（关联 files.id）
     optional string root_file_id = 5 [(gorm.field).tag = {not_null: true, type: "char(36)"}];
+    // 绑定的存储提供者ID列表（JSON 数组，仅根目录级别绑定）
+    optional string bound_provider_ids = 6 [(gorm.field).tag = {
+        not_null: true,
+        default: "'[]'"
+    }];
     // 存储配额（字节，0 = 不限制）
-    optional uint64 quota_bytes = 6 [(gorm.field).tag = {not_null: true, default: "0"}];
+    optional uint64 quota_bytes = 7 [(gorm.field).tag = {not_null: true, default: "0"}];
     // 已用存储（字节，定时统计更新）
-    optional uint64 used_bytes = 7 [(gorm.field).tag = {not_null: true, default: "0"}];
+    optional uint64 used_bytes = 8 [(gorm.field).tag = {not_null: true, default: "0"}];
 }
 
 // ===== 请求/响应消息 =====
@@ -89,6 +94,17 @@ message GetUserSpaceResp {
 message UpdateUserSpaceReq {
     optional string user_id = 1 [(buf.validate.field).required = true];
     optional uint64 quota_bytes = 2;
+}
+
+// 管理员为用户分配根目录（首次创建或重新绑定存储提供者）
+message AssignRootDirReq {
+    optional string user_id = 1 [(buf.validate.field).required = true];
+    // 绑定的存储提供者ID列表
+    repeated uint32 provider_ids = 2 [(buf.validate.field).required = true];
+}
+
+message AssignRootDirResp {
+    optional string root_file_id = 1;
 }
 
 // 管理员列出所有用户空间
@@ -168,6 +184,8 @@ service UserSpaceService {
     rpc ListUserSpaces(ListUserSpacesReq) returns (BaseResp);
     // 管理员：更新用户空间配额
     rpc UpdateUserSpace(UpdateUserSpaceReq) returns (BaseResp);
+    // 管理员：为用户分配根目录
+    rpc AssignRootDir(AssignRootDirReq) returns (BaseResp);
 }
 
 // 旧权限服务（废弃，保留用于 DB 兼容，所有方法返回 UNIMPLEMENTED）
