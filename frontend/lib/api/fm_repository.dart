@@ -35,6 +35,10 @@ class FmRepository {
   Talker get _logger => getLogger();
 
   String? _baseUrl;
+  String? _transferUrl; // 传输服务地址（高带宽上传下载）
+
+  /// 上传/下载用的 base URL，优先使用传输服务地址
+  String get _uploadBaseUrl => _transferUrl ?? _baseUrl ?? '';
 
   FmRepository._();
 
@@ -106,6 +110,29 @@ class FmRepository {
     );
     _dio.interceptors.add(authInterceptor);
     _uploadDio.interceptors.add(authInterceptor);
+  }
+
+  /// 获取传输服务配置并缓存
+  Future<void> fetchTransferConfig() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetTransferConfig',
+        data: GetTransferConfigReq().toProto3Json(),
+      );
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetTransferConfigResp>(
+        data,
+        GetTransferConfigResp(),
+      );
+      if (respData.serverUrl.isNotEmpty) {
+        _transferUrl = respData.serverUrl;
+        final ls = GetIt.I.get<LocalStorage>();
+        await ls.saveTransferUrl(respData.serverUrl);
+        _logger.info('传输服务地址: $_transferUrl');
+      }
+    } catch (e) {
+      _logger.warning('获取传输服务配置失败（非致命）: $e');
+    }
   }
 
   /// 用于 isolate 中初始化，需要手动传入 token
@@ -968,7 +995,7 @@ class FmRepository {
       }
 
       final response = await _uploadDio.post(
-        '$_baseUrl/native.UploadService/UploadSmall',
+        '$_uploadBaseUrl/native.UploadService/UploadSmall',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
       );
@@ -1020,7 +1047,7 @@ class FmRepository {
       }
 
       final response = await _uploadDio.post(
-        '$_baseUrl/native.UploadService/InitUpload',
+        '$_uploadBaseUrl/native.UploadService/InitUpload',
         data: req.toProto3Json(),
       );
 
@@ -1063,7 +1090,7 @@ class FmRepository {
       if (chunkHash != null) req.chunkHash = chunkHash;
 
       final response = await _uploadDio.post(
-        '$_baseUrl/native.UploadService/UploadChunk',
+        '$_uploadBaseUrl/native.UploadService/UploadChunk',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
       );
@@ -1090,7 +1117,7 @@ class FmRepository {
       final req = CompleteUploadReq()..uploadId = uploadId;
 
       final response = await _uploadDio.post(
-        '$_baseUrl/native.UploadService/CompleteUpload',
+        '$_uploadBaseUrl/native.UploadService/CompleteUpload',
         data: req.toProto3Json(),
       );
 
@@ -2169,6 +2196,39 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('列出用户空间失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 管理员：为用户分配根目录并绑定存储提供者
+  Future<ApiResult<AssignRootDirResp>> assignRootDir({
+    required String userId,
+    required List<int> providerIds,
+  }) async {
+    try {
+      final req = AssignRootDirReq()
+        ..userId = userId
+        ..providerIds.addAll(providerIds);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.UserSpaceService/AssignRootDir',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<AssignRootDirResp>(
+        data,
+        AssignRootDirResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('分配根目录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('分配根目录失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

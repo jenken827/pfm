@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
+	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -311,5 +312,13 @@ func (s *FileServer) GetFilesByType(ctx context.Context, req *connect.Request[na
 		Files:   result,
 		Total:   &tc,
 		HasMore: &hasMore,
+	})
+}
+
+// GetTransferConfig 获取传输服务配置（上传/下载高带宽地址）
+func (s *FileServer) GetTransferConfig(ctx context.Context, req *connect.Request[native.GetTransferConfigReq]) (*connect.Response[native.BaseResp], error) {
+	serverURL := config.GetConfig().Transfer.ServerURL
+	return response.SuccessResp(&native.GetTransferConfigResp{
+		ServerUrl: &serverURL,
 	})
 }

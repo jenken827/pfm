@@ -25,15 +25,32 @@ void main() async {
       // 检查进程是否还活着
       try {
         final pid = int.parse(lockFile.readAsStringSync().trim());
-        // 尝试检查进程是否存在（Windows: tasklist, Linux/Mac: kill -0）
+        // 尝试检查进程是否存在
+        // Windows: tasklist 即使找不到进程也返回 0，需要检查输出内容
+        // Linux/Mac: kill -0 找不到进程返回非 0
         final result = Process.runSync(
           Platform.isWindows ? 'tasklist' : 'kill',
           Platform.isWindows ? ['/FI', 'PID eq $pid'] : ['-0', '$pid'],
         );
-        if (result.exitCode == 0) {
-          // 进程还在运行，退出
-          print('PFM is already running (PID: $pid)');
-          exit(0);
+        if (Platform.isWindows) {
+          // Windows tasklist 返回码不可靠，需要检查输出中是否包含实际进程信息
+          // 如果输出只包含"信息"提示行（没有找到任务），则进程不存在
+          final stdout = result.stdout.toString();
+          final stderr = result.stderr.toString();
+          final hasProcess = result.exitCode == 0 &&
+              !stdout.contains('没有运行的任务匹配指定标准') &&
+              !stdout.contains('No tasks are running which match') &&
+              !stdout.contains('No running task') &&
+              stderr.isEmpty;
+          if (hasProcess) {
+            print('PFM is already running (PID: $pid)');
+            exit(0);
+          }
+        } else {
+          if (result.exitCode == 0) {
+            print('PFM is already running (PID: $pid)');
+            exit(0);
+          }
         }
       } catch (_) {
         // 解析失败，锁文件无效，继续启动
@@ -43,7 +60,7 @@ void main() async {
     lockFile.writeAsStringSync('${pid}\n');
     // 退出时清理锁文件
     ProcessSignal.sigint.watch().listen((_) {
-      lockFile.deleteSync(recursive: true);
+      try { lockFile.deleteSync(); } catch (_) {}
       exit(0);
     });
   }

@@ -704,7 +704,7 @@ class _FileViewState extends State<_FileView> {
   /// 获取缩略图 URL
   String? _getThumbnailUrl(String fileId) {
     final ls = GetIt.I.get<LocalStorage>();
-    final baseUrl = ls.fileServer;
+    final baseUrl = ls.downloadBaseUrl;
     if (baseUrl == null || baseUrl.isEmpty) return null;
     return '$baseUrl/api/file/stream/preview?file_id=$fileId&size=small';
   }

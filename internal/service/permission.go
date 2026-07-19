@@ -558,7 +558,7 @@ func ListUsers(ctx context.Context) (*native.ListUsersResp, *models.Err) {
 	result := &native.ListUsersResp{}
 	for _, u := range users {
 		info := &native.CasdoorUserInfo{
-			UserId:      &u.Name,
+			UserId:      &u.Id,
 			DisplayName: strPtr(u.DisplayName),
 			Email:       strPtr(u.Email),
 			Avatar:      strPtr(u.Avatar),

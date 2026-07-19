@@ -15,12 +15,20 @@ type Config struct {
 	SignToken string `json:"sign_token" yaml:"sign_token"`
 	// 上传配置
 	Upload UploadConfig `json:"upload" yaml:"upload"`
+	// 传输服务配置（高带宽上传下载地址）
+	Transfer TransferConfig `json:"transfer" yaml:"transfer"`
 }
 
 // UploadConfig 上传配置
 type UploadConfig struct {
 	// 全局最大并发上传数（所有存储提供者共享），默认 10
 	MaxConcurrentUploads int `json:"max_concurrent_uploads" yaml:"max_concurrent_uploads"`
+}
+
+// TransferConfig 传输服务配置（高带宽上传下载地址）
+type TransferConfig struct {
+	// 传输服务地址，为空时使用主服务地址
+	ServerURL string `json:"server_url" yaml:"server_url"`
 }
 
 // Schema http server config

@@ -33,6 +33,8 @@ class LocalStorage {
   static const String _tokenKey = 'token';
   // 服务器 URL 键
   static const String _fileServerKey = 'serverurl';
+  // 传输服务 URL 键
+  static const String _transferUrlKey = 'transfer_url';
 
   late final Box _box;
   late final Box _settingsBox;
@@ -141,6 +143,20 @@ class LocalStorage {
   Future<void> saveFileServer(String url) async {
     await _box.put(_fileServerKey, url);
   }
+
+  /// 获取传输服务 URL（高带宽上传下载地址）
+  String? get transferUrl {
+    final url = _box.get(_transferUrlKey);
+    return (url != null && url.isNotEmpty) ? url : null;
+  }
+
+  /// 保存传输服务 URL
+  Future<void> saveTransferUrl(String url) async {
+    await _box.put(_transferUrlKey, url);
+  }
+
+  /// 获取下载/预览用的 base URL（优先传输服务地址）
+  String get downloadBaseUrl => transferUrl ?? fileServer ?? '';
 
   /// 获取相册备份配置
   AlbumBackupConfig? get albumBackupConfig {

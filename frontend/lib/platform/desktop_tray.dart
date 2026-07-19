@@ -130,13 +130,11 @@ class DesktopTray implements TrayListener {
         try {
           final lockFile = File('${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock');
           if (lockFile.existsSync()) {
-            lockFile.deleteSync(recursive: true);
+            lockFile.deleteSync();
           }
         } catch (_) {}
-        // 取消阻止关闭，然后真正退出
-        await windowManager.setPreventClose(false);
         await destroy();
-        await windowManager.close();
+        exit(0);
         break;
     }
   }

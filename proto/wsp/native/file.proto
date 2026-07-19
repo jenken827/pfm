@@ -570,6 +570,14 @@ message GetFilesByTypeRespData {
   optional bool has_more = 3;
 }
 
+// 传输服务配置
+message GetTransferConfigReq {}
+
+message GetTransferConfigResp {
+  // 传输服务地址（上传/下载用），为空表示使用主服务地址
+  optional string server_url = 1;
+}
+
 // 文件服务
 service FileService {
   // 获取文件列表
@@ -643,4 +651,7 @@ service FileService {
 
   // 按文件类型获取文件列表
   rpc GetFilesByType(GetFilesByTypeReq) returns (BaseResp);
+
+  // 获取传输服务配置（上传/下载高带宽地址）
+  rpc GetTransferConfig(GetTransferConfigReq) returns (BaseResp);
 }

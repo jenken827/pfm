@@ -55,11 +55,10 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   int _currentPage = 0;
   bool _showOriginal = false; // 是否显示原图
 
-  static const List<double> _zoomLevels = [1.0, 2.0, 4.0];
-  double _zoomLevel = 1.0;
+  final TransformationController _transformController = TransformationController();
 
   /// 是否已放大（超过默认缩放比例）
-  bool get _isZoomed => _zoomLevel > 1.05;
+  bool get _isZoomed => _transformController.value.getMaxScaleOnAxis() > 1.05;
 
   // 视频播放器
   Player? _videoPlayer;
@@ -84,6 +83,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   @override
   void dispose() {
     _pageController.dispose();
+    _transformController.dispose();
     // VideoController 不需要显式释放，只需释放 Player
     _videoPlayer?.dispose();
     super.dispose();
@@ -113,7 +113,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   /// 构建预览流URL
   String _buildPreviewUrl(String fileId, {bool original = false}) {
     final ls = GetIt.I.get<LocalStorage>();
-    final baseUrl = ls.fileServer ?? '';
+    final baseUrl = ls.downloadBaseUrl;
 
     // 检查是否是历史版本（格式：history:{id}）
     if (fileId.startsWith('history:')) {
@@ -243,7 +243,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
               _currentFile = _images![index];
             });
             // 切换页面时重置缩放
-            _zoomLevel = 1.0;
+            _transformController.value = Matrix4.identity();
           },
           itemBuilder: (context, index) {
             return _buildSingleImageView(context, _images![index], headers);
@@ -314,31 +314,31 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
     return Stack(
       children: [
-        ClipRect(
-          child: SizedBox.expand(
+        SizedBox.expand(
+          child: InteractiveViewer(
+            transformationController: _transformController,
+            minScale: 0.5,
+            maxScale: 4.0,
+            scaleEnabled: true,
             child: Center(
-              child: Transform.scale(
-                scale: _zoomLevel,
-                alignment: Alignment.center,
-                child: Image.network(
-                  previewUrl,
-                  headers: headers,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                            : null,
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
-                  },
-                ),
+              child: Image.network(
+                previewUrl,
+                headers: headers,
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
+                },
               ),
             ),
           ),
@@ -359,68 +359,48 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
         ),
-        // 缩放控制按钮 - 底部居中
-        Positioned(
-          bottom: 32,
-          left: 0,
-          right: 0,
-          child: Center(child: _buildZoomControls()),
-        ),
+        // 缩放控制按钮 - 底部居中（仅放大后显示重置按钮）
+        if (_isZoomed)
+          Positioned(
+            bottom: 32,
+            left: 0,
+            right: 0,
+            child: Center(child: _buildZoomControls()),
+          ),
       ],
     );
   }
 
-  /// 构建缩放控制按钮组
+  /// 构建缩放重置按钮
   Widget _buildZoomControls() {
-    final currentIndex = _zoomLevels.indexOf(_zoomLevel);
-    final canZoomIn = currentIndex < _zoomLevels.length - 1;
-    final canZoomOut = _zoomLevel > 1.0;
+    final scale = _transformController.value.getMaxScaleOnAxis();
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.black54,
         borderRadius: BorderRadius.circular(24),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.remove, color: Colors.white),
-            onPressed: canZoomOut
-                ? () {
-                    setState(() {
-                      final idx = _zoomLevels.indexOf(_zoomLevel);
-                      if (idx > 0) {
-                        _zoomLevel = _zoomLevels[idx - 1];
-                      }
-                    });
-                  }
-                : null,
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Text(
-              '${_zoomLevel.toStringAsFixed(1)}x',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
+          Text(
+            '${scale.toStringAsFixed(1)}x',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
             ),
           ),
+          const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: canZoomIn
-                ? () {
-                    setState(() {
-                      final idx = _zoomLevels.indexOf(_zoomLevel);
-                      if (idx < _zoomLevels.length - 1) {
-                        _zoomLevel = _zoomLevels[idx + 1];
-                      }
-                    });
-                  }
-                : null,
+            icon: const Icon(Icons.fit_screen, color: Colors.white, size: 20),
+            tooltip: '重置缩放',
+            onPressed: () {
+              setState(() {
+                _transformController.value = Matrix4.identity();
+              });
+            },
           ),
         ],
       ),

@@ -134,6 +134,8 @@ class CasdoorLoginHelper {
     }
 
     await ls.saveUser(user);
+    // 异步获取传输服务配置（非阻塞）
+    FmRepository().fetchTransferConfig();
     return user;
   }
 

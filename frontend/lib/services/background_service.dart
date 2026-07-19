@@ -321,7 +321,7 @@ class BackgroundService {
       await downloadFile(
         taskId: taskId,
         storage: _transferStorage,
-        baseUrl: ls.fileServer!,
+        baseUrl: ls.downloadBaseUrl,
         token: ls.token!,
       );
     } catch (e, s) {
