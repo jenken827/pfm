@@ -70,7 +70,8 @@ class User {
         avatar: map['avatar'],
         email: map['email'],
         phone: map['phone'],
-        roles: (map['roles'] as List<dynamic>?)
+        roles:
+            (map['roles'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toList() ??
             [],

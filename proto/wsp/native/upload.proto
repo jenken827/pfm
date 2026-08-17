@@ -61,6 +61,13 @@ message UploadRecord {
     not_null: true
     default: "''"
   }];
+  // 任务状态（与 FileLocation.status 的 LocationStatus 分离，语义对齐前端 UploadStatus）
+  // status(12) 为历史字段，保留用于数据迁移回填，已废弃
+  // default=0(UNSPECIFIED) 作为"未迁移/未初始化"标记，保证回填幂等
+  optional UploadStatus task_status = 17 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
 }
 
 
@@ -172,7 +179,7 @@ message ListUploadRecordsReq {
   // 每页数量，默认20
   optional uint32 page_size = 2;
   // 可选：按状态过滤
-  optional LocationStatus status = 3;
+  optional UploadStatus status = 3;
 }
 
 // 上传记录信息
@@ -182,7 +189,7 @@ message UploadRecordInfo {
   optional uint64 file_size = 3;
   optional string file_hash = 4;
   optional string parent_id = 5;
-  optional LocationStatus status = 6;
+  optional UploadStatus status = 6;
   // 目标存储提供者ID列表（JSON 数组格式）
   optional string target_provider_ids = 7;
   // 任务类型

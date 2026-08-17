@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -79,12 +78,13 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.file.name,
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          widget.file.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           if (!_isDesktop)
             IconButton(
@@ -105,7 +105,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   /// 桌面端：在系统浏览器中打开文件预览
   Widget _buildDesktopView() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     return Center(
       child: Column(
@@ -115,7 +115,10 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
           const SizedBox(height: 16),
           Text(
             al.flyfish_willOpenInBrowser,
-            style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -130,7 +133,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
 
   /// 移动端：WebView 预览
   Widget _buildMobileView() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     return Stack(
       children: [
@@ -157,7 +160,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
             ),
           )
         else if (_controller != null)
-          WebViewWidget(controller: _controller!),
+          WebViewWidget(controller: _controller),
         if (_isLoading)
           Center(
             child: Column(

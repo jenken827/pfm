@@ -16,47 +16,58 @@ class ClientBackupBloc extends Bloc<ClientBackupEvent, ClientBackupState> {
   }
 
   Future<void> _onLoad(
-      ClientBackupLoadEvent event, Emitter<ClientBackupState> emit) async {
+    ClientBackupLoadEvent event,
+    Emitter<ClientBackupState> emit,
+  ) async {
     emit(state.copyWith(status: ClientBackupStatus.loading));
     try {
       final configs = ClientBackupService.instance.getConfigs();
-      emit(state.copyWith(
-        status: ClientBackupStatus.success,
-        configs: configs,
-      ));
+      emit(
+        state.copyWith(status: ClientBackupStatus.success, configs: configs),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: ClientBackupStatus.failure,
-        message: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: ClientBackupStatus.failure,
+          message: e.toString(),
+        ),
+      );
     }
   }
 
   Future<void> _onCreate(
-      ClientBackupCreateEvent event, Emitter<ClientBackupState> emit) async {
+    ClientBackupCreateEvent event,
+    Emitter<ClientBackupState> emit,
+  ) async {
     try {
-      await ClientBackupService.instance.addConfig(ClientBackupConfig(
-        id: event.id,
-        name: event.name,
-        sourcePath: event.sourcePath,
-        targetDirId: event.targetDirId,
-        strategy: event.strategy,
-        cronExpression: event.cronExpression,
-        ignoreRules: event.ignoreRules,
-        recursive: event.recursive,
-        enabled: event.enabled,
-      ));
+      await ClientBackupService.instance.addConfig(
+        ClientBackupConfig(
+          id: event.id,
+          name: event.name,
+          sourcePath: event.sourcePath,
+          targetDirId: event.targetDirId,
+          strategy: event.strategy,
+          cronExpression: event.cronExpression,
+          ignoreRules: event.ignoreRules,
+          recursive: event.recursive,
+          enabled: event.enabled,
+        ),
+      );
       add(ClientBackupLoadEvent());
     } catch (e) {
-      emit(state.copyWith(
-        status: ClientBackupStatus.failure,
-        message: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: ClientBackupStatus.failure,
+          message: e.toString(),
+        ),
+      );
     }
   }
 
   Future<void> _onUpdate(
-      ClientBackupUpdateEvent event, Emitter<ClientBackupState> emit) async {
+    ClientBackupUpdateEvent event,
+    Emitter<ClientBackupState> emit,
+  ) async {
     try {
       final configs = ClientBackupService.instance.getConfigs();
       final config = configs.firstWhere((c) => c.id == event.id);
@@ -73,45 +84,51 @@ class ClientBackupBloc extends Bloc<ClientBackupEvent, ClientBackupState> {
       await ClientBackupService.instance.updateConfig(updated);
       add(ClientBackupLoadEvent());
     } catch (e) {
-      emit(state.copyWith(
-        status: ClientBackupStatus.failure,
-        message: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: ClientBackupStatus.failure,
+          message: e.toString(),
+        ),
+      );
     }
   }
 
   Future<void> _onDelete(
-      ClientBackupDeleteEvent event, Emitter<ClientBackupState> emit) async {
+    ClientBackupDeleteEvent event,
+    Emitter<ClientBackupState> emit,
+  ) async {
     try {
       for (final id in event.ids) {
         await ClientBackupService.instance.deleteConfig(id);
       }
       add(ClientBackupLoadEvent());
     } catch (e) {
-      emit(state.copyWith(
-        status: ClientBackupStatus.failure,
-        message: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          status: ClientBackupStatus.failure,
+          message: e.toString(),
+        ),
+      );
     }
   }
 
   Future<void> _onTrigger(
-      ClientBackupTriggerEvent event, Emitter<ClientBackupState> emit) async {
+    ClientBackupTriggerEvent event,
+    Emitter<ClientBackupState> emit,
+  ) async {
     emit(state.copyWith(runningConfigId: event.id));
     try {
-      final result =
-          await ClientBackupService.instance.executeBackup(event.id);
+      final result = await ClientBackupService.instance.executeBackup(event.id);
       add(ClientBackupLoadEvent());
-      emit(state.copyWith(
-        lastResult: result,
-        runningConfigId: '',
-      ));
+      emit(state.copyWith(lastResult: result, runningConfigId: ''));
     } catch (e) {
-      emit(state.copyWith(
-        status: ClientBackupStatus.failure,
-        message: e.toString(),
-        runningConfigId: '',
-      ));
+      emit(
+        state.copyWith(
+          status: ClientBackupStatus.failure,
+          message: e.toString(),
+          runningConfigId: '',
+        ),
+      );
     }
   }
 }

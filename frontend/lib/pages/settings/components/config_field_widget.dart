@@ -11,7 +11,7 @@ Widget buildConfigField(
   Map<String, dynamic> existingConfig,
 ) {
   final initialValue = existingConfig[field.name];
-  
+
   switch (field.fieldType) {
     case ConfigFieldType.STRING:
       return Padding(
@@ -22,8 +22,8 @@ Widget buildConfigField(
             labelText: field.label,
             hintText: field.placeholder.isNotEmpty ? field.placeholder : null,
             helperText: field.helperText.isNotEmpty ? field.helperText : null,
-            prefixIcon: field.iconName.isNotEmpty 
-                ? Icon(_getIconData(field.iconName)) 
+            prefixIcon: field.iconName.isNotEmpty
+                ? Icon(_getIconData(field.iconName))
                 : null,
           ),
           initialValue: initialValue?.toString(),
@@ -34,7 +34,7 @@ Widget buildConfigField(
           obscureText: field.inputType == 'password',
         ),
       );
-    
+
     case ConfigFieldType.NUMBER:
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
@@ -44,8 +44,8 @@ Widget buildConfigField(
             labelText: field.label,
             hintText: field.placeholder.isNotEmpty ? field.placeholder : null,
             helperText: field.helperText.isNotEmpty ? field.helperText : null,
-            prefixIcon: field.iconName.isNotEmpty 
-                ? Icon(_getIconData(field.iconName)) 
+            prefixIcon: field.iconName.isNotEmpty
+                ? Icon(_getIconData(field.iconName))
                 : null,
           ),
           keyboardType: TextInputType.number,
@@ -55,20 +55,20 @@ Widget buildConfigField(
               : null,
         ),
       );
-    
+
     case ConfigFieldType.BOOLEAN:
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: FormBuilderSwitch(
           name: field.name,
           title: Text(field.label),
-          subtitle: field.helperText.isNotEmpty == true 
-              ? Text(field.helperText) 
+          subtitle: field.helperText.isNotEmpty == true
+              ? Text(field.helperText)
               : null,
           initialValue: initialValue == true,
         ),
       );
-    
+
     case ConfigFieldType.SELECT:
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
@@ -77,8 +77,8 @@ Widget buildConfigField(
           decoration: InputDecoration(
             labelText: field.label,
             helperText: field.helperText.isNotEmpty ? field.helperText : null,
-            prefixIcon: field.iconName.isNotEmpty 
-                ? Icon(_getIconData(field.iconName)) 
+            prefixIcon: field.iconName.isNotEmpty
+                ? Icon(_getIconData(field.iconName))
                 : null,
           ),
           initialValue: initialValue?.toString(),
@@ -93,7 +93,7 @@ Widget buildConfigField(
               : null,
         ),
       );
-    
+
     case ConfigFieldType.STRING_LIST:
       // 解析初始值
       List<String> initialList = [];
@@ -113,7 +113,7 @@ Widget buildConfigField(
         required: field.required,
         initialValue: initialList,
       );
-    
+
     default:
       return const SizedBox.shrink();
   }
@@ -211,7 +211,7 @@ class _StringListFieldState extends State<_StringListField> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: FormBuilderField<List<String>>(
@@ -221,9 +221,11 @@ class _StringListFieldState extends State<_StringListField> {
           return InputDecorator(
             decoration: InputDecoration(
               labelText: widget.label,
-              helperText: widget.helperText.isNotEmpty ? widget.helperText : null,
-              prefixIcon: widget.iconName.isNotEmpty 
-                  ? Icon(_getIconData(widget.iconName)) 
+              helperText: widget.helperText.isNotEmpty
+                  ? widget.helperText
+                  : null,
+              prefixIcon: widget.iconName.isNotEmpty
+                  ? Icon(_getIconData(widget.iconName))
                   : null,
               errorText: field.errorText,
             ),
@@ -240,8 +242,8 @@ class _StringListFieldState extends State<_StringListField> {
                             controller: _controllers[index],
                             focusNode: _focusNodes[index],
                             decoration: InputDecoration(
-                              hintText: widget.placeholder.isNotEmpty 
-                                  ? widget.placeholder 
+                              hintText: widget.placeholder.isNotEmpty
+                                  ? widget.placeholder
                                   : null,
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
@@ -258,7 +260,10 @@ class _StringListFieldState extends State<_StringListField> {
                         ),
                         const SizedBox(width: 8),
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, size: 20),
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            size: 20,
+                          ),
                           onPressed: _controllers.length > 1
                               ? () => _removeRow(index)
                               : null,

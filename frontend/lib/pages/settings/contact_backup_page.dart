@@ -45,9 +45,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   Future<void> _selectTargetFolder() async {
     final result = await Navigator.push<FolderPickResult>(
       context,
-      MaterialPageRoute(
-        builder: (context) => const FolderPickerPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const FolderPickerPage()),
     );
     if (result != null) {
       await _backupService.setTargetFolder(result.id, result.name);
@@ -57,28 +55,39 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     // 桌面端显示"仅移动端可用"提示
     if (isDesktop()) {
       return Scaffold(
-        appBar: AppBar(
-          title: Text(al.contactBackup_title),
-          centerTitle: true,
-        ),
+        appBar: AppBar(title: Text(al.contactBackup_title), centerTitle: true),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.phone_android, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+              Icon(
+                Icons.phone_android,
+                size: 64,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 16),
               Text(
                 al.contactBackup_mobileOnly,
-                style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_mobileOnlyDesc,
-                style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
               ),
             ],
           ),
@@ -94,10 +103,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(al.contactBackup_title),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(al.contactBackup_title), centerTitle: true),
       body: ListView(
         children: [
           // 状态卡片
@@ -124,7 +130,8 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: ElevatedButton.icon(
-              onPressed: _result.status == ContactBackupStatus.loading ||
+              onPressed:
+                  _result.status == ContactBackupStatus.loading ||
                       _result.status == ContactBackupStatus.exporting ||
                       _result.status == ContactBackupStatus.uploading
                   ? null
@@ -145,14 +152,16 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildStatusCard() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     Color statusColor;
     String statusText;
     IconData statusIcon;
 
     switch (_result.status) {
       case ContactBackupStatus.idle:
-        statusColor = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+        statusColor = Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
         statusText = al.contactBackup_statusReady;
         statusIcon = Icons.contacts_outlined;
         break;
@@ -163,7 +172,10 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
         break;
       case ContactBackupStatus.exporting:
         statusColor = PfmColors.primary;
-        statusText = al.contactBackup_statusExporting(_result.exportedContacts, _result.totalContacts);
+        statusText = al.contactBackup_statusExporting(
+          _result.exportedContacts,
+          _result.totalContacts,
+        );
         statusIcon = Icons.import_export;
         break;
       case ContactBackupStatus.uploading:
@@ -221,7 +233,9 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -231,7 +245,9 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                           al.contactBackup_totalContacts(_result.totalContacts),
                           style: TextStyle(
                             fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -244,7 +260,8 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
                 _result.status == ContactBackupStatus.uploading) ...[
               const SizedBox(height: 16),
               LinearProgressIndicator(
-                value: _result.status == ContactBackupStatus.exporting &&
+                value:
+                    _result.status == ContactBackupStatus.exporting &&
                         _result.totalContacts > 0
                     ? _result.exportedContacts / _result.totalContacts
                     : null,
@@ -254,7 +271,10 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.contactBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -264,7 +284,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildInfoCard() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
@@ -298,7 +318,7 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
   }
 
   Widget _buildFormatInfo() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -308,7 +328,10 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.description_outlined,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   al.contactBackup_howToRestore,
@@ -326,7 +349,10 @@ class _ContactBackupPageState extends State<ContactBackupPage> {
             const SizedBox(height: 8),
             Text(
               al.contactRestore_supportedPlatforms,
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

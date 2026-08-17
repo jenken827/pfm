@@ -56,7 +56,7 @@ class _TransferPageState extends State<TransferPage>
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < PfmConstraints.mobileBreakpoint;
@@ -114,9 +114,7 @@ class _TransferPageState extends State<TransferPage>
       ),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -156,9 +154,7 @@ class _TransferPageState extends State<TransferPage>
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: TabBar(
         controller: _tabController,

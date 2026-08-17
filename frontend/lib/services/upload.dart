@@ -25,7 +25,8 @@ Future<T> _retryOnTimeout<T>(
     } catch (e) {
       attempt++;
       // 仅对超时和连接错误重试
-      final isRetryable = e is TimeoutException ||
+      final isRetryable =
+          e is TimeoutException ||
           (e is io.SocketException) ||
           (e.toString().contains('sendTimeout')) ||
           (e.toString().contains('receiveTimeout')) ||
@@ -61,7 +62,9 @@ Future<void> uploadFile({
     return;
   }
 
-  l.info('[Upload] Start: ${task.filename} (${_formatSize(task.fileSize)}) taskId=$taskId');
+  l.info(
+    '[Upload] Start: ${task.filename} (${_formatSize(task.fileSize)}) taskId=$taskId',
+  );
 
   io.RandomAccessFile? raf;
   Timer? syncTimer;
@@ -73,7 +76,9 @@ Future<void> uploadFile({
       final hashStart = DateTime.now();
       final fileHash = await _computeFileHash(task.filepath);
       final hashDuration = DateTime.now().difference(hashStart);
-      l.info('[Upload] Hash computed in ${hashDuration.inMilliseconds}ms: ${fileHash.substring(0, 16)}...');
+      l.info(
+        '[Upload] Hash computed in ${hashDuration.inMilliseconds}ms: ${fileHash.substring(0, 16)}...',
+      );
       await storage.updateUploadTask(task.id, fileHash: fileHash);
       task.fileHash = fileHash;
     }
@@ -85,7 +90,9 @@ Future<void> uploadFile({
 
     if (fileSize <= smallFileThreshold) {
       // 小文件上传：先 initUpload 检查秒传，不秒传再 uploadSmall 传内容
-      l.info('[Upload] Small file mode: ${task.filename} (${_formatSize(fileSize)})');
+      l.info(
+        '[Upload] Small file mode: ${task.filename} (${_formatSize(fileSize)})',
+      );
 
       // 先请求秒传检查
       final initResult = await _retryOnTimeout(
@@ -95,7 +102,7 @@ Future<void> uploadFile({
           hash: task.fileHash!,
           parentId: task.parentId,
           overwrite: task.overwrite,
-          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          tags: null, // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
           uploadId: task.uploadId != null ? int.tryParse(task.uploadId!) : null,
         ),
         operationName: 'initUpload(${task.filename})',
@@ -107,7 +114,9 @@ Future<void> uploadFile({
           status: UploadStatus.FAILED,
           errorMessage: initResult.message,
         );
-        l.error('[Upload] InitUpload FAILED: ${task.filename} - ${initResult.message}');
+        l.error(
+          '[Upload] InitUpload FAILED: ${task.filename} - ${initResult.message}',
+        );
         return;
       }
 
@@ -120,7 +129,9 @@ Future<void> uploadFile({
           uploadedBytes: fileSize,
         );
         final totalDuration = DateTime.now().difference(startTime);
-        l.info('[Upload] COMPLETED (instant): ${task.filename} in ${totalDuration.inMilliseconds}ms');
+        l.info(
+          '[Upload] COMPLETED (instant): ${task.filename} in ${totalDuration.inMilliseconds}ms',
+        );
         return;
       }
 
@@ -134,8 +145,8 @@ Future<void> uploadFile({
 
       final uploadStart = DateTime.now();
       // 节流：避免 onSendProgress 高频写 DB 导致锁竞争
-      int _lastProgressBytes = 0;
-      DateTime _lastProgressTime = DateTime.now();
+      int lastProgressBytes = 0;
+      DateTime lastProgressTime = DateTime.now();
       final result = await _retryOnTimeout(
         () => fmRepo.uploadSmall(
           name: task.filename,
@@ -144,17 +155,17 @@ Future<void> uploadFile({
           hash: task.fileHash!,
           content: content,
           overwrite: task.overwrite,
-          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          tags: null, // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
           uploadId: uploadId,
           onSendProgress: (sent, total) {
             final capped = sent > fileSize ? fileSize : sent;
             final now = DateTime.now();
-            final bytesDelta = capped - _lastProgressBytes;
-            final timeDelta = now.difference(_lastProgressTime).inMilliseconds;
+            final bytesDelta = capped - lastProgressBytes;
+            final timeDelta = now.difference(lastProgressTime).inMilliseconds;
             // 字节数变化超过 1% 或距上次更新超过 2 秒才写 DB
             if (bytesDelta > fileSize ~/ 100 || timeDelta > 2000) {
-              _lastProgressBytes = capped;
-              _lastProgressTime = now;
+              lastProgressBytes = capped;
+              lastProgressTime = now;
               storage.updateUploadTask(task.id, uploadedBytes: capped);
             }
           },
@@ -170,7 +181,9 @@ Future<void> uploadFile({
           status: UploadStatus.FAILED,
           errorMessage: result.message,
         );
-        l.error('[Upload] FAILED: ${task.filename} after ${uploadDuration.inSeconds}s - ${result.message}');
+        l.error(
+          '[Upload] FAILED: ${task.filename} after ${uploadDuration.inSeconds}s - ${result.message}',
+        );
         return;
       }
 
@@ -181,12 +194,16 @@ Future<void> uploadFile({
       );
 
       final totalDuration = DateTime.now().difference(startTime);
-      l.info('[Upload] COMPLETED: ${task.filename} in ${totalDuration.inSeconds}s');
+      l.info(
+        '[Upload] COMPLETED: ${task.filename} in ${totalDuration.inSeconds}s',
+      );
       return;
     }
 
     // 分片上传逻辑（大文件）
-    l.info('[Upload] Chunked upload mode: ${task.filename} (${_formatSize(fileSize)})');
+    l.info(
+      '[Upload] Chunked upload mode: ${task.filename} (${_formatSize(fileSize)})',
+    );
     List<int> uploadedChunks = [];
 
     // 初始化上传
@@ -202,7 +219,7 @@ Future<void> uploadFile({
           parentId: task.parentId,
           chunkSize: chunkSize,
           overwrite: task.overwrite,
-          tags: null,  // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
+          tags: null, // 不发送 tags 到后端，避免资产 ID 被创建为文件标签
           uploadId: task.uploadId != null ? int.tryParse(task.uploadId!) : null,
         ),
         operationName: 'initUpload(${task.filename})',
@@ -216,7 +233,9 @@ Future<void> uploadFile({
           status: UploadStatus.FAILED,
           errorMessage: result.message,
         );
-        l.error('[Upload] InitUpload FAILED: ${task.filename} after ${initDuration.inSeconds}s - ${result.message}');
+        l.error(
+          '[Upload] InitUpload FAILED: ${task.filename} after ${initDuration.inSeconds}s - ${result.message}',
+        );
         return;
       }
       final data = result.data!;
@@ -288,10 +307,11 @@ Future<void> uploadFile({
 
     if (pendingChunks.isNotEmpty) {
       //执行上传
-      l.info('[Upload] ${task.filename}: ${pendingChunks.length} chunks to upload (${totalChunks - pendingChunks.length} already done)');
+      l.info(
+        '[Upload] ${task.filename}: ${pendingChunks.length} chunks to upload (${totalChunks - pendingChunks.length} already done)',
+      );
 
       raf = await file.open();
-      final chunkUploadStart = DateTime.now();
 
       syncTimer = Timer.periodic(Duration(seconds: 3), (t) {
         storage.updateUploadTask(
@@ -391,7 +411,9 @@ Future<void> uploadFile({
       // 后端异步处理窗口期：记录已被清理，视为已完成
       if (result.message != null &&
           result.message!.contains('record not found')) {
-        getLogger().info('CompleteUpload: record not found (already processing), treating as done');
+        getLogger().info(
+          'CompleteUpload: record not found (already processing), treating as done',
+        );
         await storage.updateUploadTask(
           task.id,
           status: UploadStatus.COMPLETED,
@@ -462,6 +484,8 @@ String _computeBlake3Hash(List<int> data) {
 String _formatSize(int bytes) {
   if (bytes < 1024) return '${bytes}B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-  if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
   return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
 }

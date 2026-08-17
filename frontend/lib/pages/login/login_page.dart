@@ -65,7 +65,7 @@ class _LoginPageState extends State<LoginPage> {
   /// 显示设置文件服务器对话框
   Future<void> _showServerConfigDialog() async {
     final controller = TextEditingController(text: _ls.fileServer ?? '');
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final screenSize = MediaQuery.of(context).size;
     final isWideScreen = screenSize.width > 600;
 
@@ -193,7 +193,9 @@ class _LoginPageState extends State<LoginPage> {
                 OutlinedButton.icon(
                   onPressed: _isLoading ? null : _showServerConfigDialog,
                   icon: const Icon(Icons.dns),
-                  label: Text(al.login_fileServer(_ls.fileServer ?? al.login_notSet)),
+                  label: Text(
+                    al.login_fileServer(_ls.fileServer ?? al.login_notSet),
+                  ),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),

@@ -29,9 +29,9 @@ class StorageProviderTile extends StatelessWidget {
 
   String get _typeName {
     // 从 providerTypes 中查找匹配的类型信息
-    final typeInfo = providerTypes.where(
-      (t) => t.type == provider.providerType,
-    ).firstOrNull;
+    final typeInfo = providerTypes
+        .where((t) => t.type == provider.providerType)
+        .firstOrNull;
     return typeInfo?.displayName.isNotEmpty == true
         ? typeInfo!.displayName
         : '未知';
@@ -39,9 +39,9 @@ class StorageProviderTile extends StatelessWidget {
 
   String get _iconName {
     // 从 providerTypes 中查找匹配的类型信息
-    final typeInfo = providerTypes.where(
-      (t) => t.type == provider.providerType,
-    ).firstOrNull;
+    final typeInfo = providerTypes
+        .where((t) => t.type == provider.providerType)
+        .firstOrNull;
     return typeInfo?.iconName.isNotEmpty == true ? typeInfo!.iconName : '';
   }
 
@@ -59,7 +59,7 @@ class StorageProviderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
     return InkWell(
@@ -99,7 +99,9 @@ class StorageProviderTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          provider.enabled ? al.common_enabled : al.common_disabled,
+                          provider.enabled
+                              ? al.common_enabled
+                              : al.common_disabled,
                           style: TextStyle(
                             fontSize: 11,
                             color: provider.enabled
@@ -119,7 +121,10 @@ class StorageProviderTile extends StatelessWidget {
                           }
                         },
                         itemBuilder: (context) => [
-                          PopupMenuItem(value: 'edit', child: Text(al.common_edit)),
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text(al.common_edit),
+                          ),
                           PopupMenuItem(
                             value: 'delete',
                             child: Text(
@@ -171,7 +176,9 @@ class StorageProviderTile extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          al.storageProvider_usedPercent((_capacityPercent * 100).toStringAsFixed(1)),
+                          al.storageProvider_usedPercent(
+                            (_capacityPercent * 100).toStringAsFixed(1),
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: _capacityPercent > 0.9
                                 ? theme.colorScheme.error

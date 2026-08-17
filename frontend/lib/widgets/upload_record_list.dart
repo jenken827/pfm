@@ -75,7 +75,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
       if (result.success) {
         final newRecords = result.data!.records
-            .where((r) => r.status != LocationStatus.PCOMPLETED)
+            .where((r) => r.status != UploadStatus.COMPLETED)
             .toList();
         setState(() {
           if (reset || _page == 1) {
@@ -127,30 +127,30 @@ class _UploadRecordListState extends State<UploadRecordList> {
     }
   }
 
-  String _getStatusText(AppLocalizations al, LocationStatus status) {
+  String _getStatusText(AppLocalizations al, UploadStatus status) {
     switch (status) {
-      case LocationStatus.PPENDING:
+      case UploadStatus.PENDING:
         return al.uploadRecord_statusWaiting;
-      case LocationStatus.PUPLOADING:
+      case UploadStatus.UPLOADING:
         return al.uploadRecord_statusUploading;
-      case LocationStatus.PCOMPLETED:
+      case UploadStatus.COMPLETED:
         return al.uploadRecord_statusCompleted;
-      case LocationStatus.PFAILED:
+      case UploadStatus.FAILED:
         return al.uploadRecord_statusFailed;
       default:
         return al.uploadRecord_statusUnknown;
     }
   }
 
-  Color _getStatusColor(LocationStatus status) {
+  Color _getStatusColor(UploadStatus status) {
     switch (status) {
-      case LocationStatus.PPENDING:
+      case UploadStatus.PENDING:
         return Theme.of(context).colorScheme.onSurfaceVariant;
-      case LocationStatus.PUPLOADING:
+      case UploadStatus.UPLOADING:
         return Colors.blue;
-      case LocationStatus.PCOMPLETED:
+      case UploadStatus.COMPLETED:
         return Colors.green;
-      case LocationStatus.PFAILED:
+      case UploadStatus.FAILED:
         return Colors.red;
       default:
         return Theme.of(context).colorScheme.onSurfaceVariant;
@@ -159,7 +159,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -172,14 +172,31 @@ class _UploadRecordListState extends State<UploadRecordList> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(color: PfmColors.errorSurface, borderRadius: BorderRadius.circular(PfmRadius.xl)),
-              child: const Icon(Icons.error_outline, size: 32, color: PfmColors.error),
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: PfmColors.errorSurface,
+                borderRadius: BorderRadius.circular(PfmRadius.xl),
+              ),
+              child: const Icon(
+                Icons.error_outline,
+                size: 32,
+                color: PfmColors.error,
+              ),
             ),
             const SizedBox(height: PfmSpacing.lg),
-            Text(al.uploadRecord_loadFailed, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurface)),
+            Text(
+              al.uploadRecord_loadFailed,
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
             const SizedBox(height: PfmSpacing.lg),
-            ElevatedButton.icon(onPressed: _loadRecords, icon: const Icon(Icons.refresh, size: 18), label: Text(al.common_retry)),
+            ElevatedButton.icon(
+              onPressed: _loadRecords,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: Text(al.common_retry),
+            ),
           ],
         ),
       );
@@ -191,12 +208,25 @@ class _UploadRecordListState extends State<UploadRecordList> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(color: PfmColors.archiveSurface, borderRadius: BorderRadius.circular(PfmRadius.xl)),
-              child: const Icon(Icons.history, size: 40, color: PfmColors.archive),
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: PfmColors.archiveSurface,
+                borderRadius: BorderRadius.circular(PfmRadius.xl),
+              ),
+              child: const Icon(
+                Icons.history,
+                size: 40,
+                color: PfmColors.archive,
+              ),
             ),
             const SizedBox(height: PfmSpacing.xl),
-            Text(al.uploadRecord_noRecords, style: PfmTypography.titleMedium.copyWith(color: Theme.of(context).colorScheme.onSurface)),
+            Text(
+              al.uploadRecord_noRecords,
+              style: PfmTypography.titleMedium.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
           ],
         ),
       );
@@ -208,14 +238,28 @@ class _UploadRecordListState extends State<UploadRecordList> {
         _buildActionBar(al),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.lg,
+            vertical: PfmSpacing.md,
+          ),
+          color: Theme.of(
+            context,
+          ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           child: Row(
             children: [
-              Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.info_outline,
+                size: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: PfmSpacing.sm),
               Expanded(
-                child: Text(al.uploadRecord_recordsHint, style: PfmTypography.labelSmall.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                child: Text(
+                  al.uploadRecord_recordsHint,
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             ],
           ),
@@ -248,20 +292,39 @@ class _UploadRecordListState extends State<UploadRecordList> {
   Widget _buildActionBar(AppLocalizations al) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
-          Text(al.uploadRecord_total(_total), style: PfmTypography.labelMedium.copyWith(color: colorScheme.onSurfaceVariant)),
+          Text(
+            al.uploadRecord_total(_total),
+            style: PfmTypography.labelMedium.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
           if (_failedCount > 0) ...[
             const SizedBox(width: PfmSpacing.sm),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
-              decoration: BoxDecoration(color: PfmColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
-              child: Text(al.uploadRecord_failedCount(_failedCount), style: PfmTypography.labelSmall.copyWith(color: PfmColors.error)),
+              padding: const EdgeInsets.symmetric(
+                horizontal: PfmSpacing.sm,
+                vertical: PfmSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: PfmColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(PfmRadius.full),
+              ),
+              child: Text(
+                al.uploadRecord_failedCount(_failedCount),
+                style: PfmTypography.labelSmall.copyWith(
+                  color: PfmColors.error,
+                ),
+              ),
             ),
           ],
           const Spacer(),
@@ -283,7 +346,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
   }
 
   Future<void> _retryAllFailed() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (_failedCount == 0) return;
 
     final confirmed = await PfmDialogs.confirm(
@@ -299,12 +362,16 @@ class _UploadRecordListState extends State<UploadRecordList> {
 
     if (mounted) {
       if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.uploadRecord_retrySubmitted)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(al.uploadRecord_retrySubmitted)));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${al.uploadRecord_retryFailedMsg}: ${result.message}')),
+          SnackBar(
+            content: Text(
+              '${al.uploadRecord_retryFailedMsg}: ${result.message}',
+            ),
+          ),
         );
       }
       refresh();
@@ -315,33 +382,57 @@ class _UploadRecordListState extends State<UploadRecordList> {
     final colorScheme = Theme.of(context).colorScheme;
     return ListTile(
       leading: Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(color: PfmColors.primarySurface, borderRadius: BorderRadius.circular(PfmRadius.sm)),
-        child: const Icon(Icons.insert_drive_file, color: PfmColors.primary, size: 20),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: PfmColors.primarySurface,
+          borderRadius: BorderRadius.circular(PfmRadius.sm),
+        ),
+        child: const Icon(
+          Icons.insert_drive_file,
+          color: PfmColors.primary,
+          size: 20,
+        ),
       ),
-      title: Text(record.fileName, style: TextStyle(color: colorScheme.onSurface)),
+      title: Text(
+        record.fileName,
+        style: TextStyle(color: colorScheme.onSurface),
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(formatCapacityString(record.fileSize.toInt()), style: TextStyle(color: colorScheme.onSurfaceVariant)),
+          Text(
+            formatCapacityString(record.fileSize.toInt()),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PfmSpacing.sm,
+                  vertical: PfmSpacing.xs,
+                ),
                 decoration: BoxDecoration(
                   color: _getStatusColor(record.status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(PfmRadius.full),
                 ),
                 child: Text(
                   _getStatusText(al, record.status),
-                  style: PfmTypography.labelSmall.copyWith(color: _getStatusColor(record.status)),
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: _getStatusColor(record.status),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                al.uploadRecord_target(_getProviderCount(al, record.targetProviderIds)),
-                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                al.uploadRecord_target(
+                  _getProviderCount(al, record.targetProviderIds),
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -358,14 +449,20 @@ class _UploadRecordListState extends State<UploadRecordList> {
               title: Text(al.uploadRecord_viewDetail),
             ),
           ),
-          if (record.status == LocationStatus.PFAILED)
+          if (record.status == UploadStatus.FAILED)
             PopupMenuItem(
               value: 'retry',
-              child: ListTile(leading: const Icon(Icons.refresh), title: Text(al.uploadRecord_retry)),
+              child: ListTile(
+                leading: const Icon(Icons.refresh),
+                title: Text(al.uploadRecord_retry),
+              ),
             ),
           PopupMenuItem(
             value: 'delete',
-            child: ListTile(leading: const Icon(Icons.delete), title: Text(al.uploadRecord_delete)),
+            child: ListTile(
+              leading: const Icon(Icons.delete),
+              title: Text(al.uploadRecord_delete),
+            ),
           ),
         ],
       ),
@@ -387,7 +484,7 @@ class _UploadRecordListState extends State<UploadRecordList> {
   }
 
   Future<void> _retryRecord(UploadRecordInfo record) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final repository = context.read<FmRepository>();
       final result = await repository.retryUploadRecord(record.id.toInt());
@@ -399,21 +496,25 @@ class _UploadRecordListState extends State<UploadRecordList> {
         // 刷新列表
         refresh();
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.uploadRecord_retryFailedMsg}: ${result.message}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${al.uploadRecord_retryFailedMsg}: ${result.message}',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.uploadRecord_retryFailedMsg}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.uploadRecord_retryFailedMsg}: $e')),
+        );
       }
     }
   }
 
   Future<void> _deleteRecord(UploadRecordInfo record) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final confirmed = await PfmDialogs.confirm(
       context,
       title: al.uploadRecord_confirmDelete,
@@ -434,15 +535,17 @@ class _UploadRecordListState extends State<UploadRecordList> {
         // 刷新列表
         refresh();
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.uploadRecord_deleteFailed}: ${result.message}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${al.uploadRecord_deleteFailed}: ${result.message}'),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.uploadRecord_deleteFailed}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.uploadRecord_deleteFailed}: $e')),
+        );
       }
     }
   }

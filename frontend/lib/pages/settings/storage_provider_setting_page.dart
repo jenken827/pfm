@@ -5,7 +5,6 @@ import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
-import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/settings/components/config_field_widget.dart';
 import 'package:pfm/pages/settings/components/storage_provider_tile.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
@@ -33,7 +32,7 @@ class _StorageProviderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(al.storageProvider_title), centerTitle: true),
       body: BlocBuilder<StorageProviderBloc, StorageProviderState>(
@@ -112,15 +111,15 @@ class _StorageProviderView extends StatelessWidget {
     required BuildContext context,
     StorageProvider? provider,
   }) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     // 获取存储提供者类型列表
     final state = context.read<StorageProviderBloc>().state;
     final providerTypes = state.providerTypes;
 
     if (providerTypes.isEmpty && provider == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(al.storageProvider_typesNotLoaded)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(al.storageProvider_typesNotLoaded)),
+      );
       return;
     }
 
@@ -181,7 +180,9 @@ class _StorageProviderView extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(provider == null ? al.storageProvider_add : al.storageProvider_edit),
+          title: Text(
+            provider == null ? al.storageProvider_add : al.storageProvider_edit,
+          ),
           content: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 500, // 桌面端最大宽度
@@ -314,7 +315,9 @@ class _StorageProviderView extends StatelessWidget {
                           width: 100,
                           child: FormBuilderDropdown<String>(
                             name: 'capacity_unit',
-                            decoration: InputDecoration(labelText: al.storageProvider_unit),
+                            decoration: InputDecoration(
+                              labelText: al.storageProvider_unit,
+                            ),
                             initialValue: capacityUnit,
                             items: unitDropItems,
                             onChanged: (value) {},
@@ -345,7 +348,9 @@ class _StorageProviderView extends StatelessWidget {
                           width: 100,
                           child: FormBuilderDropdown<String>(
                             name: 'file_size_limit_unit',
-                            decoration: InputDecoration(labelText: al.storageProvider_unit),
+                            decoration: InputDecoration(
+                              labelText: al.storageProvider_unit,
+                            ),
                             initialValue: fileSizeLimitUnit,
                             items: unitDropItems,
                             onChanged: (value) {},
@@ -374,8 +379,9 @@ class _StorageProviderView extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       al.storageProvider_proxySetting,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     FormBuilderTextField(
@@ -392,8 +398,9 @@ class _StorageProviderView extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       al.storageProvider_concurrencySetting,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     FormBuilderTextField(
@@ -405,7 +412,8 @@ class _StorageProviderView extends StatelessWidget {
                         prefixIcon: const Icon(Icons.speed),
                       ),
                       keyboardType: TextInputType.number,
-                      initialValue: (provider?.maxConcurrentUploads ?? 0).toString(),
+                      initialValue: (provider?.maxConcurrentUploads ?? 0)
+                          .toString(),
                     ),
 
                     // 加密设置（仅添加时可编辑）
@@ -464,7 +472,9 @@ class _StorageProviderView extends StatelessWidget {
                           style: TextStyle(
                             color: provider.encryptionKey.isNotEmpty
                                 ? Theme.of(context).textTheme.bodyLarge?.color
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -481,7 +491,9 @@ class _StorageProviderView extends StatelessWidget {
                           style: TextStyle(
                             color: provider.encryptionSuffix.isNotEmpty
                                 ? Theme.of(context).textTheme.bodyLarge?.color
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -502,16 +514,22 @@ class _StorageProviderView extends StatelessWidget {
                   final formData = formKey.currentState!.value;
 
                   // 解析容量值，空值默认为0
-                  final capacityValueStr = formData['capacity_value']?.toString() ?? '';
-                  final capacityValue = capacityValueStr.isEmpty ? 0.0 : (double.tryParse(capacityValueStr) ?? 0.0);
+                  final capacityValueStr =
+                      formData['capacity_value']?.toString() ?? '';
+                  final capacityValue = capacityValueStr.isEmpty
+                      ? 0.0
+                      : (double.tryParse(capacityValueStr) ?? 0.0);
                   final capacity = parseCapacityFromUnit(
                     capacityValue,
                     formData['capacity_unit'] ?? 'GB',
                   );
 
                   // 解析文件大小限制，空值默认为0
-                  final fileSizeLimitValueStr = formData['file_size_limit_value']?.toString() ?? '';
-                  final fileSizeLimitValue = fileSizeLimitValueStr.isEmpty ? 0.0 : (double.tryParse(fileSizeLimitValueStr) ?? 0.0);
+                  final fileSizeLimitValueStr =
+                      formData['file_size_limit_value']?.toString() ?? '';
+                  final fileSizeLimitValue = fileSizeLimitValueStr.isEmpty
+                      ? 0.0
+                      : (double.tryParse(fileSizeLimitValueStr) ?? 0.0);
                   final fileSizeLimit = parseCapacityFromUnit(
                     fileSizeLimitValue,
                     formData['file_size_limit_unit'] ?? 'MB',
@@ -554,7 +572,10 @@ class _StorageProviderView extends StatelessWidget {
 
                   // 解析最大并发上传数
                   final maxConcurrentUploads =
-                      int.tryParse(formData['max_concurrent_uploads']?.toString() ?? '0') ?? 0;
+                      int.tryParse(
+                        formData['max_concurrent_uploads']?.toString() ?? '0',
+                      ) ??
+                      0;
 
                   context.read<StorageProviderBloc>().add(
                     provider == null
@@ -617,7 +638,7 @@ class _StorageProviderView extends StatelessWidget {
   }
 
   void _showDeleteDialog(BuildContext context, StorageProvider provider) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

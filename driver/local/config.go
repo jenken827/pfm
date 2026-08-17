@@ -51,8 +51,9 @@ func init() {
 		}
 
 		return &LocalDriver{
-			Config: &c,
-			Orm:    provider,
+			Config:         &c,
+			Orm:            provider,
+			ProviderConfig: types.ProviderConfigFromORM(provider),
 		}, nil
 	}, metadata)
 }

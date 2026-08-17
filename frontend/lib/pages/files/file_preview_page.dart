@@ -55,7 +55,8 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   int _currentPage = 0;
   bool _showOriginal = false; // 是否显示原图
 
-  final TransformationController _transformController = TransformationController();
+  final TransformationController _transformController =
+      TransformationController();
 
   /// 是否已放大（超过默认缩放比例）
   bool get _isZoomed => _transformController.value.getMaxScaleOnAxis() > 1.05;
@@ -144,7 +145,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentFile.name),
@@ -165,7 +166,9 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           if (_currentFile.type == FileType.IMAGE)
             IconButton(
               icon: Icon(_showOriginal ? Icons.image : Icons.hd),
-              tooltip: _showOriginal ? al.preview_viewThumbnail : al.preview_viewOriginal,
+              tooltip: _showOriginal
+                  ? al.preview_viewThumbnail
+                  : al.preview_viewOriginal,
               onPressed: () {
                 setState(() {
                   _showOriginal = !_showOriginal;
@@ -188,15 +191,24 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             itemBuilder: (context) => [
               PopupMenuItem(
                 value: 'share',
-                child: ListTile(leading: const Icon(Icons.share), title: Text(al.preview_share)),
+                child: ListTile(
+                  leading: const Icon(Icons.share),
+                  title: Text(al.preview_share),
+                ),
               ),
               PopupMenuItem(
                 value: 'rename',
-                child: ListTile(leading: const Icon(Icons.edit), title: Text(al.preview_rename)),
+                child: ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: Text(al.preview_rename),
+                ),
               ),
               PopupMenuItem(
                 value: 'delete',
-                child: ListTile(leading: const Icon(Icons.delete), title: Text(al.preview_delete)),
+                child: ListTile(
+                  leading: const Icon(Icons.delete),
+                  title: Text(al.preview_delete),
+                ),
               ),
             ],
           ),
@@ -236,7 +248,9 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         PageView.builder(
           controller: _pageController,
           itemCount: _images!.length,
-          physics: _isZoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+          physics: _isZoomed
+              ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
           onPageChanged: (index) {
             setState(() {
               _currentPage = index;
@@ -310,7 +324,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     File file,
     Map<String, String> headers,
   ) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
     return Stack(
       children: [
@@ -337,7 +351,11 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                   );
                 },
                 errorBuilder: (context, error, stackTrace) {
-                  return _buildErrorWidget(context, al.preview_imageLoadFailed, error);
+                  return _buildErrorWidget(
+                    context,
+                    al.preview_imageLoadFailed,
+                    error,
+                  );
                 },
               ),
             ),
@@ -408,7 +426,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildVideoPreview(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (!_isVideoInitialized || _videoController == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -475,7 +493,10 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 0.5, child: Text('0.5x')),
                   const PopupMenuItem(value: 0.75, child: Text('0.75x')),
-                  PopupMenuItem(value: 1.0, child: Text(al.preview_normalSpeed)),
+                  PopupMenuItem(
+                    value: 1.0,
+                    child: Text(al.preview_normalSpeed),
+                  ),
                   const PopupMenuItem(value: 1.25, child: Text('1.25x')),
                   const PopupMenuItem(value: 1.5, child: Text('1.5x')),
                   const PopupMenuItem(value: 2.0, child: Text('2.0x')),
@@ -521,7 +542,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildAudioPreview(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -540,7 +561,10 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
           const SizedBox(height: 24),
-          Text(al.preview_audioPlay, style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            al.preview_audioPlay,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 8),
           Text(
             _currentFile.name,
@@ -573,7 +597,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Widget _buildUnsupportedPreview(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -584,7 +608,10 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             color: Theme.of(context).colorScheme.error,
           ),
           const SizedBox(height: 16),
-          Text(al.preview_unsupportedType, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            al.preview_unsupportedType,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () => _downloadFile(context),
@@ -601,7 +628,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
     String message,
     dynamic error,
   ) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -632,7 +659,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   void _downloadFile(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final downloadDir = await getDownloadsDirectory();
 
@@ -655,21 +682,21 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(al.preview_downloadQueued(fileName))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(al.preview_downloadQueued(fileName))),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.preview_downloadFailed}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.preview_downloadFailed}: $e')),
+        );
       }
     }
   }
 
   Future<void> _openInExternalPlayer(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final previewUrl = _buildPreviewUrl(_currentFile.id);
     final uri = Uri.parse(previewUrl);
 
@@ -685,9 +712,9 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.preview_openPlayerFailed}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.preview_openPlayerFailed}: $e')),
+        );
       }
     }
   }
@@ -707,7 +734,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Future<void> _shareFile(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final repo = FmRepository();
       final result = await repo.createShareLink(
@@ -722,35 +749,38 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           _showShareSheet(context, shareUrl, al);
         }
       } else if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_createShareLinkFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? al.preview_createShareLinkFailed),
+          ),
+        );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${al.preview_shareFailed}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${al.preview_shareFailed}: $e')),
+        );
       }
     }
   }
 
   /// 显示分享底部弹窗：分享链接 + 保存到我的网盘
-  void _showShareSheet(BuildContext context, String shareUrl, AppLocalizations al) {
+  void _showShareSheet(
+    BuildContext context,
+    String shareUrl,
+    AppLocalizations al,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) {
-        return _ShareBottomSheet(
-          shareUrl: shareUrl,
-          al: al,
-        );
+        return _ShareBottomSheet(shareUrl: shareUrl, al: al);
       },
     );
   }
 
   Future<void> _renameFile(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final controller = TextEditingController(text: _currentFile.name);
 
     final confirmed = await showDialog<bool>(
@@ -785,22 +815,22 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
           RenameObj(id: _currentFile.id, newName: controller.text),
         ]);
 
-        if (result.success && mounted) {
+        if (result.success && context.mounted) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(al.preview_renameSuccess)));
           // 返回上一页刷新列表
           context.pop();
-        } else if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_renameFailed)));
+        } else if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.message ?? al.preview_renameFailed)),
+          );
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${al.preview_renameFailed}: $e')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${al.preview_renameFailed}: $e')),
+          );
         }
       }
     }
@@ -808,7 +838,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   }
 
   Future<void> _deleteFile(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -830,27 +860,27 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
       ),
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       try {
         final repo = FmRepository();
         final result = await repo.deleteFile([_currentFile.id]);
 
-        if (result.success && mounted) {
+        if (result.success && context.mounted) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(al.preview_deleteSuccess)));
           // 返回上一页刷新列表
           context.pop();
-        } else if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(result.message ?? al.preview_deleteFailed)));
+        } else if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.message ?? al.preview_deleteFailed)),
+          );
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${al.preview_deleteFailed}: $e')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${al.preview_deleteFailed}: $e')),
+          );
         }
       }
     }
@@ -859,10 +889,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
 
 /// 分享底部弹窗：显示分享链接 + 保存到我的网盘按钮
 class _ShareBottomSheet extends StatefulWidget {
-  const _ShareBottomSheet({
-    required this.shareUrl,
-    required this.al,
-  });
+  const _ShareBottomSheet({required this.shareUrl, required this.al});
 
   final String shareUrl;
   final AppLocalizations al;
@@ -931,10 +958,16 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
                   icon: const Icon(Icons.copy, size: 20),
                   tooltip: widget.al.preview_shareLinkCopiedToClipboard,
                   onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: widget.shareUrl));
+                    await Clipboard.setData(
+                      ClipboardData(text: widget.shareUrl),
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(widget.al.preview_shareLinkCopiedToClipboard)),
+                        SnackBar(
+                          content: Text(
+                            widget.al.preview_shareLinkCopiedToClipboard,
+                          ),
+                        ),
                       );
                     }
                   },
@@ -961,7 +994,9 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
               const LinearProgressIndicator(),
               const SizedBox(height: 8),
               Text(
-                _statusText.isNotEmpty ? _statusText : widget.al.preview_savingToDisk,
+                _statusText.isNotEmpty
+                    ? _statusText
+                    : widget.al.preview_savingToDisk,
                 style: Theme.of(context).textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
@@ -989,8 +1024,9 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
 
       // 从 shareUrl 中提取 shareCode（URL 最后一段路径）
       final uri = Uri.parse(widget.shareUrl);
-      final shareCode =
-          uri.pathSegments.isNotEmpty ? uri.pathSegments.last : widget.shareUrl;
+      final shareCode = uri.pathSegments.isNotEmpty
+          ? uri.pathSegments.last
+          : widget.shareUrl;
 
       // 调用保存接口
       final saveResult = await repo.saveShareToMySpace(
@@ -999,11 +1035,13 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
       );
 
       if (!saveResult.success || saveResult.data == null) {
-        if (mounted) {
+        if (context.mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(saveResult.message ?? widget.al.preview_saveToDiskFailed),
+              content: Text(
+                saveResult.message ?? widget.al.preview_saveToDiskFailed,
+              ),
             ),
           );
         }
@@ -1012,7 +1050,7 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
 
       final taskId = saveResult.data!.taskId;
       if (taskId.isEmpty) {
-        if (mounted) {
+        if (context.mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(widget.al.preview_saveToDiskSuccess)),
@@ -1022,9 +1060,10 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
       }
 
       // 轮询异步任务进度
+      if (!context.mounted) return;
       await _pollAsyncTask(context, taskId, repo);
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${widget.al.preview_saveToDiskFailed}: $e')),
@@ -1064,7 +1103,7 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
         }
 
         if (status == 'SUCCESS') {
-          if (mounted) {
+          if (context.mounted) {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(widget.al.preview_saveToDiskSuccess)),
@@ -1073,7 +1112,7 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
           return;
         } else if (status == 'FAILED') {
           final errorMsg = progressResult.data!.error;
-          if (mounted) {
+          if (context.mounted) {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -1094,7 +1133,7 @@ class _ShareBottomSheetState extends State<_ShareBottomSheet> {
     }
 
     // 超时
-    if (mounted) {
+    if (context.mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(widget.al.preview_saveToDiskFailed)),

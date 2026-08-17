@@ -34,7 +34,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   Future<void> _loadDetail() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final repository = context.read<FmRepository>();
       final result = await repository.getUploadRecordDetail(widget.uploadId);
@@ -60,7 +60,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   String _getStatusText(LocationStatus status) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     switch (status) {
       case LocationStatus.PPENDING:
         return al.uploadRecord_statusWaiting;
@@ -91,7 +91,7 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
   }
 
   String _getCacheStatusText(CacheStatus status) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     switch (status) {
       case CacheStatus.CACHE_STATUS_UNSPECIFIED:
       case CacheStatus.UNCACHED:
@@ -232,7 +232,10 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
     final colorScheme = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
-        title: Text(location.providerName, style: TextStyle(color: colorScheme.onSurface)),
+        title: Text(
+          location.providerName,
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -259,7 +262,10 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 ),
                 if (location.progress.toInt() > 0) ...[
                   const SizedBox(width: 8),
-                  Text('进度: ${location.progress.toInt()}%', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                  Text(
+                    '进度: ${location.progress.toInt()}%',
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
                 ],
               ],
             ),
@@ -295,13 +301,20 @@ class _UploadRecordDetailDialogState extends State<UploadRecordDetailDialog> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '消息: ${location.message}',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
           ],
         ),
         trailing: location.encrypted == true
-            ? Icon(Icons.lock, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)
+            ? Icon(
+                Icons.lock,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              )
             : null,
       ),
     );

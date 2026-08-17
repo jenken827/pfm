@@ -85,7 +85,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    al = AppLocalizations.of(context)!;
+    al = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(al.permission_title),
@@ -111,9 +111,15 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_errorMessage!, style: const TextStyle(color: PfmColors.error)),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: PfmColors.error),
+            ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadData, child: Text(al.permission_retry)),
+            ElevatedButton(
+              onPressed: _loadData,
+              child: Text(al.permission_retry),
+            ),
           ],
         ),
       );
@@ -147,7 +153,9 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     final quotaBytes = space?.quotaBytes.toInt() ?? 0;
     final usedBytes = space?.usedBytes.toInt() ?? 0;
     final isUnlimited = quotaBytes == 0;
-    final usageRatio = isUnlimited ? 0.0 : (usedBytes / quotaBytes).clamp(0.0, 1.0);
+    final usageRatio = isUnlimited
+        ? 0.0
+        : (usedBytes / quotaBytes).clamp(0.0, 1.0);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -160,7 +168,9 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
               leading: CircleAvatar(
                 backgroundColor: colorScheme.primaryContainer,
                 child: Text(
-                  user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+                  user.displayName.isNotEmpty
+                      ? user.displayName[0].toUpperCase()
+                      : '?',
                   style: TextStyle(
                     color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
@@ -175,24 +185,31 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (user.email.isNotEmpty)
-                    Text(user.email,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      user.email,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   if (user.roles.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Wrap(
                         spacing: 4,
                         children: user.roles
-                            .map((r) => Chip(
-                                  label: Text(r,
-                                      style: const TextStyle(fontSize: 10)),
-                                  padding: EdgeInsets.zero,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ))
+                            .map(
+                              (r) => Chip(
+                                label: Text(
+                                  r,
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                padding: EdgeInsets.zero,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            )
                             .toList(),
                       ),
                     ),
@@ -240,15 +257,19 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
   }
 
   Widget _buildStorageBar(
-      int usedBytes, int quotaBytes, bool isUnlimited, double ratio) {
+    int usedBytes,
+    int quotaBytes,
+    bool isUnlimited,
+    double ratio,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final usedStr = formatCapacityString(usedBytes);
     final quotaStr = isUnlimited ? '不限' : formatCapacityString(quotaBytes);
     final barColor = ratio > 0.9
         ? PfmColors.error
         : ratio > 0.7
-            ? PfmColors.warning
-            : colorScheme.primary;
+        ? PfmColors.warning
+        : colorScheme.primary;
 
     return Column(
       children: [
@@ -290,7 +311,9 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
   void _showQuotaDialog(CasdoorUserInfo user, UserSpace? space) {
     final currentQuota = space?.quotaBytes.toInt() ?? 0;
     final controller = TextEditingController(
-      text: currentQuota > 0 ? (currentQuota / (1024 * 1024 * 1024)).toStringAsFixed(1) : '',
+      text: currentQuota > 0
+          ? (currentQuota / (1024 * 1024 * 1024)).toStringAsFixed(1)
+          : '',
     );
     bool isUnlimited = currentQuota == 0;
 
@@ -328,7 +351,9 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: controller,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: '配额 (GB)',
                         hintText: '例如: 10.0',
@@ -391,12 +416,14 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
       runSpacing: 2,
       children: [
         Icon(Icons.cloud_done, size: 14, color: colorScheme.onSurfaceVariant),
-        ...names.map((n) => Chip(
-              label: Text(n, style: const TextStyle(fontSize: 10)),
-              padding: EdgeInsets.zero,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            )),
+        ...names.map(
+          (n) => Chip(
+            label: Text(n, style: const TextStyle(fontSize: 10)),
+            padding: EdgeInsets.zero,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
       ],
     );
   }
@@ -427,7 +454,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
                     children: [
                       if (hasExistingRoot) ...[
                         Text(
-                          '当前根目录: ${space!.rootFileId}',
+                          '当前根目录: ${space.rootFileId}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -459,9 +486,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
                           final isSelected = selectedIds.contains(id);
                           return CheckboxListTile(
                             title: Text(provider.name),
-                            subtitle: Text(
-                              provider.enabled ? '已启用' : '已禁用',
-                            ),
+                            subtitle: Text(provider.enabled ? '已启用' : '已禁用'),
                             value: isSelected,
                             enabled: provider.enabled,
                             onChanged: (checked) {
@@ -512,16 +537,16 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     if (result.success) {
       if (mounted) {
         final rootId = result.data?.rootFileId ?? '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('根目录已分配: $rootId')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('根目录已分配: $rootId')));
       }
       _loadData();
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分配失败: ${result.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分配失败: ${result.message}')));
       }
     }
   }
@@ -533,16 +558,16 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     );
     if (result.success) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('配额已更新')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('配额已更新')));
       }
       _loadData(); // 刷新列表
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新失败: ${result.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新失败: ${result.message}')));
       }
     }
   }

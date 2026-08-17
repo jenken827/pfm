@@ -64,7 +64,7 @@ class _SettingPageState extends State<SettingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final ls = GetIt.I.get<LocalStorage>();
     final casdoorConfig = ls.casdoorConfig;
     final isLoggedIn = ls.isLoggedIn;
@@ -102,7 +102,9 @@ class _SettingPageState extends State<SettingPage> {
                     iconColor: PfmColors.primary,
                     title: 'API Server',
                     subtitle: ls.fileServer ?? al.common_notConfigured,
-                    onTap: isLoggedIn ? null : () => _showServerConfigDialog(context),
+                    onTap: isLoggedIn
+                        ? null
+                        : () => _showServerConfigDialog(context),
                   ),
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
@@ -110,8 +112,11 @@ class _SettingPageState extends State<SettingPage> {
                     iconBackground: PfmColors.archiveSurface,
                     iconColor: PfmColors.archive,
                     title: 'Casdoor',
-                    subtitle: casdoorConfig?.serverUrl ?? al.common_notConfigured,
-                    onTap: isLoggedIn ? null : () => const LoginCasdoorConfigRoute().push(context),
+                    subtitle:
+                        casdoorConfig?.serverUrl ?? al.common_notConfigured,
+                    onTap: isLoggedIn
+                        ? null
+                        : () => const LoginCasdoorConfigRoute().push(context),
                   ),
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
@@ -127,7 +132,10 @@ class _SettingPageState extends State<SettingPage> {
             ),
             if (isLoggedIn)
               Padding(
-                padding: const EdgeInsets.only(top: PfmSpacing.sm, left: PfmSpacing.sm),
+                padding: const EdgeInsets.only(
+                  top: PfmSpacing.sm,
+                  left: PfmSpacing.sm,
+                ),
                 child: Text(
                   al.settings_changeServerHint,
                   style: PfmTypography.labelSmall.copyWith(
@@ -187,7 +195,8 @@ class _SettingPageState extends State<SettingPage> {
                       iconColor: PfmColors.primary,
                       title: al.settings_storageProvider,
                       subtitle: al.settings_storageProviderSubtitle,
-                      onTap: () => const StorageProviderSettingRoute().push(context),
+                      onTap: () =>
+                          const StorageProviderSettingRoute().push(context),
                     ),
                     const Divider(height: 1, indent: 56),
                     _SettingsTile(
@@ -236,7 +245,8 @@ class _SettingPageState extends State<SettingPage> {
                       iconColor: PfmColors.error,
                       title: al.permission_title,
                       subtitle: al.permission_subtitle,
-                      onTap: () => const PermissionManagementRoute().push(context),
+                      onTap: () =>
+                          const PermissionManagementRoute().push(context),
                     ),
                   ],
                 ],
@@ -267,7 +277,9 @@ class _SettingPageState extends State<SettingPage> {
                     subtitle: al.settings_aboutSubtitle,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const AboutPage()),
+                      MaterialPageRoute(
+                        builder: (context) => const AboutPage(),
+                      ),
                     ),
                   ),
                 ],
@@ -297,7 +309,7 @@ class _SettingPageState extends State<SettingPage> {
 
   /// 显示设置文件服务器对话框
   void _showServerConfigDialog(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final ls = GetIt.I.get<LocalStorage>();
     final controller = TextEditingController(text: ls.fileServer ?? '');
     showDialog(
@@ -339,7 +351,7 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   void _showLanguageDialog(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final ls = GetIt.I.get<LocalStorage>();
     showDialog(
       context: context,
@@ -373,7 +385,7 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   void _showLogoutDialog(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final confirmed = await PfmDialogs.confirm(
       context,
       title: al.settings_logout,
@@ -464,17 +476,19 @@ class _SettingPageState extends State<SettingPage> {
             onPressed: () async {
               final chunkKB = int.tryParse(chunkSizeController.text) ?? 2048;
               final thresholdMB = int.tryParse(thresholdController.text) ?? 5;
-              final uploadCon = int.tryParse(uploadConcurrencyController.text) ?? 3;
-              final downloadCon = int.tryParse(downloadConcurrencyController.text) ?? 3;
+              final uploadCon =
+                  int.tryParse(uploadConcurrencyController.text) ?? 3;
+              final downloadCon =
+                  int.tryParse(downloadConcurrencyController.text) ?? 3;
               await ls.saveUploadChunkSize(chunkKB * 1024);
               await ls.saveSmallFileThreshold(thresholdMB * 1024 * 1024);
               await ls.saveUploadConcurrency(uploadCon.clamp(1, 10));
               await ls.saveDownloadConcurrency(downloadCon.clamp(1, 10));
               if (ctx.mounted) {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('传输设置已保存')),
-                );
+                ScaffoldMessenger.of(
+                  ctx,
+                ).showSnackBar(const SnackBar(content: Text('传输设置已保存')));
               }
             },
             child: const Text('保存'),
@@ -489,9 +503,9 @@ class _SettingPageState extends State<SettingPage> {
       final files = await getLogFiles();
       if (files.isEmpty) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('暂无日志文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('暂无日志文件')));
         }
         return;
       }
@@ -527,9 +541,9 @@ class _SettingPageState extends State<SettingPage> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败: $e')));
       }
     }
   }
@@ -573,7 +587,11 @@ class _SettingsTile extends StatelessWidget {
                 color: iconBackground ?? colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(PfmRadius.sm),
               ),
-              child: Icon(icon, color: iconColor ?? colorScheme.onSurfaceVariant, size: 18),
+              child: Icon(
+                icon,
+                color: iconColor ?? colorScheme.onSurfaceVariant,
+                size: 18,
+              ),
             ),
             const SizedBox(width: PfmSpacing.md),
             Expanded(
@@ -600,7 +618,11 @@ class _SettingsTile extends StatelessWidget {
               ),
             ),
             if (onTap != null)
-              Icon(Icons.chevron_right, size: 18, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: colorScheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),
@@ -617,7 +639,10 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: PfmSpacing.md, left: PfmSpacing.xs),
+      padding: const EdgeInsets.only(
+        bottom: PfmSpacing.md,
+        left: PfmSpacing.xs,
+      ),
       child: Text(
         title,
         style: PfmTypography.titleSmall.copyWith(

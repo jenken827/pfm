@@ -94,7 +94,7 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 	}
 
 	// 7. 打开文件（支持多分片合并、Seek）
-	reader, err := sourceStorage.Open(ctx, sourceLocations, encryptor)
+	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
 	}
@@ -185,7 +185,7 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool)
 	}
 
 	// 7. 打开文件
-	reader, err := sourceStorage.Open(ctx, sourceLocations, encryptor)
+	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
 	}
@@ -281,7 +281,7 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	defer tempFile.Close()
 
 	// 6. 打开文件
-	reader, err := sourceStorage.Open(ctx, sourceLocations, encryptor)
+	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		llog.L().Errorf("open file for thumbnail failed: %v", err)
 		return
@@ -380,7 +380,7 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 		// 异步触发预下载（不阻塞当前请求）
 		utils.Go(func() {
 			bgCtx := context.Background()
-			if err := preDownloader.PreDownload(bgCtx, sourceLocations); err != nil {
+			if err := preDownloader.PreDownload(bgCtx, types.FileRefsFromLocations(sourceLocations)); err != nil {
 				llog.L().Errorf("async pre-download failed: file_id=%s, provider=%d, err=%v",
 					fileID, sourceProviderID, err)
 			} else {
@@ -409,8 +409,8 @@ func createEncryptorIfNeeded(sourceStorage types.StorageDriver, sourceLocations 
 		return &types.NullEncryptor{}, nil
 	}
 
-	providerOrm := sourceStorage.GetOrm()
-	if providerOrm == nil || providerOrm.EncryptionKey == nil {
+	pcfg := sourceStorage.GetProviderConfig()
+	if pcfg == nil || pcfg.EncryptionKey == "" {
 		return &types.NullEncryptor{}, nil
 	}
 
@@ -419,7 +419,7 @@ func createEncryptorIfNeeded(sourceStorage types.StorageDriver, sourceLocations 
 		salt = *sourceLocations[0].EncryptionSalt
 	}
 
-	return storage.NewCryptEncryptor(*providerOrm.EncryptionKey, salt)
+	return storage.NewCryptEncryptor(pcfg.EncryptionKey, salt)
 }
 
 // getThumbnailCacheDir 获取缩略图缓存目录

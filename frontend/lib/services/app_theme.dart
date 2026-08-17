@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:pfm/design/design_tokens.dart';
 
 /// PFM 应用主题
@@ -41,7 +40,9 @@ final class AppTheme {
         foregroundColor: PfmColors.lightTextPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: PfmTypography.titleLarge.copyWith(color: PfmColors.lightTextPrimary),
+        titleTextStyle: PfmTypography.titleLarge.copyWith(
+          color: PfmColors.lightTextPrimary,
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: PfmColors.lightSurface,
@@ -50,7 +51,9 @@ final class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return PfmTypography.labelMedium.copyWith(color: PfmColors.primary);
           }
-          return PfmTypography.labelMedium.copyWith(color: PfmColors.lightTextSecondary);
+          return PfmTypography.labelMedium.copyWith(
+            color: PfmColors.lightTextSecondary,
+          );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -62,10 +65,20 @@ final class AppTheme {
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: PfmColors.lightSurface,
         indicatorColor: PfmColors.primarySurface,
-        selectedIconTheme: const IconThemeData(color: PfmColors.primary, size: 24),
-        unselectedIconTheme: IconThemeData(color: PfmColors.lightTextSecondary, size: 24),
-        selectedLabelTextStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.primary),
-        unselectedLabelTextStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.lightTextSecondary),
+        selectedIconTheme: const IconThemeData(
+          color: PfmColors.primary,
+          size: 24,
+        ),
+        unselectedIconTheme: IconThemeData(
+          color: PfmColors.lightTextSecondary,
+          size: 24,
+        ),
+        selectedLabelTextStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.primary,
+        ),
+        unselectedLabelTextStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.lightTextSecondary,
+        ),
       ),
       dividerTheme: const DividerThemeData(
         color: PfmColors.lightBorder,
@@ -75,7 +88,10 @@ final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: PfmColors.lightSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.md,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PfmRadius.md),
           borderSide: const BorderSide(color: PfmColors.lightBorder),
@@ -92,14 +108,19 @@ final class AppTheme {
           borderRadius: BorderRadius.circular(PfmRadius.md),
           borderSide: const BorderSide(color: PfmColors.error),
         ),
-        hintStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.lightTextMuted),
+        hintStyle: PfmTypography.bodyMedium.copyWith(
+          color: PfmColors.lightTextMuted,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: PfmColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.lg,
+            vertical: PfmSpacing.md,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.md),
           ),
@@ -110,7 +131,10 @@ final class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: PfmColors.lightTextPrimary,
           side: const BorderSide(color: PfmColors.lightBorder),
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.lg,
+            vertical: PfmSpacing.md,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.md),
           ),
@@ -120,7 +144,10 @@ final class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: PfmColors.lightTextSecondary,
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.md, vertical: PfmSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.md,
+            vertical: PfmSpacing.sm,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.sm),
           ),
@@ -128,9 +155,16 @@ final class AppTheme {
         ),
       ),
       listTileTheme: ListTileThemeData(
-        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
-        titleTextStyle: PfmTypography.bodyLarge.copyWith(color: PfmColors.lightTextPrimary),
-        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.lightTextSecondary),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.xs,
+        ),
+        titleTextStyle: PfmTypography.bodyLarge.copyWith(
+          color: PfmColors.lightTextPrimary,
+        ),
+        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(
+          color: PfmColors.lightTextSecondary,
+        ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: PfmColors.lightSurface,
@@ -141,7 +175,9 @@ final class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: PfmColors.lightTextPrimary,
-        contentTextStyle: PfmTypography.bodyMedium.copyWith(color: Colors.white),
+        contentTextStyle: PfmTypography.bodyMedium.copyWith(
+          color: Colors.white,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.md),
         ),
@@ -154,12 +190,16 @@ final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.full),
         ),
-        labelStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.lightTextPrimary),
+        labelStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.lightTextPrimary,
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: PfmColors.lightSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PfmRadius.xl),
+          ),
         ),
       ),
     );
@@ -198,16 +238,22 @@ final class AppTheme {
         foregroundColor: PfmColors.darkTextPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: PfmTypography.titleLarge.copyWith(color: PfmColors.darkTextPrimary),
+        titleTextStyle: PfmTypography.titleLarge.copyWith(
+          color: PfmColors.darkTextPrimary,
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: PfmColors.darkSurface,
         indicatorColor: PfmColors.primaryDark,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return PfmTypography.labelMedium.copyWith(color: PfmColors.primaryLight);
+            return PfmTypography.labelMedium.copyWith(
+              color: PfmColors.primaryLight,
+            );
           }
-          return PfmTypography.labelMedium.copyWith(color: PfmColors.darkTextSecondary);
+          return PfmTypography.labelMedium.copyWith(
+            color: PfmColors.darkTextSecondary,
+          );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -219,10 +265,20 @@ final class AppTheme {
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: PfmColors.darkSurface,
         indicatorColor: PfmColors.primaryDark,
-        selectedIconTheme: const IconThemeData(color: PfmColors.primaryLight, size: 24),
-        unselectedIconTheme: IconThemeData(color: PfmColors.darkTextSecondary, size: 24),
-        selectedLabelTextStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.primaryLight),
-        unselectedLabelTextStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.darkTextSecondary),
+        selectedIconTheme: const IconThemeData(
+          color: PfmColors.primaryLight,
+          size: 24,
+        ),
+        unselectedIconTheme: IconThemeData(
+          color: PfmColors.darkTextSecondary,
+          size: 24,
+        ),
+        selectedLabelTextStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.primaryLight,
+        ),
+        unselectedLabelTextStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.darkTextSecondary,
+        ),
       ),
       dividerTheme: const DividerThemeData(
         color: PfmColors.darkBorder,
@@ -232,7 +288,10 @@ final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: PfmColors.darkSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.md,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PfmRadius.md),
           borderSide: const BorderSide(color: PfmColors.darkBorder),
@@ -249,14 +308,19 @@ final class AppTheme {
           borderRadius: BorderRadius.circular(PfmRadius.md),
           borderSide: const BorderSide(color: PfmColors.error),
         ),
-        hintStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.darkTextMuted),
+        hintStyle: PfmTypography.bodyMedium.copyWith(
+          color: PfmColors.darkTextMuted,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: PfmColors.primaryLight,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.lg,
+            vertical: PfmSpacing.md,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.md),
           ),
@@ -267,7 +331,10 @@ final class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: PfmColors.darkTextPrimary,
           side: const BorderSide(color: PfmColors.darkBorder),
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.lg,
+            vertical: PfmSpacing.md,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.md),
           ),
@@ -277,7 +344,10 @@ final class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: PfmColors.darkTextSecondary,
-          padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.md, vertical: PfmSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PfmSpacing.md,
+            vertical: PfmSpacing.sm,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PfmRadius.sm),
           ),
@@ -285,9 +355,16 @@ final class AppTheme {
         ),
       ),
       listTileTheme: ListTileThemeData(
-        contentPadding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
-        titleTextStyle: PfmTypography.bodyLarge.copyWith(color: PfmColors.darkTextPrimary),
-        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.darkTextSecondary),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: PfmSpacing.lg,
+          vertical: PfmSpacing.xs,
+        ),
+        titleTextStyle: PfmTypography.bodyLarge.copyWith(
+          color: PfmColors.darkTextPrimary,
+        ),
+        subtitleTextStyle: PfmTypography.bodyMedium.copyWith(
+          color: PfmColors.darkTextSecondary,
+        ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: PfmColors.darkSurface,
@@ -298,7 +375,9 @@ final class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: PfmColors.darkSurface,
-        contentTextStyle: PfmTypography.bodyMedium.copyWith(color: PfmColors.darkTextPrimary),
+        contentTextStyle: PfmTypography.bodyMedium.copyWith(
+          color: PfmColors.darkTextPrimary,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.md),
         ),
@@ -311,12 +390,16 @@ final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PfmRadius.full),
         ),
-        labelStyle: PfmTypography.labelMedium.copyWith(color: PfmColors.darkTextPrimary),
+        labelStyle: PfmTypography.labelMedium.copyWith(
+          color: PfmColors.darkTextPrimary,
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: PfmColors.darkSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PfmRadius.xl),
+          ),
         ),
       ),
     );

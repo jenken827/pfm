@@ -134,6 +134,27 @@ func UpdateFileLocation(fl *native.FileLocationORM, updateFields []string) error
 	return nil
 }
 
+// TransitionFileLocationStatus 状态迁移（带乐观锁）
+// 仅当记录当前 status 在 prevStatuses 中时才更新，防止并发覆盖已完成状态
+func TransitionFileLocationStatus(id uint64, prevStatuses []native.LocationStatus, newStatus native.LocationStatus, message *string) error {
+	ctx := context.Background()
+	updateMap := map[string]interface{}{"status": int32(newStatus)}
+	if message != nil {
+		updateMap["message"] = *message
+	}
+	prevInts := make([]int32, 0, len(prevStatuses))
+	for _, s := range prevStatuses {
+		prevInts = append(prevInts, int32(s))
+	}
+	if err := GetDB().WithContext(ctx).Model(&native.FileLocationORM{}).
+		Where("id = ? AND status IN ?", id, prevInts).
+		Updates(updateMap).Error; err != nil {
+		llog.L().Errorf("transition file location status failed: %v, id: %d", err, id)
+		return err
+	}
+	return nil
+}
+
 // UpdateFileLocationCacheStatus 更新文件位置的缓存状态
 func UpdateFileLocationCacheStatus(id uint64, status native.CacheStatus) error {
 	ctx := context.Background()

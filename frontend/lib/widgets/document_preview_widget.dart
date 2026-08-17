@@ -33,7 +33,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   }
 
   Future<void> _loadDocument() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     setState(() {
       _isLoading = true;
       _error = null;
@@ -77,7 +77,7 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
   }
 
   Future<void> _loadTxtDocument() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final dio = Dio();
       final response = await dio.get(
@@ -113,8 +113,11 @@ class _DocumentPreviewWidgetState extends State<DocumentPreviewWidget> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline,
-                  size: 64, color: Theme.of(context).colorScheme.error),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 24),
               Text(
                 _error!,

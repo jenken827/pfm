@@ -10,23 +10,6 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # ============================================================
-# 代理配置（如需代理，取消注释并修改）
-# ============================================================
-
-# HTTP 代理
-export HTTP_PROXY=http://127.0.0.1:10809
-export HTTPS_PROXY=http://127.0.0.1:10809
-export ALL_PROXY=socks5://127.0.0.1:10809
-
-# 如果环境变量中已设置代理，则使用之
-if [ -n "$HTTP_PROXY" ]; then
-    echo "📌 使用 HTTP 代理: $HTTP_PROXY"
-fi
-if [ -n "$HTTPS_PROXY" ]; then
-    echo "📌 使用 HTTPS 代理: $HTTPS_PROXY"
-fi
-
-# ============================================================
 # 帮助信息
 # ============================================================
 
@@ -86,7 +69,6 @@ show_help() {
   - build 和 run 命令会自动从 git commit hash 和日期生成版本号
   - proto 命令需要在 proto/ 目录下执行 buf generate
   - 项目模块路径: jenken827.com/jenken827/pfm
-  - 如需代理，设置 HTTP_PROXY/HTTPS_PROXY 环境变量或取消脚本顶部注释
 EOF
 }
 
@@ -391,9 +373,6 @@ cmd_flutter() {
         echo "❌ 错误: frontend/dev.sh 不存在"
         exit 1
     fi
-
-    # 确保代理环境变量传递给子进程
-    export HTTP_PROXY HTTPS_PROXY ALL_PROXY
 
     if [[ "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
         bash dev.sh help

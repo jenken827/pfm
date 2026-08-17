@@ -91,6 +91,8 @@
 | `GetUploadRecordByID(id) (*UploadRecord, error)` | 按 ID 查询上传记录 |
 | `ListUploadRecords(parentID, status, offset, limit) ([]UploadRecord, int64, error)` | 分页查询上传记录 |
 | `UpdateUploadRecordStatus(id, status, message) error` | 更新上传记录状态 |
+| `TransitionUploadRecordTaskStatus(id, prevStatuses, newStatus, message) error` | 任务状态迁移（乐观锁，操作 task_status 列） |
+| `TransitionFileLocationStatus(id, prevStatuses, newStatus, message) error` | 分片状态迁移（乐观锁，操作 status 列） |
 | `CountUploadRecordsByStatus(status) (int64, error)` | 按状态统计上传记录数 |
 | `DeleteUploadRecord(id) error` | 删除上传记录 |
 | `GetPendingUploadRecords() ([]UploadRecord, error)` | 获取所有待处理记录（启动恢复用） |
@@ -116,6 +118,7 @@
 | `GetFileLocationsByProvider(providerID) ([]FileLocation, error)` | 按 Provider 查询副本 |
 | `DeleteFileLocation(id) error` | 删除副本记录 |
 | `DeleteFileLocationsByHash(hash) error` | 按哈希批量删除 |
+| `TransitionFileLocationStatus(id, prevStatuses, newStatus, message) error` | 状态迁移（乐观锁：仅当当前状态在 prevStatuses 中才更新） |
 
 ### provider.go
 
@@ -179,3 +182,49 @@
 | 方法 | 说明 |
 |------|------|
 | `SelectBestSource(locations) (*FileLocation, error)` | 按 sort_order 选择最优读取源 |
+
+## driver/types/（驱动抽象层，阶段2 DTO 化）
+
+### driver.go
+
+| 接口/方法 | 说明 |
+|------|------|
+| `StorageDriver` | 存储驱动接口（Upload/Open 已 DTO 化，不再传 GORM ORM） |
+| `Upload(ctx, src UploadSource, opt UploadOptions) ([]FileRef, error)` | 上传（src=轻量源，opt=per-provider 选项） |
+| `Open(ctx, refs []FileRef, opt OpenOptions) (ReadSeekCloser, error)` | 打开（refs=分片引用，opt=解密器） |
+| `GetProviderConfig() *ProviderConfig` | 类型化配置视图（替代 GetOrm） |
+| `BatchDeleter` / `PreDownloader` | 可选接口，入参均为 `[]FileRef` |
+
+### upload_source.go
+
+| 类型/方法 | 说明 |
+|------|------|
+| `FileRef` | 文件在 provider 上的引用（值类型，双向：Upload 输出 / Open 输入） |
+| `UploadSource` | 上传源（TempPath/FileName/FileSize/FileHash） |
+| `UploadOptions` / `OpenOptions` | 上传/打开选项 |
+| `ProviderConfig` | 类型化配置视图（EncryptionKey/Suffix/SortOrder/FileSizeLimit/HashType 等） |
+| `ProviderConfigFromORM(orm)` | 从 ORM 提取配置视图 |
+| `FileRefFromLocation(loc)` / `FileRefsFromLocations(locs)` | FileLocationORM → FileRef 转换 |
+
+### upload_pack.go（加密管道，消除多驱动复制）
+
+| 方法 | 说明 |
+|------|------|
+| `PackToTempFile(rawPath, fileName, opt)` | 加密到临时文件（baidu 用），返回 (路径, 混淆名, 大小) |
+| `PackStream(raw, fileName, opt)` | 流式加密（telegram 用） |
+| `ComputeEncryptedChunkSize(limit, encrypted)` | 加密开销预留后的分片大小 |
+
+### upload_dir.go（目录 sharding，消除多驱动复制）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `DirBackend` | 目录后端接口（List/Mkdir，local 用 os、云端用 API） |
+| `AllocateUploadDir(ctx, root, backend)` | 年/月/数字子目录 sharding 单一实现 |
+
+### cache.go / persistence.go（驱动回调持久化，替代驱动反写 db）
+
+| 类型 | 说明 |
+|------|------|
+| `CacheUpdater` / `CacheUpdaterSetter` | 缓存状态更新回调（telegram） |
+| `ProviderConfigPersister` / `ConfigPersisterSetter` | 配置持久化回调（baidu token 刷新） |
+

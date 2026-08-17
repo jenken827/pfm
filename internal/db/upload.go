@@ -19,7 +19,7 @@ func GetUploadRecordByHash(hash string, withChunk bool) (*native.UploadRecordORM
 }
 
 // GetUploadRecordsByStatus 获取上传记录
-func GetUploadRecordsByStatus(status []native.LocationStatus) ([]*native.UploadRecordORM, error) {
+func GetUploadRecordsByStatus(status []native.UploadStatus) ([]*native.UploadRecordORM, error) {
 	ints := []int32{}
 	for _, s := range status {
 
@@ -27,7 +27,7 @@ func GetUploadRecordsByStatus(status []native.LocationStatus) ([]*native.UploadR
 
 	}
 
-	return gorm.G[*native.UploadRecordORM](db).Where("status in ?", ints).Find(context.Background())
+	return gorm.G[*native.UploadRecordORM](db).Where("task_status in ?", ints).Find(context.Background())
 
 }
 
@@ -100,6 +100,8 @@ func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error 
 		switch field {
 		case "status":
 			updateMap["status"] = *r.Status
+		case "task_status":
+			updateMap["task_status"] = *r.TaskStatus
 		case "message":
 			updateMap["message"] = *r.Message
 		case "file_hash":
@@ -135,6 +137,27 @@ func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error 
 	return nil
 }
 
+// TransitionUploadRecordTaskStatus 任务状态迁移（带乐观锁，操作 task_status 列）
+// 仅当记录当前 task_status 在 prevStatuses 中时才更新，防止并发覆盖已完成状态
+func TransitionUploadRecordTaskStatus(id uint32, prevStatuses []native.UploadStatus, newStatus native.UploadStatus, message *string) error {
+	ctx := context.Background()
+	updateMap := map[string]interface{}{"task_status": int32(newStatus)}
+	if message != nil {
+		updateMap["message"] = *message
+	}
+	prevInts := make([]int32, 0, len(prevStatuses))
+	for _, s := range prevStatuses {
+		prevInts = append(prevInts, int32(s))
+	}
+	if err := db.WithContext(ctx).Model(&native.UploadRecordORM{}).
+		Where("id = ? AND task_status IN ?", id, prevInts).
+		Updates(updateMap).Error; err != nil {
+		llog.L().Errorf("transition upload record task status failed: %v, id: %d", err, id)
+		return err
+	}
+	return nil
+}
+
 // ClearUploadRecords 清理上传记录
 func ClearUploadRecords(id uint32) error {
 	ctx := context.Background()
@@ -154,7 +177,7 @@ func ClearUploadRecords(id uint32) error {
 // CountUploadRecordsByStatus 按状态统计上传记录数
 func CountUploadRecordsByStatus(status int32) (int64, error) {
 	var count int64
-	if err := db.Model(&native.UploadRecordORM{}).Where("status = ?", status).Count(&count).Error; err != nil {
+	if err := db.Model(&native.UploadRecordORM{}).Where("task_status = ?", status).Count(&count).Error; err != nil {
 		llog.L().Errorf("count upload records by status failed: %v", err)
 		return 0, err
 	}
@@ -168,7 +191,7 @@ func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRec
 	// 构建基础查询
 	query := db.Model(&native.UploadRecordORM{})
 	if status != nil {
-		query = query.Where("status = ?", *status)
+		query = query.Where("task_status = ?", *status)
 	}
 
 	// 统计总数
@@ -183,7 +206,7 @@ func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRec
 	if err := db.Model(&native.UploadRecordORM{}).
 		Scopes(func(d *gorm.DB) *gorm.DB {
 			if status != nil {
-				return d.Where("status = ?", *status)
+				return d.Where("task_status = ?", *status)
 			}
 			return d
 		}).

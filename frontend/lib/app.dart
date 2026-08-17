@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
-import 'package:pfm/platform/platform.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/services.dart';
 import 'l10n/l10n.dart';

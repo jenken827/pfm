@@ -9,11 +9,7 @@ class FolderSettingsDialog extends StatefulWidget {
   final File folder;
   final VoidCallback? onUpdate;
 
-  const FolderSettingsDialog({
-    super.key,
-    required this.folder,
-    this.onUpdate,
-  });
+  const FolderSettingsDialog({super.key, required this.folder, this.onUpdate});
 
   @override
   State<FolderSettingsDialog> createState() => _FolderSettingsDialogState();
@@ -33,12 +29,11 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
     // 初始化 maxHistories 配置
     final maxHistories = widget.folder.maxHistories;
     _maxHistoriesController = TextEditingController(
-      text: maxHistories != null && maxHistories > 0 ? maxHistories.toString() : '',
+      text: maxHistories > 0 ? maxHistories.toString() : '',
     );
 
     // 初始化加密配置
     _enableEncryption = widget.folder.enableEncryption;
-
   }
 
   @override
@@ -49,11 +44,11 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
   }
 
   Future<void> _updateFolder() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(al.folderSettings_nameEmpty)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(al.folderSettings_nameEmpty)));
       return;
     }
 
@@ -83,15 +78,19 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
       if (result.success) {
         if (mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(al.folderSettings_updated)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(al.folderSettings_updated)));
           widget.onUpdate?.call();
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${al.folderSettings_updateFailed}: ${result.message}')),
+            SnackBar(
+              content: Text(
+                '${al.folderSettings_updateFailed}: ${result.message}',
+              ),
+            ),
           );
         }
       }
@@ -108,9 +107,9 @@ class _FolderSettingsDialogState extends State<FolderSettingsDialog> {
     }
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return AlertDialog(
       title: Text(al.folderSettings_title),
       content: SizedBox(

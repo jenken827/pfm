@@ -74,8 +74,9 @@ class RecentFilesStorage {
     }
 
     // 按访问时间降序排序
-    entries.sort((a, b) =>
-        (b['accessedAt'] as int).compareTo(a['accessedAt'] as int));
+    entries.sort(
+      (a, b) => (b['accessedAt'] as int).compareTo(a['accessedAt'] as int),
+    );
 
     return entries.take(limit).toList();
   }
@@ -104,12 +105,17 @@ class RecentFilesStorage {
     // 按访问时间排序，删除最早的
     final entries = userKeys.map((k) {
       final v = _box.get(k);
-      return MapEntry(k as String, v != null ? (v['accessedAt'] as int? ?? 0) : 0);
+      return MapEntry(
+        k as String,
+        v != null ? (v['accessedAt'] as int? ?? 0) : 0,
+      );
     }).toList();
 
     entries.sort((a, b) => a.value.compareTo(b.value));
 
-    final toDelete = entries.take(entries.length - _maxRecords).map((e) => e.key);
+    final toDelete = entries
+        .take(entries.length - _maxRecords)
+        .map((e) => e.key);
     await _box.deleteAll(toDelete);
   }
 }

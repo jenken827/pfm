@@ -36,9 +36,16 @@ class ClientBackupCreateEvent extends ClientBackupEvent {
 
   @override
   List<Object?> get props => [
-        id, name, sourcePath, targetDirId, strategy,
-        cronExpression, ignoreRules, recursive, enabled,
-      ];
+    id,
+    name,
+    sourcePath,
+    targetDirId,
+    strategy,
+    cronExpression,
+    ignoreRules,
+    recursive,
+    enabled,
+  ];
 }
 
 class ClientBackupUpdateEvent extends ClientBackupEvent {
@@ -66,9 +73,16 @@ class ClientBackupUpdateEvent extends ClientBackupEvent {
 
   @override
   List<Object?> get props => [
-        id, name, sourcePath, targetDirId, strategy,
-        cronExpression, ignoreRules, recursive, enabled,
-      ];
+    id,
+    name,
+    sourcePath,
+    targetDirId,
+    strategy,
+    cronExpression,
+    ignoreRules,
+    recursive,
+    enabled,
+  ];
 }
 
 class ClientBackupDeleteEvent extends ClientBackupEvent {

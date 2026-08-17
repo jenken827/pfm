@@ -37,8 +37,11 @@ class ClientBackupService {
     if (data == null) return [];
     if (data is List) {
       return data
-          .map((e) => ClientBackupConfig.fromJson(
-              Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => ClientBackupConfig.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList();
     }
     return [];
@@ -47,8 +50,7 @@ class ClientBackupService {
   /// 保存所有配置
   Future<void> saveConfigs(List<ClientBackupConfig> configs) async {
     final box = GetIt.I<LocalStorage>().settingsBox;
-    await box.put(
-        _configsKey, configs.map((c) => c.toJson()).toList());
+    await box.put(_configsKey, configs.map((c) => c.toJson()).toList());
   }
 
   /// 添加配置
@@ -93,12 +95,17 @@ class ClientBackupService {
 
     // 1. 扫描本地目录
     final files = await _scanDirectory(config);
-    l.info('ClientBackup: scanned ${files.length} files from ${config.sourcePath}');
+    l.info(
+      'ClientBackup: scanned ${files.length} files from ${config.sourcePath}',
+    );
 
     // 2. 增量判断
     final toBackup = <_BackupCandidate>[];
     for (final file in files) {
-      final record = await storage.getBackupFileRecord(configId, file.relativePath);
+      final record = await storage.getBackupFileRecord(
+        configId,
+        file.relativePath,
+      );
       if (record == null) {
         // 新文件
         toBackup.add(file);
@@ -148,17 +155,16 @@ class ClientBackupService {
 
         // 创建/更新备份文件记录
         final existingRecord = await storage.getBackupFileRecord(
-            configId, candidate.relativePath);
+          configId,
+          candidate.relativePath,
+        );
         if (existingRecord != null) {
-          await storage.updateBackupFileRecord(
-            existingRecord['id'] as String,
-            {
-              'file_size': candidate.fileSize,
-              'modified_at': candidate.modifiedAt,
-              'status': BackupFileStatus.pending.index,
-              'message': null,
-            },
-          );
+          await storage.updateBackupFileRecord(existingRecord['id'] as String, {
+            'file_size': candidate.fileSize,
+            'modified_at': candidate.modifiedAt,
+            'status': BackupFileStatus.pending.index,
+            'message': null,
+          });
         } else {
           await storage.addBackupFileRecord({
             'id': _uuid.v4(),
@@ -176,7 +182,9 @@ class ClientBackupService {
         bgService.scheduleNewUploadTask(uploadTask);
         createdCount++;
       } catch (e) {
-        l.error('ClientBackup: failed to create upload task for ${candidate.relativePath}: $e');
+        l.error(
+          'ClientBackup: failed to create upload task for ${candidate.relativePath}: $e',
+        );
       }
     }
 
@@ -194,14 +202,18 @@ class ClientBackupService {
 
   /// 扫描本地目录
   Future<List<_BackupCandidate>> _scanDirectory(
-      ClientBackupConfig config) async {
+    ClientBackupConfig config,
+  ) async {
     final dir = Directory(config.sourcePath);
     if (!await dir.exists()) return [];
 
     // 解析忽略规则
     List<String> ignorePatterns = [];
     if (config.ignoreRules != null && config.ignoreRules!.isNotEmpty) {
-      ignorePatterns = config.ignoreRules!.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      ignorePatterns = config.ignoreRules!
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .toList();
     }
 
     final results = <_BackupCandidate>[];
@@ -215,12 +227,14 @@ class ClientBackupService {
 
         try {
           final stat = await entity.stat();
-          results.add(_BackupCandidate(
-            relativePath: relativePath,
-            absPath: entity.path,
-            fileSize: stat.size,
-            modifiedAt: stat.modified.millisecondsSinceEpoch ~/ 1000,
-          ));
+          results.add(
+            _BackupCandidate(
+              relativePath: relativePath,
+              absPath: entity.path,
+              fileSize: stat.size,
+              modifiedAt: stat.modified.millisecondsSinceEpoch ~/ 1000,
+            ),
+          );
         } catch (_) {
           // 文件无法访问，跳过
         }
@@ -239,7 +253,8 @@ class ClientBackupService {
       // 简单的通配符匹配
       if (trimmed.contains('*')) {
         final regex = RegExp(
-            trimmed.replaceAll('.', r'\.').replaceAll('*', '.*'));
+          trimmed.replaceAll('.', r'\.').replaceAll('*', '.*'),
+        );
         if (regex.hasMatch(relativePath)) return true;
       } else {
         if (relativePath == trimmed || relativePath.endsWith('/$trimmed')) {

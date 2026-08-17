@@ -29,7 +29,6 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
 
   // 存储空间
   UserSpace? _userSpace;
-  bool _loadingSpace = true;
 
   @override
   void initState() {
@@ -44,10 +43,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     if (mounted && result.success && result.data != null) {
       setState(() {
         _userSpace = result.data!.space;
-        _loadingSpace = false;
       });
-    } else if (mounted) {
-      setState(() => _loadingSpace = false);
     }
   }
 
@@ -64,7 +60,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < PfmConstraints.mobileBreakpoint;
@@ -162,8 +158,8 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     final barColor = ratio > 0.9
         ? PfmColors.error
         : ratio > 0.7
-            ? PfmColors.warning
-            : colorScheme.primary;
+        ? PfmColors.warning
+        : colorScheme.primary;
 
     return Container(
       padding: const EdgeInsets.all(PfmSpacing.lg),
@@ -177,19 +173,20 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.cloud_outlined,
-                  size: 18, color: colorScheme.primary),
+              Icon(Icons.cloud_outlined, size: 18, color: colorScheme.primary),
               const SizedBox(width: PfmSpacing.sm),
               Text(
-                al.home_storageSpace ?? '存储空间',
-                style: PfmTypography.titleSmall
-                    .copyWith(color: colorScheme.onSurface),
+                al.home_storageSpace,
+                style: PfmTypography.titleSmall.copyWith(
+                  color: colorScheme.onSurface,
+                ),
               ),
               const Spacer(),
               Text(
                 '$usedStr / $quotaStr',
-                style: PfmTypography.labelSmall
-                    .copyWith(color: colorScheme.onSurfaceVariant),
+                style: PfmTypography.labelSmall.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -199,8 +196,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
             child: LinearProgressIndicator(
               value: isUnlimited ? 1.0 : ratio,
               minHeight: 8,
-              backgroundColor:
-                  colorScheme.surfaceContainerHighest,
+              backgroundColor: colorScheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(
                 isUnlimited ? colorScheme.primary : barColor,
               ),
@@ -221,49 +217,49 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     final categories = [
       _CategoryItem(
         icon: Icons.image_outlined,
-        label: al.fileType_image ?? '图片',
+        label: al.fileType_image,
         fileType: FileType.IMAGE,
         color: PfmColors.primary,
       ),
       _CategoryItem(
         icon: Icons.video_file_outlined,
-        label: al.fileType_video ?? '视频',
+        label: al.fileType_video,
         fileType: FileType.VIDEO,
         color: PfmColors.warning,
       ),
       _CategoryItem(
         icon: Icons.audio_file_outlined,
-        label: al.fileType_audio ?? '音频',
+        label: al.fileType_audio,
         fileType: FileType.AUDIO,
         color: PfmColors.success,
       ),
       _CategoryItem(
         icon: Icons.description_outlined,
-        label: al.fileType_document ?? '文档',
+        label: al.fileType_document,
         fileType: FileType.DOCUMENT,
         color: PfmColors.info,
       ),
       _CategoryItem(
         icon: Icons.archive_outlined,
-        label: al.fileType_archive ?? '压缩包',
+        label: al.fileType_archive,
         fileType: FileType.ARCHIVE,
         color: PfmColors.error,
       ),
       _CategoryItem(
         icon: Icons.font_download_outlined,
-        label: al.fileType_font ?? '字体',
+        label: al.fileType_font,
         fileType: FileType.FONT,
         color: const Color(0xFF9C27B0), // Purple
       ),
       _CategoryItem(
         icon: Icons.android_outlined,
-        label: al.fileType_application ?? '应用',
+        label: al.fileType_application,
         fileType: FileType.APPLICATION,
         color: const Color(0xFF607D8B), // Blue Grey
       ),
       _CategoryItem(
         icon: Icons.folder_outlined,
-        label: al.home_allFiles ?? '全部文件',
+        label: al.home_allFiles,
         fileType: FileType.FILE_TYPE_UNKNOWN,
         color: colorScheme.onSurfaceVariant,
       ),
@@ -314,11 +310,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
                   color: category.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(PfmRadius.md),
                 ),
-                child: Icon(
-                  category.icon,
-                  size: 28,
-                  color: category.color,
-                ),
+                child: Icon(category.icon, size: 28, color: category.color),
               ),
               const SizedBox(height: PfmSpacing.md),
               Text(
@@ -360,8 +352,8 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         _loadingRecent
             ? const Center(child: CircularProgressIndicator())
             : _recentFiles.isEmpty
-                ? _buildEmptyRecentFiles(context, al, colorScheme)
-                : _buildRecentFilesList(context, al, colorScheme),
+            ? _buildEmptyRecentFiles(context, al, colorScheme)
+            : _buildRecentFilesList(context, al, colorScheme),
       ],
     );
   }
@@ -381,11 +373,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
       child: Center(
         child: Column(
           children: [
-            Icon(
-              Icons.history,
-              size: 48,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            Icon(Icons.history, size: 48, color: colorScheme.onSurfaceVariant),
             const SizedBox(height: PfmSpacing.md),
             Text(
               al.home_noRecentFiles,
@@ -415,10 +403,8 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _recentFiles.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          color: colorScheme.outlineVariant,
-        ),
+        separatorBuilder: (context, index) =>
+            Divider(height: 1, color: colorScheme.outlineVariant),
         itemBuilder: (context, index) {
           final file = _recentFiles[index];
           return _buildRecentFileTile(context, al, colorScheme, file);
@@ -437,7 +423,6 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     final fileName = file['fileName'] as String? ?? '';
     final fileSize = file['fileSize'] as int? ?? 0;
     final fileType = file['fileType'] as int? ?? 0;
-    final fileId = file['fileId'] as String? ?? '';
 
     return ListTile(
       leading: Container(
@@ -465,10 +450,7 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
           color: colorScheme.onSurfaceVariant,
         ),
       ),
-      trailing: Icon(
-        Icons.chevron_right,
-        color: colorScheme.onSurfaceVariant,
-      ),
+      trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
       onTap: () => _onRecentFileTap(context, file, fileType),
     );
   }
@@ -511,7 +493,8 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
 
   /// 导航到文件详情或预览
   void _navigateToFile(BuildContext context, File protoFile) {
-    final isPreviewable = protoFile.type == FileType.IMAGE ||
+    final isPreviewable =
+        protoFile.type == FileType.IMAGE ||
         protoFile.type == FileType.VIDEO ||
         protoFile.type == FileType.AUDIO ||
         protoFile.type == FileType.DOCUMENT;
@@ -519,28 +502,6 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
       context.push('/files/preview', extra: protoFile);
     } else {
       context.push('/files/detail', extra: protoFile);
-    }
-  }
-
-  /// 获取文件类型图标（String 版本）
-  IconData _getFileTypeIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'image':
-        return Icons.image;
-      case 'video':
-        return Icons.video_file;
-      case 'audio':
-        return Icons.audio_file;
-      case 'document':
-        return Icons.description;
-      case 'archive':
-        return Icons.archive;
-      case 'font':
-        return Icons.font_download;
-      case 'application':
-        return Icons.android;
-      default:
-        return Icons.insert_drive_file;
     }
   }
 
@@ -582,28 +543,6 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
       case 6:
         return const Color(0xFF9C27B0);
       case 7:
-        return const Color(0xFF607D8B);
-      default:
-        return PfmColors.primary;
-    }
-  }
-
-  /// 获取文件类型颜色
-  Color _getFileTypeColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'image':
-        return PfmColors.primary;
-      case 'video':
-        return PfmColors.warning;
-      case 'audio':
-        return PfmColors.success;
-      case 'document':
-        return PfmColors.info;
-      case 'archive':
-        return PfmColors.error;
-      case 'font':
-        return const Color(0xFF9C27B0);
-      case 'application':
         return const Color(0xFF607D8B);
       default:
         return PfmColors.primary;

@@ -474,7 +474,7 @@ func batchDeleteFromProvider(
 		return
 	}
 
-	results, err := batchDeleter.BatchDelete(ctx, locations)
+	results, err := batchDeleter.BatchDelete(ctx, types.FileRefsFromLocations(locations))
 
 	// 全部成功
 	if results == nil && err == nil {
@@ -999,6 +999,7 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 		ChunkSize:         utils.Uint64Ptr(0),
 		TempPath:          utils.StringPtr(""), // Will be filled by dispatcher
 		Status:            utils.Int32Ptr(int32(native.LocationStatus_PPENDING)),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TargetProviderIds: utils.StringPtr(string(providerIDsJSON)), // JSON array like [1,3,5]
 		TaskType:          utils.Int32Ptr(int32(native.UploadTaskType_SYNC)),
 	}
@@ -1108,7 +1109,7 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 	llog.L().Infof("GetFilesByType: user=%s, totalFiles=%d", userID, len(allFiles))
 	for _, f := range allFiles {
 		if f.ParentId == nil {
-			llog.L().Infof("GetFilesByType: skip file %s (no parent)", f.Name)
+			llog.L().Infof("GetFilesByType: skip file %s (no parent)", *f.Name)
 			continue
 		}
 		allowed := checkFilePermission(ctx, *f.ParentId, PermRead)

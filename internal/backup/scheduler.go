@@ -303,7 +303,7 @@ func (s *BackupScheduler) consumeRegisters() {
 
 // registerFile 注册文件（核心逻辑）
 // 备份文件统一通过 storage.Dispatch 上传到目标目录绑定的所有存储提供者
-// 无论是 local、123pan 还是 telegram，都通过各自驱动的 Upload 方法物理写入文件
+// 无论是 local 还是 telegram，都通过各自驱动的 Upload 方法物理写入文件
 func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 	ctx := context.Background()
 	task := item.Task
@@ -399,6 +399,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		TempPath:          &candidate.AbsPath,            // 源文件路径作为临时文件路径
 		OverwriteId:       utils.StringPtr(""),           // 空字符串表示不覆盖
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TargetProviderIds: &targetProviderIds,             // 从 UserSpace 获取的 provider
 		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP), // 自动备份任务
 	}

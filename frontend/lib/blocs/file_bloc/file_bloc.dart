@@ -76,7 +76,9 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     Emitter<FileState> emit,
   ) async {
     // 同时刷新文件列表和存储提供者列表
-    add(FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName));
+    add(
+      FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName),
+    );
     add(const FileLoadStorageProvidersEvent());
   }
 
@@ -246,11 +248,15 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     if (keyword.isEmpty) {
       // 清空搜索，恢复到当前目录的文件列表
       emit(state.copyWith(searchKeyword: ''));
-      add(FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName));
+      add(
+        FileListEvent(dirId: state.currentDirId, dirName: state.currentDirName),
+      );
       return;
     }
 
-    emit(state.copyWith(status: FileStateStatus.loading, searchKeyword: keyword));
+    emit(
+      state.copyWith(status: FileStateStatus.loading, searchKeyword: keyword),
+    );
 
     final searchType = event.isTagSearch ? SearchType.TAG : SearchType.NAME;
     final resp = await fmRepository.searchFiles(
@@ -258,21 +264,25 @@ class FileBloc extends Bloc<FileEvent, FileState> {
       searchType: searchType,
     );
     if (!resp.success || resp.data == null) {
-      emit(state.copyWith(
-        status: FileStateStatus.failure,
-        msg: resp.message ?? '搜索失败',
-      ));
+      emit(
+        state.copyWith(
+          status: FileStateStatus.failure,
+          msg: resp.message ?? '搜索失败',
+        ),
+      );
       return;
     }
 
     final result = resp.data!;
-    emit(state.copyWith(
-      status: FileStateStatus.success,
-      files: result.files,
-      total: result.total,
-      hasMore: result.hasMore,
-      offset: result.files.length,
-    ));
+    emit(
+      state.copyWith(
+        status: FileStateStatus.success,
+        files: result.files,
+        total: result.total,
+        hasMore: result.hasMore,
+        offset: result.files.length,
+      ),
+    );
   }
 
   /// 加载存储提供者列表

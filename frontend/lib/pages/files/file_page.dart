@@ -104,8 +104,7 @@ class _FileViewState extends State<_FileView> {
               ),
             );
           }
-          if (_shouldRestoreScroll &&
-              state.status == FileStateStatus.success) {
+          if (_shouldRestoreScroll && state.status == FileStateStatus.success) {
             _shouldRestoreScroll = false;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_scrollController.hasClients) {
@@ -143,7 +142,7 @@ class _FileViewState extends State<_FileView> {
 
   /// Clean Minimal 风格工具栏
   Widget _buildToolbar(BuildContext context, FileState state, bool isMobile) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (state.isSelectMode) {
@@ -154,9 +153,7 @@ class _FileViewState extends State<_FileView> {
         ),
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          border: Border(
-            bottom: BorderSide(color: colorScheme.outlineVariant),
-          ),
+          border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
         ),
         child: Row(
           children: [
@@ -193,9 +190,7 @@ class _FileViewState extends State<_FileView> {
       ),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -205,9 +200,9 @@ class _FileViewState extends State<_FileView> {
               icon: const Icon(Icons.arrow_back, size: 20),
               onPressed: () {
                 final parent = state.breadcrumbs[state.breadcrumbs.length - 2];
-                context
-                    .read<FileBloc>()
-                    .add(FileNavigateEvent(parent.id, parent.name));
+                context.read<FileBloc>().add(
+                  FileNavigateEvent(parent.id, parent.name),
+                );
               },
               visualDensity: VisualDensity.compact,
             ),
@@ -244,8 +239,9 @@ class _FileViewState extends State<_FileView> {
               size: 20,
               color: colorScheme.onSurfaceVariant,
             ),
-            onPressed: () =>
-                context.read<FileBloc>().add(FileViewModeEvent(!state.isGridView)),
+            onPressed: () => context.read<FileBloc>().add(
+              FileViewModeEvent(!state.isGridView),
+            ),
             tooltip: state.isGridView ? al.file_listView : al.file_gridView,
             visualDensity: VisualDensity.compact,
           ),
@@ -262,8 +258,11 @@ class _FileViewState extends State<_FileView> {
                 value: 'trash',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline,
-                        size: 18, color: colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: PfmSpacing.md),
                     Text(al.file_recycleBin),
                   ],
@@ -301,7 +300,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   Widget _buildContent(BuildContext context, FileState state, bool isMobile) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     // 首次加载
@@ -416,9 +415,7 @@ class _FileViewState extends State<_FileView> {
       ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -444,9 +441,9 @@ class _FileViewState extends State<_FileView> {
                       isLast: i == state.breadcrumbs.length - 1,
                       onTap: () {
                         final crumb = state.breadcrumbs[i];
-                        context
-                            .read<FileBloc>()
-                            .add(FileNavigateEvent(crumb.id, crumb.name));
+                        context.read<FileBloc>().add(
+                          FileNavigateEvent(crumb.id, crumb.name),
+                        );
                       },
                     ),
                   ],
@@ -530,8 +527,7 @@ class _FileViewState extends State<_FileView> {
     );
   }
 
-  Widget _buildGridView(
-      BuildContext context, FileState state, bool isMobile) {
+  Widget _buildGridView(BuildContext context, FileState state, bool isMobile) {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is ScrollEndNotification &&
@@ -599,7 +595,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   Widget? _buildFab(BuildContext context, FileState state) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (state.isSelectMode) {
@@ -705,7 +701,7 @@ class _FileViewState extends State<_FileView> {
   String? _getThumbnailUrl(String fileId) {
     final ls = GetIt.I.get<LocalStorage>();
     final baseUrl = ls.downloadBaseUrl;
-    if (baseUrl == null || baseUrl.isEmpty) return null;
+    if (baseUrl.isEmpty) return null;
     return '$baseUrl/api/file/stream/preview?file_id=$fileId&size=small';
   }
 
@@ -749,9 +745,7 @@ class _FileViewState extends State<_FileView> {
             file.type == pbenum.FileType.ARCHIVE) {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => FlyfishViewerPage(file: file),
-            ),
+            MaterialPageRoute(builder: (_) => FlyfishViewerPage(file: file)),
           );
         } else {
           context.push(FileDetailRoute().location, extra: file);
@@ -822,16 +816,14 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   void _showFileMenu(BuildContext context, File file) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final isFolder = file.type == pbenum.FileType.FOLDER;
 
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(PfmRadius.xl),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -926,7 +918,10 @@ class _FileViewState extends State<_FileView> {
   }
 
   Future<void> _copyShareLink(
-      BuildContext context, File file, AppLocalizations al) async {
+    BuildContext context,
+    File file,
+    AppLocalizations al,
+  ) async {
     try {
       final fmRepo = context.read<FmRepository>();
       final result = await fmRepo.createShareLink(fileId: file.id);
@@ -934,9 +929,9 @@ class _FileViewState extends State<_FileView> {
         final url = result.data!.shareUrl;
         await Clipboard.setData(ClipboardData(text: url));
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(al.file_linkCopied)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(al.file_linkCopied)));
         }
       } else {
         if (context.mounted) {
@@ -951,9 +946,9 @@ class _FileViewState extends State<_FileView> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${al.file_getLinkFailed}: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${al.file_getLinkFailed}: $e')));
       }
     }
   }
@@ -963,7 +958,7 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   Future<void> _downloadFile(BuildContext context, File file) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final downloadDir = await getDownloadsDirectory();
       if (downloadDir == null) return;
@@ -997,7 +992,7 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   void _showFabMenu(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1011,17 +1006,26 @@ class _FileViewState extends State<_FileView> {
             PfmDialogs.menuItem(
               icon: Icons.create_new_folder_outlined,
               title: al.file_newFolder,
-              onTap: () { Navigator.pop(ctx); _showCreateDirDialog(context); },
+              onTap: () {
+                Navigator.pop(ctx);
+                _showCreateDirDialog(context);
+              },
             ),
             PfmDialogs.menuItem(
               icon: Icons.upload_file_outlined,
               title: al.file_uploadFile,
-              onTap: () { Navigator.pop(ctx); _pickAndUploadFiles(context); },
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUploadFiles(context);
+              },
             ),
             PfmDialogs.menuItem(
               icon: Icons.folder_outlined,
               title: al.file_uploadFolder,
-              onTap: () { Navigator.pop(ctx); _pickAndUploadFolder(context); },
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUploadFolder(context);
+              },
             ),
             const SizedBox(height: PfmSpacing.md),
           ],
@@ -1035,7 +1039,7 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   Future<void> _pickAndUploadFiles(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final tagsController = TextEditingController();
     bool overwrite = false;
 
@@ -1125,7 +1129,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   Future<void> _pickAndUploadFolder(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     try {
       final result = await FilePicker.platform.getDirectoryPath();
 
@@ -1149,9 +1153,9 @@ class _FileViewState extends State<_FileView> {
 
           if (context.mounted) {
             Navigator.of(context, rootNavigator: true).pop();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(al.file_folderUploadAdded)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(al.file_folderUploadAdded)));
           }
         } catch (e) {
           if (context.mounted) {
@@ -1238,6 +1242,7 @@ class _FileViewState extends State<_FileView> {
     for (final subDir in subDirs) {
       if (!context.mounted) return;
       await Future.delayed(const Duration(milliseconds: 350));
+      if (!context.mounted) return;
       await _uploadFolder(
         context: context,
         folderPath: subDir,
@@ -1289,15 +1294,13 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   void _showBatchActionMenu(BuildContext context, FileState state) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(PfmRadius.xl),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PfmRadius.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -1360,7 +1363,7 @@ class _FileViewState extends State<_FileView> {
   // ============================================================
 
   void _showCreateDirDialog(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final nameController = TextEditingController();
     final maxHistoriesController = TextEditingController();
     bool enableEncryption = false;
@@ -1449,7 +1452,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showRenameDialog(BuildContext context, File file) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final controller = TextEditingController(text: file.name);
     showDialog(
       context: context,
@@ -1482,7 +1485,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showTagsDialog(BuildContext context, File file) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final fmRepo = context.read<FmRepository>();
     final tagsResult = await fmRepo.getFileTags(fileId: file.id);
 
@@ -1502,15 +1505,14 @@ class _FileViewState extends State<_FileView> {
 
     final controller = TextEditingController(text: currentTags.join(','));
 
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(al.file_editTags),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(
-            hintText: al.file_tagInputHint,
-          ),
+          decoration: InputDecoration(hintText: al.file_tagInputHint),
           autofocus: true,
         ),
         actions: [
@@ -1543,14 +1545,15 @@ class _FileViewState extends State<_FileView> {
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content:
-                          Text('${al.file_tagUpdateFailed}: ${result.message}'),
+                      content: Text(
+                        '${al.file_tagUpdateFailed}: ${result.message}',
+                      ),
                     ),
                   );
                 }
               }
 
-              Navigator.pop(ctx);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             child: Text(al.common_save),
           ),
@@ -1572,7 +1575,7 @@ class _FileViewState extends State<_FileView> {
   }
 
   void _showDeleteConfirm(BuildContext context, List<String> ids) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final confirmed = await PfmDialogs.confirm(
       context,
       title: al.file_confirmDelete,
@@ -1585,9 +1588,8 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  Future<void> _showMoveDialog(
-      BuildContext context, List<File> files) async {
-    final al = AppLocalizations.of(context)!;
+  Future<void> _showMoveDialog(BuildContext context, List<File> files) async {
+    final al = AppLocalizations.of(context);
     final fileIds = files.map((f) => f.id).toList();
 
     final pickResult = await context.push<FolderPickResult>(
@@ -1669,9 +1671,7 @@ class _BreadcrumbItem extends StatelessWidget {
         child: Text(
           name,
           style: PfmTypography.labelMedium.copyWith(
-            color: isLast
-                ? colorScheme.primary
-                : colorScheme.onSurfaceVariant,
+            color: isLast ? colorScheme.primary : colorScheme.onSurfaceVariant,
             fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
@@ -1712,9 +1712,7 @@ class _MenuTile extends StatelessWidget {
             const SizedBox(width: PfmSpacing.lg),
             Text(
               title,
-              style: PfmTypography.bodyLarge.copyWith(
-                color: effectiveColor,
-              ),
+              style: PfmTypography.bodyLarge.copyWith(color: effectiveColor),
             ),
           ],
         ),
@@ -1732,12 +1730,13 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   List<Widget> buildActions(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return [
       IconButton(
         icon: Icon(_isTagSearch ? Icons.label : Icons.search, size: 20),
-        tooltip:
-            _isTagSearch ? al.file_searchToggleFilename : al.file_searchToggleTag,
+        tooltip: _isTagSearch
+            ? al.file_searchToggleFilename
+            : al.file_searchToggleTag,
         onPressed: () {
           _isTagSearch = !_isTagSearch;
           showResults(context);
@@ -1766,7 +1765,7 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (query.trim().isEmpty) {
@@ -1789,9 +1788,7 @@ class _FileSearchDelegate extends SearchDelegate<String> {
           return const Center(child: CircularProgressIndicator());
         }
         if (state.status == FileStateStatus.failure) {
-          return Center(
-            child: Text('${al.file_searchFailed}: ${state.msg}'),
-          );
+          return Center(child: Text('${al.file_searchFailed}: ${state.msg}'));
         }
         if (state.files.isEmpty) {
           return Center(
@@ -1822,10 +1819,8 @@ class _FileSearchDelegate extends SearchDelegate<String> {
             final fileName = file.hasName() ? file.name : al.file_unknownFile;
             final fileSize = file.hasSize() ? file.size.toInt() : 0;
             final fileId = file.hasId() ? file.id : '';
-            final iconData =
-                _FileViewState._getFileIconData(file.type);
-            final iconColors =
-                _FileViewState._getFileIconColors(file.type);
+            final iconData = _FileViewState._getFileIconData(file.type);
+            final iconColors = _FileViewState._getFileIconColors(file.type);
 
             return Padding(
               padding: const EdgeInsets.symmetric(
@@ -1849,7 +1844,7 @@ class _FileSearchDelegate extends SearchDelegate<String> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (query.trim().isEmpty) {

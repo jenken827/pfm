@@ -85,12 +85,14 @@ class TransferStorage {
     return UploadTaskRecord.fromJson(Map<String, dynamic>.from(raw));
   }
 
-  Future<List<UploadTaskRecord>> getAllUploadTasksAsync(
-      {int limit = 100}) async {
-    final all = _uploadBox.values
-        .map((m) => UploadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  Future<List<UploadTaskRecord>> getAllUploadTasksAsync({
+    int limit = 100,
+  }) async {
+    final all =
+        _uploadBox.values
+            .map((m) => UploadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return all.take(limit).toList();
   }
 
@@ -99,11 +101,12 @@ class TransferStorage {
     int limit = 100,
     int offset = 0,
   }) async {
-    final filtered = _uploadBox.values
-        .map((m) => UploadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
-        .where((t) => t.status == status)
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final filtered =
+        _uploadBox.values
+            .map((m) => UploadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
+            .where((t) => t.status == status)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (offset > 0) filtered.removeRange(0, offset.clamp(0, filtered.length));
     return filtered.take(limit).toList();
   }
@@ -111,7 +114,7 @@ class TransferStorage {
   Future<Map<String, int>> countAllUploadTasks() async {
     int uploading = 0, pending = 0, completed = 0, failed = 0;
     for (final raw in _uploadBox.values) {
-      final s = (raw as Map)['status'] as int? ?? 0;
+      final s = (raw)['status'] as int? ?? 0;
       if (s == UploadStatus.UPLOADING.value ||
           s == UploadStatus.HASHING.value) {
         uploading++;
@@ -175,7 +178,7 @@ class TransferStorage {
     for (final key in _uploadBox.keys) {
       final raw = _uploadBox.get(key);
       if (raw == null) continue;
-      final s = (raw as Map)['status'] as int? ?? 0;
+      final s = (raw)['status'] as int? ?? 0;
       if (s == UploadStatus.COMPLETED.value) {
         keysToDelete.add(key);
       }
@@ -188,9 +191,8 @@ class TransferStorage {
     for (final key in _uploadBox.keys) {
       final raw = _uploadBox.get(key);
       if (raw == null) continue;
-      final s = (raw as Map)['status'] as int? ?? 0;
-      if (s == UploadStatus.FAILED.value ||
-          s == UploadStatus.CANCELED.value) {
+      final s = (raw)['status'] as int? ?? 0;
+      if (s == UploadStatus.FAILED.value || s == UploadStatus.CANCELED.value) {
         keysToDelete.add(key);
       }
     }
@@ -300,7 +302,9 @@ class TransferStorage {
             s == DownloadStatus.downloading.index ||
             s == DownloadStatus.paused.index ||
             s == DownloadStatus.predownload.index) {
-          getLogger().info('Download task already exists for file ${task.fileId}, skip');
+          getLogger().info(
+            'Download task already exists for file ${task.fileId}, skip',
+          );
           return;
         }
         // 已完成的任务也跳过，避免重复下载
@@ -348,7 +352,8 @@ class TransferStorage {
   }
 
   Future<DownloadTaskRecord?> getUncompletedDownloadTaskByFileId(
-      String fileId) async {
+    String fileId,
+  ) async {
     for (final raw in _downloadBox.values) {
       final m = Map<String, dynamic>.from(raw);
       if (m['file_id'] == fileId) {
@@ -364,12 +369,16 @@ class TransferStorage {
     return null;
   }
 
-  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync(
-      {int limit = 100}) async {
-    final all = _downloadBox.values
-        .map((m) => DownloadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync({
+    int limit = 100,
+  }) async {
+    final all =
+        _downloadBox.values
+            .map(
+              (m) => DownloadTaskRecord.fromJson(Map<String, dynamic>.from(m)),
+            )
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return all.take(limit).toList();
   }
 
@@ -378,11 +387,14 @@ class TransferStorage {
     int limit = 100,
     int offset = 0,
   }) async {
-    final filtered = _downloadBox.values
-        .map((m) => DownloadTaskRecord.fromJson(Map<String, dynamic>.from(m)))
-        .where((t) => t.status == status)
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final filtered =
+        _downloadBox.values
+            .map(
+              (m) => DownloadTaskRecord.fromJson(Map<String, dynamic>.from(m)),
+            )
+            .where((t) => t.status == status)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (offset > 0) filtered.removeRange(0, offset.clamp(0, filtered.length));
     return filtered.take(limit).toList();
   }
@@ -391,7 +403,7 @@ class TransferStorage {
   Future<int> countDownloadTasksByStatus(DownloadStatus status) async {
     int count = 0;
     for (final raw in _downloadBox.values) {
-      final s = (raw as Map)['status'] as int? ?? 0;
+      final s = (raw)['status'] as int? ?? 0;
       if (s == status.index) {
         count++;
       }
@@ -441,7 +453,7 @@ class TransferStorage {
     for (final key in _downloadBox.keys) {
       final raw = _downloadBox.get(key);
       if (raw == null) continue;
-      final s = (raw as Map)['status'] as int? ?? 0;
+      final s = (raw)['status'] as int? ?? 0;
       if (s == DownloadStatus.completed.index) {
         keysToDelete.add(key);
       }

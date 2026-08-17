@@ -2,23 +2,6 @@
 
 set -e
 
-# ============================================================
-# 代理配置（如需代理，取消注释并修改）
-# ============================================================
-
-# HTTP 代理
-export HTTP_PROXY=http://127.0.0.1:10809
-export HTTPS_PROXY=http://127.0.0.1:10809
-export ALL_PROXY=socks5://127.0.0.1:10809
-
-# 如果环境变量中已设置代理，则使用之
-if [ -n "$HTTP_PROXY" ]; then
-    echo "📌 使用 HTTP 代理: $HTTP_PROXY"
-fi
-if [ -n "$HTTPS_PROXY" ]; then
-    echo "📌 使用 HTTPS 代理: $HTTPS_PROXY"
-fi
-
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -159,14 +142,15 @@ update_build_number() {
     NEW_VERSION="$CURRENT_VERSION+$CURRENT_DATE"
 
     # 使用适当的sed命令进行替换
+    # 用 -E (ERE) 标准量词,避免 BRE 的 \( 后跟 \+ 在部分 sed 实现上行为未定义
     if [[ "$OSTYPE" == "darwin"* ]]; then
         if [[ "$SED_CMD" == "gsed" ]]; then
-            $SED_CMD -i "s/version: $CURRENT_VERSION\(\+[0-9a-zA-Z_\.+-]*\)\?/version: $NEW_VERSION/" pubspec.yaml
+            $SED_CMD -i -E "s/^version: [0-9]+\.[0-9]+\.[0-9]+(\+[0-9a-zA-Z_.+-]+)?$/version: $NEW_VERSION/" pubspec.yaml
         else
-            $SED_CMD -i '' "s/version: $CURRENT_VERSION\(\+[0-9a-zA-Z_\.+-]*\)\?/version: $NEW_VERSION/" pubspec.yaml
+            $SED_CMD -i '' -E "s/^version: [0-9]+\.[0-9]+\.[0-9]+(\+[0-9a-zA-Z_.+-]+)?$/version: $NEW_VERSION/" pubspec.yaml
         fi
     else
-        $SED_CMD -i "s/version: $CURRENT_VERSION\(\+[0-9a-zA-Z_\.+-]*\)\?/version: $NEW_VERSION/" pubspec.yaml
+        $SED_CMD -i -E "s/^version: [0-9]+\.[0-9]+\.[0-9]+(\+[0-9a-zA-Z_.+-]+)?$/version: $NEW_VERSION/" pubspec.yaml
     fi
 
     # 验证更新是否成功
@@ -197,26 +181,30 @@ replace_commit_hash_in_about() {
         echo "⚠️  警告: about页面文件未找到: $ABOUT_FILE"
         return 0
     fi
-    
+
     # 获取当前commit hash的前8位
     COMMIT_HASH=$(git rev-parse --short=8 HEAD)
-    
+    # 获取构建日期(YYYYMMDD),注入 about 页面构建号
+    BUILD_DATE=$(date +%Y%m%d)
+
     # 备份about页面文件
     cp "$ABOUT_FILE" "$ABOUT_FILE.backup"
     echo "✅ 已备份about页面文件"
-    
-    # 替换{{commit-hash}}占位符
+
+    # 替换{{commit-hash}}和{{build-number}}占位符
+    # 注:不直接用 PackageInfo.buildNumber --split-per-abi 会把它 override 为
+    # abiIndex*1000+base(如 20262817),日期语义丢失,故构建时注入真实日期
     if [[ "$OSTYPE" == "darwin"* ]]; then
         if command -v gsed &> /dev/null; then
-            gsed -i "s/{{commit-hash}}/$COMMIT_HASH/g" "$ABOUT_FILE"
+            gsed -i -e "s/{{commit-hash}}/$COMMIT_HASH/g" -e "s/{{build-number}}/$BUILD_DATE/g" "$ABOUT_FILE"
         else
-            sed -i '' "s/{{commit-hash}}/$COMMIT_HASH/g" "$ABOUT_FILE"
+            sed -i '' -e "s/{{commit-hash}}/$COMMIT_HASH/g" -e "s/{{build-number}}/$BUILD_DATE/g" "$ABOUT_FILE"
         fi
     else
-        sed -i "s/{{commit-hash}}/$COMMIT_HASH/g" "$ABOUT_FILE"
+        sed -i -e "s/{{commit-hash}}/$COMMIT_HASH/g" -e "s/{{build-number}}/$BUILD_DATE/g" "$ABOUT_FILE"
     fi
-    
-    echo "✅ About页面中的commit hash已替换为: $COMMIT_HASH"
+
+    echo "✅ About页面中的commit hash已替换为: $COMMIT_HASH, 构建日期: $BUILD_DATE"
 }
 
 # 恢复about页面中的commit hash占位符
@@ -308,6 +296,9 @@ run_flutter_build() {
 # - 下载到 .sqlite3-cache（持久化，flutter clean 不会清除）
 # - 构建时如果 hook 目录不存在，先触发一次失败构建创建目录，再复制文件
 ensure_sqlite3_libs() {
+    # 暂不需要预先缓存 sqlite3 原生库，已屏蔽（如需恢复，删除下面这行 return 0）
+    return 0
+
     # 检查项目是否依赖 sqlite3
     if ! grep -q "sqlite3:" pubspec.yaml 2>/dev/null; then
         return 0  # 不依赖 sqlite3，跳过
@@ -335,7 +326,7 @@ ensure_sqlite3_libs() {
         if [ ! -f "$cache_file" ]; then
             echo "📥 下载 ${ARCH_FILES[$arch]}..."
             mkdir -p "$PERSISTENT_CACHE"
-            curl -x "$HTTP_PROXY" -sL -o "$cache_file" "$BASE_URL/${ARCH_FILES[$arch]}"
+            curl -sL -o "$cache_file" "$BASE_URL/${ARCH_FILES[$arch]}"
             if [ -f "$cache_file" ]; then
                 echo "✅ $arch 下载完成"
             else
@@ -350,7 +341,7 @@ ensure_sqlite3_libs() {
     if [ ! -f "$win_cache" ]; then
         echo "📥 下载 $WINDOWS_DLL..."
         mkdir -p "$PERSISTENT_CACHE"
-        curl -x "$HTTP_PROXY" -sL -o "$win_cache" "$BASE_URL/$WINDOWS_DLL"
+        curl -sL -o "$win_cache" "$BASE_URL/$WINDOWS_DLL"
         if [ -f "$win_cache" ]; then
             echo "✅ Windows DLL 下载完成"
         else
@@ -475,13 +466,6 @@ build_android_apk() {
     
     # 执行构建（使用 ABI 拆分减小体积）
     # sqlite3 hook 首次可能因网络超时失败（~10秒），自动重试即可
-    # 设置代理环境变量（确保 Dart hook 进程能继承）
-    export http_proxy="$HTTP_PROXY"
-    export https_proxy="$HTTPS_PROXY"
-    export HTTP_PROXY="$HTTP_PROXY"
-    export HTTPS_PROXY="$HTTPS_PROXY"
-
-
     # 预先运行 pub get 创建 hook 目录
     puro flutter pub get
 

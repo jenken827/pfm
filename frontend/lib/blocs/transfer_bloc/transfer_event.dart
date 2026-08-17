@@ -36,7 +36,9 @@ class TransferAddUploadEvent extends TransferEvent {
 
 // 批量新增上传任务（只创建记录，不逐个调度 WorkManager）
 class TransferAddBatchUploadEvent extends TransferEvent {
-  TransferAddBatchUploadEvent(this.files, this.parentId, {
+  TransferAddBatchUploadEvent(
+    this.files,
+    this.parentId, {
     this.tags,
     this.overwrite = false,
   });
@@ -87,6 +89,7 @@ class TransferAddDownloadEvent extends TransferEvent {
   final int fileSize;
   final String savePath;
   final String? fileHash;
+
   /// 指定下载的存储提供者 ID（可选，为空则由后端自动选择最优提供者）
   final int? providerId;
 }

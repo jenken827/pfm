@@ -11,7 +11,7 @@ class ThemeSettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final ls = GetIt.I.get<LocalStorage>();
     final theme = Theme.of(context);
 
@@ -35,13 +35,23 @@ class ThemeSettingPage extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                 ),
                 const SizedBox(width: PfmSpacing.sm),
-                Text(al.theme_title, style: PfmTypography.titleLarge.copyWith(color: colorScheme.onSurface)),
+                Text(
+                  al.theme_title,
+                  style: PfmTypography.titleLarge.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: PfmSpacing.xxxl),
 
             // 主题模式
-            Text(al.theme_mode, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+            Text(
+              al.theme_mode,
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: PfmSpacing.md),
             Card(
               child: RadioGroup<ThemeMode>(
@@ -55,18 +65,36 @@ class ThemeSettingPage extends StatelessWidget {
                 child: Column(
                   children: [
                     RadioListTile<ThemeMode>(
-                      title: Text(al.theme_light, style: TextStyle(color: colorScheme.onSurface)),
-                      subtitle: Text(al.theme_lightDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      title: Text(
+                        al.theme_light,
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      subtitle: Text(
+                        al.theme_lightDesc,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
                       value: ThemeMode.light,
                     ),
                     RadioListTile<ThemeMode>(
-                      title: Text(al.theme_dark, style: TextStyle(color: colorScheme.onSurface)),
-                      subtitle: Text(al.theme_darkDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      title: Text(
+                        al.theme_dark,
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      subtitle: Text(
+                        al.theme_darkDesc,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
                       value: ThemeMode.dark,
                     ),
                     RadioListTile<ThemeMode>(
-                      title: Text(al.theme_system, style: TextStyle(color: colorScheme.onSurface)),
-                      subtitle: Text(al.theme_systemDesc, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      title: Text(
+                        al.theme_system,
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      subtitle: Text(
+                        al.theme_systemDesc,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
                       value: ThemeMode.system,
                     ),
                   ],
@@ -77,7 +105,12 @@ class ThemeSettingPage extends StatelessWidget {
             const SizedBox(height: PfmSpacing.xxxl),
 
             // 主题颜色
-            Text(al.theme_color, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+            Text(
+              al.theme_color,
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: PfmSpacing.md),
             _ThemeColorGrid(currentColor: ls.currentThemeName),
           ],
@@ -103,36 +136,36 @@ class _ThemeColorGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Wrap(
-        spacing: PfmSpacing.md,
-        runSpacing: PfmSpacing.md,
-        children: _colors.map((option) {
-          final isSelected = currentColor == option.name;
-          // 生成该主题方案的预览颜色
-          final previewColor = FlexThemeData.light(
-            scheme: option.color,
-          ).colorScheme.primary;
-          return GestureDetector(
-            onTap: () async {
-              final ls = GetIt.I.get<LocalStorage>();
-              final tl = ls.themeLanguage.copyWith(themeName: option.name);
-              await ls.saveThemeLanguage(tl);
-            },
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: previewColor,
-                borderRadius: BorderRadius.circular(PfmRadius.lg),
-                border: isSelected
-                    ? Border.all(color: theme.colorScheme.primary, width: 3)
-                    : null,
-              ),
-              child: isSelected
-                  ? const Icon(Icons.check, color: Colors.white, size: 20)
+      spacing: PfmSpacing.md,
+      runSpacing: PfmSpacing.md,
+      children: _colors.map((option) {
+        final isSelected = currentColor == option.name;
+        // 生成该主题方案的预览颜色
+        final previewColor = FlexThemeData.light(
+          scheme: option.color,
+        ).colorScheme.primary;
+        return GestureDetector(
+          onTap: () async {
+            final ls = GetIt.I.get<LocalStorage>();
+            final tl = ls.themeLanguage.copyWith(themeName: option.name);
+            await ls.saveThemeLanguage(tl);
+          },
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: previewColor,
+              borderRadius: BorderRadius.circular(PfmRadius.lg),
+              border: isSelected
+                  ? Border.all(color: theme.colorScheme.primary, width: 3)
                   : null,
             ),
-          );
-        }).toList(),
+            child: isSelected
+                ? const Icon(Icons.check, color: Colors.white, size: 20)
+                : null,
+          ),
+        );
+      }).toList(),
     );
   }
 }

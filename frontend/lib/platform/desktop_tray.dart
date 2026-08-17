@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -64,15 +63,9 @@ class DesktopTray implements TrayListener {
   Future<void> _setContextMenu() async {
     final menu = Menu(
       items: [
-        MenuItem(
-          key: 'show_window',
-          label: '显示主窗口',
-        ),
+        MenuItem(key: 'show_window', label: '显示主窗口'),
         MenuItem.separator(),
-        MenuItem(
-          key: 'exit',
-          label: '退出',
-        ),
+        MenuItem(key: 'exit', label: '退出'),
       ],
     );
     await trayManager.setContextMenu(menu);
@@ -128,14 +121,15 @@ class DesktopTray implements TrayListener {
       case 'exit':
         // 清理锁文件
         try {
-          final lockFile = File('${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock');
+          final lockFile = File(
+            '${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock',
+          );
           if (lockFile.existsSync()) {
             lockFile.deleteSync();
           }
         } catch (_) {}
         await destroy();
         exit(0);
-        break;
     }
   }
 }

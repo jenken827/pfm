@@ -42,8 +42,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     await emit.forEach(
       _bgService.uploadTaskStream,
       onData: (tasks) {
-        final newCompletedCount =
-            tasks.where((t) => t.status == UploadStatus.COMPLETED).length;
+        final newCompletedCount = tasks
+            .where((t) => t.status == UploadStatus.COMPLETED)
+            .length;
         final oldCompletedCount = state.completedUploadCountSnapshot;
         final hasNewCompleted = newCompletedCount > oldCompletedCount;
 
@@ -51,8 +52,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
           uploadTasks: tasks,
           fakeStatus: state.fakeStatus + 1,
           // 只有当有新的上传完成时才更新快照
-          completedUploadCountSnapshot:
-              hasNewCompleted ? newCompletedCount : oldCompletedCount,
+          completedUploadCountSnapshot: hasNewCompleted
+              ? newCompletedCount
+              : oldCompletedCount,
           // 从数据库获取真实计数
           dbUploadingCount: _bgService.uploadingCount,
           dbPendingCount: _bgService.pendingCount,
@@ -88,7 +90,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -115,7 +118,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } else {
       await _bgService.transferStorage.clearDownloadCompleted();
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -159,7 +163,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } else {
       await _bgService.pauseDownload(event.taskId!);
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -178,7 +183,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } else {
       await _bgService.resumeDownload(event.taskId!);
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -211,7 +217,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       );
     } else {
       await _bgService.cancelDownload(event.taskId!);
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -234,7 +241,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     } else {
       await _bgService.transferStorage.deleteDownloadTask(event.taskId);
 
-      final records = await _bgService.transferStorage.getAllDownloadTasksAsync();
+      final records = await _bgService.transferStorage
+          .getAllDownloadTasksAsync();
       final tasks = records.map(_recordToState).toList();
       emit(state.copyWith(downloadTasks: tasks));
     }
@@ -296,16 +304,18 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         }
 
         final stat = await file.stat();
-        records.add(UploadTaskRecord(
-          id: Uuid().v8(),
-          filepath: filePath,
-          filename: basename(filePath),
-          fileSize: stat.size,
-          parentId: event.parentId,
-          status: UploadStatus.PENDING,
-          tags: event.tags,
-          overwrite: event.overwrite,
-        ));
+        records.add(
+          UploadTaskRecord(
+            id: Uuid().v8(),
+            filepath: filePath,
+            filename: basename(filePath),
+            fileSize: stat.size,
+            parentId: event.parentId,
+            status: UploadStatus.PENDING,
+            tags: event.tags,
+            overwrite: event.overwrite,
+          ),
+        );
       }
 
       if (records.isEmpty) return;
@@ -314,9 +324,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       await _bgService.addUploadTasksBatch(records);
       await _bgService.scheduleFirstPendingUpload();
 
-      getLogger().info(
-        'Batch added ${records.length} upload tasks',
-      );
+      getLogger().info('Batch added ${records.length} upload tasks');
     } catch (e) {
       getLogger().error('Batch upload failed: $e');
     }
@@ -400,14 +408,16 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     // 刷新列表
     final tasks = await _bgService.transferStorage.getAllUploadTasksAsync();
     final counts = await _bgService.transferStorage.countAllUploadTasks();
-    emit(state.copyWith(
-      uploadTasks: tasks,
-      fakeStatus: state.fakeStatus + 1,
-      dbUploadingCount: counts['uploading'] ?? 0,
-      dbPendingCount: counts['pending'] ?? 0,
-      dbCompletedCount: counts['completed'] ?? 0,
-      dbFailedCount: counts['failed'] ?? 0,
-    ));
+    emit(
+      state.copyWith(
+        uploadTasks: tasks,
+        fakeStatus: state.fakeStatus + 1,
+        dbUploadingCount: counts['uploading'] ?? 0,
+        dbPendingCount: counts['pending'] ?? 0,
+        dbCompletedCount: counts['completed'] ?? 0,
+        dbFailedCount: counts['failed'] ?? 0,
+      ),
+    );
   }
 
   /// DownloadTaskRecord -> DownloadTaskState 转换

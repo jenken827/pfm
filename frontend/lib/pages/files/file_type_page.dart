@@ -6,10 +6,7 @@ import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/design/design_tokens.dart';
-import 'package:pfm/design/components/components.dart';
 import 'package:pfm/utils/format.dart';
-import 'package:pfm/router/files_route.dart';
-import 'package:pfm/pages/files/file_detail_page.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
 
 /// 按文件类型浏览页面
@@ -23,7 +20,7 @@ class FileTypePage extends StatefulWidget {
 }
 
 class _FileTypePageState extends State<FileTypePage> {
-  List<File> _files = [];
+  final List<File> _files = [];
   bool _loading = true;
   bool _hasMore = true;
   int _offset = 0;
@@ -65,7 +62,7 @@ class _FileTypePageState extends State<FileTypePage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final typeName = _getFileTypeName(widget.fileType, al);
 
@@ -81,10 +78,10 @@ class _FileTypePageState extends State<FileTypePage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? _buildError(context, colorScheme)
-              : _files.isEmpty
-                  ? _buildEmpty(context, al, colorScheme)
-                  : _buildFileList(context, colorScheme),
+          ? _buildError(context, colorScheme)
+          : _files.isEmpty
+          ? _buildEmpty(context, al, colorScheme)
+          : _buildFileList(context, colorScheme),
     );
   }
 
@@ -158,7 +155,8 @@ class _FileTypePageState extends State<FileTypePage> {
       child: ListView.separated(
         padding: const EdgeInsets.all(PfmSpacing.lg),
         itemCount: _files.length + (_hasMore ? 1 : 0),
-        separatorBuilder: (context, index) => const SizedBox(height: PfmSpacing.sm),
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: PfmSpacing.sm),
         itemBuilder: (context, index) {
           if (index == _files.length) {
             return const Center(
@@ -179,8 +177,11 @@ class _FileTypePageState extends State<FileTypePage> {
     File file,
     ColorScheme colorScheme,
   ) {
-    final fileTypeName = _getFileTypeName(file.type.value, AppLocalizations.of(context)!);
-    
+    final fileTypeName = _getFileTypeName(
+      file.type.value,
+      AppLocalizations.of(context),
+    );
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -203,7 +204,9 @@ class _FileTypePageState extends State<FileTypePage> {
         ),
         title: Text(
           file.name,
-          style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurface),
+          style: PfmTypography.bodyMedium.copyWith(
+            color: colorScheme.onSurface,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -220,8 +223,11 @@ class _FileTypePageState extends State<FileTypePage> {
         onTap: () {
           if (file.type == FileType.IMAGE) {
             // 图片类型：画廊模式
-            final images = _files.where((f) => f.type == FileType.IMAGE).toList();
-            context.push('/files/preview',
+            final images = _files
+                .where((f) => f.type == FileType.IMAGE)
+                .toList();
+            context.push(
+              '/files/preview',
               extra: PreviewArgs(
                 file: file,
                 images: images,
@@ -243,19 +249,19 @@ class _FileTypePageState extends State<FileTypePage> {
   String _getFileTypeName(int fileType, AppLocalizations al) {
     switch (fileType) {
       case 2:
-        return al.fileType_image ?? '图片';
+        return al.fileType_image;
       case 3:
-        return al.fileType_video ?? '视频';
+        return al.fileType_video;
       case 4:
-        return al.fileType_audio ?? '音频';
+        return al.fileType_audio;
       case 5:
-        return al.fileType_document ?? '文档';
+        return al.fileType_document;
       case 6:
-        return al.fileType_archive ?? '压缩包';
+        return al.fileType_archive;
       case 7:
-        return al.fileType_font ?? '字体';
+        return al.fileType_font;
       case 8:
-        return al.fileType_application ?? '应用';
+        return al.fileType_application;
       default:
         return '文件';
     }

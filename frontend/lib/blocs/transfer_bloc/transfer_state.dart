@@ -61,8 +61,9 @@ class TransferState extends Equatable {
 
   /// 检测是否有新的上传任务完成
   bool hasNewCompletedUploads(TransferState previous) {
-    final currentCompleted =
-        uploadTasks.where((t) => t.status == UploadStatus.COMPLETED).length;
+    final currentCompleted = uploadTasks
+        .where((t) => t.status == UploadStatus.COMPLETED)
+        .length;
     return currentCompleted > previous.completedUploadCountSnapshot;
   }
 

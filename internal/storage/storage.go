@@ -64,8 +64,31 @@ func createAndStoreDriver(sp *native.StorageProviderORM) error {
 		return err
 	}
 
+	// 注入缓存状态更新器（telegram 等需要，避免驱动直接依赖 db 层）
+	if setter, ok := ins.(types.CacheUpdaterSetter); ok {
+		setter.SetCacheUpdater(dbCacheUpdater{})
+	}
+	// 注入配置持久化器（baidu token 刷新等需要）
+	if setter, ok := ins.(types.ConfigPersisterSetter); ok {
+		setter.SetConfigPersister(dbConfigPersister{})
+	}
+
 	storages.Store(*sp.Id, ins)
 	return nil
+}
+
+// dbCacheUpdater 基于 db 层的缓存状态更新器
+type dbCacheUpdater struct{}
+
+func (dbCacheUpdater) UpdateCacheStatus(locationID uint64, status native.CacheStatus) error {
+	return db.UpdateFileLocationCacheStatus(locationID, status)
+}
+
+// dbConfigPersister 基于 db 层的配置持久化器
+type dbConfigPersister struct{}
+
+func (dbConfigPersister) UpdateConfig(providerID uint32, configJSON string) error {
+	return db.UpdateStorageProviderConfig(providerID, configJSON)
 }
 
 // closeAndDeleteStorage 关闭并删除存储实例

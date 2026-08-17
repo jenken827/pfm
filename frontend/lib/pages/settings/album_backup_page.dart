@@ -1,12 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:get_it/get_it.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/album_backup_service.dart';
-import 'package:pfm/services/local_storage.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 /// 相册自动备份设置页面
@@ -63,7 +61,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Future<void> _startRebackup() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -91,21 +89,21 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   Future<void> _selectTargetFolder() async {
     final result = await Navigator.push<FolderPickResult>(
       context,
-      MaterialPageRoute(
-        builder: (context) => const FolderPickerPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const FolderPickerPage()),
     );
     if (result != null) {
-      await _saveConfig(_config.copyWith(
-        targetParentId: result.id,
-        targetFolderName: result.name,
-      ));
+      await _saveConfig(
+        _config.copyWith(
+          targetParentId: result.id,
+          targetFolderName: result.name,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: Text(al.albumBackup_title)),
@@ -117,9 +115,7 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
     if (!Platform.isAndroid && !Platform.isIOS) {
       return Scaffold(
         appBar: AppBar(title: Text(al.albumBackup_title)),
-        body: Center(
-          child: Text(al.albumBackup_mobileOnly),
-        ),
+        body: Center(child: Text(al.albumBackup_mobileOnly)),
       );
     }
 
@@ -200,8 +196,8 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
               _config.targetParentId.isEmpty
                   ? al.albumBackup_notSetRoot
                   : _config.targetFolderName.isEmpty
-                      ? _config.targetParentId
-                      : _config.targetFolderName,
+                  ? _config.targetParentId
+                  : _config.targetFolderName,
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _selectTargetFolder,
@@ -228,14 +224,16 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Widget _buildStatusCard() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     Color statusColor;
     String statusText;
     IconData statusIcon;
 
     switch (_result.status) {
       case AlbumBackupStatus.idle:
-        statusColor = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+        statusColor = Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
         statusText = al.albumBackup_statusIdle;
         statusIcon = Icons.cloud_upload_outlined;
         break;
@@ -246,7 +244,10 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
         break;
       case AlbumBackupStatus.uploading:
         statusColor = PfmColors.warning;
-        statusText = al.albumBackup_statusBackingUp(_result.uploadedPhotos, _result.newPhotos);
+        statusText = al.albumBackup_statusBackingUp(
+          _result.uploadedPhotos,
+          _result.newPhotos,
+        );
         statusIcon = Icons.cloud_upload;
         break;
       case AlbumBackupStatus.completed:
@@ -303,7 +304,9 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
                           _result.errorMessage!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -323,7 +326,10 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
               const SizedBox(height: 8),
               Text(
                 al.albumBackup_lastBackup(_result.lastBackupTime!.toString()),
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -333,8 +339,9 @@ class _AlbumBackupPageState extends State<AlbumBackupPage> {
   }
 
   Widget _buildAlbumTile(AssetPathEntity album) {
-    final al = AppLocalizations.of(context)!;
-    final isSelected = _config.backupAlbumIds.isEmpty ||
+    final al = AppLocalizations.of(context);
+    final isSelected =
+        _config.backupAlbumIds.isEmpty ||
         _config.backupAlbumIds.contains(album.id);
 
     return FutureBuilder<int>(

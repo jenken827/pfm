@@ -20,7 +20,9 @@ void main() async {
 
   // 桌面平台单实例检查
   if (_isDesktop()) {
-    final lockFile = File('${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock');
+    final lockFile = File(
+      '${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock',
+    );
     if (lockFile.existsSync()) {
       // 检查进程是否还活着
       try {
@@ -37,18 +39,19 @@ void main() async {
           // 如果输出只包含"信息"提示行（没有找到任务），则进程不存在
           final stdout = result.stdout.toString();
           final stderr = result.stderr.toString();
-          final hasProcess = result.exitCode == 0 &&
+          final hasProcess =
+              result.exitCode == 0 &&
               !stdout.contains('没有运行的任务匹配指定标准') &&
               !stdout.contains('No tasks are running which match') &&
               !stdout.contains('No running task') &&
               stderr.isEmpty;
           if (hasProcess) {
-            print('PFM is already running (PID: $pid)');
+            debugPrint('PFM is already running (PID: $pid)');
             exit(0);
           }
         } else {
           if (result.exitCode == 0) {
-            print('PFM is already running (PID: $pid)');
+            debugPrint('PFM is already running (PID: $pid)');
             exit(0);
           }
         }
@@ -57,10 +60,12 @@ void main() async {
       }
     }
     // 写入当前 PID
-    lockFile.writeAsStringSync('${pid}\n');
+    lockFile.writeAsStringSync('$pid\n');
     // 退出时清理锁文件
     ProcessSignal.sigint.watch().listen((_) {
-      try { lockFile.deleteSync(); } catch (_) {}
+      try {
+        lockFile.deleteSync();
+      } catch (_) {}
       exit(0);
     });
   }
@@ -74,10 +79,10 @@ void main() async {
   }
 
   await initTalkerLogger();
-  
+
   // 初始化前台服务（Android 保活）
   await ForegroundServiceManager.init();
-  
+
   // 清理可能残留的 Hive 锁文件（应用被强杀/系统杀死后锁文件未释放会导致 openBox 永久卡住）
   await _cleanupStaleHiveLocks();
 

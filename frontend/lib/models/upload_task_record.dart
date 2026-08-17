@@ -55,17 +55,17 @@ class UploadTaskRecord {
   /// 上传进度（0-100）
   double get progress {
     if (fileSize == 0) return 0;
-    
+
     // 失败或取消时，返回上传过程中的实际进度（可能不是100%）
     if (status == UploadStatus.FAILED || status == UploadStatus.CANCELED) {
       return (uploadedBytes / fileSize) * 100;
     }
-    
+
     // 完成时返回100%
     if (status == UploadStatus.COMPLETED) {
       return 100;
     }
-    
+
     // 其他状态返回当前进度
     final currentProgress =
         (uploadedBytes >= fileSize ? 1.0 : uploadedBytes / fileSize) * 100;

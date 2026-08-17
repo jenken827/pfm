@@ -56,7 +56,7 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _restoreSelected() async {
     if (_selectedIds.isEmpty) return;
 
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -89,9 +89,9 @@ class _TrashPageState extends State<TrashPage> {
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_restoreFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? al.trash_restoreFailed)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -105,7 +105,7 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _deleteSelectedPermanently() async {
     if (_selectedIds.isEmpty) return;
 
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -141,9 +141,11 @@ class _TrashPageState extends State<TrashPage> {
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_permanentDeleteFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? al.trash_permanentDeleteFailed),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -157,7 +159,7 @@ class _TrashPageState extends State<TrashPage> {
   Future<void> _emptyTrash() async {
     if (_files.isEmpty) return;
 
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -193,9 +195,9 @@ class _TrashPageState extends State<TrashPage> {
         _selectedIds.clear();
         _loadTrash();
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message ?? al.trash_emptyFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? al.trash_emptyFailed)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -208,7 +210,7 @@ class _TrashPageState extends State<TrashPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -239,7 +241,7 @@ class _TrashPageState extends State<TrashPage> {
   }
 
   Widget _buildBody() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -275,7 +277,10 @@ class _TrashPageState extends State<TrashPage> {
               color: Theme.of(context).colorScheme.outline,
             ),
             const SizedBox(height: 16),
-            Text(al.trash_emptyHint, style: Theme.of(context).textTheme.bodyLarge),
+            Text(
+              al.trash_emptyHint,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           ],
         ),
       );

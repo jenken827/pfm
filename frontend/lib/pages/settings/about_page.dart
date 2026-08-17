@@ -31,7 +31,7 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobileScreen = screenWidth < PfmConstraints.mobileBreakpoint;
@@ -52,7 +52,12 @@ class _AboutPageState extends State<AboutPage> {
                   onPressed: () => Navigator.pop(context),
                 ),
                 const SizedBox(width: PfmSpacing.sm),
-                Text(al.about_title, style: PfmTypography.titleLarge.copyWith(color: colorScheme.onSurface)),
+                Text(
+                  al.about_title,
+                  style: PfmTypography.titleLarge.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: PfmSpacing.xxxl),
@@ -78,7 +83,10 @@ class _AboutPageState extends State<AboutPage> {
                     iconBackground: PfmColors.archiveSurface,
                     iconColor: PfmColors.archive,
                     title: al.about_buildNumber,
-                    subtitle: '${_packageInfo?.buildNumber}-{{commit-hash}}',
+                    // 不直接显示 PackageInfo.buildNumber:--split-per-abi 会把它
+                    // override 为 abiIndex*1000+base(日期语义丢失),故构建时由
+                    // dev.sh 注入真实日期 {{build-number}}
+                    subtitle: '{{build-number}}-{{commit-hash}}',
                   ),
                   const Divider(height: 1, indent: 56),
                   _buildInfoTile(
@@ -95,7 +103,12 @@ class _AboutPageState extends State<AboutPage> {
             const SizedBox(height: PfmSpacing.xxxl),
 
             // 技术信息
-            Text(al.about_techStack, style: PfmTypography.titleSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+            Text(
+              al.about_techStack,
+              style: PfmTypography.titleSmall.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: PfmSpacing.md),
             Card(
               child: Column(
@@ -141,31 +154,27 @@ class _AboutPageState extends State<AboutPage> {
               color: PfmColors.primarySurface,
               borderRadius: BorderRadius.circular(PfmRadius.xl),
             ),
-            child: const Icon(Icons.folder_outlined, size: 40, color: PfmColors.primary),
+            child: const Icon(
+              Icons.folder_outlined,
+              size: 40,
+              color: PfmColors.primary,
+            ),
           ),
           const SizedBox(height: PfmSpacing.lg),
           Text(
             _packageInfo?.appName ?? 'PFM',
-            style: PfmTypography.displayMedium.copyWith(color: colorScheme.onSurface),
+            style: PfmTypography.displayMedium.copyWith(
+              color: colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: PfmSpacing.xs),
           Text(
             'Personal File Manager',
-            style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant),
+            style: PfmTypography.bodyMedium.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: PfmSpacing.md, left: PfmSpacing.xs),
-      child: Text(
-        title,
-        style: PfmTypography.titleSmall.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
       ),
     );
   }
@@ -179,25 +188,44 @@ class _AboutPageState extends State<AboutPage> {
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.md,
+      ),
       child: Row(
         children: [
           Container(
-            width: 36, height: 36,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: iconBackground ?? colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(PfmRadius.sm),
             ),
-            child: Icon(icon, color: iconColor ?? colorScheme.onSurfaceVariant, size: 18),
+            child: Icon(
+              icon,
+              color: iconColor ?? colorScheme.onSurfaceVariant,
+              size: 18,
+            ),
           ),
           const SizedBox(width: PfmSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: PfmTypography.bodyLarge.copyWith(color: colorScheme.onSurface, fontWeight: FontWeight.w500)),
+                Text(
+                  title,
+                  style: PfmTypography.bodyLarge.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: PfmSpacing.xs),
-                Text(subtitle, style: PfmTypography.labelSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+                Text(
+                  subtitle,
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           ),
@@ -211,9 +239,19 @@ class _AboutPageState extends State<AboutPage> {
     return Center(
       child: Column(
         children: [
-          Text('© 2026 PFM', style: PfmTypography.labelSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+          Text(
+            '© 2026 PFM',
+            style: PfmTypography.labelSmall.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: PfmSpacing.xs),
-          Text(al.about_appTitle, style: PfmTypography.labelSmall.copyWith(color: colorScheme.onSurfaceVariant)),
+          Text(
+            al.about_appTitle,
+            style: PfmTypography.labelSmall.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

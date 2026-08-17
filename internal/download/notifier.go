@@ -177,12 +177,12 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 			return
 		}
 
-		orm := st.GetOrm()
-		if orm == nil || orm.EncryptionKey == nil || *orm.EncryptionKey == "" {
+		pcfg := st.GetProviderConfig()
+		if pcfg == nil || pcfg.EncryptionKey == "" {
 			llog.L().Errorf("encryption key not found in storage provider")
 			return
 		}
-		encryptionKey := *orm.EncryptionKey
+		encryptionKey := pcfg.EncryptionKey
 
 		// 4.3 创建解密器
 		decryptor, err := storage.NewCryptEncryptor(encryptionKey, salt)
@@ -208,7 +208,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 
 	// 5. 更新上传记录的临时文件路径
 	uploadRecord.TempPath = &finalFilePath
-	uploadRecord.Status = utils.EnumPtr(native.LocationStatus_PUPLOADING)
+	uploadRecord.TaskStatus = utils.EnumPtr(native.UploadStatus_UPLOADING)
 	if err := db.GetDB().Save(uploadRecord).Error; err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return

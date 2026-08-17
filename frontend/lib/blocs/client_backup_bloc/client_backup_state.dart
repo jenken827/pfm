@@ -34,5 +34,11 @@ class ClientBackupState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [status, configs, message, runningConfigId, lastResult];
+  List<Object?> get props => [
+    status,
+    configs,
+    message,
+    runningConfigId,
+    lastResult,
+  ];
 }

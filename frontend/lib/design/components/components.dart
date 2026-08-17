@@ -238,10 +238,7 @@ class PfmSectionHeader extends StatelessWidget {
             ),
           ),
           if (action != null)
-            TextButton(
-              onPressed: onAction,
-              child: Text(action!),
-            ),
+            TextButton(onPressed: onAction, child: Text(action!)),
         ],
       ),
     );
@@ -282,7 +279,6 @@ class PfmFileListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -346,10 +342,7 @@ class PfmFileListTile extends StatelessWidget {
                 onPressed: onMenuPressed,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 32,
-                ),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
           ],
         ),
@@ -614,7 +607,6 @@ class PfmStorageProviderTile extends StatelessWidget {
   }
 }
 
-
 /// 统一对话框样式辅助类
 /// 提供一致的确认对话框、底部菜单、拖拽指示器
 class PfmDialogs {
@@ -629,7 +621,6 @@ class PfmDialogs {
     String? cancelLabel,
     bool isDestructive = false,
   }) async {
-    final colorScheme = Theme.of(context).colorScheme;
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -659,7 +650,10 @@ class PfmDialogs {
       child: Container(
         width: 40,
         height: 4,
-        margin: const EdgeInsets.only(top: PfmSpacing.md, bottom: PfmSpacing.lg),
+        margin: const EdgeInsets.only(
+          top: PfmSpacing.md,
+          bottom: PfmSpacing.lg,
+        ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.outlineVariant,
           borderRadius: BorderRadius.circular(PfmRadius.full),
@@ -690,7 +684,12 @@ class PfmDialogs {
               children: [
                 Icon(icon, size: 20, color: effectiveColor),
                 const SizedBox(width: PfmSpacing.lg),
-                Text(title, style: PfmTypography.bodyLarge.copyWith(color: effectiveColor)),
+                Text(
+                  title,
+                  style: PfmTypography.bodyLarge.copyWith(
+                    color: effectiveColor,
+                  ),
+                ),
               ],
             ),
           ),

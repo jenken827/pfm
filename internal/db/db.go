@@ -105,9 +105,33 @@ func autoMigrate() error {
 		return err
 	}
 
+	// 回填 upload_records 的 task_status（从旧 status 迁移，幂等）
+	if err := migrateUploadTaskStatus(); err != nil {
+		return err
+	}
+
 	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
 	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
 	return migrateFilesUniqueIndex()
+}
+
+// migrateUploadTaskStatus 将 upload_records 的旧 status(LocationStatus) 回填到 task_status(UploadStatus)
+// 映射：PPENDING(1)->PENDING(1), PUPLOADING(2)->UPLOADING(3), PCOMPLETED(3)->COMPLETED(4), PFAILED(4)->FAILED(5)
+// 幂等：仅回填 task_status=0(UNSPECIFIED) 的记录，重复执行不覆盖已迁移的值
+func migrateUploadTaskStatus() error {
+	sql := `UPDATE upload_records SET task_status = CASE status
+		WHEN 1 THEN 1
+		WHEN 2 THEN 3
+		WHEN 3 THEN 4
+		WHEN 4 THEN 5
+		WHEN 5 THEN 5
+		ELSE 1
+	END WHERE task_status = 0`
+	if err := db.Exec(sql).Error; err != nil {
+		return fmt.Errorf("migrate upload task status failed: %w", err)
+	}
+	llog.L().Info("migrated upload_records task_status from legacy status")
+	return nil
 }
 
 // migrateFilesUniqueIndex 将 files 表的 idx_f_npi 从普通唯一索引改为 partial 唯一索引

@@ -17,8 +17,7 @@ class ClientBackupPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          ClientBackupBloc()..add(ClientBackupLoadEvent()),
+      create: (context) => ClientBackupBloc()..add(ClientBackupLoadEvent()),
       child: const _ClientBackupPageView(),
     );
   }
@@ -29,12 +28,9 @@ class _ClientBackupPageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(al.clientBackup_title),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(al.clientBackup_title), centerTitle: true),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateDialog(context),
         child: const Icon(Icons.add),
@@ -46,10 +42,20 @@ class _ClientBackupPageView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.phone_android_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  Icon(
+                    Icons.phone_android_outlined,
+                    size: 48,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
                   const SizedBox(height: 12),
-                  Text(al.clientBackup_noTasks,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(
+                    al.clientBackup_noTasks,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             );
@@ -87,7 +93,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Padding(
@@ -102,7 +108,9 @@ class _ClientBackupTaskTile extends StatelessWidget {
                   size: 20,
                   color: config.enabled
                       ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      : Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -124,29 +132,29 @@ class _ClientBackupTaskTile extends StatelessWidget {
             _InfoRow(icon: Icons.folder_outlined, text: config.sourcePath),
             if (config.lastRunAt != null)
               _InfoRow(
-                  icon: Icons.access_time,
-                  text: '上次: ${_formatTime(config.lastRunAt!)}'),
+                icon: Icons.access_time,
+                text: '上次: ${_formatTime(config.lastRunAt!)}',
+              ),
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 BlocBuilder<ClientBackupBloc, ClientBackupState>(
                   builder: (context, state) {
-                    final isRunning =
-                        state.runningConfigId == config.id;
+                    final isRunning = state.runningConfigId == config.id;
                     return TextButton(
                       onPressed: isRunning
                           ? null
                           : () {
                               context.read<ClientBackupBloc>().add(
-                                  ClientBackupTriggerEvent(id: config.id));
+                                ClientBackupTriggerEvent(id: config.id),
+                              );
                             },
                       child: isRunning
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(al.clientBackup_executeNow),
                     );
@@ -188,7 +196,7 @@ class _ClientBackupTaskTile extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -204,9 +212,9 @@ class _ClientBackupTaskTile extends StatelessWidget {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () {
-              context
-                  .read<ClientBackupBloc>()
-                  .add(ClientBackupDeleteEvent(ids: [config.id]));
+              context.read<ClientBackupBloc>().add(
+                ClientBackupDeleteEvent(ids: [config.id]),
+              );
               Navigator.pop(ctx);
             },
             child: Text(al.common_delete),
@@ -230,9 +238,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(label, style: TextStyle(fontSize: 12, color: color)),
     );
@@ -251,12 +259,19 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 14,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -295,8 +310,7 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
     final config = widget.config;
     _nameController = TextEditingController(text: config?.name ?? '');
     _sourcePath = config?.sourcePath;
-    _ignoreController =
-        TextEditingController(text: config?.ignoreRules ?? '');
+    _ignoreController = TextEditingController(text: config?.ignoreRules ?? '');
     _recursive = config?.recursive ?? true;
     _enabled = config?.enabled ?? true;
     if (config?.targetDirId != null) {
@@ -322,11 +336,13 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final isEdit = widget.config != null;
     return Padding(
       padding: EdgeInsets.only(
-        left: 16, right: 16, top: 16,
+        left: 16,
+        right: 16,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16,
       ),
       child: Form(
@@ -336,14 +352,20 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEdit ? al.clientBackup_editTask : al.clientBackup_createTask,
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                isEdit ? al.clientBackup_editTask : al.clientBackup_createTask,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                    labelText: al.clientBackup_taskName, border: const OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? al.clientBackup_taskNameRequired : null,
+                  labelText: al.clientBackup_taskName,
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (v) => v?.isEmpty == true
+                    ? al.clientBackup_taskNameRequired
+                    : null,
               ),
               const SizedBox(height: 12),
               // 本地路径选择
@@ -354,12 +376,18 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
                   isEmpty: _sourcePath == null,
                   decoration: InputDecoration(
                     labelText: al.clientBackup_localPath,
-                    hintText: _sourcePath == null ? al.clientBackup_localPathHint : null,
+                    hintText: _sourcePath == null
+                        ? al.clientBackup_localPathHint
+                        : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.folder_open),
                   ),
                   child: _sourcePath != null
-                      ? Text(_sourcePath!, maxLines: 1, overflow: TextOverflow.ellipsis)
+                      ? Text(
+                          _sourcePath!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
                       : null,
                 ),
               ),
@@ -372,12 +400,18 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
                   isEmpty: _targetDirId == null,
                   decoration: InputDecoration(
                     labelText: al.clientBackup_targetDir,
-                    hintText: _targetDirId == null ? al.clientBackup_targetDirHint : null,
+                    hintText: _targetDirId == null
+                        ? al.clientBackup_targetDirHint
+                        : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.cloud_upload_outlined),
                   ),
                   child: _targetDirId != null
-                      ? Text(_targetDirName, maxLines: 1, overflow: TextOverflow.ellipsis)
+                      ? Text(
+                          _targetDirName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
                       : null,
                 ),
               ),
@@ -392,16 +426,20 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
                 maxLines: 3,
               ),
               SwitchListTile(
-                  title: Text(al.clientBackup_includeSubdir),
-                  value: _recursive,
-                  onChanged: (v) => setState(() => _recursive = v)),
+                title: Text(al.clientBackup_includeSubdir),
+                value: _recursive,
+                onChanged: (v) => setState(() => _recursive = v),
+              ),
               SwitchListTile(
-                  title: Text(al.clientBackup_enable),
-                  value: _enabled,
-                  onChanged: (v) => setState(() => _enabled = v)),
+                title: Text(al.clientBackup_enable),
+                value: _enabled,
+                onChanged: (v) => setState(() => _enabled = v),
+              ),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: _submit, child: Text(isEdit ? al.common_save : al.common_create)),
+                onPressed: _submit,
+                child: Text(isEdit ? al.common_save : al.common_create),
+              ),
             ],
           ),
         ),
@@ -410,7 +448,7 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
   }
 
   Future<void> _pickSourcePath() async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (isDesktop()) {
       final path = await FilePicker.platform.getDirectoryPath(
         dialogTitle: al.clientBackup_selectSourceFolder,
@@ -434,11 +472,13 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(al.common_cancel)),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(al.common_cancel),
+            ),
             FilledButton(
-                onPressed: () => Navigator.pop(ctx, controller.text),
-                child: Text(al.common_confirm)),
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: Text(al.common_confirm),
+            ),
           ],
         ),
       );
@@ -461,42 +501,50 @@ class _CreateClientBackupSheetState extends State<_CreateClientBackupSheet> {
   }
 
   void _submit() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (!_formKey.currentState!.validate()) return;
     if (_sourcePath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.clientBackup_selectLocalPath)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(al.clientBackup_selectLocalPath)));
       return;
     }
     if (_targetDirId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.clientBackup_selectTargetDir)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(al.clientBackup_selectTargetDir)));
       return;
     }
 
     final bloc = context.read<ClientBackupBloc>();
     if (widget.config != null) {
-      bloc.add(ClientBackupUpdateEvent(
-        id: widget.config!.id,
-        name: _nameController.text,
-        sourcePath: _sourcePath,
-        targetDirId: _targetDirId,
-        ignoreRules:
-            _ignoreController.text.isEmpty ? null : _ignoreController.text,
-        recursive: _recursive,
-        enabled: _enabled,
-      ));
+      bloc.add(
+        ClientBackupUpdateEvent(
+          id: widget.config!.id,
+          name: _nameController.text,
+          sourcePath: _sourcePath,
+          targetDirId: _targetDirId,
+          ignoreRules: _ignoreController.text.isEmpty
+              ? null
+              : _ignoreController.text,
+          recursive: _recursive,
+          enabled: _enabled,
+        ),
+      );
     } else {
-      bloc.add(ClientBackupCreateEvent(
-        id: const Uuid().v4(),
-        name: _nameController.text,
-        sourcePath: _sourcePath!,
-        targetDirId: _targetDirId!,
-        ignoreRules:
-            _ignoreController.text.isEmpty ? null : _ignoreController.text,
-        recursive: _recursive,
-        enabled: _enabled,
-      ));
+      bloc.add(
+        ClientBackupCreateEvent(
+          id: const Uuid().v4(),
+          name: _nameController.text,
+          sourcePath: _sourcePath!,
+          targetDirId: _targetDirId!,
+          ignoreRules: _ignoreController.text.isEmpty
+              ? null
+              : _ignoreController.text,
+          recursive: _recursive,
+          enabled: _enabled,
+        ),
+      );
     }
     Navigator.pop(context);
   }

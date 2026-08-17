@@ -20,10 +20,7 @@ class BackupBloc extends Bloc<BackupEvent, BackupState> {
     on<BackupLoadFilesEvent>(_onLoadFiles);
   }
 
-  Future<void> _onLoad(
-    BackupLoadEvent event,
-    Emitter<BackupState> emit,
-  ) async {
+  Future<void> _onLoad(BackupLoadEvent event, Emitter<BackupState> emit) async {
     emit(state.copyWith(status: BackupStatus.loading));
 
     final result = await _repository.listBackupTasks();

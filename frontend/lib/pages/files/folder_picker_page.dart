@@ -129,14 +129,18 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 确认选择当前文件夹
   void _confirmSelection() {
-    final al = AppLocalizations.of(context)!;
-    final name = _breadcrumbs.isEmpty ? al.folderPicker_root : _breadcrumbs.last.name;
-    Navigator.of(context).pop(FolderPickResult(id: _currentFolderId, name: name));
+    final al = AppLocalizations.of(context);
+    final name = _breadcrumbs.isEmpty
+        ? al.folderPicker_root
+        : _breadcrumbs.last.name;
+    Navigator.of(
+      context,
+    ).pop(FolderPickResult(id: _currentFolderId, name: name));
   }
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -172,7 +176,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建面包屑导航
   Widget _buildBreadcrumbs() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -232,7 +236,7 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建文件夹列表
   Widget _buildFolderList() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -292,8 +296,12 @@ class _FolderPickerPageState extends State<FolderPickerPage> {
 
   /// 构建底部操作栏
   Widget _buildBottomBar() {
-    final al = AppLocalizations.of(context)!;
-    final path = _currentFolderId.isEmpty ? al.folderPicker_root : (_breadcrumbs.isNotEmpty ? _breadcrumbs.last.name : al.folderPicker_root);
+    final al = AppLocalizations.of(context);
+    final path = _currentFolderId.isEmpty
+        ? al.folderPicker_root
+        : (_breadcrumbs.isNotEmpty
+              ? _breadcrumbs.last.name
+              : al.folderPicker_root);
 
     return Container(
       padding: const EdgeInsets.all(16),

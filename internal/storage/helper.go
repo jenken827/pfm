@@ -131,7 +131,7 @@ func DownloadAndMergeFile(
 	})
 
 	// 2. 打开文件（多分片自动合并、解密）
-	reader, err := sourceStorage.Open(ctx, locations, encryptor)
+	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(locations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return "", fmt.Errorf("open file failed: %w", err)
 	}
@@ -191,10 +191,10 @@ func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*n
 		if st == nil {
 			continue
 		}
-		orm := st.GetOrm()
+		pcfg := st.GetProviderConfig()
 		order := uint32(0)
-		if orm != nil && orm.SortOrder != nil {
-			order = *orm.SortOrder
+		if pcfg != nil {
+			order = pcfg.SortOrder
 		}
 		sorted = append(sorted, providerOrder{providerID: pid, order: order})
 	}

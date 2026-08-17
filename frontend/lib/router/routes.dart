@@ -87,7 +87,7 @@ class MainScaffold extends StatelessWidget {
 
   /// 移动端布局 - 底部导航栏
   Widget _buildMobileScaffold(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -113,7 +113,11 @@ class MainScaffold extends StatelessWidget {
               ),
               NavigationDestination(
                 icon: _buildTransferIcon(activeCount, false, colorScheme),
-                selectedIcon: _buildTransferIcon(activeCount, true, colorScheme),
+                selectedIcon: _buildTransferIcon(
+                  activeCount,
+                  true,
+                  colorScheme,
+                ),
                 label: al.nav_transfer,
               ),
               NavigationDestination(
@@ -130,7 +134,7 @@ class MainScaffold extends StatelessWidget {
 
   /// 桌面端布局 - 侧边导航栏
   Widget _buildDesktopScaffold(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -143,10 +147,7 @@ class MainScaffold extends StatelessWidget {
             decoration: BoxDecoration(
               color: colorScheme.surface,
               border: Border(
-                right: BorderSide(
-                  color: colorScheme.outline,
-                  width: 1,
-                ),
+                right: BorderSide(color: colorScheme.outline, width: 1),
               ),
             ),
             child: Column(
@@ -182,7 +183,8 @@ class MainScaffold extends StatelessWidget {
                         Builder(
                           builder: (context) {
                             final activeCount = context.select(
-                              (TransferBloc bloc) => bloc.state.activeTransferCount,
+                              (TransferBloc bloc) =>
+                                  bloc.state.activeTransferCount,
                             );
                             return _buildNavItem(
                               context,
@@ -305,7 +307,9 @@ class MainScaffold extends StatelessWidget {
               vertical: PfmSpacing.md,
             ),
             decoration: BoxDecoration(
-              color: isActive ? colorScheme.primaryContainer : Colors.transparent,
+              color: isActive
+                  ? colorScheme.primaryContainer
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(PfmRadius.md),
             ),
             child: Row(
@@ -359,12 +363,7 @@ class MainScaffold extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(PfmSpacing.lg),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: colorScheme.outline,
-            width: 1,
-          ),
-        ),
+        border: Border(top: BorderSide(color: colorScheme.outline, width: 1)),
       ),
       child: Row(
         children: [

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
@@ -51,7 +51,9 @@ class FmRepository {
 
   /// 处理 Token 失效
   Future<void> _handleTokenInvalid() async {
-    _logger.error('Token invalid, clearing login info and redirecting to login');
+    _logger.error(
+      'Token invalid, clearing login info and redirecting to login',
+    );
     final ls = GetIt.I.get<LocalStorage>();
     await ls.clearLoginInfo();
     // 停止所有后台传输任务
@@ -870,7 +872,9 @@ class FmRepository {
       if (encryptionSuffix != null) req.encryptionSuffix = encryptionSuffix;
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
-      if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
+      if (maxConcurrentUploads != null) {
+        req.maxConcurrentUploads = maxConcurrentUploads;
+      }
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/AddStorageProvider',
@@ -917,7 +921,9 @@ class FmRepository {
       if (fileSizeLimit != null) req.fileSizeLimit = Int64(fileSizeLimit);
       if (defaultBound != null) req.defaultBound = defaultBound;
       if (proxy != null) req.proxy = proxy;
-      if (maxConcurrentUploads != null) req.maxConcurrentUploads = maxConcurrentUploads;
+      if (maxConcurrentUploads != null) {
+        req.maxConcurrentUploads = maxConcurrentUploads;
+      }
 
       final response = await _dio.post(
         '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',
@@ -1172,7 +1178,7 @@ class FmRepository {
     try {
       final req = ListUploadRecordsReq(page: page, pageSize: pageSize);
       if (status != null) {
-        req.status = LocationStatus.valueOf(status)!;
+        req.status = UploadStatus.valueOf(status)!;
       }
 
       final response = await _dio.post(
@@ -2031,10 +2037,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<ListUsersResp>(
-        data,
-        ListUsersResp(),
-      );
+      final respData = extractRespData<ListUsersResp>(data, ListUsersResp());
       return ApiResult(success: true, data: respData);
     } on TokenInvalidException {
       await _handleTokenInvalid();
@@ -2057,10 +2060,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetMyRolesResp>(
-        data,
-        GetMyRolesResp(),
-      );
+      final respData = extractRespData<GetMyRolesResp>(data, GetMyRolesResp());
       return ApiResult(success: true, data: respData);
     } on TokenInvalidException {
       await _handleTokenInvalid();
@@ -2274,10 +2274,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<ListUsersResp>(
-        data,
-        ListUsersResp(),
-      );
+      final respData = extractRespData<ListUsersResp>(data, ListUsersResp());
       return ApiResult(success: true, data: respData);
     } on TokenInvalidException {
       await _handleTokenInvalid();
@@ -2300,10 +2297,7 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetMyRolesResp>(
-        data,
-        GetMyRolesResp(),
-      );
+      final respData = extractRespData<GetMyRolesResp>(data, GetMyRolesResp());
       return ApiResult(success: true, data: respData);
     } on TokenInvalidException {
       await _handleTokenInvalid();

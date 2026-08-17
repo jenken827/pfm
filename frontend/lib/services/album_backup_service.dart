@@ -120,7 +120,7 @@ class AlbumBackupService {
   AlbumBackupConfig _config = const AlbumBackupConfig();
 
   // 备份状态
-  AlbumBackupStatus _status = AlbumBackupStatus.idle;
+  final AlbumBackupStatus _status = AlbumBackupStatus.idle;
   AlbumBackupResult _result = const AlbumBackupResult();
 
   // 状态控制器
@@ -291,7 +291,9 @@ class AlbumBackupService {
           targetFolderId = result.data!;
           _logger.info('Using subfolder: $targetFolderId');
         } else {
-          _logger.warning('Failed to get subfolder, using root: ${result.message}');
+          _logger.warning(
+            'Failed to get subfolder, using root: ${result.message}',
+          );
         }
       } catch (e) {
         _logger.warning('Failed to get subfolder, using root: $e');
@@ -307,7 +309,7 @@ class AlbumBackupService {
           // 优先用 relativePath + title 构造路径（避免慢速 originFile 调用）
           String filePath;
           int fileSize;
-          
+
           if (photo.relativePath != null && photo.title != null) {
             filePath = '${photo.relativePath}${photo.title}';
             // 尝试用 File 获取大小，失败则用 originFile
@@ -337,16 +339,18 @@ class AlbumBackupService {
           final fileName = photo.title ?? p.basename(filePath);
           final now = DateTime.now();
 
-          batch.add(UploadTaskRecord(
-            id: const Uuid().v4(),
-            filename: fileName,
-            filepath: filePath,
-            fileSize: fileSize,
-            parentId: targetFolderId,
-            status: UploadStatus.PENDING,
-            tags: photo.id,  // 存储资产 ID
-            createdAt: now,
-          ));
+          batch.add(
+            UploadTaskRecord(
+              id: const Uuid().v4(),
+              filename: fileName,
+              filepath: filePath,
+              fileSize: fileSize,
+              parentId: targetFolderId,
+              status: UploadStatus.PENDING,
+              tags: photo.id, // 存储资产 ID
+              createdAt: now,
+            ),
+          );
 
           // 同步写 backup_file_records（用 asset ID 作为 relative_path）
           backupRecords.add({
@@ -390,7 +394,9 @@ class AlbumBackupService {
           await _storage.addBackupFileRecord(record);
         }
         created += batch.length;
-        _logger.info('Final batch wrote ${batch.length} tasks (total: $created)');
+        _logger.info(
+          'Final batch wrote ${batch.length} tasks (total: $created)',
+        );
       }
 
       // 确保上传已启动
@@ -462,7 +468,9 @@ class AlbumBackupService {
     // 从 backup_file_records 表获取已备份的 asset ID（不受 upload_tasks 清理影响）
     // force 模式下跳过检查，强制重新备份所有照片
     if (force) {
-      _logger.info('Force mode: skipping backup check, will re-backup all ${allPhotos.length} photos');
+      _logger.info(
+        'Force mode: skipping backup check, will re-backup all ${allPhotos.length} photos',
+      );
       return allPhotos;
     }
 
@@ -473,31 +481,6 @@ class AlbumBackupService {
         .toList();
 
     return photosToBackup;
-  }
-
-  /// 创建上传任务记录（不调度）
-  Future<UploadTaskRecord> _createUploadTask(AssetEntity photo, {String? targetFolderId}) async {
-    // 获取文件
-    final file = await photo.originFile;
-    if (file == null) {
-      throw Exception('Cannot get file for photo: ${photo.id}');
-    }
-
-    // 获取文件信息
-    final fileName = p.basename(file.path);
-    final fileSize = await file.length();
-
-    // 创建上传任务（tags 存储资产 ID 用于去重）
-    return UploadTaskRecord(
-      id: const Uuid().v4(),
-      filename: fileName,
-      filepath: file.path,
-      fileSize: fileSize,
-      parentId: targetFolderId ?? _config.targetParentId,
-      status: UploadStatus.PENDING,
-      tags: photo.id,  // 存储资产 ID
-      createdAt: DateTime.now(),
-    );
   }
 
   /// 更新状态

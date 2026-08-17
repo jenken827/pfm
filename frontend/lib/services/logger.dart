@@ -95,7 +95,10 @@ class _FileLogObserver extends TalkerObserver {
   }
 }
 
-Future<void> initTalkerLogger({bool isBackground = false, String? logDirPath}) async {
+Future<void> initTalkerLogger({
+  bool isBackground = false,
+  String? logDirPath,
+}) async {
   // 初始化日志目录
   Directory logDir;
   if (logDirPath != null) {
@@ -116,9 +119,7 @@ Future<void> initTalkerLogger({bool isBackground = false, String? logDirPath}) a
   final talker = isBackground
       ? Talker(
           logger: TalkerLogger(
-            settings: TalkerLoggerSettings(
-              level: LogLevel.info,
-            ),
+            settings: TalkerLoggerSettings(level: LogLevel.info),
           ),
           settings: TalkerSettings(),
           observer: _FileLogObserver(),
@@ -137,7 +138,9 @@ Future<void> initTalkerLogger({bool isBackground = false, String? logDirPath}) a
         );
 
   GetIt.I.registerSingleton<Talker>(talker);
-  talker.info('talker init complete (background=$isBackground), log dir: ${_logDir!.path}');
+  talker.info(
+    'talker init complete (background=$isBackground), log dir: ${_logDir!.path}',
+  );
 }
 
 /// 获取日志文件列表（用于导出）
@@ -160,7 +163,9 @@ Future<void> shareLogFiles() async {
   if (files.isEmpty) return;
 
   final xFiles = files.map((f) => XFile(f.path)).toList();
-  await Share.shareXFiles(xFiles, subject: 'PFM 日志文件');
+  await SharePlus.instance.share(
+    ShareParams(files: xFiles, subject: 'PFM 日志文件'),
+  );
 }
 
 /// 清理旧日志

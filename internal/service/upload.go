@@ -136,6 +136,7 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		TargetProviderIds: &targetProviderIds,
 		TempPath:          &emptyStr,
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
 	}
 
@@ -156,7 +157,7 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		// 重置状态为 PPENDING，更新 provider 列表，清除旧错误信息
 		if uErr := gormDB.Model(&existing).Updates(map[string]interface{}{
 			"target_provider_ids": mergedStr,
-			"status":              int32(native.LocationStatus_PPENDING),
+			"task_status":         int32(native.UploadStatus_PENDING),
 			"message":             "",
 		}).Error; uErr != nil {
 			llog.L().Errorf("update existing sync record failed: %v", uErr)
@@ -164,7 +165,7 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		}
 
 		existing.TargetProviderIds = &mergedStr
-		existing.Status = utils.EnumPtr(native.LocationStatus_PPENDING)
+		existing.TaskStatus = utils.EnumPtr(native.UploadStatus_PENDING)
 		msg := ""
 		existing.Message = &msg
 		llog.L().Infof("reusing existing sync record #%d, merged providers: %s", *existing.Id, mergedStr)
@@ -598,6 +599,7 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, providerI
 		TempPath:          &tp,
 		OverwriteId:       &overwriteID,
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TargetProviderIds: &targetProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 		Tags:              req.Tags,
@@ -616,7 +618,7 @@ func createNewUploadTask(req *native.InitUploadReq, blake3Hash string, providerI
 			"file_name":    *req.Name,
 			"parent_id":    *req.ParentId,
 			"overwrite_id": overwriteID,
-			"status":       int32(native.LocationStatus_PPENDING),
+			"task_status":  int32(native.UploadStatus_PENDING),
 			"message":      "",
 			"tags":         req.Tags,
 		}
@@ -894,10 +896,13 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 // markUploadFailedSync 标记分块上传失败（同步版本，用于 processCompleteUpload 错误路径）
 func markUploadFailedSync(ur *native.UploadRecordORM, reason string) {
 	if ur.Id != nil {
-		failedStatus := int32(native.LocationStatus_PFAILED)
-		ur.Status = &failedStatus
+		failedStatus := int32(native.UploadStatus_FAILED)
+		ur.TaskStatus = &failedStatus
 		ur.Message = &reason
-		if err := db.UpdateUploadRecord(ur, []string{"status", "message"}); err != nil {
+		// 乐观锁：合并分片阶段 record 仍为 PENDING，仅当 PENDING 时才标记失败
+		if err := db.TransitionUploadRecordTaskStatus(*ur.Id,
+			[]native.UploadStatus{native.UploadStatus_PENDING},
+			native.UploadStatus_FAILED, &reason); err != nil {
 			llog.L().Errorf("mark upload failed error: %v, id: %d", err, *ur.Id)
 		}
 	}
@@ -1126,6 +1131,7 @@ func smallFileUploadToProviders(blake3Hash string, req *native.UploadSmallReq, p
 		TempPath:          &tempPath,
 		OverwriteId:       &overwriteID,
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TargetProviderIds: &targetProviderIds,
 		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
 	}
@@ -1156,7 +1162,7 @@ func reuseAndDispatchUpload(uploadID uint32, tempPath, fileName, parentID, overw
 		"parent_id":            parentID,
 		"overwrite_id":         overwriteID,
 		"target_provider_ids":  targetProviderIds,
-		"status":               int32(native.LocationStatus_PPENDING),
+		"task_status":          int32(native.UploadStatus_PENDING),
 		"message":              "",
 	}
 	if err := db.GetDB().Model(uploadRecord).Updates(updates).Error; err != nil {
@@ -1170,7 +1176,7 @@ func reuseAndDispatchUpload(uploadID uint32, tempPath, fileName, parentID, overw
 	uploadRecord.ParentId = &parentID
 	uploadRecord.OverwriteId = &overwriteID
 	uploadRecord.TargetProviderIds = targetProviderIds
-	uploadRecord.Status = utils.EnumPtr(native.LocationStatus_PPENDING)
+	uploadRecord.TaskStatus = utils.EnumPtr(native.UploadStatus_PENDING)
 	msg := ""
 	uploadRecord.Message = &msg
 
@@ -1198,7 +1204,7 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 	}
 
 	// 查询失败记录总数（用于状态栏统计）
-	failedCount, err := db.CountUploadRecordsByStatus(int32(native.LocationStatus_PFAILED))
+	failedCount, err := db.CountUploadRecordsByStatus(int32(native.UploadStatus_FAILED))
 	if err != nil {
 		llog.L().Warnf("count failed upload records error: %v", err)
 		// 不影响主查询，继续返回
@@ -1223,7 +1229,7 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 			FileSize:          record.FileSize,
 			FileHash:          record.FileHash,
 			ParentId:          record.ParentId,
-			Status:            (*native.LocationStatus)(record.Status),
+			Status:            (*native.UploadStatus)(record.TaskStatus),
 			TargetProviderIds: record.TargetProviderIds,
 			TaskType:          (*native.UploadTaskType)(record.TaskType),
 			CreatedAt:         createdAt,
@@ -1324,7 +1330,7 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 		FileSize:          record.FileSize,
 		FileHash:          record.FileHash,
 		ParentId:          record.ParentId,
-		Status:            (*native.LocationStatus)(record.Status),
+		Status:            (*native.UploadStatus)(record.TaskStatus),
 		TargetProviderIds: record.TargetProviderIds,
 		TaskType:          (*native.UploadTaskType)(record.TaskType),
 		CreatedAt:         recordCreatedAt,
@@ -1400,11 +1406,11 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 	}
 
 	// 重置状态为等待中
-	pendingStatus := int32(native.LocationStatus_PPENDING)
-	record.Status = &pendingStatus
+	pendingStatus := int32(native.UploadStatus_PENDING)
+	record.TaskStatus = &pendingStatus
 
 	// 更新数据库
-	if err := db.UpdateUploadRecord(record, []string{"status"}); err != nil {
+	if err := db.UpdateUploadRecord(record, []string{"task_status"}); err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -1417,7 +1423,7 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 // RetryAllFailedUploadRecords 重试所有失败的上传记录
 func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 	// 查询所有失败的上传记录
-	records, err := db.GetUploadRecordsByStatus([]native.LocationStatus{native.LocationStatus_PFAILED})
+	records, err := db.GetUploadRecordsByStatus([]native.UploadStatus{native.UploadStatus_FAILED})
 	if err != nil {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
@@ -1433,11 +1439,11 @@ func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 		}
 
 		// 重置状态为等待中
-		pendingStatus := int32(native.LocationStatus_PPENDING)
-		record.Status = &pendingStatus
+		pendingStatus := int32(native.UploadStatus_PENDING)
+		record.TaskStatus = &pendingStatus
 
 		// 更新数据库
-		if err := db.UpdateUploadRecord(record, []string{"status"}); err != nil {
+		if err := db.UpdateUploadRecord(record, []string{"task_status"}); err != nil {
 			llog.L().Errorf("RetryAllFailedUploadRecords: update record %d failed: %v", *record.Id, err)
 			continue
 		}

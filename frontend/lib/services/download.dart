@@ -38,7 +38,8 @@ Future<void> downloadFile({
     // 检查是否是历史版本下载（格式：history:{historyId}）
     if (task.fileId.startsWith('history:')) {
       final historyId = task.fileId.substring(8); // 移除 'history:' 前缀
-      downloadUrl = '$baseUrl/api/file/history/download?id=$historyId'; // baseUrl already resolved to transferUrl in caller
+      downloadUrl =
+          '$baseUrl/api/file/history/download?id=$historyId'; // baseUrl already resolved to transferUrl in caller
     } else {
       downloadUrl = '$baseUrl/api/file/stream/download?file_id=${task.fileId}';
       if (task.providerId != null) {

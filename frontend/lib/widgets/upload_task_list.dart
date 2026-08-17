@@ -49,7 +49,7 @@ class UploadTaskList extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
@@ -62,19 +62,33 @@ class UploadTaskList extends StatelessWidget {
               color: PfmColors.primarySurface,
               borderRadius: BorderRadius.circular(PfmRadius.xl),
             ),
-            child: const Icon(Icons.cloud_upload_outlined, size: 40, color: PfmColors.primary),
+            child: const Icon(
+              Icons.cloud_upload_outlined,
+              size: 40,
+              color: PfmColors.primary,
+            ),
           ),
           const SizedBox(height: PfmSpacing.xl),
-          Text(al.uploadTask_noTasks, style: PfmTypography.titleMedium.copyWith(color: colorScheme.onSurface)),
+          Text(
+            al.uploadTask_noTasks,
+            style: PfmTypography.titleMedium.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: PfmSpacing.sm),
-          Text(al.uploadTask_noTasksHint, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant)),
+          Text(
+            al.uploadTask_noTasksHint,
+            style: PfmTypography.bodyMedium.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildActionBar(BuildContext context, TransferState state) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     // 真正在上传中的数量（不含 PENDING）
     final activeCount = state.dbUploadingCount;
@@ -83,7 +97,10 @@ class UploadTaskList extends StatelessWidget {
     final failedCount = state.dbFailedCount;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
@@ -98,11 +115,23 @@ class UploadTaskList extends StatelessWidget {
               Theme.of(context).colorScheme.primary,
             ),
           if (pendingCount > 0)
-            _buildStatusChip(context, al.uploadTask_waiting(pendingCount), Theme.of(context).colorScheme.onSurfaceVariant),
+            _buildStatusChip(
+              context,
+              al.uploadTask_waiting(pendingCount),
+              Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           if (failedCount > 0)
-            _buildStatusChip(context, al.uploadTask_failed(failedCount), Colors.red),
+            _buildStatusChip(
+              context,
+              al.uploadTask_failed(failedCount),
+              Colors.red,
+            ),
           if (completedCount > 0)
-            _buildStatusChip(context, al.uploadTask_completed(completedCount), Colors.green),
+            _buildStatusChip(
+              context,
+              al.uploadTask_completed(completedCount),
+              Colors.green,
+            ),
           const Spacer(),
           // 操作菜单
           PopupMenuButton<String>(
@@ -171,9 +200,18 @@ class UploadTaskList extends StatelessWidget {
   Widget _buildStatusChip(BuildContext context, String label, Color color) {
     return Container(
       margin: const EdgeInsets.only(right: PfmSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
-      child: Text(label, style: PfmTypography.labelSmall.copyWith(color: color)),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.sm,
+        vertical: PfmSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(PfmRadius.full),
+      ),
+      child: Text(
+        label,
+        style: PfmTypography.labelSmall.copyWith(color: color),
+      ),
     );
   }
 }
@@ -186,11 +224,14 @@ class _UploadTaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
+      margin: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.xs,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(PfmSpacing.lg),
         child: Column(
@@ -201,9 +242,17 @@ class _UploadTaskItem extends StatelessWidget {
               children: [
                 // 文件图标
                 Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(color: PfmColors.primarySurface, borderRadius: BorderRadius.circular(PfmRadius.sm)),
-                  child: Icon(_getFileIcon(), color: PfmColors.primary, size: 20),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: PfmColors.primarySurface,
+                    borderRadius: BorderRadius.circular(PfmRadius.sm),
+                  ),
+                  child: Icon(
+                    _getFileIcon(),
+                    color: PfmColors.primary,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: PfmSpacing.md),
                 // 文件名
@@ -292,7 +341,9 @@ class _UploadTaskItem extends StatelessWidget {
                   child: Row(
                     children: [
                       Text(
-                        al.uploadTask_uploaded(_formatBytes(task.uploadedBytes)),
+                        al.uploadTask_uploaded(
+                          _formatBytes(task.uploadedBytes),
+                        ),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -377,7 +428,7 @@ class _UploadTaskItem extends StatelessWidget {
   }
 
   Widget _buildStatusChip(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     String label;
     Color color;
 
@@ -418,14 +469,23 @@ class _UploadTaskItem extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(right: PfmSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(PfmRadius.full)),
-      child: Text(label, style: PfmTypography.labelSmall.copyWith(color: color)),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.sm,
+        vertical: PfmSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(PfmRadius.full),
+      ),
+      child: Text(
+        label,
+        style: PfmTypography.labelSmall.copyWith(color: color),
+      ),
     );
   }
 
   Widget _buildActions(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 20),
       onSelected: (value) {
@@ -497,11 +557,11 @@ class _UploadTaskItem extends StatelessWidget {
 
   /// 显示重命名对话框
   void _showRenameDialog(BuildContext context, TransferBloc bloc) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     // 生成随机文件名，保留扩展名
     final randomName = _generateRandomFilename(task.filename);
     final controller = TextEditingController(text: randomName);
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -547,7 +607,7 @@ class _UploadTaskItem extends StatelessWidget {
     final lastDotIndex = originalFilename.lastIndexOf('.');
     String name;
     String extension;
-    
+
     if (lastDotIndex > 0 && lastDotIndex < originalFilename.length - 1) {
       name = originalFilename.substring(0, lastDotIndex);
       extension = originalFilename.substring(lastDotIndex);
@@ -555,16 +615,16 @@ class _UploadTaskItem extends StatelessWidget {
       name = originalFilename;
       extension = '';
     }
-    
+
     // 生成6位随机后缀
     final random = DateTime.now().millisecondsSinceEpoch % 1000000;
     final suffix = random.toString().padLeft(6, '0');
-    
+
     return '${name}_$suffix$extension';
   }
 
   void _showDetailSheet(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
 
     String statusText;
@@ -613,16 +673,17 @@ class _UploadTaskItem extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   margin: const EdgeInsets.only(bottom: PfmSpacing.xl),
-                  decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.outlineVariant, borderRadius: BorderRadius.circular(PfmRadius.full)),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(PfmRadius.full),
+                  ),
                 ),
               ),
               // 文件名
-              Text(
-                task.filename,
-                style: Theme.of(ctx).textTheme.titleLarge,
-              ),
+              Text(task.filename, style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 16),
               // 详情列表
               _detailRow(ctx, '状态', statusText),
@@ -630,14 +691,17 @@ class _UploadTaskItem extends StatelessWidget {
               _detailRow(ctx, '上传进度', '${task.progress.toStringAsFixed(1)}%'),
               if (task.uploadedBytes > 0)
                 _detailRow(ctx, '已上传', _formatBytes(task.uploadedBytes)),
-              if (task.speed > 0)
-                _detailRow(ctx, '上传速度', task.formatSpeed),
+              if (task.speed > 0) _detailRow(ctx, '上传速度', task.formatSpeed),
               _detailRow(ctx, '本地路径', task.filepath),
               _detailRow(ctx, '目标目录 ID', task.parentId),
               if (task.fileHash != null && task.fileHash!.isNotEmpty)
                 _detailRow(ctx, '文件哈希 (Blake3)', task.fileHash!),
               if (task.chunkTotal > 0)
-                _detailRow(ctx, '分片信息', '${task.chunkTotal} 片 × ${formatCapacityString(task.chunkSize)}'),
+                _detailRow(
+                  ctx,
+                  '分片信息',
+                  '${task.chunkTotal} 片 × ${formatCapacityString(task.chunkSize)}',
+                ),
               if (task.tags != null && task.tags!.isNotEmpty)
                 _detailRow(ctx, '标签', task.tags!),
               _detailRow(ctx, '覆盖同名', task.overwrite ? '是' : '否'),
@@ -658,7 +722,9 @@ class _UploadTaskItem extends StatelessWidget {
                   ),
                   child: Text(
                     task.errorMessage!,
-                    style: TextStyle(color: Theme.of(ctx).colorScheme.onErrorContainer),
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.onErrorContainer,
+                    ),
                   ),
                 ),
               ],
@@ -688,9 +754,21 @@ class _UploadTaskItem extends StatelessWidget {
         children: [
           SizedBox(
             width: 100,
-            child: Text(label, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant)),
+            child: Text(
+              label,
+              style: PfmTypography.bodyMedium.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-          Expanded(child: Text(value, style: PfmTypography.bodyMedium.copyWith(color: colorScheme.onSurface))),
+          Expanded(
+            child: Text(
+              value,
+              style: PfmTypography.bodyMedium.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -718,9 +796,9 @@ class _UploadTaskItem extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('打开失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('打开失败: $e')));
       }
     }
   }

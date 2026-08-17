@@ -63,26 +63,26 @@ class ClientBackupConfig {
     this.lastBackupSize = 0,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'sourcePath': sourcePath,
-        'targetDirId': targetDirId,
-        'strategy': strategy,
-        'cronExpression': cronExpression,
-        'ignoreRules': ignoreRules,
-        'recursive': recursive,
-        'enabled': enabled,
-        'lastRunAt': lastRunAt?.toIso8601String(),
-        'lastScanCount': lastScanCount,
-        'lastBackupCount': lastBackupCount,
-        'lastBackupSize': lastBackupSize,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'sourcePath': sourcePath,
+    'targetDirId': targetDirId,
+    'strategy': strategy,
+    'cronExpression': cronExpression,
+    'ignoreRules': ignoreRules,
+    'recursive': recursive,
+    'enabled': enabled,
+    'lastRunAt': lastRunAt?.toIso8601String(),
+    'lastScanCount': lastScanCount,
+    'lastBackupCount': lastBackupCount,
+    'lastBackupSize': lastBackupSize,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 
   static ClientBackupConfig fromJson(Map<String, dynamic> json) =>
       ClientBackupConfig(

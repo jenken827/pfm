@@ -149,7 +149,9 @@ class Sqlite3Storage {
   ''';
 
   /// 获取所有任务（异步）- 限制数量避免内存溢出
-  Future<List<UploadTaskRecord>> getAllUploadTasksAsync({int limit = 100}) async {
+  Future<List<UploadTaskRecord>> getAllUploadTasksAsync({
+    int limit = 100,
+  }) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       uploadTaskTableName,
       orderBy: 'created_at DESC',
@@ -190,14 +192,12 @@ class Sqlite3Storage {
 
   /// 一次查询获取所有状态计数（减少锁竞争）
   Future<Map<String, int>> countAllUploadTasks() async {
-    final result = await _database!.rawQuery(
-      '''SELECT 
+    final result = await _database!.rawQuery('''SELECT 
         SUM(CASE WHEN status IN (${UploadStatus.UPLOADING.value}, ${UploadStatus.HASHING.value}) THEN 1 ELSE 0 END) as uploading,
         SUM(CASE WHEN status = ${UploadStatus.PENDING.value} THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN status = ${UploadStatus.COMPLETED.value} THEN 1 ELSE 0 END) as completed,
         SUM(CASE WHEN status = ${UploadStatus.FAILED.value} THEN 1 ELSE 0 END) as failed
-      FROM $uploadTaskTableName''',
-    );
+      FROM $uploadTaskTableName''');
     final row = result.first;
     return {
       'uploading': (row['uploading'] as int?) ?? 0,
@@ -211,7 +211,11 @@ class Sqlite3Storage {
   Future<int> countActiveUploadTasks() async {
     final result = await _database!.rawQuery(
       'SELECT COUNT(*) as cnt FROM $uploadTaskTableName WHERE status IN (?, ?, ?)',
-      [UploadStatus.PENDING.value, UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
+      [
+        UploadStatus.PENDING.value,
+        UploadStatus.UPLOADING.value,
+        UploadStatus.HASHING.value,
+      ],
     );
     return result.first['cnt'] as int;
   }
@@ -238,7 +242,11 @@ class Sqlite3Storage {
   Future<int> resetStuckUploadTasks() async {
     final result = await _database!.rawUpdate(
       'UPDATE $uploadTaskTableName SET status = ?, upload_id = NULL WHERE status IN (?, ?)',
-      [UploadStatus.PENDING.value, UploadStatus.UPLOADING.value, UploadStatus.HASHING.value],
+      [
+        UploadStatus.PENDING.value,
+        UploadStatus.UPLOADING.value,
+        UploadStatus.HASHING.value,
+      ],
     );
     return result;
   }
@@ -426,10 +434,10 @@ class Sqlite3Storage {
           );
           if (record != null &&
               record['status'] as int == BackupFileStatus.failed.index) {
-            await updateBackupFileRecord(
-              record['id'] as String,
-              {'status': BackupFileStatus.pending.index, 'message': null},
-            );
+            await updateBackupFileRecord(record['id'] as String, {
+              'status': BackupFileStatus.pending.index,
+              'message': null,
+            });
           }
         }
       }
@@ -501,7 +509,9 @@ class Sqlite3Storage {
   // ========== 下载任务 CRUD ==========
 
   /// 获取所有下载任务 - 限制数量避免内存溢出
-  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync({int limit = 100}) async {
+  Future<List<DownloadTaskRecord>> getAllDownloadTasksAsync({
+    int limit = 100,
+  }) async {
     final List<Map<String, dynamic>> maps = await _database!.query(
       downloadTaskTableName,
       orderBy: 'created_at DESC',
@@ -770,7 +780,9 @@ class Sqlite3Storage {
 
   /// 获取某配置+路径的备份记录
   Future<Map<String, dynamic>?> getBackupFileRecord(
-      String configId, String relativePath) async {
+    String configId,
+    String relativePath,
+  ) async {
     final maps = await _database!.query(
       backupFileTableName,
       where: 'config_id = ? AND relative_path = ?',
@@ -794,7 +806,9 @@ class Sqlite3Storage {
 
   /// 更新备份文件记录
   Future<void> updateBackupFileRecord(
-      String id, Map<String, dynamic> values) async {
+    String id,
+    Map<String, dynamic> values,
+  ) async {
     if (values.isEmpty) return;
     await _withRetry(
       () => _database!.update(
@@ -808,7 +822,8 @@ class Sqlite3Storage {
 
   /// 获取某配置下所有记录
   Future<List<Map<String, dynamic>>> getBackupFileRecords(
-      String configId) async {
+    String configId,
+  ) async {
     return await _database!.query(
       backupFileTableName,
       where: 'config_id = ?',
@@ -819,7 +834,8 @@ class Sqlite3Storage {
 
   /// 获取某配置下未完成的记录（用于断点续传）
   Future<List<Map<String, dynamic>>> getPendingBackupRecords(
-      String configId) async {
+    String configId,
+  ) async {
     // status: 0=pending, 1=uploading, 4=failed, 5=stale
     return await _database!.query(
       backupFileTableName,

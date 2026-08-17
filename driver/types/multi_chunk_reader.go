@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // ChunkOpener 分片打开器接口
@@ -15,18 +13,18 @@ type ChunkOpener interface {
 	// OpenChunk 打开指定分片
 	// offset: 分片内偏移（支持从中间位置开始读取）
 	// 返回的 ReadCloser 应该已经定位到 offset 位置
-	OpenChunk(ctx context.Context, loc *native.FileLocationORM, offset int64) (io.ReadCloser, error)
+	OpenChunk(ctx context.Context, ref FileRef, offset int64) (io.ReadCloser, error)
 	// OpenChunkRangeSeek 返回一个 OpenRangeSeek 函数，支持 Range 请求和 Seek 操作
 	// 用于加密文件的解密
-	OpenChunkRangeSeek(ctx context.Context, loc *native.FileLocationORM) OpenRangeSeek
+	OpenChunkRangeSeek(ctx context.Context, ref FileRef) OpenRangeSeek
 }
 
 // MultiChunkReader 多分片合并读取器
 // 支持将多个分片合并为一个连续的 ReadSeekCloser
 type MultiChunkReader struct {
 	ctx         context.Context
-	opener      ChunkOpener          // 分片打开器
-	locations   []*native.FileLocationORM
+	opener      ChunkOpener // 分片打开器
+	locations   []FileRef
 	encryptor   Encryptor
 	currentIdx  int
 	currentRC   io.ReadCloser
@@ -37,15 +35,13 @@ type MultiChunkReader struct {
 }
 
 // NewMultiChunkReader 创建多分片合并读取器
-func NewMultiChunkReader(ctx context.Context, opener ChunkOpener, locations []*native.FileLocationORM, encryptor Encryptor) *MultiChunkReader {
+func NewMultiChunkReader(ctx context.Context, opener ChunkOpener, locations []FileRef, encryptor Encryptor) *MultiChunkReader {
 	// 预先计算总大小和每个分片的偏移
 	var totalSize int64
 	chunkOffset := make([]int64, len(locations))
 	for i, loc := range locations {
 		chunkOffset[i] = totalSize
-		if loc.ChunkSize != nil {
-			totalSize += int64(*loc.ChunkSize)
-		}
+		totalSize += int64(loc.ChunkSize)
 	}
 
 	return &MultiChunkReader{
@@ -150,7 +146,7 @@ func (m *MultiChunkReader) Close() error {
 
 // openCurrentChunk 打开当前分片
 func (m *MultiChunkReader) openCurrentChunk() (io.ReadCloser, error) {
-	loc := m.locations[m.currentIdx]
+	ref := m.locations[m.currentIdx]
 
 	// 计算分片内偏移
 	chunkInternalOffset := m.offset - m.chunkOffset[m.currentIdx]
@@ -159,7 +155,7 @@ func (m *MultiChunkReader) openCurrentChunk() (io.ReadCloser, error) {
 	if m.encryptor != nil && m.encryptor.IsEncrypted() {
 		// 使用 DecryptDataSeek 处理加密文件
 		// 这会先读取 header，然后 seek 到正确的位置
-		openRangeSeek := m.opener.OpenChunkRangeSeek(m.ctx, loc)
+		openRangeSeek := m.opener.OpenChunkRangeSeek(m.ctx, ref)
 		decrypted, err := m.encryptor.DecryptDataSeek(m.ctx, openRangeSeek, chunkInternalOffset, -1)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt chunk failed: %w", err)
@@ -168,7 +164,7 @@ func (m *MultiChunkReader) openCurrentChunk() (io.ReadCloser, error) {
 	}
 
 	// 非加密文件，直接打开
-	rc, err := m.opener.OpenChunk(m.ctx, loc, chunkInternalOffset)
+	rc, err := m.opener.OpenChunk(m.ctx, ref, chunkInternalOffset)
 	if err != nil {
 		return nil, err
 	}

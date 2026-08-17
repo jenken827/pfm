@@ -34,9 +34,15 @@ class BackupCreateEvent extends BackupEvent {
 
   @override
   List<Object?> get props => [
-        name, sourcePath, targetDirId, strategy,
-        cronExpression, ignoreRules, recursive, enabled,
-      ];
+    name,
+    sourcePath,
+    targetDirId,
+    strategy,
+    cronExpression,
+    ignoreRules,
+    recursive,
+    enabled,
+  ];
 }
 
 /// 更新备份任务
@@ -65,9 +71,16 @@ class BackupUpdateEvent extends BackupEvent {
 
   @override
   List<Object?> get props => [
-        id, name, sourcePath, targetDirId, strategy,
-        cronExpression, ignoreRules, recursive, enabled,
-      ];
+    id,
+    name,
+    sourcePath,
+    targetDirId,
+    strategy,
+    cronExpression,
+    ignoreRules,
+    recursive,
+    enabled,
+  ];
 }
 
 /// 删除备份任务

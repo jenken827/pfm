@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:pfm/services/logger.dart';
@@ -57,7 +56,8 @@ class ForegroundServiceManager {
     );
     await notifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(channel);
   }
 
@@ -117,10 +117,7 @@ class ForegroundServiceManager {
         body = '正在传输文件...';
       }
 
-      service.invoke('update', {
-        'title': title,
-        'body': body,
-      });
+      service.invoke('update', {'title': title, 'body': body});
     } catch (e) {
       // 通知更新失败不影响传输
     }

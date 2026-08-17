@@ -38,7 +38,7 @@ class DownloadTaskList extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
@@ -88,7 +88,10 @@ class _DownloadTaskItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: PfmSpacing.lg, vertical: PfmSpacing.xs),
+      margin: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.lg,
+        vertical: PfmSpacing.xs,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(PfmSpacing.lg),
         child: Column(
@@ -104,7 +107,11 @@ class _DownloadTaskItem extends StatelessWidget {
                     color: PfmColors.successSurface,
                     borderRadius: BorderRadius.circular(PfmRadius.sm),
                   ),
-                  child: const Icon(Icons.download, color: PfmColors.success, size: 20),
+                  child: const Icon(
+                    Icons.download,
+                    color: PfmColors.success,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: PfmSpacing.md),
                 Expanded(
@@ -133,7 +140,7 @@ class _DownloadTaskItem extends StatelessWidget {
                   icon: const Icon(Icons.more_vert, size: 20),
                   onSelected: (value) => _handleMenuAction(context, value),
                   itemBuilder: (context) {
-                    final al = AppLocalizations.of(context)!;
+                    final al = AppLocalizations.of(context);
                     return _buildMenuItems(al);
                   },
                 ),
@@ -160,9 +167,8 @@ class _DownloadTaskItem extends StatelessWidget {
                           task.localPath!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
                       Icon(
@@ -183,7 +189,9 @@ class _DownloadTaskItem extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: task.progress / 100,
                   backgroundColor: colorScheme.outlineVariant,
-                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    colorScheme.primary,
+                  ),
                   minHeight: 4,
                 ),
               ),
@@ -272,15 +280,15 @@ class _DownloadTaskItem extends StatelessWidget {
   }
 
   Future<void> _openFile(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (task.localPath == null) return;
-    
+
     final file = File(task.localPath!);
     if (!await file.exists()) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.downloadTask_fileNotExist)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(al.downloadTask_fileNotExist)));
       }
       return;
     }
@@ -288,21 +296,23 @@ class _DownloadTaskItem extends StatelessWidget {
     final result = await OpenFile.open(task.localPath!);
     if (result.type != ResultType.done && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${al.downloadTask_cannotOpenFile}: ${result.message}')),
+        SnackBar(
+          content: Text('${al.downloadTask_cannotOpenFile}: ${result.message}'),
+        ),
       );
     }
   }
 
   Future<void> _openFolder(BuildContext context) async {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (task.localPath == null) return;
-    
+
     final file = File(task.localPath!);
     if (!await file.exists()) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.downloadTask_fileNotExist)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(al.downloadTask_fileNotExist)));
       }
       return;
     }
@@ -329,26 +339,26 @@ class _DownloadTaskItem extends StatelessWidget {
         }
       } else {
         // iOS 不支持打开目录，复制路径提示用户
-        _copyPath(context);
+        if (context.mounted) _copyPath(context);
       }
     } catch (e) {
       // 打开失败时复制路径
-      _copyPath(context);
+      if (context.mounted) _copyPath(context);
     }
   }
 
   void _copyPath(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (task.localPath == null) return;
-    
+
     Clipboard.setData(ClipboardData(text: task.localPath!));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(al.downloadTask_pathCopied)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(al.downloadTask_pathCopied)));
   }
 
   Widget _buildStatusChip(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     String label;
     Color color;
 
@@ -385,7 +395,10 @@ class _DownloadTaskItem extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(right: PfmSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: PfmSpacing.sm, vertical: PfmSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PfmSpacing.sm,
+        vertical: PfmSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(PfmRadius.full),

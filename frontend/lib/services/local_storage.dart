@@ -162,9 +162,7 @@ class LocalStorage {
   AlbumBackupConfig? get albumBackupConfig {
     final configJson = _settingsBox.get('albumBackupConfig');
     if (configJson != null) {
-      return AlbumBackupConfig.fromJson(
-        Map<String, dynamic>.from(configJson),
-      );
+      return AlbumBackupConfig.fromJson(Map<String, dynamic>.from(configJson));
     }
     return null;
   }
@@ -208,7 +206,10 @@ class LocalStorage {
 
   /// 小文件上传阈值（字节），默认 5MB
   int get smallFileThreshold {
-    return _settingsBox.get('smallFileThreshold', defaultValue: 5 * 1024 * 1024);
+    return _settingsBox.get(
+      'smallFileThreshold',
+      defaultValue: 5 * 1024 * 1024,
+    );
   }
 
   /// 保存小文件上传阈值

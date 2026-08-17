@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+// ignore: implementation_imports
 import 'package:blake3_dart/src/blake3_compact.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:get_it/get_it.dart';
@@ -49,27 +50,23 @@ class ContactBackupResult {
 class ContactBackupService {
   static ContactBackupService? _instance;
 
-  final Sqlite3Storage _storage;
   final LocalStorage _localStorage;
   late final Talker _logger;
 
   ContactBackupResult _result = const ContactBackupResult();
   ContactBackupConfig _config = const ContactBackupConfig();
 
-  final _statusController =
-      StreamController<ContactBackupResult>.broadcast();
+  final _statusController = StreamController<ContactBackupResult>.broadcast();
   Stream<ContactBackupResult> get statusStream => _statusController.stream;
 
   bool _isBackingUp = false;
 
-  ContactBackupService._(this._storage, this._localStorage)
-      : _logger = getLogger();
+  ContactBackupService._(this._localStorage) : _logger = getLogger();
 
   static Future<ContactBackupService> instance() async {
     if (_instance != null) return _instance!;
-    final storage = await Sqlite3Storage.instance();
     final localStorage = GetIt.I.get<LocalStorage>();
-    _instance = ContactBackupService._(storage, localStorage);
+    _instance = ContactBackupService._(localStorage);
     await _instance!._loadConfig();
     return _instance!;
   }
@@ -82,9 +79,7 @@ class ContactBackupService {
     final saved = _localStorage.contactBackupConfig;
     if (saved != null) {
       _config = saved;
-      _result = ContactBackupResult(
-        lastBackupTime: saved.lastBackupTime,
-      );
+      _result = ContactBackupResult(lastBackupTime: saved.lastBackupTime);
     }
   }
 
@@ -106,8 +101,9 @@ class ContactBackupService {
   Future<bool> requestPermission() async {
     if (isDesktop()) return false;
 
-    final permission =
-        await FlutterContacts.permissions.request(PermissionType.read);
+    final permission = await FlutterContacts.permissions.request(
+      PermissionType.read,
+    );
     if (permission == PermissionStatus.granted ||
         permission == PermissionStatus.limited) {
       return true;
@@ -176,7 +172,9 @@ class ContactBackupService {
       hasher.update(contentBytes);
       final output = Uint8List(32);
       hasher.finalize(output);
-      final hash = output.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      final hash = output
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
       _logger.info('Exported contacts hash: $hash');
 
       // 对比 hash，如果相同则跳过上传
@@ -193,7 +191,8 @@ class ContactBackupService {
       // 保存到带日期后缀的文件名（避免覆盖旧备份）
       final tempDir = await getTemporaryDirectory();
       final now = DateTime.now();
-      final dateSuffix = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+      final dateSuffix =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
       final fileName = 'contacts_backup_$dateSuffix.vcf';
       final filePath = p.join(tempDir.path, fileName);
       final file = File(filePath);
@@ -215,10 +214,7 @@ class ContactBackupService {
       await _saveConfig();
 
       // 完成
-      _updateStatus(
-        status: ContactBackupStatus.completed,
-        lastBackupTime: now,
-      );
+      _updateStatus(status: ContactBackupStatus.completed, lastBackupTime: now);
 
       return _result;
     } catch (e) {
@@ -245,7 +241,9 @@ class ContactBackupService {
     hasher.update(Uint8List.fromList(content));
     final hashOutput = Uint8List(32);
     hasher.finalize(hashOutput);
-    final fileHash = hashOutput.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final fileHash = hashOutput
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
 
     final task = UploadTaskRecord(
       id: const Uuid().v4(),

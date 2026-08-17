@@ -6,7 +6,6 @@ import 'package:pfm/api/api.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
-import 'package:pfm/utils/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 /// 后台服务(上传，下载)
@@ -60,11 +59,9 @@ class BackgroundService {
     _runningDownloads.clear();
     _scheduledUploadIds.clear();
     _scheduledDownloadIds.clear();
-    _uploadingCount = 0;
     _pendingCount = 0;
     _completedCount = 0;
     _failedCount = 0;
-    _downloadingCount = 0;
     notifyUploadTasksChanged();
     notifyDownloadTasksChanged();
   }
@@ -81,11 +78,9 @@ class BackgroundService {
   bool _timerRunning = false;
 
   /// 上传/下载任务计数（从数据库获取，用于 UI 状态统计）
-  int _uploadingCount = 0;
   int _pendingCount = 0;
   int _completedCount = 0;
   int _failedCount = 0;
-  int _downloadingCount = 0;
 
   BackgroundService._(this._storage) : _logger = getLogger();
 
@@ -152,7 +147,6 @@ class BackgroundService {
     final failedCount = counts['failed'] ?? 0;
 
     // 更新计数缓存
-    _uploadingCount = uploadingCount;
     _pendingCount = pendingCount;
     _completedCount = completedCount;
     _failedCount = failedCount;
@@ -165,7 +159,9 @@ class BackgroundService {
     // 上传调度（直接在主 Isolate 运行，上传是 I/O 密集型不阻塞 UI）
     {
       final canScheduleUpload = _maxUploadConcurrency - _runningUploads.length;
-      _logger.info('Timer: canScheduleUpload=$canScheduleUpload (max=${_maxUploadConcurrency}, running=${_runningUploads.length})');
+      _logger.info(
+        'Timer: canScheduleUpload=$canScheduleUpload (max=$_maxUploadConcurrency, running=${_runningUploads.length})',
+      );
 
       if (canScheduleUpload > 0 && pendingCount > 0) {
         final pendingTasks = await _transferStorage.getUploadTasksByStatus(
@@ -173,7 +169,9 @@ class BackgroundService {
           limit: canScheduleUpload,
         );
 
-        _logger.info('Timer: found ${pendingTasks.length} pending tasks to schedule');
+        _logger.info(
+          'Timer: found ${pendingTasks.length} pending tasks to schedule',
+        );
 
         for (final task in pendingTasks.take(canScheduleUpload)) {
           _logger.info('Timer: starting upload ${task.id} (${task.filename})');
@@ -187,12 +185,14 @@ class BackgroundService {
       await _pollPredownloadTasks();
 
       // 下载调度
-      final canScheduleDownload = _maxDownloadConcurrency - _runningDownloads.length;
+      final canScheduleDownload =
+          _maxDownloadConcurrency - _runningDownloads.length;
       if (canScheduleDownload > 0) {
-        final pendingDownloads = await _transferStorage.getDownloadTasksByStatus(
-          DownloadStatus.pending,
-          limit: canScheduleDownload,
-        );
+        final pendingDownloads = await _transferStorage
+            .getDownloadTasksByStatus(
+              DownloadStatus.pending,
+              limit: canScheduleDownload,
+            );
         if (pendingDownloads.isNotEmpty) {
           for (final task in pendingDownloads.take(canScheduleDownload)) {
             _logger.info('Timer: starting download ${task.id}');
@@ -204,19 +204,27 @@ class BackgroundService {
     }
 
     // 定期通知 UI 更新（使用分页加载的任务）
-    final recentUploads = await _transferStorage.getAllUploadTasksAsync(limit: 100);
-    final recentDownloads = await _transferStorage.getAllDownloadTasksAsync(limit: 100);
+    final recentUploads = await _transferStorage.getAllUploadTasksAsync(
+      limit: 100,
+    );
+    final recentDownloads = await _transferStorage.getAllDownloadTasksAsync(
+      limit: 100,
+    );
     _uploadTaskController.add(recentUploads);
     _downloadTaskController.add(recentDownloads);
 
-    if (uploadingCount == 0 && pendingCount == 0 && downloadingCount == 0 &&
-        _runningUploads.isEmpty && _runningDownloads.isEmpty) {
+    if (uploadingCount == 0 &&
+        pendingCount == 0 &&
+        downloadingCount == 0 &&
+        _runningUploads.isEmpty &&
+        _runningDownloads.isEmpty) {
       // 还有预下载任务时不停止 timer
-      final predownloadCount = await _transferStorage.countDownloadTasksByStatus(
-        DownloadStatus.predownload,
-      );
+      final predownloadCount = await _transferStorage
+          .countDownloadTasksByStatus(DownloadStatus.predownload);
       if (predownloadCount > 0) {
-        getLogger().debug('timer: $predownloadCount predownload tasks, keeping timer');
+        getLogger().debug(
+          'timer: $predownloadCount predownload tasks, keeping timer',
+        );
         return;
       }
       getLogger().debug('timer: no active tasks, stopping timer');
@@ -251,7 +259,8 @@ class BackgroundService {
       _logger.error('Upload failed: $taskId', e, s);
       // 异常时确保状态更新为 FAILED，避免卡在 UPLOADING
       try {
-        await _transferStorage.updateUploadTask(taskId,
+        await _transferStorage.updateUploadTask(
+          taskId,
           status: UploadStatus.FAILED,
           errorMessage: e.toString(),
         );
@@ -276,15 +285,14 @@ class BackgroundService {
         task.tags!,
       );
       if (record != null) {
-        await _storage.updateBackupFileRecord(
-          record['id'] as String,
-          {
-            'file_hash': task.fileHash,
-            'status': BackupFileStatus.completed.index,
-            'uploaded_at': DateTime.now().toIso8601String(),
-          },
+        await _storage.updateBackupFileRecord(record['id'] as String, {
+          'file_hash': task.fileHash,
+          'status': BackupFileStatus.completed.index,
+          'uploaded_at': DateTime.now().toIso8601String(),
+        });
+        _logger.info(
+          'Backup record updated to completed for asset: ${task.tags}',
         );
-        _logger.info('Backup record updated to completed for asset: ${task.tags}');
       }
     } catch (e) {
       _logger.warning('Failed to sync backup record on complete: $e');
@@ -299,13 +307,10 @@ class BackgroundService {
         task.tags!,
       );
       if (record != null) {
-        await _storage.updateBackupFileRecord(
-          record['id'] as String,
-          {
-            'status': BackupFileStatus.failed.index,
-            'message': task.errorMessage,
-          },
-        );
+        await _storage.updateBackupFileRecord(record['id'] as String, {
+          'status': BackupFileStatus.failed.index,
+          'message': task.errorMessage,
+        });
         _logger.info('Backup record updated to failed for asset: ${task.tags}');
       }
     } catch (e) {
@@ -328,7 +333,8 @@ class BackgroundService {
       _logger.error('Download failed: $taskId', e, s);
       // 异常时确保状态更新为 FAILED
       try {
-        await _transferStorage.updateDownloadTask(taskId,
+        await _transferStorage.updateDownloadTask(
+          taskId,
           status: DownloadStatus.failed,
           errorMessage: e.toString(),
         );
@@ -355,7 +361,9 @@ class BackgroundService {
 
     for (final task in predownloadTasks) {
       if (task.fileHash == null || task.providerId == null) {
-        _logger.warning('Predownload task missing fileHash/providerId: ${task.id}');
+        _logger.warning(
+          'Predownload task missing fileHash/providerId: ${task.id}',
+        );
         continue;
       }
 
@@ -457,7 +465,9 @@ class BackgroundService {
 
   /// 调度待处理的上传任务（用于批量添加后触发处理）
   Future<void> scheduleFirstPendingUpload() async {
-    _logger.info('scheduleFirstPendingUpload called, ensuring timer is running');
+    _logger.info(
+      'scheduleFirstPendingUpload called, ensuring timer is running',
+    );
     // 确保 timer 运行，由 timer 统一调度任务
     _ensureTimerRunning();
   }
@@ -488,14 +498,14 @@ class BackgroundService {
   /// 重命名并重试上传任务
   Future<void> renameAndRetryUpload(String taskId, String newFilename) async {
     _logger.info('Renaming and retrying upload task: $taskId -> $newFilename');
-    
+
     // 获取任务
     final task = await _transferStorage.getUploadTaskAsync(taskId);
     if (task == null) {
       _logger.warning('Task not found: $taskId');
       return;
     }
-    
+
     // 更新文件名并重置状态
     await _transferStorage.updateUploadTask(
       taskId,
@@ -504,7 +514,7 @@ class BackgroundService {
       errorMessage: null,
       retryCount: 0,
     );
-    
+
     // 重新调度上传
     await scheduleUpload(taskId, true);
     _logger.info('Renamed and rescheduled upload task: $taskId');
@@ -544,13 +554,19 @@ class BackgroundService {
     _logger.info('Cancelling upload task: $taskId');
 
     // 更新任务状态
-    await _transferStorage.updateUploadTask(taskId, status: UploadStatus.CANCELED);
+    await _transferStorage.updateUploadTask(
+      taskId,
+      status: UploadStatus.CANCELED,
+    );
   }
 
   /// 暂停上传任务
   Future<void> pauseUpload(String taskId) async {
     _logger.info('Pausing upload task: $taskId');
-    await _transferStorage.updateUploadTask(taskId, status: UploadStatus.PAUSED);
+    await _transferStorage.updateUploadTask(
+      taskId,
+      status: UploadStatus.PAUSED,
+    );
   }
 
   /// 恢复上传任务（只重置状态，由 _timerHandler 调度，不超出并发限制）
@@ -572,13 +588,19 @@ class BackgroundService {
   /// 取消下载任务
   Future<void> cancelDownload(String taskId) async {
     _logger.info('Cancelling download task: $taskId');
-    await _transferStorage.updateDownloadTask(taskId, status: DownloadStatus.canceled);
+    await _transferStorage.updateDownloadTask(
+      taskId,
+      status: DownloadStatus.canceled,
+    );
   }
 
   /// 暂停下载任务
   Future<void> pauseDownload(String taskId) async {
     _logger.info('Pausing download task: $taskId');
-    await _transferStorage.updateDownloadTask(taskId, status: DownloadStatus.paused);
+    await _transferStorage.updateDownloadTask(
+      taskId,
+      status: DownloadStatus.paused,
+    );
   }
 
   /// 恢复下载任务

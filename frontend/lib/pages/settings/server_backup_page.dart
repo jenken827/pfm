@@ -27,12 +27,9 @@ class _ServerBackupPageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(al.serverBackup_title),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(al.serverBackup_title), centerTitle: true),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateDialog(context),
         child: const Icon(Icons.add),
@@ -47,10 +44,20 @@ class _ServerBackupPageView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.backup_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  Icon(
+                    Icons.backup_outlined,
+                    size: 48,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
                   const SizedBox(height: 12),
-                  Text(al.serverBackup_noTasks,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(
+                    al.serverBackup_noTasks,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             );
@@ -88,7 +95,7 @@ class _ServerBackupTaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final statusText = _getStatusText(task.lastRunStatus, al);
     final statusColor = _getStatusColor(context, task.lastRunStatus);
 
@@ -106,7 +113,9 @@ class _ServerBackupTaskTile extends StatelessWidget {
                   size: 20,
                   color: task.hasEnabled() && task.enabled
                       ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      : Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -121,14 +130,24 @@ class _ServerBackupTaskTile extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                _StrategyTag(strategy: task.hasStrategy() ? task.strategy : BackupStrategy.BACKUP_STRATEGY_SCHEDULED),
+                _StrategyTag(
+                  strategy: task.hasStrategy()
+                      ? task.strategy
+                      : BackupStrategy.BACKUP_STRATEGY_SCHEDULED,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: task.hasCronExpression() &&
+                  child:
+                      task.hasCronExpression() &&
                           task.cronExpression.isNotEmpty &&
-                          (task.hasStrategy() ? task.strategy : BackupStrategy.BACKUP_STRATEGY_SCHEDULED) ==
+                          (task.hasStrategy()
+                                  ? task.strategy
+                                  : BackupStrategy.BACKUP_STRATEGY_SCHEDULED) ==
                               BackupStrategy.BACKUP_STRATEGY_SCHEDULED
-                      ? _InfoRow(icon: Icons.schedule, text: task.cronExpression)
+                      ? _InfoRow(
+                          icon: Icons.schedule,
+                          text: task.cronExpression,
+                        )
                       : const SizedBox.shrink(),
                 ),
               ],
@@ -138,13 +157,17 @@ class _ServerBackupTaskTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: task.lastRunStatus ==
+                  onPressed:
+                      task.lastRunStatus ==
                           BackupRunStatus.BACKUP_RUN_STATUS_RUNNING
                       ? null
                       : () {
-                          final al = AppLocalizations.of(context)!;
-                          context.read<BackupBloc>().add(BackupTriggerEvent(
-                              id: task.hasId() ? task.id.toInt() : 0));
+                          final al = AppLocalizations.of(context);
+                          context.read<BackupBloc>().add(
+                            BackupTriggerEvent(
+                              id: task.hasId() ? task.id.toInt() : 0,
+                            ),
+                          );
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(al.serverBackup_triggered)),
                           );
@@ -199,7 +222,9 @@ class _ServerBackupTaskTile extends StatelessWidget {
       case BackupRunStatus.BACKUP_RUN_STATUS_FAILED:
         return PfmColors.error;
       default:
-        return Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+        return Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
     }
   }
 
@@ -216,7 +241,7 @@ class _ServerBackupTaskTile extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final name = task.hasName() ? task.name : '';
     showDialog(
       context: context,
@@ -233,8 +258,9 @@ class _ServerBackupTaskTile extends StatelessWidget {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () {
-              context.read<BackupBloc>().add(BackupDeleteEvent(
-                  ids: [task.hasId() ? task.id.toInt() : 0]));
+              context.read<BackupBloc>().add(
+                BackupDeleteEvent(ids: [task.hasId() ? task.id.toInt() : 0]),
+              );
               Navigator.pop(ctx);
             },
             child: Text(al.common_delete),
@@ -258,9 +284,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(label, style: TextStyle(fontSize: 12, color: color)),
     );
@@ -279,12 +305,19 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 14,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -302,7 +335,7 @@ class _StrategyTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     String label;
     Color color;
     switch (strategy) {
@@ -316,18 +349,22 @@ class _StrategyTag extends StatelessWidget {
         break;
       case BackupStrategy.BACKUP_STRATEGY_MANUAL:
         label = al.serverBackup_manualBackup;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+        color = Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
         break;
       default:
         label = al.common_unknown;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+        color = Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(label, style: TextStyle(fontSize: 11, color: color)),
     );
@@ -363,15 +400,19 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
     super.initState();
     final task = widget.task;
     _nameController = TextEditingController(
-        text: task?.hasName() == true ? task!.name : '');
+      text: task?.hasName() == true ? task!.name : '',
+    );
     _sourcePathController = TextEditingController(
-        text: task?.hasSourcePath() == true ? task!.sourcePath : '');
+      text: task?.hasSourcePath() == true ? task!.sourcePath : '',
+    );
     _cronController = TextEditingController(
-        text: task?.hasCronExpression() == true
-            ? task!.cronExpression
-            : '0 0 * * *');
+      text: task?.hasCronExpression() == true
+          ? task!.cronExpression
+          : '0 0 * * *',
+    );
     _ignoreController = TextEditingController(
-        text: task?.hasIgnoreRules() == true ? task!.ignoreRules : '');
+      text: task?.hasIgnoreRules() == true ? task!.ignoreRules : '',
+    );
     if (task?.hasStrategy() == true) _strategy = task!.strategy;
     if (task?.hasRecursive() == true) _recursive = task!.recursive;
     if (task?.hasEnabled() == true) _enabled = task!.enabled;
@@ -400,11 +441,13 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     final isEdit = widget.task != null;
     return Padding(
       padding: EdgeInsets.only(
-        left: 16, right: 16, top: 16,
+        left: 16,
+        right: 16,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16,
       ),
       child: Form(
@@ -414,14 +457,20 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEdit ? al.serverBackup_editTask : al.serverBackup_createTask,
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                isEdit ? al.serverBackup_editTask : al.serverBackup_createTask,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                    labelText: al.serverBackup_taskName, border: const OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? al.serverBackup_taskNameRequired : null,
+                  labelText: al.serverBackup_taskName,
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (v) => v?.isEmpty == true
+                    ? al.serverBackup_taskNameRequired
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -431,7 +480,9 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                   hintText: al.serverBackup_sourcePathHint,
                   border: const OutlineInputBorder(),
                 ),
-                validator: (v) => v?.isEmpty == true ? al.serverBackup_sourcePathRequired : null,
+                validator: (v) => v?.isEmpty == true
+                    ? al.serverBackup_sourcePathRequired
+                    : null,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -441,30 +492,41 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                   isEmpty: _targetDirId == null,
                   decoration: InputDecoration(
                     labelText: al.serverBackup_targetDir,
-                    hintText: _targetDirId == null ? al.serverBackup_targetDirHint : null,
+                    hintText: _targetDirId == null
+                        ? al.serverBackup_targetDirHint
+                        : null,
                     border: const OutlineInputBorder(),
                     suffixIcon: const Icon(Icons.folder_open),
                   ),
                   child: _targetDirId != null
-                      ? Text(_targetDirName, maxLines: 1, overflow: TextOverflow.ellipsis)
+                      ? Text(
+                          _targetDirName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
                       : null,
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<BackupStrategy>(
-                value: _strategy,
+                initialValue: _strategy,
                 decoration: InputDecoration(
-                    labelText: al.serverBackup_backupStrategy, border: const OutlineInputBorder()),
+                  labelText: al.serverBackup_backupStrategy,
+                  border: const OutlineInputBorder(),
+                ),
                 items: [
                   DropdownMenuItem(
-                      value: BackupStrategy.BACKUP_STRATEGY_SCHEDULED,
-                      child: Text(al.serverBackup_scheduledBackup)),
+                    value: BackupStrategy.BACKUP_STRATEGY_SCHEDULED,
+                    child: Text(al.serverBackup_scheduledBackup),
+                  ),
                   DropdownMenuItem(
-                      value: BackupStrategy.BACKUP_STRATEGY_WATCH,
-                      child: Text(al.serverBackup_watchBackup)),
+                    value: BackupStrategy.BACKUP_STRATEGY_WATCH,
+                    child: Text(al.serverBackup_watchBackup),
+                  ),
                   DropdownMenuItem(
-                      value: BackupStrategy.BACKUP_STRATEGY_MANUAL,
-                      child: Text(al.serverBackup_manualBackup)),
+                    value: BackupStrategy.BACKUP_STRATEGY_MANUAL,
+                    child: Text(al.serverBackup_manualBackup),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _strategy = v);
@@ -492,17 +554,21 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
                 maxLines: 2,
               ),
               SwitchListTile(
-                  title: Text(al.serverBackup_includeSubdir),
-                  value: _recursive,
-                  onChanged: (v) => setState(() => _recursive = v)),
+                title: Text(al.serverBackup_includeSubdir),
+                value: _recursive,
+                onChanged: (v) => setState(() => _recursive = v),
+              ),
               if (_strategy != BackupStrategy.BACKUP_STRATEGY_MANUAL)
                 SwitchListTile(
-                    title: Text(al.clientBackup_enable),
-                    value: _enabled,
-                    onChanged: (v) => setState(() => _enabled = v)),
+                  title: Text(al.clientBackup_enable),
+                  value: _enabled,
+                  onChanged: (v) => setState(() => _enabled = v),
+                ),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: _submit, child: Text(isEdit ? al.common_save : al.common_create)),
+                onPressed: _submit,
+                child: Text(isEdit ? al.common_save : al.common_create),
+              ),
             ],
           ),
         ),
@@ -523,39 +589,46 @@ class _CreateServerBackupSheetState extends State<_CreateServerBackupSheet> {
   }
 
   void _submit() {
-    final al = AppLocalizations.of(context)!;
+    final al = AppLocalizations.of(context);
     if (!_formKey.currentState!.validate()) return;
     if (_targetDirId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(al.serverBackup_selectTargetDir)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(al.serverBackup_selectTargetDir)));
       return;
     }
     final bloc = context.read<BackupBloc>();
     if (widget.task != null) {
-      bloc.add(BackupUpdateEvent(
-        id: widget.task!.hasId() ? widget.task!.id.toInt() : 0,
-        name: _nameController.text,
-        sourcePath: _sourcePathController.text,
-        targetDirId: _targetDirId!,
-        strategy: _strategy,
-        cronExpression: _cronController.text,
-        ignoreRules:
-            _ignoreController.text.isEmpty ? null : _ignoreController.text,
-        recursive: _recursive,
-        enabled: _enabled,
-      ));
+      bloc.add(
+        BackupUpdateEvent(
+          id: widget.task!.hasId() ? widget.task!.id.toInt() : 0,
+          name: _nameController.text,
+          sourcePath: _sourcePathController.text,
+          targetDirId: _targetDirId!,
+          strategy: _strategy,
+          cronExpression: _cronController.text,
+          ignoreRules: _ignoreController.text.isEmpty
+              ? null
+              : _ignoreController.text,
+          recursive: _recursive,
+          enabled: _enabled,
+        ),
+      );
     } else {
-      bloc.add(BackupCreateEvent(
-        name: _nameController.text,
-        sourcePath: _sourcePathController.text,
-        targetDirId: _targetDirId!,
-        strategy: _strategy,
-        cronExpression: _cronController.text,
-        ignoreRules:
-            _ignoreController.text.isEmpty ? null : _ignoreController.text,
-        recursive: _recursive,
-        enabled: _enabled,
-      ));
+      bloc.add(
+        BackupCreateEvent(
+          name: _nameController.text,
+          sourcePath: _sourcePathController.text,
+          targetDirId: _targetDirId!,
+          strategy: _strategy,
+          cronExpression: _cronController.text,
+          ignoreRules: _ignoreController.text.isEmpty
+              ? null
+              : _ignoreController.text,
+          recursive: _recursive,
+          enabled: _enabled,
+        ),
+      );
     }
     Navigator.pop(context);
   }

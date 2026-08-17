@@ -1,6 +1,7 @@
 package llog
 
 import (
+	"io"
 	"path"
 	"strings"
 
@@ -11,6 +12,13 @@ import (
 )
 
 var logger *logrus.Logger
+
+// discardLogger 未初始化时的兜底 logger（测试/未初始化场景防 nil panic）
+var discardLogger = func() *logrus.Logger {
+	l := logrus.New()
+	l.SetOutput(io.Discard)
+	return l
+}()
 
 // Init 初始化日志
 // 使用logrus和lumberjack
@@ -73,5 +81,8 @@ func SetLogLevel(l string) {
 
 // L 获取日志实例
 func L() *logrus.Logger {
+	if logger == nil {
+		return discardLogger
+	}
 	return logger
 }
