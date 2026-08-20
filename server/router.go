@@ -174,7 +174,7 @@ func telegramWebhookRoute(mux *http.ServeMux) {
 
 // webdavRoute WebDAV 服务路由
 func webdavRoute(mux *http.ServeMux) {
-	webdavHandler := webdav.NewHandler("")
+	webdavHandler := webdav.NewHandler()
 	mux.Handle("/dav/", http.StripPrefix("/dav", webdavHandler))
 }
 

@@ -9,5 +9,6 @@ export 'files/trash_page.dart';
 export 'files/file_type_page.dart';
 export 'transfer/transfer_page.dart';
 export 'settings/setting_page.dart';
+export 'settings/log_page.dart';
 export 'login/login_page.dart';
 export 'login/casdoor_config_page.dart';

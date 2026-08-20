@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 )
@@ -22,7 +23,7 @@ const (
 // basicAuthCacheEntry Basic Auth 缓存条目
 type basicAuthCacheEntry struct {
 	valid     bool
-	userName  string
+	userID    string
 	expiresAt time.Time
 }
 
@@ -48,7 +49,7 @@ func NewBasicAuthenticator() *BasicAuthenticator {
 }
 
 // Authenticate 验证用户名密码
-// 返回 (userName, nil) 表示认证成功
+// 返回 (userID, nil) 表示认证成功（userID 为 Casdoor 用户 UUID，与 owner_id 一致）
 // 返回 ("", error) 表示认证失败
 func (a *BasicAuthenticator) Authenticate(username, password string) (string, error) {
 	// 1. 查缓存
@@ -59,7 +60,7 @@ func (a *BasicAuthenticator) Authenticate(username, password string) (string, er
 			if !entry.valid {
 				return "", fmt.Errorf("authentication failed (cached)")
 			}
-			return entry.userName, nil
+			return entry.userID, nil
 		}
 		a.cache.Delete(cacheKey)
 	}
@@ -75,19 +76,25 @@ func (a *BasicAuthenticator) Authenticate(username, password string) (string, er
 		return "", fmt.Errorf("casdoor authentication failed: %w", err)
 	}
 
-	// 3. 验证成功，解析 token 获取用户名
-	// ROPC grant 返回的 token 中包含用户信息
-	_ = token // token 已获取，认证成功
+	// 3. 验证成功，解析 token 获取用户 UUID（与 owner_id / UserSpace.user_id 一致）
+	claims, err := casdoorsdk.ParseJwtToken(token)
+	if err != nil {
+		return "", fmt.Errorf("parse casdoor token failed: %w", err)
+	}
+	userID := claims.User.Id
+	if userID == "" {
+		userID = claims.User.Name
+	}
 
 	// 4. 缓存成功结果
 	a.cache.Store(cacheKey, &basicAuthCacheEntry{
 		valid:     true,
-		userName:  username,
+		userID:    userID,
 		expiresAt: time.Now().Add(basicAuthCacheTTL),
 	})
 
-	llog.L().Infof("webdav basic auth success: user=%s", username)
-	return username, nil
+	llog.L().Infof("webdav basic auth success: user=%s, user_id=%s", username, userID)
+	return userID, nil
 }
 
 // loginWithCasdoor 调用 Casdoor OAuth2 ROPC grant 获取 token

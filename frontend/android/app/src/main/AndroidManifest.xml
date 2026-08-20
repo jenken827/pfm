@@ -20,9 +20,9 @@
     <uses-permission android:name="android.permission.WRITE_CONTACTS"/>
     
     <application
-        android:label="pfm"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+            android:label="pfm"
+            android:name="com.shifangyuan.pfm.PfmApplication"
+            android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

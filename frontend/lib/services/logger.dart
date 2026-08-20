@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -28,7 +29,7 @@ class _FileLogWriter {
     final timestamp = DateTime.now().toString().substring(0, 10);
     _currentFile = File('${_logDir!.path}/pfm_$timestamp.log');
     _sink = _currentFile!.openWrite(mode: FileMode.append);
-    _currentSize = await _currentFile!.length();
+    _currentSize = _currentFile!.existsSync() ? await _currentFile!.length() : 0;
   }
 
   void write(String message) {
@@ -38,6 +39,8 @@ class _FileLogWriter {
       final timestamp = DateTime.now().toString().substring(11, 23);
       _sink!.writeln('$timestamp $message');
       _currentSize += message.length + 1;
+      // 实时落盘：进程被强杀/卡死时尽量不丢最后几条日志
+      unawaited(_sink!.flush().catchError((_) {}));
 
       // 轮转文件
       if (_currentSize >= _maxFileSize) {
@@ -104,7 +107,7 @@ Future<void> initTalkerLogger({
   if (logDirPath != null) {
     logDir = Directory(logDirPath);
   } else {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await getApplicationSupportDirectory();
     logDir = Directory('${appDir.path}/logs');
   }
   _logDir = logDir;
@@ -180,6 +183,58 @@ Future<void> cleanupOldLogs({int keepDays = 7}) async {
       await file.delete();
     }
   }
+}
+
+/// 原生日志目录（Kotlin/ObjC 写入）：Android/iOS 为
+/// getApplicationSupportDirectory()/pfm_logs（Android 上即 filesDir），
+/// 桌面平台原生侧无此目录，返回 null。
+Future<Directory?> getNativeLogDir() async {
+  if (!Platform.isAndroid && !Platform.isIOS) return null;
+  try {
+    final supportDir = await getApplicationSupportDirectory();
+    return Directory('${supportDir.path}/pfm_logs');
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 获取原生日志文件列表（按修改时间倒序）
+Future<List<File>> getNativeLogFiles() async {
+  final dir = await getNativeLogDir();
+  if (dir == null || !await dir.exists()) return [];
+  try {
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.log'))
+        .toList();
+    files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    return files;
+  } catch (_) {
+    return [];
+  }
+}
+
+/// 获取全部日志文件（Flutter 日志 + 原生日志），按修改时间倒序
+Future<List<File>> getAllLogFiles() async {
+  final flutterFiles = await getLogFiles();
+  final nativeFiles = await getNativeLogFiles();
+  final all = [...flutterFiles, ...nativeFiles];
+  all.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+  return all;
+}
+
+/// 清空全部日志：删除 Flutter 与原生日志文件，并清空当前内存日志
+Future<void> clearAllLogs() async {
+  final files = await getAllLogFiles();
+  for (final f in files) {
+    try {
+      await f.delete();
+    } catch (_) {}
+  }
+  try {
+    getLogger().cleanHistory();
+  } catch (_) {}
 }
 
 /// 自定义日志格式化器

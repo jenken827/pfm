@@ -2,7 +2,6 @@ package webdav
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -18,16 +17,19 @@ import (
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"lukechampine.com/blake3"
 )
 
 // Backend WebDAV 文件系统后端
 type Backend struct {
-	rootID string
+	rootID  string
+	ownerID string
 }
 
 // NewBackend 创建 WebDAV 后端
-func NewBackend(rootID string) *Backend {
-	return &Backend{rootID: rootID}
+// rootID 为用户根目录文件 ID，ownerID 为当前用户 ID（与 File.owner_id 一致）
+func NewBackend(rootID, ownerID string) *Backend {
+	return &Backend{rootID: rootID, ownerID: ownerID}
 }
 
 // resolvePath 解析 WebDAV 路径到 PFM 文件
@@ -36,12 +38,12 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 	name = strings.TrimSuffix(name, "/")
 
 	parentID := b.rootID
-	if parentID == "" {
-		parentID = "0"
-	}
 
 	// 根目录
 	if name == "" {
+		if parentID == "" {
+			return nil, gowebdav.NewHTTPError(404, fmt.Errorf("root not configured"))
+		}
 		file, err := db.GetFileByID(parentID)
 		if err != nil {
 			return nil, gowebdav.NewHTTPError(404, fmt.Errorf("root not found"))
@@ -53,22 +55,15 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 	parts := strings.Split(name, "/")
 	var current *native.FileORM
 	for _, part := range parts {
-		files, _, _, err := db.GetFileList(parentID, 0, 10000, "")
-		if err != nil {
-			return nil, fmt.Errorf("list files failed: %w", err)
-		}
-		found := false
-		for _, f := range files {
-			if f.Name != nil && *f.Name == part {
-				current = f
-				parentID = *f.Id
-				found = true
-				break
-			}
-		}
-		if !found {
+		if parentID == "" {
 			return nil, gowebdav.NewHTTPError(404, fmt.Errorf("not found: %s", name))
 		}
+		f, err := db.GetFileByParentAndName(parentID, part, b.ownerID)
+		if err != nil {
+			return nil, gowebdav.NewHTTPError(404, fmt.Errorf("not found: %s", name))
+		}
+		current = f
+		parentID = *f.Id
 	}
 	return current, nil
 }
@@ -132,7 +127,7 @@ func (b *Backend) ReadDir(ctx context.Context, name string, recursive bool) ([]g
 		return nil, gowebdav.NewHTTPError(405, fmt.Errorf("not a directory"))
 	}
 
-	files, _, _, err := db.GetFileList(*file.Id, 0, 10000, "")
+	files, _, _, err := db.GetFileList(*file.Id, 0, 10000, b.ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +157,40 @@ func (b *Backend) ReadDir(ctx context.Context, name string, recursive bool) ([]g
 	return result, nil
 }
 
+// checkPrecondition 检查 If-Match / If-None-Match 条件请求头
+// 返回 412 错误表示条件不满足
+func checkPrecondition(existing *native.FileORM, ifMatch, ifNoneMatch gowebdav.ConditionalMatch) error {
+	// 计算当前 ETag
+	currentETag := ""
+	if existing != nil && existing.Hash != nil {
+		currentETag = *existing.Hash
+	}
+
+	// If-None-Match：条件为真时（资源不存在 或 ETag 不匹配）才允许操作
+	if ifNoneMatch.IsSet() {
+		matched, err := ifNoneMatch.MatchETag(currentETag)
+		if err != nil {
+			return gowebdav.NewHTTPError(412, fmt.Errorf("invalid If-None-Match: %w", err))
+		}
+		if matched {
+			return gowebdav.NewHTTPError(412, fmt.Errorf("precondition failed: If-None-Match"))
+		}
+	}
+
+	// If-Match：条件为真时（资源存在 且 ETag 匹配）才允许操作
+	if ifMatch.IsSet() {
+		matched, err := ifMatch.MatchETag(currentETag)
+		if err != nil {
+			return gowebdav.NewHTTPError(412, fmt.Errorf("invalid If-Match: %w", err))
+		}
+		if !matched {
+			return gowebdav.NewHTTPError(412, fmt.Errorf("precondition failed: If-Match"))
+		}
+	}
+
+	return nil
+}
+
 // Create 创建/更新文件
 func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, opts *gowebdav.CreateOptions) (*gowebdav.FileInfo, bool, error) {
 	dirPath := path.Dir(name)
@@ -173,24 +202,28 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 	}
 
 	// 检查是否已存在
-	existingFiles, _, _, _ := db.GetFileList(*parentFile.Id, 0, 10000, "")
-	var existing *native.FileORM
-	for _, f := range existingFiles {
-		if f.Name != nil && *f.Name == fileName {
-			existing = f
-			break
+	existing, err := db.GetFileByParentAndName(*parentFile.Id, fileName, b.ownerID)
+	var existingFile *native.FileORM
+	if err == nil {
+		existingFile = existing
+	}
+	created := existingFile == nil
+
+	// 处理 If-Match / If-None-Match 条件请求头
+	if opts != nil {
+		if pErr := checkPrecondition(existingFile, opts.IfMatch, opts.IfNoneMatch); pErr != nil {
+			return nil, false, pErr
 		}
 	}
-	created := existing == nil
 
-	// 读取内容到临时文件并计算 hash
+	// 读取内容到临时文件并计算 blake3 hash（与系统文件 hash 算法一致）
 	tmpFile, err := os.CreateTemp("", "webdav-upload-*")
 	if err != nil {
 		return nil, false, fmt.Errorf("create temp file: %w", err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	hasher := sha256.New()
+	hasher := blake3.New(32, nil)
 	writer := io.MultiWriter(tmpFile, hasher)
 	written, err := io.Copy(writer, body)
 	if err != nil {
@@ -209,12 +242,12 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 
 	// 调用 UploadSmall
 	uploadReq := &native.UploadSmallReq{
-		Name:     &fileName,
-		ParentId: parentFile.Id,
-		Size:     uint64Ptr(uint64(written)),
-		Hash:     &hash,
-		Content:  content,
-		Overwrite: boolPtr(existing != nil),
+		Name:      &fileName,
+		ParentId:  parentFile.Id,
+		Size:      uint64Ptr(uint64(written)),
+		Hash:      &hash,
+		Content:   content,
+		Overwrite: boolPtr(existingFile != nil),
 	}
 
 	_, mErr := service.UploadSmall(ctx, uploadReq)
@@ -227,6 +260,7 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 		Size:    written,
 		ModTime: time.Now(),
 		IsDir:   false,
+		ETag:    hash,
 	}, created, nil
 }
 
@@ -239,6 +273,14 @@ func (b *Backend) RemoveAll(ctx context.Context, name string, opts *gowebdav.Rem
 	if err != nil {
 		return err
 	}
+
+	// 处理 If-Match / If-None-Match 条件请求头
+	if opts != nil {
+		if pErr := checkPrecondition(file, opts.IfMatch, opts.IfNoneMatch); pErr != nil {
+			return pErr
+		}
+	}
+
 	mErr := service.DeleteFile(ctx, &native.DeleteFileReq{
 		Ids: []string{*file.Id},
 	})
@@ -258,6 +300,11 @@ func (b *Backend) Mkdir(ctx context.Context, name string) error {
 		return gowebdav.NewHTTPError(404, fmt.Errorf("parent not found: %w", err))
 	}
 
+	// 已存在同名目录/文件则返回 405（与 OpenList 行为一致）
+	if _, err := db.GetFileByParentAndName(*parentFile.Id, dirName, b.ownerID); err == nil {
+		return gowebdav.NewHTTPError(405, fmt.Errorf("already exists: %s", dirName))
+	}
+
 	_, mErr := service.CreateDir(ctx, &native.CreateDirReq{
 		Name:     &dirName,
 		ParentId: parentFile.Id,
@@ -268,7 +315,7 @@ func (b *Backend) Mkdir(ctx context.Context, name string) error {
 	return nil
 }
 
-// Copy 复制（暂不支持）
+// Copy 复制（当前服务端未提供 Copy RPC，暂不支持）
 func (b *Backend) Copy(ctx context.Context, name, dest string, options *gowebdav.CopyOptions) (bool, error) {
 	return false, gowebdav.NewHTTPError(501, fmt.Errorf("copy not supported"))
 }
@@ -288,16 +335,10 @@ func (b *Backend) Move(ctx context.Context, name, dest string, options *gowebdav
 	}
 
 	// 检查目标是否已存在
-	destFiles, _, _, _ := db.GetFileList(*destFile.Id, 0, 10000, "")
-	created := true
-	for _, f := range destFiles {
-		if f.Name != nil && *f.Name == destName {
-			if options != nil && options.NoOverwrite {
-				return false, gowebdav.NewHTTPError(412, fmt.Errorf("exists"))
-			}
-			created = false
-			break
-		}
+	_, err = db.GetFileByParentAndName(*destFile.Id, destName, b.ownerID)
+	created := err != nil
+	if err == nil && options != nil && options.NoOverwrite {
+		return false, gowebdav.NewHTTPError(412, fmt.Errorf("exists"))
 	}
 
 	// 移动

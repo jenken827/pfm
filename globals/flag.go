@@ -57,23 +57,24 @@ func Parse() {
 		os.Exit(0)
 	}
 
-	if err := validateConfig(); err != nil {
+	if err := ValidateConfig(); err != nil {
 		flag.Usage()
 		fmt.Fprintf(os.Stderr, "\n%v\n", err)
 		os.Exit(1)
 	}
-	normalizePath()
+	NormalizePath()
 }
 
-func validateConfig() error {
+// ValidateConfig 校验配置参数（-d/-c 至少指定一个）
+func ValidateConfig() error {
 	if DataDir == "" && ConfigPath == "" {
 		return fmt.Errorf("error: at least one of -dir or -config must be specified")
 	}
 	return nil
 }
 
-// normalizePath 规范化路径
-func normalizePath() {
+// NormalizePath 规范化路径
+func NormalizePath() {
 	if !filepath.IsAbs(DataDir) {
 		wd, err := os.Getwd()
 		if err != nil {

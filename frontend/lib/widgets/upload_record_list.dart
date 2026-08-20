@@ -273,7 +273,11 @@ class _UploadRecordListState extends State<UploadRecordList> {
               itemBuilder: (context, index) {
                 // 底部加载更多指示器
                 if (index == _records.length) {
-                  _loadMore();
+                  // 不能在 build 阶段直接触发加载(会抛 setState during build),
+                  // 推迟到当前帧构建完成后;_loadMore 内部有 _isLoading/_hasMore 守卫
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _loadMore();
+                  });
                   return const Padding(
                     padding: EdgeInsets.all(16),
                     child: Center(child: CircularProgressIndicator()),

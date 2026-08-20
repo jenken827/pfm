@@ -476,14 +476,14 @@ build_android_apk() {
     fi
     ensure_sqlite3_libs
 
-    if ! puro flutter build apk --release --split-per-abi --no-tree-shake-icons; then
+    if ! puro flutter build apk --release --split-per-abi --no-tree-shake-icons --target-platform android-arm64; then
         echo "⚠️ 构建失败，再次填充 sqlite3 缓存后重试..."
         # 再次清理并填充
         if [ -d "$HOOK_SHARED" ]; then
             rm -rf "$HOOK_SHARED"/download-* 2>/dev/null
         fi
         ensure_sqlite3_libs
-        puro flutter build apk --release --split-per-abi --no-tree-shake-icons
+        puro flutter build apk --release --split-per-abi --no-tree-shake-icons --target-platform android-arm64
     fi
     
     # 查找所有生成的APK文件（split-per-abi 会生成多个）

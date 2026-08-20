@@ -5,7 +5,6 @@
 proto/gen/
 data/
 pfm
-pfm
-
+*.test
 apk
 .hermes/memory/MEMORY.md.lock

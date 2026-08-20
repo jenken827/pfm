@@ -21,8 +21,9 @@ part 'settings_route.g.dart';
     TypedGoRoute<ClientBackupRoute>(path: 'client-backup'),
     TypedGoRoute<AlbumBackupRoute>(path: 'album-backup'),
     TypedGoRoute<ContactBackupRoute>(path: 'contact-backup'),
-    TypedGoRoute<PermissionManagementRoute>(path: 'permission'),
-  ],
+        TypedGoRoute<PermissionManagementRoute>(path: 'permission'),
+        TypedGoRoute<LogRoute>(path: 'logs'),
+      ],
 )
 @immutable
 class SettingsRoute extends GoRouteData with $SettingsRoute {
@@ -103,5 +104,15 @@ class PermissionManagementRoute extends GoRouteData
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const PermissionManagementPage();
+  }
+}
+
+/// 日志查看路由
+class LogRoute extends GoRouteData with $LogRoute {
+  const LogRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const LogPage();
   }
 }

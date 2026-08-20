@@ -416,7 +416,36 @@
     "settings_uploadSetting": "上传设置",
     "settings_uploadSubtitle": "分片大小和并发数",
     "settings_exportLog": "导出日志",
-    "settings_exportLogSubtitle": "导出日志文件用于问题分析",
+        "settings_exportLogSubtitle": "导出日志文件用于问题分析",
+    "settings_viewLog": "查看日志",
+    "settings_viewLogSubtitle": "查看日志记录，排查启动/运行问题",
+    "log_title": "日志",
+    "log_refresh": "刷新",
+    "log_searchHint": "搜索关键词",
+    "log_sourceAll": "全部来源",
+    "log_sourceNative": "原生",
+    "log_levelAll": "全部级别",
+    "log_levelError": "错误",
+    "log_levelWarning": "警告",
+    "log_levelInfo": "信息",
+    "log_levelDebug": "调试",
+    "log_levelVerbose": "详细",
+    "log_clear": "清空日志",
+    "log_clearConfirm": "确定清空所有日志（包括日志文件与当前会话）？",
+    "log_clearDone": "日志已清空",
+    "log_empty": "暂无日志",
+    "log_count": "共 {count} 条",
+    "log_copy": "复制",
+    "log_copyAll": "复制全部",
+    "log_copyDone": "已复制 {count} 条日志",
+    "@log_count": {
+      "description": "日志条数",
+      "placeholders": {
+        "count": {
+          "type": "int"
+        }
+      }
+    },
     "settings_about": "关于",
     "settings_aboutSubtitle": "查看应用信息",
     "settings_logout": "退出登录",

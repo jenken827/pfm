@@ -181,14 +181,14 @@ cmd_run() {
     
     eval go build $BUILD_ARGS -o \"$OUTPUT\" .
     echo "🚀 启动服务器..."
-    "$OUTPUT" -d ./data
+    "$OUTPUT" server -d ./data
 }
 
 # 开发模式运行（不编译，直接 go run）
 cmd_dev() {
     echo "🚀 开发模式运行..."
     check_command "go"
-    go run . -d ./data
+    go run . server -d ./data
 }
 
 # 生成所有 protobuf 代码

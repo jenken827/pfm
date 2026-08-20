@@ -6,6 +6,8 @@ import (
 	"path"
 	"strconv"
 	"time"
+
+	"jenken827.com/jenken827/pfm/internal/llog"
 )
 
 // MaxFilesPerDir 每个目录最大文件数
@@ -31,14 +33,24 @@ type DirBackend interface {
 // 路径统一使用正斜杠；local backend 由 os 自动转换
 func AllocateUploadDir(ctx context.Context, root string, backend DirBackend) (string, error) {
 	now := time.Now()
-	yearMonthDir := path.Join(root, now.Format("2006"), now.Format("01"))
-	if err := backend.Mkdir(ctx, yearMonthDir); err != nil {
-		return "", fmt.Errorf("create year-month directory failed: %w", err)
+	year := now.Format("2006")
+	month := now.Format("01")
+
+	// 逐级确保目录存在（百度 create 不递归创建父目录，必须逐级；失败仅告警不阻断，
+	// 由 List fallback 与后续 create 兜底——恢复重构前的容错行为）
+	for _, dir := range []string{root, path.Join(root, year), path.Join(root, year, month)} {
+		if err := backend.Mkdir(ctx, dir); err != nil {
+			llog.L().Warnf("ensure directory %s failed (may already exist): %v", dir, err)
+		}
 	}
+
+	yearMonthDir := path.Join(root, year, month)
 
 	entries, err := backend.List(ctx, yearMonthDir)
 	if err != nil {
-		return "", fmt.Errorf("list year-month directory failed: %w", err)
+		// 列出失败（如百度 -7 目录不存在/名错误）→ 直接使用年月目录，后续 create 兜底
+		llog.L().Warnf("list year-month directory failed: %v, fallback to %s", err, yearMonthDir)
+		return yearMonthDir, nil
 	}
 
 	directFileCount := 0
@@ -69,7 +81,13 @@ func AllocateUploadDir(ctx context.Context, root string, backend DirBackend) (st
 	maxSubDir := path.Join(yearMonthDir, strconv.Itoa(maxSubDirNum))
 	subEntries, err := backend.List(ctx, maxSubDir)
 	if err != nil {
-		return "", fmt.Errorf("list subdirectory %d failed: %w", maxSubDirNum, err)
+		// 子目录列表失败（如百度 -7）→ 创建新子目录（恢复重构前行为）
+		llog.L().Warnf("list subdirectory %d failed: %v, creating new subfolder", maxSubDirNum, err)
+		newSubDir := path.Join(yearMonthDir, strconv.Itoa(maxSubDirNum+1))
+		if err := backend.Mkdir(ctx, newSubDir); err != nil {
+			return "", fmt.Errorf("create subdirectory %d failed: %w", maxSubDirNum+1, err)
+		}
+		return newSubDir, nil
 	}
 	subFileCount := 0
 	for _, entry := range subEntries {

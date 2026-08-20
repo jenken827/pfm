@@ -190,6 +190,11 @@ class AlbumBackupService {
     return await PhotoManager.getAssetPathList(
       type: RequestType.image,
       hasAll: true,
+      // 与 _getPhotosToBackup 一致：显式排序，避免 Android 上
+      // getAssetListRange 生成 "ORDER BY LIMIT" 坏 SQL
+      filterOption: FilterOptionGroup(
+        orders: const [OrderOption(type: OrderOptionType.createDate)],
+      ),
     );
   }
 
@@ -430,6 +435,13 @@ class AlbumBackupService {
   /// 获取需要备份的照片列表
   /// [force] 为 true 时跳过已备份检查，返回所有照片
   Future<List<AssetEntity>> _getPhotosToBackup({bool force = false}) async {
+    // 显式指定排序：photo_manager 3.x 在 Android 上若不传 orders，
+    // getAssetListRange 生成的 sortOrder 为 "LIMIT x OFFSET y"，
+    // MediaProvider 拼接后产生 "ORDER BY LIMIT" 坏 SQL（SQLITE_ERROR）。
+    final filterOption = FilterOptionGroup(
+      orders: const [OrderOption(type: OrderOptionType.createDate)],
+    );
+
     // 确定要查询的相册
     List<AssetPathEntity> albums;
     if (_config.backupAlbumIds.isEmpty) {
@@ -437,6 +449,7 @@ class AlbumBackupService {
       albums = await PhotoManager.getAssetPathList(
         type: _config.backupVideos ? RequestType.common : RequestType.image,
         hasAll: true,
+        filterOption: filterOption,
       );
     } else {
       // 备份指定相册
@@ -445,6 +458,7 @@ class AlbumBackupService {
         final allAlbums = await PhotoManager.getAssetPathList(
           type: RequestType.image,
           hasAll: true,
+          filterOption: filterOption,
         );
         final album = allAlbums.where((a) => a.id == albumId).firstOrNull;
         if (album != null) {

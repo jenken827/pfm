@@ -266,8 +266,8 @@ class FmRepository {
     } on DioException catch (e) {
       _logger.error('获取文件列表失败: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取文件列表失败: $e');
+    } catch (e, st) {
+      _logger.error('获取文件列表失败: $e\n$st');
       return ApiResult(success: false, message: e.toString());
     }
   }

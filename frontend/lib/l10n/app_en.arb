@@ -265,7 +265,36 @@
     "settings_uploadSetting": "Upload Settings",
     "settings_uploadSubtitle": "Chunk size and concurrency",
     "settings_exportLog": "Export Logs",
-    "settings_exportLogSubtitle": "Export log files for troubleshooting",
+        "settings_exportLogSubtitle": "Export log files for troubleshooting",
+    "settings_viewLog": "View Logs",
+    "settings_viewLogSubtitle": "View log records to troubleshoot startup/runtime issues",
+    "log_title": "Logs",
+    "log_refresh": "Refresh",
+    "log_searchHint": "Search keyword",
+    "log_sourceAll": "All sources",
+    "log_sourceNative": "Native",
+    "log_levelAll": "All levels",
+    "log_levelError": "Error",
+    "log_levelWarning": "Warning",
+    "log_levelInfo": "Info",
+    "log_levelDebug": "Debug",
+    "log_levelVerbose": "Verbose",
+    "log_clear": "Clear Logs",
+    "log_clearConfirm": "Clear all logs (files and current session)?",
+    "log_clearDone": "Logs cleared",
+    "log_empty": "No logs",
+    "log_count": "{count} entries",
+    "log_copy": "Copy",
+    "log_copyAll": "Copy all",
+    "log_copyDone": "Copied {count} entries",
+    "@log_count": {
+      "description": "Log entry count",
+      "placeholders": {
+        "count": {
+          "type": "int"
+        }
+      }
+    },
     "settings_about": "About",
     "settings_aboutSubtitle": "View app information",
     "settings_logout": "Log Out",

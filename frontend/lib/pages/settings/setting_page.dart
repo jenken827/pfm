@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/fm_repository.dart';
@@ -217,7 +219,10 @@ class _SettingPageState extends State<SettingPage> {
                     subtitle: al.settings_autoBackupSubtitle,
                     onTap: () => const ClientBackupRoute().push(context),
                   ),
-                  if (isMobile) ...[
+                  // 相册备份仅移动端：用设备类型判断(Platform.isAndroid/isIOS)。
+                  // 不能复用上面的 isMobile(屏幕宽度<600)——大屏Android Pad
+                  // (如华为MatePad)宽度>600会被误判为桌面而隐藏入口
+                  if (Platform.isAndroid || Platform.isIOS) ...[
                     const Divider(height: 1, indent: 56),
                     _SettingsTile(
                       icon: Icons.photo_library_outlined,
@@ -260,6 +265,15 @@ class _SettingPageState extends State<SettingPage> {
             Card(
               child: Column(
                 children: [
+                  _SettingsTile(
+                    icon: Icons.description_outlined,
+                    iconBackground: PfmColors.documentSurface,
+                    iconColor: PfmColors.document,
+                    title: al.settings_viewLog,
+                    subtitle: al.settings_viewLogSubtitle,
+                    onTap: () => const LogRoute().push(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
                   _SettingsTile(
                     icon: Icons.bug_report_outlined,
                     iconBackground: PfmColors.warningSurface,
