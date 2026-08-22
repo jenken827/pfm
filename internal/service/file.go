@@ -1027,12 +1027,15 @@ func deleteThumbnailsForFiles(fileIDs []string) {
 	cacheDir := "data/thumbnails"
 	generator := thumbnail.NewGenerator(cacheDir)
 
-	for _, fileID := range fileIDs {
-		file, err := db.GetFileByID(fileID)
-		if err != nil {
-			continue
-		}
+	// 用 Unscoped 查询：永久删除的文件已在回收站（软删），
+	// 默认作用域的 GetFileByID 查不到软删记录，会导致缩略图永远无法清理
+	files, err := db.GetFilesByIDsUnscoped(fileIDs)
+	if err != nil {
+		llog.L().Warnf("get files for thumbnail cleanup failed: %v", err)
+		return
+	}
 
+	for _, file := range files {
 		if file.Hash != nil && *file.Hash != "" {
 			// 删除所有尺寸的缩略图
 			if err := generator.DeleteAllThumbnails(*file.Hash); err != nil {

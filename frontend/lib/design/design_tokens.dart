@@ -119,7 +119,10 @@ class PfmShadows {
 class PfmTypography {
   PfmTypography._();
 
-  static const String fontFamily = 'Inter';
+  // 全局字体：Noto Sans SC（OFL 开源，中英文统一字形）。
+  // 避免 Windows 默认字体（Segoe UI + 系统中文回退）导致的中文粗细/颜色深浅不一致，
+  // 打包进安装包，桌面端与移动端渲染一致。
+  static const String fontFamily = 'NotoSansSC';
 
   // 大标题
   static const TextStyle displayLarge = TextStyle(

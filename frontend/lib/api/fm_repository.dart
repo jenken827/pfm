@@ -92,11 +92,11 @@ class FmRepository {
         if (token?.accessToken != null) {
           options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
         }
-        _logger.info('API Request: ${options.method} ${options.path}');
+        _logger.debug('API Request: ${options.method} ${options.path}');
         return handler.next(options);
       },
       onResponse: (response, handler) {
-        _logger.info(
+        _logger.debug(
           'API Response: ${response.statusCode} ${response.requestOptions.path}',
         );
         return handler.next(response);
@@ -164,11 +164,11 @@ class FmRepository {
         if (token?.accessToken != null) {
           options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
         }
-        _logger.info('API Request: ${options.method} ${options.path}');
+        _logger.debug('API Request: ${options.method} ${options.path}');
         return handler.next(options);
       },
       onResponse: (response, handler) {
-        _logger.info(
+        _logger.debug(
           'API Response: ${response.statusCode} ${response.requestOptions.path}',
         );
         return handler.next(response);

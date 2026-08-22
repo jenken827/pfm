@@ -8,3 +8,6 @@ pfm
 *.test
 apk
 .hermes/memory/MEMORY.md.lock
+
+# puro/flutter 构建会污染 lockfile, 移出版本控制
+frontend/pubspec.lock

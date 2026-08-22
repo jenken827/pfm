@@ -419,6 +419,16 @@
         "settings_exportLogSubtitle": "导出日志文件用于问题分析",
     "settings_viewLog": "查看日志",
     "settings_viewLogSubtitle": "查看日志记录，排查启动/运行问题",
+    "settings_logLevel": "日志等级",
+    "settings_logLevelSubtitle": "控制日志输出量，调高等级可减少刷屏",
+    "settings_logLevelApplied": "日志等级已切换为 {level}",
+    "@settings_logLevelApplied": {
+      "placeholders": {
+        "level": {
+          "type": "String"
+        }
+      }
+    },
     "log_title": "日志",
     "log_refresh": "刷新",
     "log_searchHint": "搜索关键词",

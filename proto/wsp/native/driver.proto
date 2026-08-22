@@ -21,6 +21,10 @@ message TelegramDriverConfig {
     optional string webhook_secret_token=3;
     repeated string chat_id=4;
     optional bool enabled_webhook = 5; 
+    // 本地 bot-api(--local 模式)返回的容器内文件路径前缀，例如 /var/lib/telegram-bot-api
+    optional string local_path_prefix = 6;
+    // 容器内路径前缀在宿主机上的实际路径（bind mount 目标），例如 /home/user/servers/telegram-bot-api/data
+    optional string local_path_replacement = 7;
 }
 
 // 123pan 驱动器配置

@@ -35,7 +35,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
   /// 获取文件列表
   Future<void> _onFileList(FileListEvent event, Emitter<FileState> emit) async {
     emit(state.copyWith(status: FileStateStatus.loading));
-    getLogger().info('get file list dir id: ${event.dirId}');
+    getLogger().debug('get file list dir id: ${event.dirId}');
     final resp = await fmRepository.getFileList(parentId: event.dirId);
 
     if (!resp.success) {
@@ -66,6 +66,8 @@ class FileBloc extends Bloc<FileEvent, FileState> {
         hasMore: hasMore,
         offset: files.length,
         total: total,
+        // 进入目录列表即退出搜索态，避免从搜索结果导航后残留搜索状态
+        searchKeyword: '',
       ),
     );
   }
@@ -93,7 +95,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
     }
 
     emit(state.copyWith(status: FileStateStatus.loadingMore));
-    getLogger().info('load more files, offset: ${state.offset}');
+    getLogger().debug('load more files, offset: ${state.offset}');
 
     final resp = await fmRepository.getFileList(
       parentId: state.currentDirId,

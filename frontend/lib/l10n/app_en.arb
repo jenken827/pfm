@@ -268,6 +268,16 @@
         "settings_exportLogSubtitle": "Export log files for troubleshooting",
     "settings_viewLog": "View Logs",
     "settings_viewLogSubtitle": "View log records to troubleshoot startup/runtime issues",
+    "settings_logLevel": "Log Level",
+    "settings_logLevelSubtitle": "Controls log verbosity; raise the level to reduce noise",
+    "settings_logLevelApplied": "Log level switched to {level}",
+    "@settings_logLevelApplied": {
+      "placeholders": {
+        "level": {
+          "type": "String"
+        }
+      }
+    },
     "log_title": "Logs",
     "log_refresh": "Refresh",
     "log_searchHint": "Search keyword",

@@ -108,6 +108,8 @@
 | `DeleteFile(id) error` | 删除文件记录 |
 | `RenameFile(id, newName) error` | 重命名 |
 | `MoveFile(id, newParentID) error` | 移动 |
+| `CountActiveFilesByHashExcludingIDs(hash, excludeIDs) (int64, error)` | 统计引用指定 hash 的未删除文件数（排除指定 ID），用于判断 file_location 是否可安全删除 |
+| `CountFileHistoriesByHash(hash) (int64, error)` | 统计指定 hash 在 file_histories 中的引用数，用于判断该 hash 的存储位置是否仍被历史版本引用 |
 
 ### file_location.go
 

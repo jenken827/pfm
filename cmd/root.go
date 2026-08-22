@@ -17,6 +17,7 @@ var rootCmd = &cobra.Command{
 
 子命令:
   server   启动服务器
+  decrypt  按 file_locations id 解密本地加密文件
   version  显示版本信息`,
 	// 无子命令时显示帮助
 	Run: func(cmd *cobra.Command, args []string) {

@@ -80,6 +80,24 @@ class _FileLogWriter {
 
 final _fileWriter = _FileLogWriter();
 
+/// 当前 Talker 实例引用（用于运行时切换日志等级）
+Talker? _talker;
+
+/// 运行时切换日志等级（立即生效，无需重启）
+/// 通过 configure 整体替换 logger（TalkerLoggerSettings.level 为 final，
+/// 无法原地修改），observer/history 会被保留。
+void setLogLevel(LogLevel level) {
+  final talker = _talker;
+  if (talker == null) return;
+  talker.configure(
+    logger: TalkerLogger(
+      settings: TalkerLoggerSettings(level: level),
+      formatter: CustomLoggerFormatter(),
+    ),
+  );
+  talker.info('log level changed to ${level.name}');
+}
+
 /// 文件日志观察者
 class _FileLogObserver extends TalkerObserver {
   @override
@@ -101,6 +119,7 @@ class _FileLogObserver extends TalkerObserver {
 Future<void> initTalkerLogger({
   bool isBackground = false,
   String? logDirPath,
+  LogLevel? logLevel,
 }) async {
   // 初始化日志目录
   Directory logDir;
@@ -118,11 +137,15 @@ Future<void> initTalkerLogger({
   // 初始化文件写入器
   await _fileWriter.init(_logDir!);
 
+  // 日志等级：优先使用调用方传入的配置（持久化的用户设置），
+  // 否则 debug 构建默认 debug，release 构建默认 info
+  final level = logLevel ?? (kDebugMode ? LogLevel.debug : LogLevel.info);
+
   // 后台隔离进程使用简单的 Talker，避免依赖 Flutter 插件
   final talker = isBackground
       ? Talker(
           logger: TalkerLogger(
-            settings: TalkerLoggerSettings(level: LogLevel.info),
+            settings: TalkerLoggerSettings(level: level),
           ),
           settings: TalkerSettings(),
           observer: _FileLogObserver(),
@@ -130,7 +153,7 @@ Future<void> initTalkerLogger({
       : TalkerFlutter.init(
           logger: TalkerLogger(
             settings: TalkerLoggerSettings(
-              level: kDebugMode ? LogLevel.debug : LogLevel.info,
+              level: level,
             ),
             formatter: CustomLoggerFormatter(),
           ),
@@ -140,6 +163,7 @@ Future<void> initTalkerLogger({
           observer: _FileLogObserver(),
         );
 
+  _talker = talker;
   GetIt.I.registerSingleton<Talker>(talker);
   talker.info(
     'talker init complete (background=$isBackground), log dir: ${_logDir!.path}',

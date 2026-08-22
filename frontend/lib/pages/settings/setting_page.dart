@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/fm_repository.dart';
@@ -10,6 +11,7 @@ import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/design/design_tokens.dart';
 import 'package:pfm/design/components/components.dart';
+import 'package:talker_flutter/talker_flutter.dart';
 
 /// 设置页面
 class SettingPage extends StatefulWidget {
@@ -266,6 +268,15 @@ class _SettingPageState extends State<SettingPage> {
               child: Column(
                 children: [
                   _SettingsTile(
+                    icon: Icons.speed_outlined,
+                    iconBackground: PfmColors.warningSurface,
+                    iconColor: PfmColors.warning,
+                    title: al.settings_logLevel,
+                    subtitle: al.settings_logLevelSubtitle,
+                    onTap: () => _showLogLevelDialog(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  _SettingsTile(
                     icon: Icons.description_outlined,
                     iconBackground: PfmColors.documentSurface,
                     iconColor: PfmColors.document,
@@ -395,6 +406,53 @@ class _SettingPageState extends State<SettingPage> {
           ),
         ),
       ),
+    );
+  }
+
+  /// 显示日志等级选择对话框
+  Future<void> _showLogLevelDialog(BuildContext context) async {
+    final al = AppLocalizations.of(context);
+    final ls = GetIt.I.get<LocalStorage>();
+
+    final current = LogLevel.values.firstWhere(
+      (l) => l.name == ls.logLevel,
+      orElse: () => kDebugMode ? LogLevel.debug : LogLevel.info,
+    );
+    final options = <(String, LogLevel)>[
+      (al.log_levelDebug, LogLevel.debug),
+      (al.log_levelInfo, LogLevel.info),
+      (al.log_levelWarning, LogLevel.warning),
+      (al.log_levelError, LogLevel.error),
+    ];
+
+    final selected = await showDialog<LogLevel>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(al.settings_logLevel),
+        children: [
+          for (final (label, level) in options)
+            ListTile(
+              title: Text(label),
+              // 避免 RadioListTile 的 groupValue/onChanged 废弃告警，用勾选标记当前值
+              trailing: level == current
+                  ? Icon(
+                      Icons.check,
+                      size: 20,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    )
+                  : null,
+              onTap: () => Navigator.pop(ctx, level),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || selected == current) return;
+
+    await ls.saveLogLevel(selected.name);
+    setLogLevel(selected);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(al.settings_logLevelApplied(selected.name))),
     );
   }
 

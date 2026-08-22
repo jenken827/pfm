@@ -10,6 +10,8 @@ final class AppTheme {
   ThemeData light() {
     return ThemeData(
       useMaterial3: true,
+      // 全局字体（含 Material 组件），桌面/移动端一致
+      fontFamily: PfmTypography.fontFamily,
       brightness: Brightness.light,
       colorScheme: ColorScheme.light(
         primary: PfmColors.primary,
@@ -208,6 +210,8 @@ final class AppTheme {
   ThemeData dark() {
     return ThemeData(
       useMaterial3: true,
+      // 全局字体（含 Material 组件），桌面/移动端一致
+      fontFamily: PfmTypography.fontFamily,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.dark(
         primary: PfmColors.primaryLight,

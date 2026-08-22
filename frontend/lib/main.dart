@@ -11,6 +11,7 @@ import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/hive/hive.dart';
 import 'package:pfm/platform/platform.dart';
+import 'package:talker_flutter/talker_flutter.dart';
 import 'services/services.dart';
 import 'package:pfm/services/recent_files_storage.dart';
 import 'router/router.dart';
@@ -119,6 +120,18 @@ Future<void> main() async {
       final ls = await LocalStorage.instance();
       GetIt.I.registerSingleton<LocalStorage>(ls);
       tick('local storage loaded');
+
+      // 应用持久化的日志等级（initTalkerLogger 已按构建模式设置了默认值，
+      // 这里用用户配置覆盖，实现日志等级可配置）
+      final savedLogLevel = ls.logLevel;
+      if (savedLogLevel != null) {
+        setLogLevel(
+          LogLevel.values.firstWhere(
+            (l) => l.name == savedLogLevel,
+            orElse: () => kDebugMode ? LogLevel.debug : LogLevel.info,
+          ),
+        );
+      }
 
       // 初始化后台服务
       await BackgroundService.initialize();

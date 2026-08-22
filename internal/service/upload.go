@@ -17,6 +17,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -105,21 +106,36 @@ func validateAndGetParent(parentID string) (*native.FileORM, *models.Err) {
 	return parentFile, nil
 }
 
-// checkFileExists 检查文件是否已存在（通过hash和同名）
-func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.FileORM, *native.FileORM, *models.Err) {
-	existingFile, err := db.GetFileByHash(fileHash)
+// checkFileExists 检查文件是否已存在
+// 返回三个文件：
+//   - ownerFile:  自己名下同 hash 的记录（用于复用判断，避免全局命中其他用户）
+//   - sameNameFile: 同目录同名的记录（用于同名冲突/覆盖判断）
+//   - globalFile:  全局同 hash 的记录（仅当 ownerFile 不存在时查询，
+//                  用于判断存储层数据是否已存在，决定秒传还是完整上传）
+func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.FileORM, *native.FileORM, *native.FileORM, *models.Err) {
+	ownerFile, err := db.GetFileByHashAndOwner(fileHash, ownerID)
 	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("check file exists by hash failed: %v", err)
-		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		llog.L().Errorf("check file exists by hash and owner failed: %v", err)
+		return nil, nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	sameNameFile, err := db.GetFileByParentAndName(parentID, fileName, ownerID)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		llog.L().Errorf("check same name file failed: %v", err)
-		return nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		return nil, nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	return existingFile, sameNameFile, nil
+	// 仅当自己名下没有同 hash 记录时，才需要全局查询判断数据是否存在
+	var globalFile *native.FileORM
+	if ownerFile == nil {
+		globalFile, err = db.GetFileByHash(fileHash)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			llog.L().Errorf("check global file by hash failed: %v", err)
+			return nil, nil, nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+		}
+	}
+
+	return ownerFile, sameNameFile, globalFile, nil
 }
 
 // createSyncTask 创建同步任务（支持 UPSERT：如果同 hash 记录已存在则合并 provider 列表并重试）
@@ -146,6 +162,17 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		var existing native.UploadRecordORM
 		if qErr := gormDB.Where("file_hash = ?", fileHash).First(&existing).Error; qErr != nil {
 			llog.L().Errorf("create sync record failed and lookup also failed: %v / %v", err, qErr)
+			return
+		}
+
+		// 防误复用：同 hash 冲突的记录必须是 SYNC 类型才允许合并复用。
+		// 若是 UPLOAD 类型（真实上传任务，可能正在 Dispatch 中），复用会导致
+		// 同一 upload record 被上传与同步两个流程并行处理，两次 prepareEncryptor
+		// 竞争写入 file_locations.encryption_salt，最终 DB 里的盐与实际加密用的
+		// 随机盐不一致 → 密文无法解密（8/21 相册备份截图损坏事故根因）。
+		if existing.TaskType == nil || *existing.TaskType != int32(native.UploadTaskType_SYNC) {
+			llog.L().Warnf("sync record conflict with non-sync record #%d (task_type=%v), skip merge to avoid double dispatch",
+				*existing.Id, existing.TaskType)
 			return
 		}
 
@@ -215,6 +242,13 @@ func buildExistingEncryptMap(locations []*native.FileLocationORM) map[uint32]boo
 
 // handleInstantUpload 处理秒传逻辑
 // 返回值：handled 表示是否已处理，需要直接返回；fileToUse 表示应该使用的文件记录
+//
+// 判定规则（ownerFile 是自己名下同 hash 的记录，globalFile 是全局同 hash 的记录）：
+//   - 同目录同名且同 hash → 秒传复用（保留原同名覆盖/冲突语义）
+//   - 自己名下同 hash 且同名 → 秒传复用，不新增
+//   - 自己名下同 hash 但不同名 → 秒传 + 新增记录
+//   - 自己名下无同 hash，但全局存在 → 秒传 + 新增记录
+//   - 全局也不存在 → 完整上传流程（handled=false）
 func handleInstantUpload(
 	ctx context.Context,
 	fileHash string,
@@ -222,16 +256,89 @@ func handleInstantUpload(
 	fileSize *uint64,
 	parentID *string,
 	providerIds []uint32,
-	existingFile *native.FileORM,
+	ownerFile *native.FileORM,
 	sameNameFile *native.FileORM,
+	globalFile *native.FileORM,
 	overwrite bool,
 	tags *string,
 ) (handled bool, fileToUse *native.FileORM, err *models.Err) {
-	if existingFile == nil {
+	// 处理同名文件（保留原有语义：同目录同名同 hash 秒传，不同 hash 覆盖/冲突）
+	if sameNameFile != nil {
+		if *sameNameFile.Hash == fileHash {
+			// 同名且同 hash，直接返回秒传成功（记录就是目标目录里的，parent 正确）
+			llog.L().Infof("same name and same hash, instant upload: %s", *fileName)
+			return true, sameNameFile, nil
+		}
+		// 同名但 hash 不同，检查覆盖标志
+		if !overwrite {
+			llog.L().Infof("same name file exists, overwrite=false: %s", *fileName)
+			return true, nil, &models.Err{
+				E: fmt.Errorf("file with same name already exists: %s", *fileName),
+				C: native.RespCode_ALREADY_EXISTS,
+			}
+		}
+		// 需要覆盖，更新文件记录
+		// 与 handleOverwriteFile 对齐：按父目录 max_histories 决定建历史还是直接更新，
+		// 并异步清理旧 hash 在存储提供者上的位置（否则旧 hash 的 file_location 永久残留成孤儿）
+		oldHash := sameNameFile.Hash
+		maxHistories := uint32(0)
+		if parentID != nil && *parentID != "" {
+			if parentFolder, err := db.GetFileByID(*parentID); err == nil && parentFolder != nil && parentFolder.MaxHistories != nil {
+				maxHistories = *parentFolder.MaxHistories
+			}
+		}
+
+		f := &native.FileORM{
+			Hash: &fileHash,
+			Size: fileSize,
+		}
+		if maxHistories == 0 {
+			// 不保留历史：直接更新文件记录，异步删除旧 hash 的存储位置
+			if updateErr := db.UpdateFileSimple(f); updateErr != nil {
+				llog.L().Errorf("update file failed: %v", updateErr)
+				return true, nil, &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
+			}
+			if oldHash != nil && *oldHash != "" && *oldHash != fileHash {
+				if oldLocations, locErr := db.GetFileLocationsByFileHash(*oldHash); locErr == nil && len(oldLocations) > 0 {
+					go cleanOldFileLocations(oldLocations, oldHash)
+				} else if locErr != nil {
+					llog.L().Errorf("get old file locations failed: %v, hash: %s", locErr, *oldHash)
+				}
+			}
+		} else {
+			// 保留历史：写入 file_history，超限裁剪交给 cleanupOldHistories 统一处理
+			if updateErr := db.UpdateFileWithHistory(ctx, f, sameNameFile); updateErr != nil {
+				llog.L().Errorf("update file with history failed: %v", updateErr)
+				return true, nil, &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
+			}
+			if sameNameFile.Id != nil {
+				go cleanupOldHistories(*sameNameFile.Id, maxHistories)
+			}
+		}
+		sameNameFile.Hash = &fileHash
+		sameNameFile.Size = fileSize
+		return true, sameNameFile, nil
+	}
+
+	// 确定"已有数据"来源：优先自己名下，其次全局
+	dataFile := ownerFile
+	if dataFile == nil {
+		dataFile = globalFile
+	}
+
+	// 全局也不存在同 hash → 完整上传流程
+	if dataFile == nil {
 		return false, nil, nil
 	}
 
 	llog.L().Infof("file already exists by hash: %s", fileHash)
+
+	// 自己名下同 hash 且同名 → 直接秒传复用，不新增记录
+	if ownerFile != nil && ownerFile.Name != nil && fileName != nil &&
+		*ownerFile.Name == *fileName {
+		llog.L().Infof("owner file same name, instant upload reuse: %s", *fileName)
+		return true, ownerFile, nil
+	}
 
 	// 检查文件已经在哪些存储提供者上
 	existingLocations, dbErr := db.GetFileLocationsByBlake3Hash(fileHash)
@@ -280,42 +387,14 @@ func handleInstantUpload(
 		createSyncTask(fileName, fileSize, parentID, fileHash, needSyncProviders)
 	}
 
-	// 处理同名文件
-	if sameNameFile != nil {
-		if *sameNameFile.Hash == fileHash {
-			// 同名且同 hash，直接返回秒传成功
-			return true, existingFile, nil
-		}
-		// 同名但 hash 不同，检查覆盖标志
-		if !overwrite {
-			llog.L().Infof("same name file exists, overwrite=false: %s", *fileName)
-			return true, nil, &models.Err{
-				E: fmt.Errorf("file with same name already exists: %s", *fileName),
-				C: native.RespCode_ALREADY_EXISTS,
-			}
-		}
-		// 需要覆盖，更新文件记录
-		f := &native.FileORM{
-			Hash: &fileHash,
-			Size: fileSize,
-		}
-		if updateErr := db.UpdateFileWithHistory(ctx, f, sameNameFile); updateErr != nil {
-			llog.L().Errorf("update file with history failed: %v", updateErr)
-			return true, nil, &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
-		}
-		sameNameFile.Hash = &fileHash
-		sameNameFile.Size = fileSize
-		return true, sameNameFile, nil
-	}
-
-	// 没有同名文件，创建新的文件记录
+	// 没有同名文件，创建新的文件记录（秒传：数据已存在，仅新增目录条目）
 	newFileRecord := &native.FileORM{
 		Name:     fileName,
 		ParentId: parentID,
-		Size:     existingFile.Size,
-		Hash:     existingFile.Hash,
-		Type:     existingFile.Type,
-		Mime:     existingFile.Mime,
+		Size:     dataFile.Size,
+		Hash:     dataFile.Hash,
+		Type:     dataFile.Type,
+		Mime:     dataFile.Mime,
 		IsReady:  utils.BoolPtr(true), // 秒传：文件已存在，标记为就绪
 	}
 	ownerID := getCurrentUserIDFromCtx(ctx)
@@ -406,7 +485,7 @@ func handleOverwriteFile(
 		llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s", *fileRecord.Id, *oldFile.Hash, *fileRecord.Hash)
 
 		// 检查历史记录数是否超过限制，超过则异步清理旧历史
-		go cleanupOldHistories(*fileRecord.Id, maxHistories, oldLocations)
+		go cleanupOldHistories(*fileRecord.Id, maxHistories)
 		return fileRecord, nil
 	}
 
@@ -509,7 +588,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 
 	// 检查文件是否已存在
 	userID := getCurrentUserIDFromCtx(ctx)
-	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
+	ownerFile, sameNameFile, globalFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -517,7 +596,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	// 处理秒传逻辑
 	handled, _, mErr := handleInstantUpload(
 		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
-		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+		providerIds, ownerFile, sameNameFile, globalFile, req.GetOverwrite(),
 		req.Tags,
 	)
 	if mErr != nil {
@@ -985,7 +1064,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 
 	// 检查文件是否已存在
 	userID := getCurrentUserIDFromCtx(ctx)
-	existingFile, sameNameFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
+	ownerFile, sameNameFile, globalFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -993,7 +1072,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	// 处理秒传逻辑
 	handled, fileRecord, mErr := handleInstantUpload(
 		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
-		providerIds, existingFile, sameNameFile, req.GetOverwrite(),
+		providerIds, ownerFile, sameNameFile, globalFile, req.GetOverwrite(),
 		req.Tags,
 	)
 	if mErr != nil {
@@ -1105,6 +1184,15 @@ func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blak
 		Mime:     &mime,
 		IsReady:  utils.BoolPtr(false),
 	}
+
+	// 设置 owner_id：优先取当前用户，取不到则从父目录继承（与 CompleteUpload 一致）
+	ownerID := getCurrentUserIDFromCtx(ctx)
+	if ownerID == "" && req.ParentId != nil && *req.ParentId != "" {
+		if parent, pErr := db.GetFileByID(*req.ParentId); pErr == nil && parent != nil && parent.OwnerId != nil {
+			ownerID = *parent.OwnerId
+		}
+	}
+	newFileRecord.OwnerId = &ownerID
 
 	newFileRecord, mErr := handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
 	if mErr != nil {
@@ -1480,8 +1568,17 @@ func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string)
 	var allDeletedIDs []uint64
 
 	for providerID, locs := range providerLocations {
-		deletedIDs, _, deletedSize := batchDeleteFromProvider(ctx, providerID, locs)
+		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locs)
 		allDeletedIDs = append(allDeletedIDs, deletedIDs...)
+		// 删除失败的位置记录标记为 DELETED_FAILED，供后续重试/巡检清理，
+		// 避免静默残留成无引用的孤儿记录
+		if len(failedIDs) > 0 {
+			if err := db.UpdateFileLocationStatus(failedIDs, int32(native.LocationStatus_PDELETED_FAILED)); err != nil {
+				llog.L().Errorf("mark file locations DELETED_FAILED failed: %v", err)
+			} else {
+				llog.L().Warnf("marked %d file locations as DELETED_FAILED, provider: %d", len(failedIDs), providerID)
+			}
+		}
 		if deletedSize > 0 {
 			providerDeletedSizes[providerID] = deletedSize
 		}
@@ -1509,8 +1606,12 @@ func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string)
 }
 
 // cleanupOldHistories 异步清理超出限制的历史记录
-func cleanupOldHistories(fileID string, maxHistories uint32, oldLocations []*native.FileLocationORM) {
-	// 获取该文件的历史记录
+// 修复：旧实现把"当前覆盖的旧版本"的 locations 当成了被裁剪历史的 locations 删除，
+// 导致被裁剪 hash 的位置永久残留成孤儿、而新历史版本的 provider 文件被误删。
+// 现在只清理被裁剪 history 条目对应的 hash，且仅当该 hash 不再被任何
+// files / file_histories 引用时才删除其存储位置（避免误删被共享的副本）。
+func cleanupOldHistories(fileID string, maxHistories uint32) {
+	// 获取该文件的历史记录（version_number DESC，最旧的排在末尾）
 	histories, err := db.GetFileHistoriesByFileID(fileID)
 	if err != nil {
 		llog.L().Errorf("get file histories failed: %v", err)
@@ -1527,20 +1628,70 @@ func cleanupOldHistories(fileID string, maxHistories uint32, oldLocations []*nat
 	toDelete := currentCount - maxHistories
 	llog.L().Infof("need to cleanup %d histories, current: %d, max: %d", toDelete, currentCount, maxHistories)
 
-	// 历史记录已按 version_number DESC 排序，需要删除最早的（最后面的）
+	// 删除最旧的 toDelete 条历史记录，并收集其 hash
+	var deletedHashes []string
 	for i := uint32(0); i < toDelete; i++ {
 		history := histories[currentCount-1-i]
-		if history != nil && history.Id != nil {
-			if err := db.DeleteFileHistory(*history.Id); err != nil {
-				llog.L().Errorf("delete history failed: %v, id: %d", err, *history.Id)
-			} else {
-				llog.L().Infof("history deleted, id: %d", *history.Id)
-			}
+		if history == nil || history.Id == nil {
+			continue
+		}
+		if err := db.DeleteFileHistory(*history.Id); err != nil {
+			llog.L().Errorf("delete history failed: %v, id: %d", err, *history.Id)
+			continue
+		}
+		if history.Hash != nil && *history.Hash != "" {
+			deletedHashes = append(deletedHashes, *history.Hash)
 		}
 	}
-
 	llog.L().Infof("histories cleaned, file_id: %s, deleted: %d, remaining: %d", fileID, toDelete, maxHistories)
 
-	// 异步删除旧文件在存储提供者上的位置
-	go cleanOldFileLocations(oldLocations, nil)
+	// 异步清理不再被引用的 hash 的存储位置
+	if len(deletedHashes) > 0 {
+		go cleanupUnreferencedHashLocations(deletedHashes)
+	}
+}
+
+// cleanupUnreferencedHashLocations 清理不再被任何文件/历史引用（孤儿）的 hash 的存储位置
+func cleanupUnreferencedHashLocations(hashes []string) {
+	cacheDir := "data/thumbnails"
+	generator := thumbnail.NewGenerator(cacheDir)
+
+	for _, hash := range hashes {
+		// 引用检查：files 表活跃记录 + file_histories 表剩余记录
+		fileRefs, err := db.CountActiveFilesByHashExcludingIDs(hash, nil)
+		if err != nil {
+			llog.L().Errorf("count active files by hash failed: %v, hash: %s", err, hash)
+			continue
+		}
+		if fileRefs > 0 {
+			llog.L().Debugf("hash %s still referenced by %d files, skip location cleanup", hash, fileRefs)
+			continue
+		}
+		historyRefs, err := db.CountFileHistoriesByHash(hash)
+		if err != nil {
+			llog.L().Errorf("count file histories by hash failed: %v, hash: %s", err, hash)
+			continue
+		}
+		if historyRefs > 0 {
+			llog.L().Debugf("hash %s still referenced by %d histories, skip location cleanup", hash, historyRefs)
+			continue
+		}
+
+		locations, err := db.GetFileLocationsByBlake3Hash(hash)
+		if err != nil {
+			llog.L().Errorf("get file locations failed: %v, hash: %s", err, hash)
+			continue
+		}
+		if len(locations) == 0 {
+			continue
+		}
+
+		llog.L().Infof("cleaning unreferenced hash locations, hash: %s, count: %d", hash, len(locations))
+		cleanOldFileLocations(locations, &hash)
+
+		// 顺带清理该 hash 的缩略图缓存（hash 已确认无任何引用，缩略图按 hash 命名可安全删除）
+		if err := generator.DeleteAllThumbnails(hash); err != nil {
+			llog.L().Warnf("delete thumbnails failed: hash=%s, err=%v", hash, err)
+		}
+	}
 }

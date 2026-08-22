@@ -46,9 +46,21 @@ func GetFilesByIDsUnscoped(ids []string) ([]*native.FileORM, error) {
 	return files, nil
 }
 
-// GetFileByHash 获取文件
+// GetFileByHash 获取文件（全局，任意 owner）
 func GetFileByHash(hash string) (*native.FileORM, error) {
 	file, err := gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+// GetFileByHashAndOwner 获取文件（限定 owner，用于复用判断）
+// 只查自己名下的同 hash 记录，避免全局 First 命中其他用户的记录
+func GetFileByHashAndOwner(hash, ownerID string) (*native.FileORM, error) {
+	file, err := gorm.G[*native.FileORM](db).
+		Where("hash=? AND owner_id=?", hash, ownerID).
+		First(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -545,6 +557,22 @@ func DeleteFileHistory(id uint64) error {
 	}
 
 	return db.Where("id = ?", id).Delete(&native.FileHistoryORM{}).Error
+}
+
+// CountFileHistoriesByHash 统计指定 hash 在文件历史表中的引用数
+// 用于判断该 hash 的 file_location 记录是否仍被历史版本引用
+func CountFileHistoriesByHash(hash string) (int64, error) {
+	if hash == "" {
+		return 0, nil
+	}
+
+	ctx := context.Background()
+	gdb := gorm.G[*native.FileHistoryORM](db).Where("hash = ?", hash)
+	count, err := gdb.Count(ctx, "*")
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // DeleteFileLocationsByBlake3Hash 根据 blake3_hash 删除文件位置记录

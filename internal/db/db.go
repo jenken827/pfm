@@ -135,6 +135,8 @@ func migrateUploadTaskStatus() error {
 }
 
 // migrateFilesUniqueIndex 将 files 表的 idx_f_npi 从普通唯一索引改为 partial 唯一索引
+// 唯一键为 (owner_id, name, parent_id)：同目录下同一用户不允许同名文件，
+// 不同用户在同一目录可以存在同名文件（目录权限模型已限制共享目录的写入者）
 func migrateFilesUniqueIndex() error {
 	// 删除旧的普通索引（如果存在）
 	// SQLite 不支持 DROP INDEX IF EXISTS 的 IF EXISTS 语法，先尝试删除
@@ -143,7 +145,7 @@ func migrateFilesUniqueIndex() error {
 	}
 
 	// 创建 partial unique index：只对未删除的记录生效
-	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_f_npi ON files (name, parent_id) WHERE deleted_at IS NULL`).Error; err != nil {
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_f_npi ON files (owner_id, name, parent_id) WHERE deleted_at IS NULL`).Error; err != nil {
 		return fmt.Errorf("create partial unique index idx_f_npi failed: %w", err)
 	}
 

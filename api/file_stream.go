@@ -217,6 +217,28 @@ func streamResponse(w http.ResponseWriter, r *http.Request, result *service.File
 	}
 }
 
+// preReadStream 预读 1 字节并回退，验证 lazy reader 可用
+// MultiChunkReader 的首次 Read 才真正打开分片（本地文件 open / 远端下载），
+// 若失败发生在 header 写出之后，连接会被截断，前端表现为
+// "Connection closed before full header received"；预读把错误提前到
+// WriteHeader 之前，可返回明确的 500 错误。
+func preReadStream(reader interface {
+	io.Reader
+	io.Seeker
+}) error {
+	buf := make([]byte, 1)
+	n, err := reader.Read(buf)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	if n > 0 {
+		if _, seekErr := reader.Seek(-int64(n), io.SeekCurrent); seekErr != nil {
+			return fmt.Errorf("seek back after pre-read failed: %w", seekErr)
+		}
+	}
+	return nil
+}
+
 // streamRangeResponse 处理 Range 请求（断点续传）
 func streamRangeResponse(w http.ResponseWriter, r *http.Request, result *service.FileStreamResult, disposition string, rangeHeader string) {
 	// 解析 Range 头
@@ -231,6 +253,14 @@ func streamRangeResponse(w http.ResponseWriter, r *http.Request, result *service
 	if err != nil {
 		llog.L().Errorf("seek failed: %v", err)
 		http.Error(w, "seek failed", http.StatusInternalServerError)
+		return
+	}
+
+	// 预读验证（在写出 206 头之前）：lazy reader 的打开失败发生在首次 Read，
+	// 提前失败可返回明确错误而非截断连接
+	if err := preReadStream(result.Reader); err != nil {
+		llog.L().Errorf("pre-read range stream failed: %v", err)
+		http.Error(w, "file stream failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -252,6 +282,14 @@ func streamRangeResponse(w http.ResponseWriter, r *http.Request, result *service
 
 // streamFullResponse 处理完整文件传输
 func streamFullResponse(w http.ResponseWriter, r *http.Request, result *service.FileStreamResult, disposition string) {
+	// 预读验证（在写出 200 头之前）：lazy reader 的打开失败发生在首次 Read，
+	// 提前失败可返回明确错误而非截断连接（前端报 Connection closed 的根因）
+	if err := preReadStream(result.Reader); err != nil {
+		llog.L().Errorf("pre-read file stream failed: %v", err)
+		http.Error(w, "file stream failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, result.FileName))
 	if result.FileSize > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(result.FileSize, 10))

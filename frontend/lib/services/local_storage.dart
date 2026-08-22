@@ -236,4 +236,15 @@ class LocalStorage {
   Future<void> saveDownloadConcurrency(int count) async {
     await _settingsBox.put('downloadConcurrency', count);
   }
+
+  /// 日志等级（talker LogLevel.name 的字符串，如 'debug'/'info'），
+  /// 未配置时返回 null，由 logger 按构建模式取默认值
+  String? get logLevel {
+    return _settingsBox.get('logLevel') as String?;
+  }
+
+  /// 保存日志等级
+  Future<void> saveLogLevel(String level) async {
+    await _settingsBox.put('logLevel', level);
+  }
 }

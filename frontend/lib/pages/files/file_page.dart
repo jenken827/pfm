@@ -804,11 +804,27 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  void _showSearchDialog(BuildContext context) {
-    showSearch(
+  Future<void> _showSearchDialog(BuildContext context) async {
+    final bloc = context.read<FileBloc>();
+    final file = await showSearch<File?>(
       context: context,
-      delegate: _FileSearchDelegate(context.read<FileBloc>()),
+      delegate: _FileSearchDelegate(bloc),
     );
+    if (!context.mounted) return;
+    // 用户取消/返回关闭搜索页：退出搜索模式，恢复当前目录的普通文件列表
+    if (file == null) {
+      bloc.add(const FileSearchEvent(''));
+      return;
+    }
+    if (file.type == pbenum.FileType.FOLDER) {
+      // 点击搜索结果中的文件夹：正常进入该目录（面包屑自动拼接，可正常返回）
+      bloc.add(FileNavigateEvent(file.id, file.name));
+    } else {
+      // 点击搜索结果中的文件：先退出搜索模式恢复普通列表，再打开预览/详情，
+      // 避免从详情返回后仍停留在搜索结果残影页
+      bloc.add(const FileSearchEvent(''));
+      _handleFileTap(context, file, bloc.state);
+    }
   }
 
   // ============================================================
@@ -1722,7 +1738,7 @@ class _MenuTile extends StatelessWidget {
 }
 
 /// 文件搜索代理
-class _FileSearchDelegate extends SearchDelegate<String> {
+class _FileSearchDelegate extends SearchDelegate<File?> {
   final FileBloc _bloc;
   bool _isTagSearch = false;
 
@@ -1756,10 +1772,9 @@ class _FileSearchDelegate extends SearchDelegate<String> {
   Widget buildLeading(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.arrow_back, size: 20),
-      onPressed: () {
-        _bloc.add(const FileSearchEvent(''));
-        close(context, '');
-      },
+      // 只关闭搜索页并返回 null，取消/恢复列表统一由 _showSearchDialog 处理，
+      // 覆盖系统返回键和返回按钮两种关闭路径
+      onPressed: () => close(context, null),
     );
   }
 
@@ -1818,7 +1833,6 @@ class _FileSearchDelegate extends SearchDelegate<String> {
             final file = state.files[index];
             final fileName = file.hasName() ? file.name : al.file_unknownFile;
             final fileSize = file.hasSize() ? file.size.toInt() : 0;
-            final fileId = file.hasId() ? file.id : '';
             final iconData = _FileViewState._getFileIconData(file.type);
             final iconColors = _FileViewState._getFileIconColors(file.type);
 
@@ -1833,7 +1847,7 @@ class _FileSearchDelegate extends SearchDelegate<String> {
                 iconColor: iconColors.$1,
                 iconBackground: iconColors.$2,
                 subtitle: _formatFileSize(fileSize),
-                onTap: () => close(context, fileId),
+                onTap: () => close(context, file),
               ),
             );
           },

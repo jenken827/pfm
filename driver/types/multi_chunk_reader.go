@@ -121,8 +121,12 @@ func (m *MultiChunkReader) Seek(offset int64, whence int) (int64, error) {
 	// 查找目标分片（二分查找优化）
 	targetIdx := m.findChunkIndex(newOffset)
 
-	// 如果切换分片，关闭当前 Reader
-	if targetIdx != m.currentIdx && m.currentRC != nil {
+	// 位置变化时关闭当前分片，下次 Read 按新偏移重新打开。
+	// 必须无条件重置：同分片内的 Seek 若不重置，底层 lazy reader
+	// （如加密 decrypter）的内部缓冲不会回退，导致预读/Seek 后
+	// 输出丢字节（如 preReadStream 的 Read(1)+Seek(-1) 会丢首字节，
+	// 造成实际输出比 Content-Length 少，Go 截断连接）。
+	if m.currentRC != nil {
 		m.currentRC.Close()
 		m.currentRC = nil
 	}
