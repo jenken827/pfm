@@ -137,6 +137,58 @@ class FmRepository {
     }
   }
 
+  /// 获取服务器认证模式（'casdoor' / 'local'）
+  /// 登录页据此决定渲染 Casdoor 登录还是本地账号密码表单
+  Future<ApiResult<String>> getAuthConfig() async {
+    try {
+      final response = await _dio.get('$_baseUrl/api/auth/config');
+      final data = response.data as Map<String, dynamic>;
+      final mode = data['mode']?.toString() ?? AuthMode.casdoor;
+      // 缓存认证模式，下次打开登录页可立即渲染
+      await GetIt.I.get<LocalStorage>().saveAuthMode(mode);
+      _logger.info('认证模式: $mode');
+      return ApiResult(success: true, data: mode);
+    } on DioException catch (e) {
+      _logger.error('获取认证配置失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取认证配置失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 本地认证登录（auth.mode=local 时使用）
+  /// 成功后调用方负责保存 token 与用户信息
+  Future<ApiResult<LocalLoginResult>> loginWithPassword({
+    required String username,
+    required String password,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/auth/login',
+        data: {'username': username, 'password': password},
+      );
+      final data = response.data as Map<String, dynamic>;
+      final result = LocalLoginResult.fromMap(data);
+      _logger.info('本地登录成功: user=${result.name}');
+      return ApiResult(success: true, data: result);
+    } on DioException catch (e) {
+      _logger.error('本地登录失败: ${e.message}');
+      // 401 = 用户名或密码错误（后端返回明文错误信息）
+      if (e.response?.statusCode == 401) {
+        final body = e.response?.data;
+        return ApiResult(
+          success: false,
+          message: body?.toString() ?? '用户名或密码错误',
+        );
+      }
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('本地登录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 用于 isolate 中初始化，需要手动传入 token
   void _initWithToken(String? baseUrl, CasdoorToken? token) {
     _baseUrl = baseUrl;
@@ -1791,6 +1843,36 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('获取子目录失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 按相对路径逐级确保目录存在（mkdir -p 语义，后端自动创建，并发安全）
+  /// 相册备份按"年/月"归档用，如 path = "2026/07"
+  /// 返回叶子目录 ID
+  Future<ApiResult<String>> ensureDirPath({
+    required String parentId,
+    required String path,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/file/ensure-dir-path',
+        data: {'parent_id': parentId, 'path': path},
+      );
+      final data = response.data as Map<String, dynamic>;
+      final folderId = data['folder_id'] as String?;
+      if (folderId == null || folderId.isEmpty) {
+        return ApiResult(success: false, message: '未返回目录ID');
+      }
+      return ApiResult(success: true, data: folderId);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('确保目录失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('确保目录失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

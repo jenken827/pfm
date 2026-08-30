@@ -81,7 +81,64 @@
 | `GetBoundProviderIdsByOwnerID(ownerID) ([]uint32, error)` | 通过 owner_id 获取绑定的存储提供者（导出） |
 | `RequireAdmin(ctx) *Err` | 检查管理员权限，非管理员返回错误 |
 
+### ensure_dir.go（按年/月目录归档）
+
+| 方法 | 说明 |
+|------|------|
+| `EnsureDirPath(ctx, parentID, relPath) (string, *Err)` | 在 parentID 下按相对路径逐级确保目录存在（mkdir -p，并发安全，唯一索引兜底），返回叶子目录 ID。相册备份按"年/月"归档用 |
+
+### photo_date.go（图片文件名日期解析）
+
+| 方法 | 说明 |
+|------|------|
+| `ParsePhotoDateFromFilename(filename) *time.Time` | 从文件名解析拍摄日期（与前端 PhotoDateResolver 规则一致：10 位时间戳 / IMG_ / Screenshot_ / mmexport / wx_camera_），无法解析返回 nil |
+
+### photo_migrate.go（旧数据年/月归档迁移）
+
+| 方法 | 说明 |
+|------|------|
+| `MigratePhotosToYearMonth(baseParentID, dryRun) (*MigratePhotoResult, error)` | 把子树下媒体文件（图片+视频）按文件名日期移到 父目录/年/月（自动创建目录），已就位/无日期跳过，同名冲突自动加后缀；dryRun 只预览 |
+
+### file_dedup.go（重复文件去重）
+
+| 方法 | 说明 |
+|------|------|
+| `DedupFilesByHash(baseParentID, dryRun) (*DedupResult, error)` | 子树下按 hash 去重：同 hash 多份保留名称最短（同长度保留最早创建），删除其余 files 记录及历史；物理存储按 hash 共享不受影响 |
+
+### album_subfolder.go（相册备份子目录）
+
+| 方法 | 说明 |
+|------|------|
+| `GetOrCreateSubfolder(ctx, parentID, prefix) (string, *Err)` | 获取有空位的编号子目录（500 文件封顶），满了自动创建新目录 |
+
+## internal/auth/
+
+| 类型/方法 | 说明 |
+|------|------|
+| `Verifier` 接口 `Verify(token) (*casdoorsdk.Claims, error)` | token 验证器统一接口（casdoor / local 双实现，返回兼容 claims） |
+| `TokenVerifier` | Casdoor JWT 验证器（本地解析 + introspect 缓存，降级本地验证） |
+| `LocalTokenVerifier` | 本地 JWT 验证器（HS256，claims 结构与 Casdoor 兼容） |
+| `LocalAuthenticator.Authenticate(username, password) (string, error)` | 本地用户表 bcrypt 验密，返回用户 ID（UUID） |
+| `LocalAuthenticator.IssueToken(user) (string, error)` | 签发本地 JWT（顶层扁平 user claims，兼容 casdoorsdk） |
+| `LocalAuthenticator.VerifyToken(token) (*casdoorsdk.Claims, error)` | 校验本地 JWT（拒绝非 HS256 算法） |
+| `HashPassword(password) (string, error)` / `VerifyPassword(hash, password) bool` | bcrypt 密码哈希/校验 |
+| `InitLocalAuth() error` | 初始化本地认证器（读取/生成 JWT 密钥，持久化到 data/jwt_secret） |
+| `AuthenticateBasic(username, password) (string, error)` | 按认证模式分发 Basic Auth（local→用户表，否则 Casdoor ROPC），WebDAV 用 |
+| `IsLocalMode() bool` | 当前是否 local 认证模式（auth.mode=local） |
+
 ## internal/db/
+
+### user.go（本地认证用户）
+
+| 方法 | 说明 |
+|------|------|
+| `GetUserByUsername(username) (*UserORM, error)` | 按用户名查询（gorm.ErrRecordNotFound 表示不存在） |
+| `GetUserByID(userID) (*UserORM, error)` | 按用户 ID 查询 |
+| `CreateUser(user) error` | 创建用户 |
+| `ListUsers() ([]UserORM, error)` | 列出所有本地用户 |
+| `DeleteUser(userID) error` | 删除用户（硬删除） |
+| `UpdateUserPassword(userID, passwordHash) error` | 更新密码哈希 |
+| `UpdateUserUsername(userID, newUsername) error` | 修改用户名（user_id 不变，关联不受影响） |
 
 ### upload.go
 

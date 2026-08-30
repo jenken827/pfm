@@ -15,6 +15,8 @@ show_help() {
   icon         执行 flutter_launcher_icons 图标生成
   splash       执行 flutter_native_splash 启动页生成
   build_runner 执行 build_runner 代码生成
+  gen-l10n     生成 l10n 本地化代码
+  analyze      运行 flutter analyze 静态检查
   build        执行 Flutter 构建（会自动更新构建号）
   all          执行所有任务（默认行为）
   help         显示此帮助信息
@@ -747,6 +749,25 @@ case "$ACTION" in
         check_flutter_commands
         puro flutter pub get
         run_build_runner
+        ;;
+
+    gen-l10n)
+        check_flutter_commands
+        echo "🌐 生成 l10n 本地化代码..."
+        puro flutter gen-l10n
+        echo "✅ l10n 代码生成完成"
+        ;;
+
+    analyze)
+        check_flutter_commands
+        echo "🔍 运行 flutter analyze..."
+        puro flutter analyze
+        ;;
+
+    test)
+        check_flutter_commands
+        echo "🧪 运行 flutter test..."
+        puro flutter test "$@"
         ;;
 
     build)

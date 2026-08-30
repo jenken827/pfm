@@ -76,6 +76,7 @@ func GetOrCreateSubfolder(ctx context.Context, parentID string, prefix string) (
 		ParentId:         &parentID,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		IsReady:          utils.BoolPtr(true),
+		OwnerId:          utils.StringPtr(userID),
 		EnableEncryption: parent.EnableEncryption,
 		MaxHistories:     parent.MaxHistories,
 	}

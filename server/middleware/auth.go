@@ -19,13 +19,19 @@ import (
 
 const tokenHeader = "Authorization"
 
-// verifier 全局 token 验证器（在 bootstrap 中初始化）
-var verifier *auth.TokenVerifier
+// verifier 全局 token 验证器（在 bootstrap 中初始化，按认证模式选择实现）
+var verifier auth.Verifier
 
-// InitVerifier 初始化 token 验证器，必须在 Casdoor 初始化之后调用
+// InitVerifier 初始化 token 验证器
+// auth.mode=local 时使用本地 JWT 验证，否则使用 Casdoor 验证
 func InitVerifier() {
+	if auth.IsLocalMode() {
+		verifier = auth.NewLocalTokenVerifier()
+		llog.L().Info("token verifier initialized (local mode)")
+		return
+	}
 	verifier = auth.NewTokenVerifier()
-	llog.L().Info("token verifier initialized")
+	llog.L().Info("token verifier initialized (casdoor mode)")
 }
 
 // AuthInterceptor auth middleware

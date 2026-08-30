@@ -243,6 +243,20 @@
     "login_serverSaved": "Server address saved",
     "login_fileServer": "File Server: {url}",
     "login_notSet": "Not set",
+    "login_username": "Username",
+    "login_password": "Password",
+    "login_signIn": "Sign in",
+    "login_signingIn": "Signing in...",
+    "login_localHint": "Sign in with local account",
+    "login_casdoorHint": "Sign in with Casdoor account",
+    "login_failed": "Login failed: {error}",
+    "@login_failed": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
     "settings_title": "Settings",
     "settings_serverConfig": "Server Configuration",
     "settings_currentUser": "Current User",

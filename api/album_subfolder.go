@@ -21,6 +21,7 @@ func GetOrCreateSubfolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := middleware.AuthHTTPMiddleware(w, r)
 	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	_ = claims

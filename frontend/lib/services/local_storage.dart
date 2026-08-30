@@ -31,6 +31,8 @@ class LocalStorage {
   static const String _userKey = 'user';
   // Casdoor Token 键
   static const String _tokenKey = 'token';
+  // 认证模式键（'casdoor' / 'local'，从服务器获取后缓存）
+  static const String _authModeKey = 'authmode';
   // 服务器 URL 键
   static const String _fileServerKey = 'serverurl';
   // 传输服务 URL 键
@@ -45,9 +47,21 @@ class LocalStorage {
 
   Box get settingsBox => _settingsBox;
 
-  // 检查casdoor服务和文件服务是否配置完成
-  bool get isConfigured =>
-      casdoorConfig != null && fileServer != null && fileServer!.isNotEmpty;
+  // 检查文件服务器是否已配置（登录入口可用）
+  // 注意：casdoor 模式下还需要 casdoorConfig（登录页按认证模式判断）
+  bool get fileServerConfigured =>
+      fileServer != null && fileServer!.isNotEmpty;
+
+  // 兼容旧调用：文件服务器已配置即可视为"已配置"
+  bool get isConfigured => fileServerConfigured;
+
+  /// 获取缓存的认证模式（'casdoor' / 'local'），未获取过返回 null
+  String? get authMode => _settingsBox.get(_authModeKey) as String?;
+
+  /// 保存认证模式
+  Future<void> saveAuthMode(String mode) async {
+    await _settingsBox.put(_authModeKey, mode);
+  }
 
   /// 检查用户是否已登录
   bool get isLoggedIn => user != null && token != null;

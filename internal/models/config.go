@@ -8,6 +8,8 @@ type Config struct {
 	Log     Log     `json:"log" yaml:"log"`
 	DB      DB      `json:"db" yaml:"db"`
 	Casdoor Casdoor `json:"casdoor" yaml:"casdoor"`
+	// 认证配置（casdoor / local 双模式）
+	Auth AuthConfig `json:"auth" yaml:"auth"`
 	//服务对外地址，用于telegram回调，i.e. https://example.com
 	ServerURL string      `json:"server_url" yaml:"server_url"`
 	Aria2     Aria2Config `json:"aria2" yaml:"aria2"`
@@ -17,6 +19,23 @@ type Config struct {
 	Upload UploadConfig `json:"upload" yaml:"upload"`
 	// 传输服务配置（高带宽上传下载地址）
 	Transfer TransferConfig `json:"transfer" yaml:"transfer"`
+}
+
+// AuthConfig 认证配置
+type AuthConfig struct {
+	// 认证模式：casdoor（默认，OAuth2 + Casdoor JWT）或 local（本地用户表 + 自签 JWT）
+	Mode string `json:"mode" yaml:"mode"`
+	// 本地认证配置（仅 mode=local 时生效）
+	Local LocalAuthConfig `json:"local" yaml:"local"`
+}
+
+// LocalAuthConfig 本地认证配置
+type LocalAuthConfig struct {
+	// JWT 签名密钥（HS256）。留空则首次启动时自动生成 32 字节随机密钥，
+	// 持久化到数据目录 jwt_secret 文件（0600 权限），重启后 token 仍有效
+	JWTSecret string `json:"jwt_secret" yaml:"jwt_secret"`
+	// Token 有效期（小时），默认 720（30 天）
+	TokenTTLHours int `json:"token_ttl_hours" yaml:"token_ttl_hours"`
 }
 
 // UploadConfig 上传配置

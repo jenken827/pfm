@@ -423,7 +423,7 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 // resolveNameConflict 检查目标目录中是否有同名文件，有则自动重命名
 // 返回新名称（冲突时），无冲突返回空字符串
 func resolveNameConflict(parentID, name, ownerID string) string {
-	existing, err := db.GetFileByParentAndName(parentID, name, ownerID)
+	existing, err := db.FindFileByParentAndName(parentID, name, ownerID)
 	if err != nil || existing == nil {
 		return "" // 无冲突
 	}
@@ -435,7 +435,7 @@ func resolveNameConflict(parentID, name, ownerID string) string {
 	// 尝试 "name (1).ext", "name (2).ext", ...
 	for i := 1; i <= 999; i++ {
 		newName := fmt.Sprintf("%s (%d)%s", baseName, i, ext)
-		conflict, err := db.GetFileByParentAndName(parentID, newName, ownerID)
+		conflict, err := db.FindFileByParentAndName(parentID, newName, ownerID)
 		if err != nil || conflict == nil {
 			return newName
 		}

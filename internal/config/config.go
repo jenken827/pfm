@@ -86,6 +86,14 @@ func defaultConfig() *models.Config {
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
 			AllowHeaders: []string{"*"},
 		},
+
+		// 默认使用 Casdoor 认证（与历史配置兼容）
+		Auth: models.AuthConfig{
+			Mode: "casdoor",
+			Local: models.LocalAuthConfig{
+				TokenTTLHours: 720,
+			},
+		},
 	}
 
 }

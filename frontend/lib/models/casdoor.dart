@@ -77,3 +77,37 @@ class User {
             [],
       );
 }
+
+/// 本地认证登录结果（POST /api/auth/login）
+class LocalLoginResult {
+  final String token;
+  final String userId;
+  final String name;
+  final String email;
+  final bool isAdmin;
+
+  const LocalLoginResult({
+    required this.token,
+    required this.userId,
+    required this.name,
+    required this.email,
+    required this.isAdmin,
+  });
+
+  factory LocalLoginResult.fromMap(Map<String, dynamic> map) {
+    final user = map['user'] as Map<String, dynamic>? ?? const {};
+    return LocalLoginResult(
+      token: map['token']?.toString() ?? '',
+      userId: user['id']?.toString() ?? '',
+      name: user['name']?.toString() ?? '',
+      email: user['email']?.toString() ?? '',
+      isAdmin: user['is_admin'] == true,
+    );
+  }
+}
+
+/// 认证模式（与后端 /api/auth/config 的 mode 字段对应）
+class AuthMode {
+  static const String casdoor = 'casdoor';
+  static const String local = 'local';
+}

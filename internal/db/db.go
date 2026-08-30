@@ -101,6 +101,7 @@ func autoMigrate() error {
 		&native.AdminUserORM{},
 		&native.PermissionAuditLogORM{},
 		&native.UserSpaceORM{},
+		&native.UserORM{},
 	); err != nil {
 		return err
 	}

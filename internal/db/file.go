@@ -76,6 +76,22 @@ func GetFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, er
 	return file, nil
 }
 
+// FindFileByParentAndName 按父目录+名称查询文件（"是否存在"类判断用）
+// 与 GetFileByParentAndName 的区别：不存在时返回 (nil, nil) 而不是
+// gorm.ErrRecordNotFound，避免 GORM 默认 logger 打印大量 record not found 噪音
+// （高频存在性检查场景：目录逐级查找、同名冲突检测等）
+func FindFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, error) {
+	var files []*native.FileORM
+	if err := db.Where("parent_id=? AND name=? AND owner_id=?", parentID, name, ownerID).
+		Find(&files).Error; err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	return files[0], nil
+}
+
 // CreateFile 创建文件
 func CreateFile(file *native.FileORM) error {
 	if file.Id == nil {

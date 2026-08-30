@@ -2,10 +2,8 @@ package webdav
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	gowebdav "github.com/emersion/go-webdav"
@@ -19,22 +17,20 @@ import (
 
 // Handler WebDAV HTTP handler
 type Handler struct {
-	fs            *gowebdav.Handler
-	authenticator *auth.BasicAuthenticator
+	fs *gowebdav.Handler
 }
 
 // NewHandler 创建 WebDAV handler
 // 每个请求按认证用户解析其 UserSpace 根目录，实现用户隔离
 func NewHandler() *Handler {
 	return &Handler{
-		fs:            &gowebdav.Handler{FileSystem: &Backend{}},
-		authenticator: auth.NewBasicAuthenticator(),
+		fs: &gowebdav.Handler{FileSystem: &Backend{}},
 	}
 }
 
 // ServeHTTP 处理 WebDAV 请求
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Basic Auth 认证
+	// Basic Auth 认证（按认证模式：Casdoor ROPC 或本地用户表）
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="PFM WebDAV"`)
@@ -42,7 +38,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.authenticator.Authenticate(username, password)
+	userID, err := auth.AuthenticateBasic(username, password)
 	if err != nil {
 		llog.L().Warnf("webdav auth failed: user=%s, err=%v", username, err)
 		w.Header().Set("WWW-Authenticate", `Basic realm="PFM WebDAV"`)
@@ -91,20 +87,4 @@ func getBoundProviderIds(space *native.UserSpaceORM) []uint32 {
 		return nil
 	}
 	return ids
-}
-
-// parseBasicAuth 手动解析 Basic Auth（备用）
-func parseBasicAuth(authHeader string) (username, password string, ok bool) {
-	if !strings.HasPrefix(authHeader, "Basic ") {
-		return
-	}
-	decoded, err := base64.StdEncoding.DecodeString(authHeader[6:])
-	if err != nil {
-		return
-	}
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return
-	}
-	return parts[0], parts[1], true
 }

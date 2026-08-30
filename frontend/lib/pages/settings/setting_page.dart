@@ -213,14 +213,19 @@ class _SettingPageState extends State<SettingPage> {
                     ),
                     const Divider(height: 1, indent: 56),
                   ],
-                  _SettingsTile(
-                    icon: Icons.phone_android_outlined,
-                    iconBackground: PfmColors.archiveSurface,
-                    iconColor: PfmColors.archive,
-                    title: al.settings_autoBackup,
-                    subtitle: al.settings_autoBackupSubtitle,
-                    onTap: () => const ClientBackupRoute().push(context),
-                  ),
+                  // 客户端自动备份仅桌面端：移动端受分区存储限制，目录整树授权
+                  // 被系统禁止(Download/Android/存储根)，无法可靠扫描本地目录，
+                  // 故隐藏入口，移动端用户改为手动选择文件上传。
+                  if (!Platform.isAndroid && !Platform.isIOS) ...[
+                    _SettingsTile(
+                      icon: Icons.phone_android_outlined,
+                      iconBackground: PfmColors.archiveSurface,
+                      iconColor: PfmColors.archive,
+                      title: al.settings_autoBackup,
+                      subtitle: al.settings_autoBackupSubtitle,
+                      onTap: () => const ClientBackupRoute().push(context),
+                    ),
+                  ],
                   // 相册备份仅移动端：用设备类型判断(Platform.isAndroid/isIOS)。
                   // 不能复用上面的 isMobile(屏幕宽度<600)——大屏Android Pad
                   // (如华为MatePad)宽度>600会被误判为桌面而隐藏入口

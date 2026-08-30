@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package native;
+
+import "google/protobuf/timestamp.proto";
+import "gorm/gorm.proto";
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// 本地认证用户表（auth.mode = local 时使用）
+// user_id 为该用户的稳定唯一 ID（UUID），与 Casdoor 模式下的用户 UUID 语义一致，
+// 用于关联 user_spaces（root_file_id）、admin_users（管理员判定）
+message User {
+  option (gorm.opts).ormable = true;
+  optional uint32 id = 1 [(gorm.field).tag = {
+    primary_key: true
+    auto_increment: true
+  }];
+  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  // 用户唯一 ID（UUID），作为 owner_id / user_id 关联 UserSpace、admin_users
+  optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 36}];
+  // 登录用户名（唯一）
+  optional string username = 5 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
+  // 密码哈希（bcrypt）
+  optional string password_hash = 6 [(gorm.field).tag = {not_null: true}];
+  // 邮箱（可选）
+  optional string email = 7 [(gorm.field).tag = {default: "''", size: 128}];
+}

@@ -394,6 +394,20 @@
         }
     },
     "login_notSet": "未设置",
+    "login_username": "用户名",
+    "login_password": "密码",
+    "login_signIn": "登录",
+    "login_signingIn": "登录中...",
+    "login_localHint": "使用服务器本地账号登录",
+    "login_casdoorHint": "通过 Casdoor 账号登录",
+    "login_failed": "登录失败：{error}",
+    "@login_failed": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
     "settings_title": "设置",
     "settings_serverConfig": "服务器配置",
     "settings_currentUser": "当前用户",

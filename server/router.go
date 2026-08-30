@@ -21,6 +21,7 @@ var vanguardServices []*vanguard.Service = make([]*vanguard.Service, 0)
 
 func route(mux *http.ServeMux) {
 	healthRoute(mux)
+	authRoute(mux)
 	telegramWebhookRoute(mux)
 	webdavRoute(mux)
 	fileViewerRoute(mux)
@@ -50,6 +51,14 @@ func healthRoute(mux *http.ServeMux) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+}
+
+// authRoute 认证路由（本地认证模式：登录 + 模式查询）
+func authRoute(mux *http.ServeMux) {
+	// 本地认证登录（auth.mode=local）
+	mux.HandleFunc("/api/auth/login", api.LoginHandler)
+	// 查询当前认证模式（前端登录页据此渲染登录 UI）
+	mux.HandleFunc("/api/auth/config", api.AuthConfigHandler)
 }
 
 // fileStreamRoute 文件流式传输路由（预览/下载）
@@ -101,6 +110,9 @@ func fileRoute(mux *http.ServeMux) {
 
 	// 2. 相册备份子目录端点
 	mux.HandleFunc("/api/file/get-or-create-subfolder", api.GetOrCreateSubfolderHandler)
+
+	// 3. 按年/月目录归档端点（mkdir -p 语义，后端自动创建）
+	mux.HandleFunc("/api/file/ensure-dir-path", api.EnsureDirPathHandler)
 
 	// 2. 创建 Vanguard Service 用于 RESTful 支持
 	service := vanguard.NewService(path, handler)

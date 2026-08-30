@@ -308,6 +308,9 @@ class AlbumBackupService {
       int created = 0;
       bool uploadStarted = false;
 
+      // "年/月"目录 ID 缓存（一次备份内不重复请求后端）
+      final monthFolderCache = <String, String>{};
+
       for (int i = 0; i < photos.length; i++) {
         final photo = photos[i];
         try {
@@ -344,13 +347,33 @@ class AlbumBackupService {
           final fileName = photo.title ?? p.basename(filePath);
           final now = DateTime.now();
 
+          // 解析拍摄时间，按"年/月"目录归档：
+          // EXIF DateTimeOriginal → 文件名规则 → 媒体库时间兜底
+          var taskParentId = targetFolderId;
+          final taken = await PhotoDateResolver.resolveFromFile(
+            filePath,
+            mediaDate: photo.createDateTime,
+          );
+          if (taken != null) {
+            final ym = '${taken.year.toString().padLeft(4, '0')}/'
+                '${taken.month.toString().padLeft(2, '0')}';
+            final folderId = await _ensureMonthFolder(
+              _config.targetParentId,
+              ym,
+              monthFolderCache,
+            );
+            if (folderId != null) {
+              taskParentId = folderId;
+            }
+          }
+
           batch.add(
             UploadTaskRecord(
               id: const Uuid().v4(),
               filename: fileName,
               filepath: filePath,
               fileSize: fileSize,
-              parentId: targetFolderId,
+              parentId: taskParentId,
               status: UploadStatus.PENDING,
               tags: photo.id, // 存储资产 ID
               createdAt: now,
@@ -430,6 +453,34 @@ class AlbumBackupService {
     } finally {
       _isBackingUp = false;
     }
+  }
+
+  /// 获取"年/月"目录 ID（如 2026/07）
+  /// 优先走内存缓存，未命中时调后端 ensure-dir-path 自动创建（并发安全）；
+  /// 失败返回 null，调用方回退到编号子目录，不影响上传
+  Future<String?> _ensureMonthFolder(
+    String parentId,
+    String ym,
+    Map<String, String> cache,
+  ) async {
+    final cached = cache[ym];
+    if (cached != null) return cached;
+
+    try {
+      final result = await FmRepository().ensureDirPath(
+        parentId: parentId,
+        path: ym,
+      );
+      if (result.success && result.data != null) {
+        cache[ym] = result.data!;
+        _logger.info('年月目录就绪: $ym -> ${result.data}');
+        return result.data!;
+      }
+      _logger.warning('创建年月目录失败: $ym, ${result.message}');
+    } catch (e) {
+      _logger.warning('创建年月目录异常: $ym, $e');
+    }
+    return null;
   }
 
   /// 获取需要备份的照片列表

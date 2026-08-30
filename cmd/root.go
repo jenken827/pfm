@@ -16,9 +16,12 @@ var rootCmd = &cobra.Command{
 	Long: `Personal File Manager 服务端。
 
 子命令:
-  server   启动服务器
-  decrypt  按 file_locations id 解密本地加密文件
-  version  显示版本信息`,
+  server            启动服务器
+  user              本地认证用户管理（auth.mode=local 时使用）
+  migrate-photos    修复旧数据：按文件名日期把图片/视频移到 年/月 目录
+  dedup-files       删除子树下的重复文件（同 hash 保留名称最短的）
+  decrypt           按 file_locations id 解密本地加密文件
+  version           显示版本信息`,
 	// 无子命令时显示帮助
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()
