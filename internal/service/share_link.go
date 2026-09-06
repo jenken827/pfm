@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -101,9 +103,9 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 7. 构建分享链接
-	serverURL := config.GetConfig().ServerURL
-	shareURL := serverURL + "/s/" + shareCode
+	// 7. 构建分享链接（sign 参数使 /s/{shareCode} 免登录公共下载可通过签名校验）
+	serverURL := strings.TrimRight(config.GetConfig().ServerURL, "/")
+	shareURL := serverURL + "/s/" + shareCode + "?sign=" + url.QueryEscape(signParam)
 
 	// 8. 返回
 	result := &native.CreateShareLinkRespData{

@@ -13,10 +13,12 @@ import (
 	"time"
 
 	gowebdav "github.com/emersion/go-webdav"
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
 )
 
@@ -216,52 +218,80 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 		}
 	}
 
-	// 读取内容到临时文件并计算 blake3 hash（与系统文件 hash 算法一致）
-	tmpFile, err := os.CreateTemp("", "webdav-upload-*")
+	// 流式写入临时文件并计算 blake3 hash（与系统文件 hash 算法一致）。
+	// 大文件不整读进内存：body 边收边写 staging（TempDir 根目录），
+	// hash 确定后再原子迁入规范临时目录 TempDir/<hash>/<fileName>（与
+	// UploadSmall 的临时文件布局一致，storage.Dispatch 的兜底查找依赖该目录）。
+	// staging 与规范目录同盘，os.Rename 零拷贝；跨设备极端场景走 copy 兜底。
+	staging, err := os.CreateTemp(globals.TempDir, "webdav-stage-*")
 	if err != nil {
-		return nil, false, fmt.Errorf("create temp file: %w", err)
+		return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("create staging file: %w", err))
 	}
-	defer os.Remove(tmpFile.Name())
+	stagingName := staging.Name()
+	defer os.Remove(stagingName) // rename 成功后为 no-op；copy 兜底场景清理 staging
 
 	hasher := blake3.New(32, nil)
-	writer := io.MultiWriter(tmpFile, hasher)
-	written, err := io.Copy(writer, body)
+	written, err := io.Copy(io.MultiWriter(staging, hasher), body)
 	if err != nil {
-		tmpFile.Close()
-		return nil, false, fmt.Errorf("write temp: %w", err)
+		staging.Close()
+		return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("write staging: %w", err))
 	}
-	tmpFile.Close()
+	staging.Close()
 
 	hash := hex.EncodeToString(hasher.Sum(nil))
 
-	// 读取文件内容
-	content, err := os.ReadFile(tmpFile.Name())
-	if err != nil {
-		return nil, false, fmt.Errorf("read temp: %w", err)
+	if err := utils.CreateFileTempDir(hash, false); err != nil {
+		return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("create temp dir: %w", err))
+	}
+	tempPath := utils.GetFileTempPath(hash, fileName)
+	if err := os.Rename(stagingName, tempPath); err != nil {
+		if copyErr := copyFile(stagingName, tempPath); copyErr != nil {
+			return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("move to temp dir: %w", err))
+		}
 	}
 
-	// 调用 UploadSmall
+	// 调用 WebDAV 专用上传（无 10MB 限制，直接从临时文件入库 + 异步分发）
+	size := uint64(written)
 	uploadReq := &native.UploadSmallReq{
 		Name:      &fileName,
 		ParentId:  parentFile.Id,
-		Size:      uint64Ptr(uint64(written)),
+		Size:      &size,
 		Hash:      &hash,
-		Content:   content,
 		Overwrite: boolPtr(existingFile != nil),
 	}
 
-	_, mErr := service.UploadSmall(ctx, uploadReq)
+	_, mErr := service.UploadWebdavFromTemp(ctx, uploadReq, tempPath)
 	if mErr != nil {
-		return nil, false, fmt.Errorf("upload failed: %s", mErr.E.Error())
+		return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("upload failed: %s", mErr.E.Error()))
 	}
 
 	return &gowebdav.FileInfo{
 		Path:    name,
-		Size:    written,
+		Size:    int64(written),
 		ModTime: time.Now(),
 		IsDir:   false,
 		ETag:    hash,
 	}, created, nil
+}
+
+// copyFile 跨设备移动临时文件的兜底（正常同盘 os.Rename 不触发）
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 // RemoveAll 删除文件
@@ -365,5 +395,4 @@ func (b *Backend) Move(ctx context.Context, name, dest string, options *gowebdav
 	return created, nil
 }
 
-func uint64Ptr(v uint64) *uint64 { return &v }
-func boolPtr(v bool) *bool       { return &v }
+func boolPtr(v bool) *bool { return &v }

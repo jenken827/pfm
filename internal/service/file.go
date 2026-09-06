@@ -122,10 +122,20 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		}
 	}
 
+	// 查询根目录时，从 context 获取用户根目录 ID（与 GetFileList/GetFolderList 保持一致）
+	parentID := req.GetParentId()
+	if parentID == "" || parentID == "0" {
+		rootID, mErr := getRootFileIDFromCtx(ctx)
+		if mErr != nil {
+			return "", mErr
+		}
+		parentID = rootID
+	}
+
 	// 所有权检查：检查对父目录的所有权
-	if !checkOwnership(ctx, req.GetParentId()) {
+	if !checkOwnership(ctx, parentID) {
 		return "", &models.Err{
-			E: fmt.Errorf("permission denied: not owner of directory %s", req.GetParentId()),
+			E: fmt.Errorf("permission denied: not owner of directory %s", parentID),
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
@@ -133,7 +143,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 	// 处理加密设置：如果前端未传递，则从父文件夹继承
 	enableEncryption := req.EnableEncryption
 	if enableEncryption == nil {
-		inherited, mErr := getInheritedEncryption(req.ParentId)
+		inherited, mErr := getInheritedEncryption(&parentID)
 		if mErr != nil {
 			return "", mErr
 		}
@@ -142,7 +152,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 
 	f := &native.FileORM{
 		Name:             req.Name,
-		ParentId:         req.ParentId,
+		ParentId:         &parentID,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		EnableEncryption: enableEncryption,
 		OwnerId:          &userID,

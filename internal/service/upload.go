@@ -262,6 +262,14 @@ func handleInstantUpload(
 	overwrite bool,
 	tags *string,
 ) (handled bool, fileToUse *native.FileORM, err *models.Err) {
+	// 秒传数据源：新内容是否已存在于存储（同 hash 的文件记录）。需在
+	// 同名分支之前确定 —— 同名覆盖若指向全新内容，不能走"只改记录"捷径，
+	// 否则文件会指向没有 file_location 的 blob（读取报 no file location found）。
+	dataFile := ownerFile
+	if dataFile == nil {
+		dataFile = globalFile
+	}
+
 	// 处理同名文件（保留原有语义：同目录同名同 hash 秒传，不同 hash 覆盖/冲突）
 	if sameNameFile != nil {
 		if *sameNameFile.Hash == fileHash {
@@ -277,6 +285,13 @@ func handleInstantUpload(
 				C: native.RespCode_ALREADY_EXISTS,
 			}
 		}
+		// 覆盖的新内容在存储中不存在 → 交还 UploadSmall 走真实上传路径
+		// （写 temp → createSmallFileRecord/handleOverwriteFile → 异步分发，
+		// 由 handleOverwriteFile 统一处理 max_histories 与旧位置清理）。
+		if dataFile == nil {
+			llog.L().Infof("same name overwrite with new content, full upload: %s", *fileName)
+			return false, nil, nil
+		}
 		// 需要覆盖，更新文件记录
 		// 与 handleOverwriteFile 对齐：按父目录 max_histories 决定建历史还是直接更新，
 		// 并异步清理旧 hash 在存储提供者上的位置（否则旧 hash 的 file_location 永久残留成孤儿）
@@ -289,6 +304,7 @@ func handleInstantUpload(
 		}
 
 		f := &native.FileORM{
+			Id:   sameNameFile.Id,
 			Hash: &fileHash,
 			Size: fileSize,
 		}
@@ -320,13 +336,7 @@ func handleInstantUpload(
 		return true, sameNameFile, nil
 	}
 
-	// 确定"已有数据"来源：优先自己名下，其次全局
-	dataFile := ownerFile
-	if dataFile == nil {
-		dataFile = globalFile
-	}
-
-	// 全局也不存在同 hash → 完整上传流程
+	// 全局也不存在同 hash → 完整上传流程（dataFile 已在函数开头确定）
 	if dataFile == nil {
 		return false, nil, nil
 	}
@@ -1133,6 +1143,90 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		Hash:   newFileRecord.Hash,
 		Exists: &exists,
 	}, nil
+}
+
+// UploadWebdavFromTemp WebDAV 上传专用入口：请求体已在 webdav 层流式落盘为
+// 临时文件（blake3 hash 在写入时同步计算），这里直接入库并异步分发到存储提供者。
+//
+// 与 UploadSmall 刻意分开，不共用其 10MB 上限与整读内存的语义：
+//   - 无大小限制（webdav PUT 的 body 天然是流，大文件应直接入库分发）；
+//   - 不把内容整读进内存（UploadSmall 的 req.Content 是内存切片，不适合大文件）。
+//
+// 秒传 / 同名冲突 / 覆盖历史 / upload-record+异步分发等语义与 UploadSmall 一致
+// （共用 checkFileExists / handleInstantUpload / checkSameNameFile /
+// createSmallFileRecord / smallFileUploadToProviders）。
+// tempPath 必须在规范临时目录（TempDir/<hash>/）下：各 helper 的错误清理路径
+// 依赖该目录的隔离性（RemoveAll 目录是安全的），storage.Dispatch 也按该布局兜底。
+func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempPath string) (*native.FileORM, *models.Err) {
+	// 权限检查：检查对父目录的上传权限
+	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+		return nil, &models.Err{
+			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	blake3Hash := *req.Hash
+	llog.L().Infof("webdav upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+
+	// 从 context 获取绑定的存储提供者
+	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
+	if mErr != nil {
+		removeWebdavTemp(tempPath)
+		return nil, mErr
+	}
+
+	// 检查文件是否已存在（秒传/同名冲突判定）
+	userID := getCurrentUserIDFromCtx(ctx)
+	ownerFile, sameNameFile, globalFile, mErr := checkFileExists(*req.ParentId, *req.Name, blake3Hash, userID)
+	if mErr != nil {
+		removeWebdavTemp(tempPath)
+		return nil, mErr
+	}
+
+	// 秒传 / 同名覆盖处理。内容已落盘：若新内容不在存储中，同名覆盖分支会
+	// 回落（handled=false）走下面的真实上传，保证记录不会指向无位置的新 hash。
+	handled, fileRecord, mErr := handleInstantUpload(
+		ctx, blake3Hash, req.Name, req.Size, req.ParentId,
+		providerIds, ownerFile, sameNameFile, globalFile, req.GetOverwrite(), req.Tags,
+	)
+	if mErr != nil {
+		removeWebdavTemp(tempPath)
+		return nil, mErr
+	}
+	if handled {
+		// 记录已就绪（秒传复用），临时文件不再需要
+		removeWebdavTemp(tempPath)
+		return fileRecord, nil
+	}
+
+	// 同名文件覆盖判定（内容不在存储时这里拿到 overwriteID，走完整上传）
+	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
+	if mErr != nil {
+		removeWebdavTemp(tempPath)
+		return nil, mErr
+	}
+
+	// 创建文件记录（覆盖时按父目录 max_histories 决定建历史还是直接更新）
+	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID)
+	if mErr != nil {
+		removeWebdavTemp(tempPath)
+		return nil, mErr
+	}
+
+	// 触发后台存储上传（从临时文件上传；内部失败会清理 temp 目录）
+	if err := smallFileUploadToProviders(blake3Hash, req, providerIds, tempPath, overwriteID); err != nil {
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	return newFileRecord, nil
+}
+
+// removeWebdavTemp 清理 webdav 上传的规范临时目录 TempDir/<hash>/
+func removeWebdavTemp(tempPath string) {
+	if err := os.RemoveAll(filepath.Dir(tempPath)); err != nil {
+		llog.L().Warnf("cleanup webdav temp dir failed: %v", err)
+	}
 }
 
 // validateSmallFileContent 验证小文件内容hash和大小

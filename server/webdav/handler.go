@@ -71,6 +71,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	llog.L().Debugf("webdav request: user=%s, method=%s, path=%s", userID, r.Method, r.URL.Path)
 
+	// go-webdav 对 OPTIONS 固定返回 204 No Content(见 emersion/go-webdav
+	// internal/server.go handleOptions: w.WriteHeader(http.StatusNoContent)),
+	// 而 flutter 的 webdav_client 1.2.2 在读写文件前会先发 OPTIONS 预检并强制
+	// 要求 200(见 webdav_dio.dart wdReadWithBytes),204 会被抛成
+	// "DioException[bad response]: No Content"——BeeCount 下载/上传同步即报此错。
+	// 这里把 OPTIONS 应答改为 200 OK(DAV/Allow 头内容与 go-webdav 对齐)。
+	if r.Method == http.MethodOptions {
+		w.Header().Set("DAV", "1, 3")
+		w.Header().Set("Allow", "OPTIONS, DELETE, PROPFIND, PROPPATCH, COPY, MOVE, HEAD, GET, PUT, MKCOL")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// 使用该用户的根目录构造后端，实现用户隔离
 	h.fs.FileSystem = NewBackend(rootFileID, userID)
 	h.fs.ServeHTTP(w, r)

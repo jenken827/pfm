@@ -54,3 +54,8 @@ aria2:
 # 分享链接签名密钥。
 # 建议设置为稳定且足够随机的字符串，否则更换后旧分享链接会失效。
 sign_token: replace-with-a-stable-secret
+auth:
+  mode: "local"
+  local:
+    jwt_secret: "replace-with-a-stable-secret"
+    token_ttl_hours: 720
