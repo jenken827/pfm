@@ -21,9 +21,6 @@ import (
 
 // Run 启动服务
 func Run() {
-	// 初始化 token 验证器（必须在 Casdoor 初始化之后）
-	middleware.InitVerifier()
-
 	mux := http.NewServeMux()
 	p := new(http.Protocols)
 

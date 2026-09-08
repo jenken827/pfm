@@ -252,7 +252,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 		wg.Add(1)
 		go func(tid uint32, pSem chan struct{}) {
 			defer wg.Done()
-			defer func() { <-pSem }()                  // 释放提供者信号量
+			defer func() { <-pSem }()                             // 释放提供者信号量
 			defer func() { <-globalDispatcher.globalSemaphore }() // 释放全局信号量
 
 			if failed, errMsg := uploadToProviderAsync(ctx, ur, sourcePath, fileName, parentID, fileEncrypt, tid); failed {
@@ -369,9 +369,31 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 		} else {
 			llog.L().Errorf("update upload record status to failed skipped: record id is nil")
 		}
+
+		// 部分失败但已有 provider 成功时，内容已安全落库：立即回收 staging 临时文件。
+		// 全部失败时 temp 是内容的唯一副本，保留供排查/重试，由兜底 janitor 超龄回收。
+		if ur.FileHash != nil && hasCompletedLocation(*ur.FileHash) {
+			if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
+				llog.L().Warnf("cleanup file temp dir after partial success failed: %v", err)
+			}
+		}
 	} else {
 		completeUpload(ur)
 	}
+}
+
+// hasCompletedLocation 检查文件 hash 是否存在任一已完成（PCOMPLETED）的 location
+func hasCompletedLocation(fileHash string) bool {
+	locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
+	if err != nil {
+		return false
+	}
+	for _, loc := range locations {
+		if loc.Status != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
+			return true
+		}
+	}
+	return false
 }
 
 // uploadToProvider 上传到单个提供者

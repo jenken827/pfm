@@ -18,7 +18,7 @@ Future<void> downloadFile({
   required String taskId,
   required TransferStorage storage,
   required String baseUrl,
-  required CasdoorToken token,
+  required AuthToken token,
 }) async {
   final l = getLogger();
 

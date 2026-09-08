@@ -80,7 +80,7 @@ message BackupTask {
   // 备份总大小统计
   optional uint64 backed_up_size = 16 [(gorm.field).tag = {default: "0"}];
 
-  // 任务所有者（Casdoor 用户名），各用户只能管理自己的任务
+  // 任务所有者（用户名/ID），各用户只能管理自己的任务
   optional string owner_id = 17 [(gorm.field).tag = {
     not_null: true,
     default: "''",

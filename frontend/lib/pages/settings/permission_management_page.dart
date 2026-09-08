@@ -22,7 +22,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
   late AppLocalizations al;
   final FmRepository _repo = FmRepository();
 
-  List<CasdoorUserInfo> _users = [];
+  List<UserInfo> _users = [];
   Map<String, UserSpace> _spaceMap = {}; // userId -> UserSpace
   List<StorageProvider> _providers = [];
   bool _isLoading = false;
@@ -54,7 +54,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
         return;
       }
 
-      final users = usersResult.data?.users.toList() ?? <CasdoorUserInfo>[];
+      final users = usersResult.data?.users.toList() ?? <UserInfo>[];
       final spaces = spacesResult.data?.spaces.toList() ?? <UserSpace>[];
       final spaceMap = <String, UserSpace>{};
       for (final s in spaces) {
@@ -148,7 +148,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     );
   }
 
-  Widget _buildUserTile(CasdoorUserInfo user, UserSpace? space) {
+  Widget _buildUserTile(UserInfo user, UserSpace? space) {
     final colorScheme = Theme.of(context).colorScheme;
     final quotaBytes = space?.quotaBytes.toInt() ?? 0;
     final usedBytes = space?.usedBytes.toInt() ?? 0;
@@ -308,7 +308,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     );
   }
 
-  void _showQuotaDialog(CasdoorUserInfo user, UserSpace? space) {
+  void _showQuotaDialog(UserInfo user, UserSpace? space) {
     final currentQuota = space?.quotaBytes.toInt() ?? 0;
     final controller = TextEditingController(
       text: currentQuota > 0
@@ -428,7 +428,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
     );
   }
 
-  void _showAssignRootDirDialog(CasdoorUserInfo user, UserSpace? space) {
+  void _showAssignRootDirDialog(UserInfo user, UserSpace? space) {
     final hasExistingRoot = space != null && space.rootFileId.isNotEmpty;
     // 预选已绑定的 provider
     List<int> selectedIds = [];

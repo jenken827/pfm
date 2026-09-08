@@ -183,6 +183,24 @@ func (s *FileServer) CancelShareLink(ctx context.Context, req *connect.Request[n
 	return response.SuccessResp(nil)
 }
 
+// ListMyShares 获取我的分享列表
+func (s *FileServer) ListMyShares(ctx context.Context, req *connect.Request[native.ListMySharesReq]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.ListMyShares(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}
+
+// UpdateShareLink 更新分享链接
+func (s *FileServer) UpdateShareLink(ctx context.Context, req *connect.Request[native.UpdateShareLinkReq]) (*connect.Response[native.BaseResp], error) {
+	data, mErr := service.UpdateShareLink(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}
+
 // RestoreFromTrash 从回收站恢复文件
 func (s *FileServer) RestoreFromTrash(ctx context.Context, req *connect.Request[native.RestoreFromTrashReq]) (*connect.Response[native.BaseResp], error) {
 	mErr := service.RestoreFromTrash(ctx, req.Msg)
@@ -321,4 +339,9 @@ func (s *FileServer) GetTransferConfig(ctx context.Context, req *connect.Request
 	return response.SuccessResp(&native.GetTransferConfigResp{
 		ServerUrl: &serverURL,
 	})
+}
+
+// GetPhotoDateConfig 获取照片日期解析配置（相册备份按年/月归档用）
+func (s *FileServer) GetPhotoDateConfig(ctx context.Context, req *connect.Request[native.GetPhotoDateConfigReq]) (*connect.Response[native.BaseResp], error) {
+	return response.SuccessResp(service.GetPhotoDateConfig())
 }

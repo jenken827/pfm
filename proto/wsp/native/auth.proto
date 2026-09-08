@@ -7,9 +7,9 @@ import "gorm/gorm.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// 本地认证用户表（auth.mode = local 时使用）
-// user_id 为该用户的稳定唯一 ID（UUID），与 Casdoor 模式下的用户 UUID 语义一致，
-// 用于关联 user_spaces（root_file_id）、admin_users（管理员判定）
+// 本地用户表（auth 认证用户）
+// user_id 为该用户的稳定唯一 ID（UUID），与 owner_id / user_spaces.user_id /
+// admin_users.user_id 一致，用于跨表关联。
 message User {
   option (gorm.opts).ormable = true;
   optional uint32 id = 1 [(gorm.field).tag = {

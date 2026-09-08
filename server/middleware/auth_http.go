@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/auth"
 )
 
 // AuthHTTPMiddleware HTTP认证中间件（用于非RPC的HTTP handler）
-func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*casdoorsdk.Claims, error) {
+func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*auth.Claims, error) {
 	accessToken := r.Header.Get(tokenHeader)
 	if accessToken == "" {
 		return nil, errors.New("no token provided")
@@ -19,7 +19,7 @@ func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*casdoorsdk.Cla
 
 	at, _ := strings.CutPrefix(accessToken, "Bearer ")
 
-	claims, err := verifier.Verify(at)
+	claims, err := auth.GetLocalAuth().VerifyToken(at)
 	if err != nil {
 		return nil, err
 	}

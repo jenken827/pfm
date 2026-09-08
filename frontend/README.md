@@ -11,7 +11,7 @@ flutter 项目框架，使用此框架可以快速搭建启动一个flutter项�
 - flex_color_scheme：主题包，提供丰富的自带主题
 - get_it：全局实例管理
 - go_router：路由管理包
-- webview_flutter：对接casdoor，可以在app内部展示casdoor的登录页面
+- webview_flutter：应用内 WebView（用于文件预览等场景）
 - protobuf：protobuf序列化包，与后端共用数据，接口对接的底层支持
 
 # 特性
@@ -19,7 +19,7 @@ flutter 项目框架，使用此框架可以快速搭建启动一个flutter项�
 
 - 支持主题切换
 
-- 集成casdoor登录流程
+- 本地账号密码登录（服务端 `users` 表 + HS256 JWT）
 
 - 持久化日志：Flutter 业务日志（talker）+ Android 原生日志（Kotlin 写入 filesDir/pfm_logs），启动时序逐阶段打点，未捕获异常自动记录；设置页提供「查看日志」入口，支持关键词搜索、级别/来源过滤与清空，亦可直接导出日志文件
 

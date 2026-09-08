@@ -5,39 +5,11 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
-
-// adminRoleName 管理员角色名（已弃用，改用本地 admin_users 表）
-// const adminRoleName = "pfm_admin"
-
-// getUserFromCtx 从 context 获取当前用户
-func getUserFromCtx(ctx context.Context) *casdoorsdk.User {
-	val := ctx.Value(globals.ContextUserKey)
-	if val == nil {
-		return nil
-	}
-	claims, ok := val.(*casdoorsdk.Claims)
-	if !ok || claims == nil {
-		return nil
-	}
-	return &claims.User
-}
-
-// isAdmin 检查是否为管理员（查询本地 admin_users 表）
-func isAdmin(ctx context.Context) bool {
-	user := getUserFromCtx(ctx)
-	if user == nil {
-		return false
-	}
-	return db.IsAdmin(user.Name)
-}
 
 // PermInterceptor 权限检查拦截器
 // 基于 owner_id 的权限模型：文件所有者或管理员可访问

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	casdoorsdk "github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
@@ -526,50 +525,40 @@ func GetAccessibleDirectories(ctx context.Context, req *native.GetAccessibleDire
 
 func strPtr(s string) *string { return &s }
 
-// ListUsers 获取用户列表（通过 Casdoor API）
+// ListUsers 获取用户列表（管理员用）
+// 数据源：本地用户表（users），角色按 admin_users 判定（pfm_admin / pfm_user）
 func ListUsers(ctx context.Context) (*native.ListUsersResp, *models.Err) {
-	// 获取所有用户
-	users, err := casdoorsdk.GetUsers()
+	return listLocalUsers()
+}
+
+// listLocalUsers 从本地用户表列出用户
+// display_name 回退为 username；角色与 GetMyRoles 语义一致（admin_users → pfm_admin，否则 pfm_user）
+func listLocalUsers() (*native.ListUsersResp, *models.Err) {
+	users, err := db.ListUsers()
 	if err != nil {
-		llog.L().Errorf("get casdoor users failed: %v", err)
-		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
+		llog.L().Errorf("list local users failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 获取所有角色（用于关联用户和角色）
-	roles, err := casdoorsdk.GetRoles()
-	if err != nil {
-		llog.L().Warnf("get casdoor roles failed (non-fatal): %v", err)
-		roles = nil
-	}
-
-	// 构建 user -> roles 映射
-	userRoles := make(map[string][]string)
-	if roles != nil {
-		for _, role := range roles {
-			if role.Users != nil {
-				for _, userName := range role.Users {
-					userRoles[userName] = append(userRoles[userName], role.Name)
-				}
-			}
-		}
-	}
-
-	// 组装响应
 	result := &native.ListUsersResp{}
 	for _, u := range users {
-		info := &native.CasdoorUserInfo{
-			UserId:      &u.Id,
-			DisplayName: strPtr(u.DisplayName),
-			Email:       strPtr(u.Email),
-			Avatar:      strPtr(u.Avatar),
-			CreatedTime: strPtr(u.CreatedTime),
+		info := &native.UserInfo{
+			UserId:      u.UserId,
+			DisplayName: u.Username,
 		}
-		if r, ok := userRoles[u.Name]; ok {
-			info.Roles = r
+		if u.Email != nil && *u.Email != "" {
+			info.Email = u.Email
+		}
+		if u.UserId != nil && db.IsAdmin(*u.UserId) {
+			info.Roles = []string{"pfm_admin"}
+		} else {
+			info.Roles = []string{"pfm_user"}
+		}
+		if u.CreatedAt != nil {
+			info.CreatedTime = strPtr(u.CreatedAt.Format("2006-01-02 15:04:05"))
 		}
 		result.Users = append(result.Users, info)
 	}
-
 	return result, nil
 }
 

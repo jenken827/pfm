@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -32,12 +31,11 @@ var (
 	localAuthErr  error
 )
 
-// LocalAuthenticator 本地认证器（auth.mode=local）
+// LocalAuthenticator 本地认证器
 //
 // 用户密码以 bcrypt 哈希存于 users 表，登录成功后签发 HS256 JWT。
-// JWT claims 结构与 Casdoor JWT 完全一致（顶层扁平 user 字段：
-// {"id":..., "name":..., "email":...}），使中间件 / service 层
-// 无需感知认证模式差异，全部复用现有 *casdoorsdk.Claims 逻辑。
+// JWT claims 采用顶层扁平 user 字段（{"id":..., "name":..., "email":...}），
+// 由 middleware / service / webdav 层经 ctx 中的 *Claims 读取当前用户。
 type LocalAuthenticator struct {
 	jwtSecret []byte
 	ttl       time.Duration
@@ -141,14 +139,14 @@ func (a *LocalAuthenticator) Authenticate(username, password string) (string, er
 	return *user.UserId, nil
 }
 
-// IssueToken 为本地用户签发 JWT（claims 结构与 Casdoor JWT 兼容，顶层扁平）
+// IssueToken 为本地用户签发 JWT（claims 顶层扁平：id/name/email）
 func (a *LocalAuthenticator) IssueToken(user *native.UserORM) (string, error) {
 	if user.UserId == nil || user.Username == nil {
 		return "", fmt.Errorf("issue token failed: user id/username is nil")
 	}
 	now := time.Now()
-	claims := &casdoorsdk.Claims{
-		User: casdoorsdk.User{
+	claims := &Claims{
+		User: User{
 			Id:    *user.UserId,
 			Name:  *user.Username,
 			Email: derefStr(user.Email),
@@ -165,10 +163,10 @@ func (a *LocalAuthenticator) IssueToken(user *native.UserORM) (string, error) {
 	return token.SignedString(a.jwtSecret)
 }
 
-// VerifyToken 校验本地 JWT，返回与 Casdoor 兼容的 claims
+// VerifyToken 校验本地 JWT，返回用户 claims
 // 只接受 HS256 签名（防止 alg 混淆攻击）
-func (a *LocalAuthenticator) VerifyToken(tokenString string) (*casdoorsdk.Claims, error) {
-	claims := &casdoorsdk.Claims{}
+func (a *LocalAuthenticator) VerifyToken(tokenString string) (*Claims, error) {
+	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

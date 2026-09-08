@@ -7,7 +7,6 @@ require (
 	connectrpc.com/connect v1.19.1
 	connectrpc.com/validate v0.6.0
 	connectrpc.com/vanguard v0.4.0
-	github.com/casdoor/casdoor-go-sdk v1.44.0
 	github.com/emersion/go-webdav v0.7.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/glebarez/sqlite v1.11.0
@@ -74,7 +73,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260223185530-2f722ef697dc // indirect

@@ -620,6 +620,23 @@ func CountActiveFilesByHashExcludingIDs(hash string, excludeIDs []string) (int64
 	return count, nil
 }
 
+// CountFilesByHashIncludingDeleted 统计引用指定 hash 的文件记录数（Unscoped，含回收站软删记录）。
+// 用于去重清理物理数据前的安全校验：只要有任何记录（含可恢复的软删记录）引用，就不允许清理。
+func CountFilesByHashIncludingDeleted(hash string) (int64, error) {
+	if hash == "" {
+		return 0, nil
+	}
+
+	ctx := context.Background()
+	var count int64
+	err := db.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+		Where("hash = ?", hash).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // GetRecentFiles 获取最近使用的文件（排除已删除和文件夹）
 func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM

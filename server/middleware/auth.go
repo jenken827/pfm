@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -19,22 +18,8 @@ import (
 
 const tokenHeader = "Authorization"
 
-// verifier 全局 token 验证器（在 bootstrap 中初始化，按认证模式选择实现）
-var verifier auth.Verifier
-
-// InitVerifier 初始化 token 验证器
-// auth.mode=local 时使用本地 JWT 验证，否则使用 Casdoor 验证
-func InitVerifier() {
-	if auth.IsLocalMode() {
-		verifier = auth.NewLocalTokenVerifier()
-		llog.L().Info("token verifier initialized (local mode)")
-		return
-	}
-	verifier = auth.NewTokenVerifier()
-	llog.L().Info("token verifier initialized (casdoor mode)")
-}
-
 // AuthInterceptor auth middleware
+// 本地认证模式：校验 HS256 JWT（users 表用户 + admin_users 管理员判定）
 func AuthInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(
@@ -44,14 +29,11 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 
 			// Debug 模式：绕过认证，使用模拟的管理员用户
 			if globals.Debug {
-				claims := &casdoorsdk.Claims{
-					User: casdoorsdk.User{
+				claims := &auth.Claims{
+					User: auth.User{
 						Id:    "debug-admin-id",
 						Name:  "debug-admin",
 						Email: "debug@localhost",
-						Roles: []*casdoorsdk.Role{
-							{Name: "pfm_admin"},
-						},
 					},
 				}
 				ctx = context.WithValue(ctx, globals.ContextUserKey, claims)
@@ -67,7 +49,7 @@ func AuthInterceptor() connect.UnaryInterceptorFunc {
 			}
 			at, _ := strings.CutPrefix(accessToken, "Bearer ")
 
-			claims, err := verifier.Verify(at)
+			claims, err := auth.GetLocalAuth().VerifyToken(at)
 			if err != nil {
 				llog.L().Errorf("token verify failed: %v", err)
 				return response.ErrResp(&models.Err{

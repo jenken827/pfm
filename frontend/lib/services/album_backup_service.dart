@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:pfm/api/api.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
+import 'package:pfm/proto/native/file.pb.dart' show PhotoDateConfig;
 import 'package:pfm/services/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -119,6 +120,9 @@ class AlbumBackupService {
   // 备份配置
   AlbumBackupConfig _config = const AlbumBackupConfig();
 
+  // 照片日期解析配置（服务端 GetPhotoDateConfig 下发；缓存缺失回退内置默认）
+  PhotoDateConfig _photoDateConfig = PhotoDateResolver.defaultConfig();
+
   // 备份状态
   final AlbumBackupStatus _status = AlbumBackupStatus.idle;
   AlbumBackupResult _result = const AlbumBackupResult();
@@ -149,6 +153,31 @@ class AlbumBackupService {
       _config = AlbumBackupConfig.fromJson(
         Map<String, dynamic>.from(configJson),
       );
+    }
+    // 加载缓存的服务端照片日期规则（无缓存保持内置默认）
+    final cached = ls.photoDateConfigJson;
+    if (cached != null && cached.isNotEmpty) {
+      try {
+        _photoDateConfig = PhotoDateConfig.fromJson(cached);
+      } catch (e) {
+        _logger.warning('解析缓存的照片日期配置失败，使用内置默认: $e');
+      }
+    }
+  }
+
+  /// 拉取服务端照片日期解析配置（相册备份前调用一次）
+  /// 失败静默：继续用本地缓存或内置默认，不影响备份主流程
+  Future<void> _refreshPhotoDateConfig() async {
+    try {
+      final result = await FmRepository().fetchPhotoDateConfig();
+      if (result.success && result.data != null) {
+        _photoDateConfig = result.data!;
+        _logger.info(
+          '照片日期解析规则已更新: ${_photoDateConfig.filenameRules.length} 条',
+        );
+      }
+    } catch (e) {
+      _logger.warning('拉取照片日期解析规则失败（非致命），使用缓存/默认: $e');
     }
   }
 
@@ -256,6 +285,9 @@ class AlbumBackupService {
       final hasNetwork = await _checkNetwork();
       if (!hasNetwork) return _result;
 
+      // 拉取服务端照片日期解析规则（失败静默用缓存/默认）
+      await _refreshPhotoDateConfig();
+
       // 开始扫描
       _updateStatus(status: AlbumBackupStatus.scanning);
 
@@ -349,10 +381,13 @@ class AlbumBackupService {
 
           // 解析拍摄时间，按"年/月"目录归档：
           // EXIF DateTimeOriginal → 文件名规则 → 媒体库时间兜底
+          // 规则表来自服务端 GetPhotoDateConfig（缓存/内置默认兜底），
+          // 与后端 migrate-photos 的 config.photo_date 保持一致
           var taskParentId = targetFolderId;
           final taken = await PhotoDateResolver.resolveFromFile(
             filePath,
             mediaDate: photo.createDateTime,
+            config: _photoDateConfig,
           );
           if (taken != null) {
             final ym = '${taken.year.toString().padLeft(4, '0')}/'

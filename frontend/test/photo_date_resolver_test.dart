@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/services/photo_date_resolver.dart';
 
 void main() {
@@ -180,6 +181,55 @@ void main() {
     test('非法月份/日期返回 null', () {
       expect(PhotoDateResolver.parseCompactDate('20261301'), isNull);
       expect(PhotoDateResolver.parseCompactDate('20260230'), isNull);
+    });
+  });
+
+  group('PhotoDateResolver 自定义配置规则', () {
+    test('配置规则整体替换默认表（只保留 XYZ_ 前缀）', () {
+      final cfg = PhotoDateConfig(
+        filenameRules: [
+          PhotoDateFilenameRule(
+            type: 'prefix_segment_date',
+            prefixes: ['XYZ_'],
+            segmentIndex: 1,
+          ),
+        ],
+      );
+      // 自定义规则命中
+      expect(
+        PhotoDateResolver.parseFromFilenameWithConfig(
+          'XYZ_20260811_063006.jpg',
+          cfg,
+        )?.year,
+        2026,
+      );
+      // 默认规则已被替换：不再命中
+      expect(
+        PhotoDateResolver.parseFromFilenameWithConfig(
+          'IMG_20260811_063006.jpg',
+          cfg,
+        ),
+        isNull,
+      );
+    });
+
+    test('未知规则类型跳过，不崩溃（向前兼容）', () {
+      final cfg = PhotoDateConfig(
+        filenameRules: [
+          PhotoDateFilenameRule(type: 'some_future_rule'),
+          PhotoDateFilenameRule(
+            type: 'prefix_segment_date',
+            prefixes: ['IMG_'],
+            segmentIndex: 1,
+          ),
+        ],
+      );
+      final dt = PhotoDateResolver.parseFromFilenameWithConfig(
+        'IMG_20260811_063006.jpg',
+        cfg,
+      );
+      expect(dt, isNotNull);
+      expect(dt!.year, 2026);
     });
   });
 }

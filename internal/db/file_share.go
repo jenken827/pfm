@@ -5,6 +5,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"gorm.io/gorm"
 )
 
 // CreateFileShare 创建分享记录
@@ -47,6 +48,29 @@ func GetFileSharesByFileID(fileID string) ([]*native.FileShareORM, error) {
 	return shares, nil
 }
 
+// ListFileSharesByOwner 分页查询指定用户创建的分享记录（按创建时间倒序）
+// 归属规则：owner_id 冗余自文件所有者，创建分享时写入；老数据由迁移脚本回填
+func ListFileSharesByOwner(ownerID string, offset, pageSize int) ([]*native.FileShareORM, int64, error) {
+	ctx := context.Background()
+	var total int64
+	if err := GetDB().WithContext(ctx).Model(&native.FileShareORM{}).
+		Where("owner_id = ?", ownerID).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var shares []*native.FileShareORM
+	if err := GetDB().WithContext(ctx).
+		Where("owner_id = ?", ownerID).
+		Offset(offset).
+		Limit(pageSize).
+		Order("created_at DESC").
+		Find(&shares).Error; err != nil {
+		return nil, 0, err
+	}
+	return shares, total, nil
+}
+
 // UpdateFileShare 更新分享记录
 func UpdateFileShare(fs *native.FileShareORM, updateFields []string) error {
 	ctx := context.Background()
@@ -58,7 +82,12 @@ func UpdateFileShare(fs *native.FileShareORM, updateFields []string) error {
 		case "status":
 			updateMap["status"] = *fs.Status
 		case "expire_at":
-			updateMap["expire_at"] = *fs.ExpireAt
+			if fs.ExpireAt != nil {
+				updateMap["expire_at"] = fs.ExpireAt
+			} else {
+				// 显式置空（转永久分享时清除过期时间）
+				updateMap["expire_at"] = gorm.Expr("NULL")
+			}
 		case "max_access_count":
 			updateMap["max_access_count"] = *fs.MaxAccessCount
 		case "never_expire":

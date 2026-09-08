@@ -60,8 +60,11 @@ func (s *UserSpaceServer) GetAsyncTaskProgress(ctx context.Context, req *connect
 	})
 }
 
-// ListUsers 获取用户列表
+// ListUsers 获取用户列表（管理员用）
 func (s *UserSpaceServer) ListUsers(ctx context.Context, req *connect.Request[native.ListUsersReq]) (*connect.Response[native.BaseResp], error) {
+	if err := service.RequireAdmin(ctx); err != nil {
+		return response.ErrResp(err)
+	}
 	resp, err := service.ListUsers(ctx)
 	if err != nil {
 		return response.ErrResp(err)

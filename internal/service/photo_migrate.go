@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -93,7 +94,7 @@ func MigratePhotosToYearMonth(baseParentID string, dryRun bool) (*MigratePhotoRe
 
 	for _, f := range photos {
 		name := *f.Name
-		taken := ParsePhotoDateFromFilename(name)
+		taken := ParsePhotoDateFromFilenameWithConfig(name, config.GetConfig().PhotoDate)
 		if taken == nil {
 			result.NoDate++
 			continue

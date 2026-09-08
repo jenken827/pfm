@@ -77,6 +77,32 @@ func createAndStoreDriver(sp *native.StorageProviderORM) error {
 	return nil
 }
 
+// EnsureProvider 确保指定 provider 的驱动已初始化（懒加载、幂等）。
+// 供 CLI 等未整体 Init() 的入口按需使用（如去重命令回收远程物理副本）。
+func EnsureProvider(id uint32) (types.StorageDriver, error) {
+	if st := GetStorage(id); st != nil {
+		return st, nil
+	}
+	sps, err := db.GetEnabledProviders()
+	if err != nil {
+		return nil, err
+	}
+	for _, sp := range sps {
+		if sp.Id == nil || *sp.Id != id {
+			continue
+		}
+		if err := createAndStoreDriver(sp); err != nil {
+			return nil, err
+		}
+		st := GetStorage(id)
+		if st == nil {
+			return nil, fmt.Errorf("driver not stored after create, id: %d", id)
+		}
+		return st, nil
+	}
+	return nil, fmt.Errorf("no enabled storage provider with id: %d", id)
+}
+
 // dbCacheUpdater 基于 db 层的缓存状态更新器
 type dbCacheUpdater struct{}
 

@@ -13,6 +13,7 @@ import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
 import 'package:pfm/router/files_route.dart';
+import 'package:pfm/pages/files/file_detail_page.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
 import 'package:pfm/pages/files/flyfish_viewer_page.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
@@ -224,6 +225,20 @@ class _FileViewState extends State<_FileView> {
           // 操作按钮
           IconButton(
             icon: Icon(
+              Icons.refresh,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onPressed:
+                state.status == FileStateStatus.loading
+                    ? null
+                    : () => _saveScrollAndRefresh(),
+            tooltip: '刷新',
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: PfmSpacing.xs),
+          IconButton(
+            icon: Icon(
               Icons.search,
               size: 20,
               color: colorScheme.onSurfaceVariant,
@@ -400,9 +415,19 @@ class _FileViewState extends State<_FileView> {
       );
     }
 
-    return state.isGridView
-        ? _buildGridView(context, state, isMobile)
-        : _buildListView(context, state, isMobile);
+    return RefreshIndicator(
+      onRefresh: () async {
+        final bloc = context.read<FileBloc>();
+        final completer = bloc.stream.firstWhere(
+          (s) => s.status != FileStateStatus.loading,
+        );
+        bloc.add(const FileRefreshEvent());
+        await completer;
+      },
+      child: state.isGridView
+          ? _buildGridView(context, state, isMobile)
+          : _buildListView(context, state, isMobile),
+    );
   }
 
   Widget _buildBreadcrumbs(BuildContext context, FileState state) {
@@ -754,7 +779,8 @@ class _FileViewState extends State<_FileView> {
     }
   }
 
-  void _recordFileAccess(File file) {
+  /// 记录最近浏览（搜索结果打开文件时也复用，静态方法便于搜索代理调用）
+  static void _recordFileAccess(File file) {
     try {
       final storage = GetIt.I.get<RecentFilesStorage>();
       storage.recordAccess(
@@ -820,8 +846,8 @@ class _FileViewState extends State<_FileView> {
       // 点击搜索结果中的文件夹：正常进入该目录（面包屑自动拼接，可正常返回）
       bloc.add(FileNavigateEvent(file.id, file.name));
     } else {
-      // 点击搜索结果中的文件：先退出搜索模式恢复普通列表，再打开预览/详情，
-      // 避免从详情返回后仍停留在搜索结果残影页
+      // 兜底分支：文件已在搜索结果页内直接打开（返回后停留在搜索结果页），
+      // 此处仅防御性地处理直接 close 返回文件对象的极端情况
       bloc.add(const FileSearchEvent(''));
       _handleFileTap(context, file, bloc.state);
     }
@@ -1382,7 +1408,7 @@ class _FileViewState extends State<_FileView> {
     final al = AppLocalizations.of(context);
     final nameController = TextEditingController();
     final maxHistoriesController = TextEditingController();
-    bool enableEncryption = false;
+    bool enableEncryption = true;
 
     showDialog(
       context: context,
@@ -1847,13 +1873,48 @@ class _FileSearchDelegate extends SearchDelegate<File?> {
                 iconColor: iconColors.$1,
                 iconBackground: iconColors.$2,
                 subtitle: _formatFileSize(fileSize),
-                onTap: () => close(context, file),
+                onTap: () => _openSearchResult(context, file),
               ),
             );
           },
         );
       },
     );
+  }
+
+  /// 打开搜索结果项：
+  /// - 文件夹：关闭搜索页，由文件页进入该目录（面包屑可正常返回）；
+  /// - 文件：不关闭搜索页，直接在搜索结果页之上打开预览/详情，
+  ///   返回后仍停留在搜索结果页，可继续浏览其余结果。
+  void _openSearchResult(BuildContext context, File file) {
+    if (file.type == pbenum.FileType.FOLDER) {
+      close(context, file);
+      return;
+    }
+
+    _FileViewState._recordFileAccess(file);
+
+    final Widget page;
+    if (file.type == pbenum.FileType.IMAGE) {
+      final images = _bloc.state.files
+          .where((f) => f.type == pbenum.FileType.IMAGE)
+          .toList();
+      final index = images.indexWhere((f) => f.id == file.id);
+      page = FilePreviewPage(
+        file: file,
+        images: images,
+        initialIndex: index >= 0 ? index : 0,
+      );
+    } else if (file.type == pbenum.FileType.VIDEO ||
+        file.type == pbenum.FileType.AUDIO) {
+      page = FilePreviewPage(file: file);
+    } else if (file.type == pbenum.FileType.DOCUMENT ||
+        file.type == pbenum.FileType.ARCHIVE) {
+      page = FlyfishViewerPage(file: file);
+    } else {
+      page = FileDetailPage(file: file);
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   @override

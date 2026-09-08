@@ -14,15 +14,10 @@ import (
 // Body: {"username":"xxx", "password":"xxx"}
 // Response 200: {"token":"<JWT>", "user":{"id":"<uuid>","name":"xxx","email":"","is_admin":false}}
 // Response 401: 用户名或密码错误
-// 仅 auth.mode=local 时可用；casdoor 模式下返回 400。
 // 暴力破解防护：全局 RateLimitHTTPMiddleware（10 req/s/endpoint/IP）+ bcrypt 计算成本。
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !auth.IsLocalMode() {
-		http.Error(w, "local auth is not enabled", http.StatusBadRequest)
 		return
 	}
 
@@ -61,7 +56,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	llog.L().Infof("local login success: user=%s, user_id=%s", req.Username, userID)
+	llog.L().Infof("login success: user=%s, user_id=%s", req.Username, userID)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"token": token,
@@ -72,22 +67,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			"is_admin": db.IsAdmin(userID),
 		},
 	})
-}
-
-// AuthConfigHandler 查询当前认证模式（前端登录页据此渲染登录 UI）
-// GET /api/auth/config
-// Response: {"mode":"casdoor"|"local"}
-func AuthConfigHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	mode := "casdoor"
-	if auth.IsLocalMode() {
-		mode = "local"
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"mode": mode})
 }
 
 // derefString 安全解引用 string 指针

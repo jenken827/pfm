@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
-import '../../models/casdoor.dart';
+import '../../models/models.dart';
 import '../../router/router.dart';
-import '../../services/casdoor_webview_login.dart';
-import '../../services/desktop_oauth_service.dart';
-import '../../services/local_storage.dart';
-import '../../utils/utils.dart';
+import '../../services/services.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -31,30 +28,13 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _handleLogin() async {
-    try {
-      User? user;
-
-      if (isDesktop()) {
-        final oauthService = DesktopOAuthService();
-        user = await oauthService.login();
-        oauthService.dispose();
-      } else if (isMobile()) {
-        user = await showCasdoorWebViewLogin(context);
-      }
-
-      if (user != null && mounted) {
-        _loadUser();
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Login success: ${user.name}')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Login error: $e')));
-      }
+  /// 清除本地登录态并回到登录页（重新登录）
+  Future<void> _handleRelogin() async {
+    final ls = GetIt.I.get<LocalStorage>();
+    await ls.clearLoginInfo();
+    if (mounted) {
+      _loadUser();
+      const LoginRoute().go(context);
     }
   }
 
@@ -81,7 +61,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
             ],
             FilledButton(
-              onPressed: _handleLogin,
+              onPressed: _handleRelogin,
               child: Text(_user != null ? 'Re-login' : 'Login'),
             ),
           ],

@@ -3,6 +3,8 @@ package service
 import (
 	"testing"
 	"time"
+
+	"jenken827.com/jenken827/pfm/internal/models"
 )
 
 func TestParsePhotoDateFromFilename(t *testing.T) {
@@ -57,5 +59,49 @@ func TestParsePhotoDateFromFilename(t *testing.T) {
 				t.Fatalf("ParsePhotoDateFromFilename(%q) = %v, want %v", tc.filename, got, want)
 			}
 		})
+	}
+}
+
+// TestParsePhotoDateFromFilenameWithConfig 验证自定义规则整体替换默认规则表：
+// 只保留 prefix_segment_date（前缀 XYZ_），则默认表里的 IMG 紧凑日期等不再命中
+func TestParsePhotoDateFromFilenameWithConfig(t *testing.T) {
+	cfg := models.PhotoDateConfig{
+		FilenameRules: []models.PhotoDateFilenameRule{
+			{Type: "prefix_segment_date", Prefixes: []string{"XYZ_"}, SegmentIndex: 1},
+		},
+	}
+	cases := []struct {
+		filename string
+		want     string
+	}{
+		// 自定义规则命中
+		{"XYZ_20260811_063006.jpg", "2026-08-11 00:00:00"},
+		{"XYZ_2018-12-31-xxx.jpg", "2018-12-31 00:00:00"},
+		// 默认规则已被整体替换：不再命中
+		{"IMG_20260811_063006.jpg", ""},
+		{"IMG20150908xxx.jpg", ""},
+		{"mmexport1713701399029.jpg", ""},
+		{"1784212534296.png", ""},
+	}
+	for _, tc := range cases {
+		got := ParsePhotoDateFromFilenameWithConfig(tc.filename, cfg)
+		if tc.want == "" {
+			if got != nil {
+				t.Fatalf("ParseWithConfig(%q) = %v, want nil", tc.filename, got)
+			}
+			continue
+		}
+		if got == nil {
+			t.Fatalf("ParseWithConfig(%q) = nil, want %s", tc.filename, tc.want)
+		}
+		want, _ := time.ParseInLocation("2006-01-02 15:04:05", tc.want, time.Local)
+		if !got.Equal(want) {
+			t.Fatalf("ParseWithConfig(%q) = %v, want %v", tc.filename, got, want)
+		}
+	}
+
+	// 空配置（零值）= 回退内置默认规则
+	if got := ParsePhotoDateFromFilenameWithConfig("IMG_20260811_063006.jpg", models.PhotoDateConfig{}); got == nil {
+		t.Fatal("empty config should fall back to default rules")
 	}
 }

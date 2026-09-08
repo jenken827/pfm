@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
@@ -24,7 +24,7 @@ func getOperatorFromCtx(ctx context.Context) string {
 	if val == nil {
 		return ""
 	}
-	claims, ok := val.(*casdoorsdk.Claims)
+	claims, ok := val.(*auth.Claims)
 	if !ok || claims == nil {
 		return ""
 	}

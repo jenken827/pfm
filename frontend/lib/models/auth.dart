@@ -1,27 +1,15 @@
-class CasdoorConfig {
-  final String clientId;
-  final String serverUrl;
-  final String organizationName;
-  final String appName;
-
-  const CasdoorConfig({
-    required this.clientId,
-    required this.serverUrl,
-    required this.organizationName,
-    required this.appName,
-  });
-}
-
-class CasdoorToken {
+/// 登录令牌（本地认证 JWT 的存取容器）。
+/// Hive typeId/字段布局与历史版本保持一致，升级后已存令牌仍可读取。
+class AuthToken {
   String? accessToken;
   String? tokenType;
   int? expiresIn;
   String? refreshToken;
   String? scope;
 
-  CasdoorToken();
+  AuthToken();
 
-  CasdoorToken.fromMap(Map<String, dynamic> map)
+  AuthToken.fromMap(Map<String, dynamic> map)
     : accessToken = map['access_token'],
       tokenType = map['token_type'],
       expiresIn = map['expires_in'],
@@ -71,10 +59,9 @@ class User {
         email: map['email'],
         phone: map['phone'],
         roles:
-            (map['roles'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            [],
+            (map['roles'] as List<dynamic>? ?? const [])
+                .map((e) => e.toString())
+                .toList(),
       );
 }
 
@@ -104,10 +91,4 @@ class LocalLoginResult {
       isAdmin: user['is_admin'] == true,
     );
   }
-}
-
-/// 认证模式（与后端 /api/auth/config 的 mode 字段对应）
-class AuthMode {
-  static const String casdoor = 'casdoor';
-  static const String local = 'local';
 }

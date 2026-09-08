@@ -399,7 +399,6 @@
     "login_signIn": "登录",
     "login_signingIn": "登录中...",
     "login_localHint": "使用服务器本地账号登录",
-    "login_casdoorHint": "通过 Casdoor 账号登录",
     "login_failed": "登录失败：{error}",
     "@login_failed": {
         "placeholders": {
@@ -951,5 +950,49 @@
             "completed": { "type": "int" },
             "total": { "type": "int" }
         }
-    }
+    },
+    "shareManage_title": "分享管理",
+    "shareManage_subtitle": "查看和管理我创建的分享链接",
+    "shareManage_empty": "暂无分享，长按文件可创建分享链接",
+    "shareManage_active": "生效中",
+    "shareManage_expired": "已过期",
+    "shareManage_cancelled": "已取消",
+    "shareManage_fileMissing": "文件已删除",
+    "shareManage_fileInTrash": "文件在回收站",
+    "shareManage_copyLink": "复制链接",
+    "shareManage_linkCopied": "分享链接已复制到剪贴板",
+    "shareManage_copyFailed": "复制链接失败",
+    "shareManage_cancelShare": "取消分享",
+    "shareManage_cancelConfirm": "取消后该链接将立即失效，确定取消此分享吗？",
+    "shareManage_cancelSuccess": "分享已取消",
+    "shareManage_cancelFailed": "取消分享失败",
+    "shareManage_edit": "编辑",
+    "shareManage_editTitle": "编辑分享设置",
+    "shareManage_validity": "有效期",
+    "shareManage_days7": "7 天",
+    "shareManage_days30": "30 天",
+    "shareManage_customDays": "自定义（天）",
+    "shareManage_keepValidity": "保持当前有效期",
+    "shareManage_forever": "永久有效",
+    "shareManage_accessLimit": "最大访问次数（0 表示不限制）",
+    "shareManage_remark": "备注",
+    "shareManage_updateSuccess": "分享设置已更新",
+    "shareManage_updateFailed": "更新分享失败",
+    "shareManage_newLinkHint": "有效期已变更，分享链接已刷新，请重新复制",
+    "shareManage_loadFailed": "加载分享列表失败",
+    "shareManage_accessUsed": "访问 {used}/{limit}",
+    "@shareManage_accessUsed": {
+        "placeholders": {
+            "used": { "type": "int" },
+            "limit": { "type": "int" }
+        }
+    },
+    "shareManage_accessUnlimited": "访问 {used} 次",
+    "@shareManage_accessUnlimited": {
+        "placeholders": {
+            "used": { "type": "int" }
+        }
+    },
+    "shareManage_expiresAt": "有效期至 {date}",
+    "shareManage_createdAt": "创建于 {date}"
 }

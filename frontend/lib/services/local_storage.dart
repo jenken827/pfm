@@ -4,7 +4,9 @@ import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_ce_flutter/adapters.dart';
+import 'package:pfm/proto/native/file.pb.dart' show PhotoDateConfig;
 import 'package:pfm/services/album_backup_service.dart';
+import 'package:pfm/services/logger.dart';
 import '../models/models.dart';
 
 class LocalStorage {
@@ -25,18 +27,16 @@ class LocalStorage {
   static const String _localEncryptionKeyKey = "localencryptkey";
   // 主题语言配置键
   static const String _themeLanguageKey = 'themelanguage';
-  // Casdoor 配置键
-  static const String _casdoorConfigKey = 'casdoorconfig';
   // 用户登录信息键
   static const String _userKey = 'user';
-  // Casdoor Token 键
+  // 登录令牌键
   static const String _tokenKey = 'token';
-  // 认证模式键（'casdoor' / 'local'，从服务器获取后缓存）
-  static const String _authModeKey = 'authmode';
   // 服务器 URL 键
   static const String _fileServerKey = 'serverurl';
   // 传输服务 URL 键
   static const String _transferUrlKey = 'transfer_url';
+  // 照片日期解析配置缓存键（相册备份年/月归档规则，服务端下发的 JSON）
+  static const String _photoDateConfigKey = 'photo_date_config';
 
   late final Box _box;
   late final Box _settingsBox;
@@ -48,20 +48,11 @@ class LocalStorage {
   Box get settingsBox => _settingsBox;
 
   // 检查文件服务器是否已配置（登录入口可用）
-  // 注意：casdoor 模式下还需要 casdoorConfig（登录页按认证模式判断）
   bool get fileServerConfigured =>
       fileServer != null && fileServer!.isNotEmpty;
 
   // 兼容旧调用：文件服务器已配置即可视为"已配置"
   bool get isConfigured => fileServerConfigured;
-
-  /// 获取缓存的认证模式（'casdoor' / 'local'），未获取过返回 null
-  String? get authMode => _settingsBox.get(_authModeKey) as String?;
-
-  /// 保存认证模式
-  Future<void> saveAuthMode(String mode) async {
-    await _settingsBox.put(_authModeKey, mode);
-  }
 
   /// 检查用户是否已登录
   bool get isLoggedIn => user != null && token != null;
@@ -83,11 +74,33 @@ class LocalStorage {
 
     final encryptionKeyUint8List = base64Url.decode(key!);
 
-    _box = await Hive.openBox(
+    _box = await _openBoxResilient(
       _boxname,
       encryptionCipher: HiveAesCipher(encryptionKeyUint8List),
     );
-    _settingsBox = await Hive.openBox(_settingsBoxname);
+    _settingsBox = await _openBoxResilient(_settingsBoxname);
+  }
+
+  /// 打开 Hive box，兼容历史版本遗留数据导致的 typeId 漂移：
+  /// 旧版本（GenerateAdapters 迁移前/适配器集合变更期间）写入的帧 typeId 可能
+  /// 已不在当前适配器表（如 unknown typeId: 34），openBox 读帧时会直接抛
+  /// HiveError 导致应用启动崩溃。这里遇到该错误时备份并重置 box（本地登录态/
+  /// 服务器地址等一次性丢失，重新登录即可），避免启动即崩。
+  Future<Box> _openBoxResilient(
+    String name, {
+    HiveAesCipher? encryptionCipher,
+  }) async {
+    try {
+      return await Hive.openBox(name, encryptionCipher: encryptionCipher);
+    } on HiveError catch (e) {
+      if (!e.message.contains('unknown typeId')) rethrow;
+      getLogger().error(
+        'Hive box $name 含未注册 typeId 的旧数据（${e.message}），'
+        '重置该 box（本地登录态/服务器配置将清除，需重新登录）',
+      );
+      await Hive.deleteBoxFromDisk(name);
+      return Hive.openBox(name, encryptionCipher: encryptionCipher);
+    }
   }
 
   ThemeLanguage get themeLanguage {
@@ -123,14 +136,6 @@ class LocalStorage {
     await _settingsBox.put(_themeLanguageKey, tl);
   }
 
-  /// 获取 Casdoor 配置
-  CasdoorConfig? get casdoorConfig => _box.get(_casdoorConfigKey);
-
-  /// 保存 Casdoor 配置
-  Future<void> saveCasdoorConfig(CasdoorConfig config) async {
-    await _box.put(_casdoorConfigKey, config);
-  }
-
   /// 获取已登录的用户
   User? get user => _box.get(_userKey);
 
@@ -139,11 +144,11 @@ class LocalStorage {
     await _box.put(_userKey, user);
   }
 
-  /// 获取 Casdoor Token
-  CasdoorToken? get token => _box.get(_tokenKey);
+  /// 获取登录令牌
+  AuthToken? get token => _box.get(_tokenKey);
 
-  /// 保存 Token
-  Future<void> saveToken(CasdoorToken token) async {
+  /// 保存登录令牌
+  Future<void> saveToken(AuthToken token) async {
     await _box.put(_tokenKey, token);
   }
 
@@ -171,6 +176,14 @@ class LocalStorage {
 
   /// 获取下载/预览用的 base URL（优先传输服务地址）
   String get downloadBaseUrl => transferUrl ?? fileServer ?? '';
+
+  /// 获取缓存的照片日期解析配置（服务端下发；无缓存返回 null 由调用方回退内置默认）
+  String? get photoDateConfigJson => _box.get(_photoDateConfigKey) as String?;
+
+  /// 保存照片日期解析配置（序列化为 JSON 字符串缓存）
+  Future<void> savePhotoDateConfigJson(PhotoDateConfig config) async {
+    await _box.put(_photoDateConfigKey, config.writeToJson());
+  }
 
   /// 获取相册备份配置
   AlbumBackupConfig? get albumBackupConfig {

@@ -111,9 +111,29 @@ func autoMigrate() error {
 		return err
 	}
 
+	// 回填 file_shares 的 owner_id（分享归属 = 对应文件的所有者，幂等）
+	if err := migrateFileShareOwner(); err != nil {
+		return err
+	}
+
 	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
 	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
 	return migrateFilesUniqueIndex()
+}
+
+// migrateFileShareOwner 为 file_shares 老数据回填 owner_id（分享归属 = 对应文件的所有者）
+// 幂等：仅回填 owner_id 为空（NULL 或空串）的记录；文件已不存在则保持空（列表不再展示该分享）
+func migrateFileShareOwner() error {
+	sql := `UPDATE file_shares SET owner_id = (
+		SELECT f.owner_id FROM files f WHERE f.id = file_shares.file_id AND f.deleted_at IS NULL
+	) WHERE (owner_id IS NULL OR owner_id = '') AND file_id IN (
+		SELECT f.id FROM files f WHERE f.deleted_at IS NULL
+	)`
+	if err := db.Exec(sql).Error; err != nil {
+		return fmt.Errorf("migrate file_shares owner_id failed: %w", err)
+	}
+	llog.L().Info("migrated file_shares owner_id from files.owner_id")
+	return nil
 }
 
 // migrateUploadTaskStatus 将 upload_records 的旧 status(LocationStatus) 回填到 task_status(UploadStatus)

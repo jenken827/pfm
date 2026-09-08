@@ -248,7 +248,6 @@
     "login_signIn": "Sign in",
     "login_signingIn": "Signing in...",
     "login_localHint": "Sign in with local account",
-    "login_casdoorHint": "Sign in with Casdoor account",
     "login_failed": "Login failed: {error}",
     "@login_failed": {
         "placeholders": {
@@ -647,5 +646,49 @@
             "completed": { "type": "int" },
             "total": { "type": "int" }
         }
-    }
+    },
+    "shareManage_title": "Share Management",
+    "shareManage_subtitle": "View and manage share links I created",
+    "shareManage_empty": "No shares yet. Long-press a file to create a share link",
+    "shareManage_active": "Active",
+    "shareManage_expired": "Expired",
+    "shareManage_cancelled": "Cancelled",
+    "shareManage_fileMissing": "File deleted",
+    "shareManage_fileInTrash": "File in trash",
+    "shareManage_copyLink": "Copy Link",
+    "shareManage_linkCopied": "Share link copied to clipboard",
+    "shareManage_copyFailed": "Failed to copy link",
+    "shareManage_cancelShare": "Cancel Share",
+    "shareManage_cancelConfirm": "The link will stop working immediately. Cancel this share?",
+    "shareManage_cancelSuccess": "Share cancelled",
+    "shareManage_cancelFailed": "Failed to cancel share",
+    "shareManage_edit": "Edit",
+    "shareManage_editTitle": "Edit Share Settings",
+    "shareManage_validity": "Validity",
+    "shareManage_days7": "7 days",
+    "shareManage_days30": "30 days",
+    "shareManage_customDays": "Custom (days)",
+    "shareManage_keepValidity": "Keep current validity",
+    "shareManage_forever": "Never expire",
+    "shareManage_accessLimit": "Max access count (0 = unlimited)",
+    "shareManage_remark": "Remark",
+    "shareManage_updateSuccess": "Share settings updated",
+    "shareManage_updateFailed": "Failed to update share",
+    "shareManage_newLinkHint": "Validity changed, share link refreshed. Please copy again",
+    "shareManage_loadFailed": "Failed to load shares",
+    "shareManage_accessUsed": "{used}/{limit} accesses",
+    "@shareManage_accessUsed": {
+        "placeholders": {
+            "used": { "type": "int" },
+            "limit": { "type": "int" }
+        }
+    },
+    "shareManage_accessUnlimited": "{used} accesses",
+    "@shareManage_accessUnlimited": {
+        "placeholders": {
+            "used": { "type": "int" }
+        }
+    },
+    "shareManage_expiresAt": "Expires {date}",
+    "shareManage_createdAt": "Created {date}"
 }

@@ -137,27 +137,36 @@ class FmRepository {
     }
   }
 
-  /// 获取服务器认证模式（'casdoor' / 'local'）
-  /// 登录页据此决定渲染 Casdoor 登录还是本地账号密码表单
-  Future<ApiResult<String>> getAuthConfig() async {
+  /// 获取照片日期解析配置（相册备份按年/月归档用）
+  /// 成功则缓存到本地，后续离线相册备份回退本地缓存，仍无则用内置默认规则
+  Future<ApiResult<PhotoDateConfig>> fetchPhotoDateConfig() async {
     try {
-      final response = await _dio.get('$_baseUrl/api/auth/config');
+      final req = GetPhotoDateConfigReq();
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/GetPhotoDateConfig',
+        data: req.toProto3Json(),
+      );
+
       final data = response.data as Map<String, dynamic>;
-      final mode = data['mode']?.toString() ?? AuthMode.casdoor;
-      // 缓存认证模式，下次打开登录页可立即渲染
-      await GetIt.I.get<LocalStorage>().saveAuthMode(mode);
-      _logger.info('认证模式: $mode');
-      return ApiResult(success: true, data: mode);
+      final respData = extractRespData<PhotoDateConfig>(data, PhotoDateConfig());
+      // 缓存 JSON 字符串，相册备份无网络时仍可用最近一次的服务端规则
+      final ls = GetIt.I.get<LocalStorage>();
+      await ls.savePhotoDateConfigJson(respData);
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
     } on DioException catch (e) {
-      _logger.error('获取认证配置失败: ${e.message}');
+      _logger.warning('获取照片日期配置失败（非致命）: ${e.message}');
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
-      _logger.error('获取认证配置失败: $e');
+      _logger.warning('获取照片日期配置失败（非致命）: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }
 
-  /// 本地认证登录（auth.mode=local 时使用）
+  /// 本地认证登录（账号密码 → 服务端签发 JWT）
   /// 成功后调用方负责保存 token 与用户信息
   Future<ApiResult<LocalLoginResult>> loginWithPassword({
     required String username,
@@ -190,7 +199,7 @@ class FmRepository {
   }
 
   /// 用于 isolate 中初始化，需要手动传入 token
-  void _initWithToken(String? baseUrl, CasdoorToken? token) {
+  void _initWithToken(String? baseUrl, AuthToken? token) {
     _baseUrl = baseUrl;
     _dio = Dio(
       BaseOptions(
@@ -236,7 +245,7 @@ class FmRepository {
     _uploadDio.interceptors.add(authInterceptor);
   }
 
-  static FmRepository isolateInit(String baseUrl, CasdoorToken token) {
+  static FmRepository isolateInit(String baseUrl, AuthToken token) {
     final inst = FmRepository._();
     inst._initWithToken(baseUrl, token);
     return inst;
@@ -670,6 +679,78 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('取消分享链接失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 获取我的分享列表
+  Future<ApiResult<ListMySharesRespData>> listMyShares({
+    int offset = 0,
+    int pageSize = 20,
+  }) async {
+    try {
+      final req = ListMySharesReq(offset: offset, pageSize: pageSize);
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/ListMyShares',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListMySharesRespData>(
+        data,
+        ListMySharesRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取我的分享列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取我的分享列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新分享链接（有效期/永久/访问上限/备注）
+  /// 各参数传 null 表示保持原值；[maxAccessCount] 传 0 表示不限制访问次数
+  Future<ApiResult<UpdateShareLinkRespData>> updateShareLink({
+    required String shareCode,
+    int? expireSeconds,
+    bool? neverExpire,
+    int? maxAccessCount,
+    String? remark,
+  }) async {
+    try {
+      final req = UpdateShareLinkReq(shareCode: shareCode);
+      if (expireSeconds != null) {
+        req.expireSeconds = Int64(expireSeconds);
+      }
+      if (neverExpire != null) req.neverExpire = neverExpire;
+      if (maxAccessCount != null) req.maxAccessCount = maxAccessCount;
+      if (remark != null) req.remark = remark;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/UpdateShareLink',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UpdateShareLinkRespData>(
+        data,
+        UpdateShareLinkRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('更新分享链接失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新分享链接失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

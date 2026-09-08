@@ -53,12 +53,10 @@ func healthRoute(mux *http.ServeMux) {
 	})
 }
 
-// authRoute 认证路由（本地认证模式：登录 + 模式查询）
+// authRoute 认证路由（本地认证登录）
 func authRoute(mux *http.ServeMux) {
-	// 本地认证登录（auth.mode=local）
+	// 本地认证登录（users 表 + HS256 JWT）
 	mux.HandleFunc("/api/auth/login", api.LoginHandler)
-	// 查询当前认证模式（前端登录页据此渲染登录 UI）
-	mux.HandleFunc("/api/auth/config", api.AuthConfigHandler)
 }
 
 // fileStreamRoute 文件流式传输路由（预览/下载）

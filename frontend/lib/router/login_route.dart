@@ -6,7 +6,6 @@ part 'login_route.g.dart';
 
 @TypedGoRoute<LoginRoute>(
   path: '/login',
-  routes: [TypedGoRoute<LoginCasdoorConfigRoute>(path: 'casdoor')],
 )
 @immutable
 class LoginRoute extends GoRouteData with $LoginRoute {
@@ -15,16 +14,5 @@ class LoginRoute extends GoRouteData with $LoginRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const LoginPage();
-  }
-}
-
-@immutable
-class LoginCasdoorConfigRoute extends GoRouteData
-    with $LoginCasdoorConfigRoute {
-  const LoginCasdoorConfigRoute();
-
-  @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const CasdoorConfigPage();
   }
 }

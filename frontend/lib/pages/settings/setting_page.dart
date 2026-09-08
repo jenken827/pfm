@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/l10n/app_localizations.dart';
-import 'package:pfm/models/casdoor.dart';
+import 'package:pfm/models/models.dart';
 import 'package:pfm/pages/settings/about_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
@@ -70,7 +70,6 @@ class _SettingPageState extends State<SettingPage> {
   Widget build(BuildContext context) {
     final al = AppLocalizations.of(context);
     final ls = GetIt.I.get<LocalStorage>();
-    final casdoorConfig = ls.casdoorConfig;
     final isLoggedIn = ls.isLoggedIn;
 
     final screenWidth = MediaQuery.of(context).size.width;
@@ -109,18 +108,6 @@ class _SettingPageState extends State<SettingPage> {
                     onTap: isLoggedIn
                         ? null
                         : () => _showServerConfigDialog(context),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  _SettingsTile(
-                    icon: Icons.key,
-                    iconBackground: PfmColors.archiveSurface,
-                    iconColor: PfmColors.archive,
-                    title: 'Casdoor',
-                    subtitle:
-                        casdoorConfig?.serverUrl ?? al.common_notConfigured,
-                    onTap: isLoggedIn
-                        ? null
-                        : () => const LoginCasdoorConfigRoute().push(context),
                   ),
                   const Divider(height: 1, indent: 56),
                   _SettingsTile(
@@ -192,6 +179,15 @@ class _SettingPageState extends State<SettingPage> {
             Card(
               child: Column(
                 children: [
+                  _SettingsTile(
+                    icon: Icons.link_outlined,
+                    iconBackground: PfmColors.primarySurface,
+                    iconColor: PfmColors.primary,
+                    title: al.shareManage_title,
+                    subtitle: al.shareManage_subtitle,
+                    onTap: () => const ShareManageRoute().push(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
                   if (_isAdmin) ...[
                     _SettingsTile(
                       icon: Icons.storage_outlined,

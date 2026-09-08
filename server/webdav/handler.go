@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	gowebdav "github.com/emersion/go-webdav"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
@@ -30,7 +29,7 @@ func NewHandler() *Handler {
 
 // ServeHTTP 处理 WebDAV 请求
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Basic Auth 认证（按认证模式：Casdoor ROPC 或本地用户表）
+	// Basic Auth 认证（本地用户表）
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="PFM WebDAV"`)
@@ -38,7 +37,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := auth.AuthenticateBasic(username, password)
+	userID, err := auth.GetLocalAuth().Authenticate(username, password)
 	if err != nil {
 		llog.L().Warnf("webdav auth failed: user=%s, err=%v", username, err)
 		w.Header().Set("WWW-Authenticate", `Basic realm="PFM WebDAV"`)
@@ -59,7 +58,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 注入用户上下文，供 service 层（UploadSmall 等）读取
-	claims := &casdoorsdk.Claims{User: casdoorsdk.User{Id: userID, Name: username}}
+	claims := &auth.Claims{User: auth.User{Id: userID, Name: username}}
 	ctx := context.WithValue(r.Context(), globals.ContextUserKey, claims)
 	ctx = context.WithValue(ctx, globals.ContextUserSpaceKey, &models.UserContext{
 		UserID:           userID,

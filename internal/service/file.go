@@ -77,6 +77,7 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 	llog.L().Infof("GetFileList: user=%s, parentId=%s, returned %d files", userID, parentID, len(files))
 	return files, total, hasMore, nil
 }
+
 // GetFolderList 获取文件夹列表（用于移动文件选择目标文件夹）
 func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.FileORM, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
@@ -530,10 +531,38 @@ func batchDeleteFromProvider(
 			if loc.Id != nil {
 				failedIDs = append(failedIDs, *loc.Id)
 			}
-			llog.L().Errorf("delete location %d failed: %v", *loc.Id, result.Error)
+			// 部分失败原因多为 Telegram 老消息(>48h API 禁止) 或百度 errno=12 参数错误
+			// 等平台/驱动侧"已知预期"，降为 warning；新错误保持 error 让监控感知
+			errStr := ""
+			if result.Error != nil {
+				errStr = result.Error.Error()
+			}
+			if isExpectedDeleteFailure(errStr) {
+				llog.L().Warnf("delete location %d failed (will keep record): %v", *loc.Id, result.Error)
+			} else {
+				llog.L().Errorf("delete location %d failed: %v", *loc.Id, result.Error)
+			}
 		}
 	}
 	return
+}
+
+// isExpectedDeleteFailure 判别是否为"已知预期"的删除失败：Telegram 老消息或百度 errno=12
+// 这些是平台硬限制或参数错误，重复尝试不会改变结果，记为 warning 即可
+func isExpectedDeleteFailure(errStr string) bool {
+	if errStr == "" {
+		return false
+	}
+	knownSubstrings := []string{
+		"message can't be deleted", // Telegram >48h
+		"errno=12",                 // 百度网盘参数错误
+	}
+	for _, s := range knownSubstrings {
+		if strings.Contains(errStr, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // deleteFilesFromProviders 从存储提供者批量删除文件（内部函数）

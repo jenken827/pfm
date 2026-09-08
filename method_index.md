@@ -47,8 +47,10 @@
 
 | 方法 | 说明 |
 |------|------|
-| `CreateShareLink(ctx, req) (*CreateShareLinkResp, *Err)` | 创建分享链接 |
-| `CancelShareLink(ctx, req) (*BaseResp, *Err)` | 取消分享链接 |
+| `CreateShareLink(ctx, req) (*CreateShareLinkResp, *Err)` | 创建分享链接（归属校验：仅文件所有者/管理员可分享） |
+| `CancelShareLink(ctx, req) (*BaseResp, *Err)` | 取消分享链接（归属校验） |
+| `ListMyShares(ctx, req) (*ListMySharesRespData, *Err)` | 我的分享列表（分页，含文件状态/分享 URL，实时计算过期） |
+| `UpdateShareLink(ctx, req) (*UpdateShareLinkRespData, *Err)` | 更新分享（有效期/永久/访问上限/备注；有效期变更重签 URL） |
 
 
 ### permission.go
@@ -87,11 +89,20 @@
 |------|------|
 | `EnsureDirPath(ctx, parentID, relPath) (string, *Err)` | 在 parentID 下按相对路径逐级确保目录存在（mkdir -p，并发安全，唯一索引兜底），返回叶子目录 ID。相册备份按"年/月"归档用 |
 
-### photo_date.go（图片文件名日期解析）
+### photo_date.go（照片日期解析，规则可配置）
+
+规则引擎：按规则表顺序匹配文件名，先命中先返回；未知规则类型跳过（向前兼容新配置）。
+规则类型：`prefix_segment_date`（前缀+下划线取段，段内 YYYYMMDD/YYYY-MM-DD）、
+`prefix_compact_date`（前缀后紧跟 8 位日期）、`prefix_timestamp`（前缀后跟 10 位秒级时间戳）、
+`leading_timestamp`（开头连续数字取前 10 位秒级时间戳）。时间戳有防误判阈值（前两位 >12 且 ≤当前；
+年份 [ts_min_year, 当前年+ts_max_year_offset]）。配置源为 `config.photo_date`（整体替换默认规则表，
+留空回退内置默认），经 `GetPhotoDateConfig` RPC 下发前端；前端内置默认与后端一致，拉取失败回退缓存/默认。
 
 | 方法 | 说明 |
 |------|------|
-| `ParsePhotoDateFromFilename(filename) *time.Time` | 从文件名解析拍摄日期（与前端 PhotoDateResolver 规则一致：10 位时间戳 / IMG_ / Screenshot_ / mmexport / wx_camera_），无法解析返回 nil |
+| `ParsePhotoDateFromFilename(filename) *time.Time` | 从文件名解析拍摄日期（默认规则表：10 位时间戳 / IMG_ / Screenshot_ / PANO_ / VID_ / IMG 紧凑日期 / mmexport / wx_camera_ / microMsg.），无法解析返回 nil |
+| `ParsePhotoDateFromFilenameWithConfig(filename, cfg models.PhotoDateConfig) *time.Time` | 用服务端配置的规则解析（migrate-photos 使用），空配置回退默认 |
+| `GetPhotoDateConfig() *native.PhotoDateConfig` | 返回下发前端的照片日期解析配置（config 未配置项回退内置默认） |
 
 ### photo_migrate.go（旧数据年/月归档迁移）
 
@@ -104,6 +115,9 @@
 | 方法 | 说明 |
 |------|------|
 | `DedupFilesByHash(baseParentID, dryRun) (*DedupResult, error)` | 子树下按 hash 去重：同 hash 多份保留名称最短（同长度保留最早创建），删除其余 files 记录及历史；物理存储按 hash 共享不受影响 |
+| `DedupNameSuffixDuplicates(baseParentID, dryRun) (*NameSuffixDedupResult, error)` | 子树下按 同目录同名 + "(N)" 后缀 配对去重：同尺寸需内容核验（JPEG 比较 SOS 后像素数据/其他格式字节比较）通过才删；不同尺寸的图片对做压缩衍生核验（32x32 灰度感知比对，均差 <10 判衍生，删小保大）；JPEG 保留 EXIF 非零 tag 更完整方，保留后缀副本时改名回原名；冗余 hash 无引用时回收其在所有提供者上的物理副本与缩略图；同时清理孤儿 upload_records/chunks；同名不同尺寸且非衍生/内容不同仅列出 |
+| `ReclaimOrphanHashStorage(hash) (int64, error)` | 回收一个 hash 在所有提供者上的物理副本（调用方保证 files/histories 无引用）：按需懒加载驱动(storage.EnsureProvider)+batchDeleteFromProvider 删除，成功删 file_locations 行并扣容量，失败标记 DELETED_FAILED 待重试；顺带删缩略图。dedup-name 与 cleanup-orphan-locations 共用 |
+| `cleanupUploadTasksByHashes(hashes) (int64, error)` | 按 hash 批量删除 upload_records + 关联 upload_chunk_records（dedup-name 回收阶段调用，避免孤儿任务持续 dispatch） |
 
 ### album_subfolder.go（相册备份子目录）
 
@@ -115,16 +129,13 @@
 
 | 类型/方法 | 说明 |
 |------|------|
-| `Verifier` 接口 `Verify(token) (*casdoorsdk.Claims, error)` | token 验证器统一接口（casdoor / local 双实现，返回兼容 claims） |
-| `TokenVerifier` | Casdoor JWT 验证器（本地解析 + introspect 缓存，降级本地验证） |
-| `LocalTokenVerifier` | 本地 JWT 验证器（HS256，claims 结构与 Casdoor 兼容） |
+| `Claims` / `User` | 认证层自研 claims 类型（JWT 顶层扁平 id/name/email，JSON 布局与历史 token 兼容） |
 | `LocalAuthenticator.Authenticate(username, password) (string, error)` | 本地用户表 bcrypt 验密，返回用户 ID（UUID） |
-| `LocalAuthenticator.IssueToken(user) (string, error)` | 签发本地 JWT（顶层扁平 user claims，兼容 casdoorsdk） |
-| `LocalAuthenticator.VerifyToken(token) (*casdoorsdk.Claims, error)` | 校验本地 JWT（拒绝非 HS256 算法） |
+| `LocalAuthenticator.IssueToken(user) (string, error)` | 签发本地 JWT（HS256，顶层扁平 user claims） |
+| `LocalAuthenticator.VerifyToken(token) (*Claims, error)` | 校验本地 JWT（拒绝非 HS256 算法） |
 | `HashPassword(password) (string, error)` / `VerifyPassword(hash, password) bool` | bcrypt 密码哈希/校验 |
 | `InitLocalAuth() error` | 初始化本地认证器（读取/生成 JWT 密钥，持久化到 data/jwt_secret） |
-| `AuthenticateBasic(username, password) (string, error)` | 按认证模式分发 Basic Auth（local→用户表，否则 Casdoor ROPC），WebDAV 用 |
-| `IsLocalMode() bool` | 当前是否 local 认证模式（auth.mode=local） |
+| `GetLocalAuth() *LocalAuthenticator` | 获取全局本地认证器（懒初始化；middleware / webdav / api 直接调用） |
 
 ## internal/db/
 
@@ -166,6 +177,7 @@
 | `RenameFile(id, newName) error` | 重命名 |
 | `MoveFile(id, newParentID) error` | 移动 |
 | `CountActiveFilesByHashExcludingIDs(hash, excludeIDs) (int64, error)` | 统计引用指定 hash 的未删除文件数（排除指定 ID），用于判断 file_location 是否可安全删除 |
+| `CountFilesByHashIncludingDeleted(hash) (int64, error)` | Unscoped 统计引用指定 hash 的全部文件记录数（含回收站软删），用于去重清理物理数据前确认无任何可恢复引用 |
 | `CountFileHistoriesByHash(hash) (int64, error)` | 统计指定 hash 在 file_histories 中的引用数，用于判断该 hash 的存储位置是否仍被历史版本引用 |
 
 ### file_location.go
@@ -228,6 +240,7 @@
 | 方法 | 说明 |
 |------|------|
 | `Init()` | 初始化存储驱动实例并恢复未完成任务 |
+| `EnsureProvider(id) (types.StorageDriver, error)` | 按需懒加载指定 provider 的驱动（幂等），供 CLI 等未整体 Init 的入口使用（如 dedup-name 回收远程副本） |
 
 ### temp_cleanup.go
 
@@ -265,13 +278,20 @@
 | `ProviderConfigFromORM(orm)` | 从 ORM 提取配置视图 |
 | `FileRefFromLocation(loc)` / `FileRefsFromLocations(locs)` | FileLocationORM → FileRef 转换 |
 
-### upload_pack.go（加密管道，消除多驱动复制）
+### upload_pack.go（加密/命名管道，消除多驱动复制）
 
 | 方法 | 说明 |
 |------|------|
-| `PackToTempFile(rawPath, fileName, opt)` | 加密到临时文件（baidu 用），返回 (路径, 混淆名, 大小) |
-| `PackStream(raw, fileName, opt)` | 流式加密（telegram 用） |
+| `PackToTempFile(rawPath, fileName, opt)` | baidu 用：加密则加密到临时文件，返回 (路径, 上传文件名, 大小)。上传文件名无论是否加密都会重命名（明文保留原扩展名） |
+| `PackStream(raw, fileName, opt)` | telegram 用：流式包装，返回加密 reader + 上传文件名（同样无条件重命名） |
 | `ComputeEncryptedChunkSize(limit, encrypted)` | 加密开销预留后的分片大小 |
+
+### filename.go（上传文件名生成）
+
+| 方法 | 说明 |
+|------|------|
+| `GenerateObfuscatedFilename(name, suffix)` | 加密混淆名：`随机8位_时间戳.后缀`（去掉原名与扩展名） |
+| `GetUniqueFileName(fileName)` | 明文唯一名：`原名_随机8位_时间戳.原扩展名`。物理目录按年/月 sharding 后不同逻辑目录的同名文件会落入同一物理目录，必须无条件重命名防覆盖 |
 
 ### upload_dir.go（目录 sharding，消除多驱动复制）
 

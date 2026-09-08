@@ -75,7 +75,7 @@ message File {
   optional google.protobuf.Timestamp last_accessed_at = 14 [(gorm.field).tag = {
     index: "idx_f_laa"
   }];
-  // 文件所有者（Casdoor 用户名），用户只能操作 owner_id=自己的文件
+  // 文件所有者（用户名/ID），用户只能操作 owner_id=自己的文件
   optional string owner_id = 15 [(gorm.field).tag = {
     not_null: true,
     default: "''",
@@ -385,6 +385,10 @@ message FileShare {
   optional uint32 max_access_count = 12;
   // 备注
   optional string remark = 13;
+  // 分享创建者（用户名/ID，冗余存储便于"我的分享"查询与归属校验）
+  optional string owner_id = 14 [(gorm.field).tag = {
+    index: "idx_fs_owner"
+  }];
 }
 
 // 文件详情响应数据
@@ -462,6 +466,83 @@ message CreateShareLinkRespData {
 message CancelShareLinkReq {
   // 分享码
   optional string share_code = 1 [(buf.validate.field).required = true];
+}
+
+// 获取我的分享列表请求
+message ListMySharesReq {
+  // 每页数量，默认20
+  optional uint32 page_size = 1;
+  // 偏移量，从0开始
+  optional uint32 offset = 2;
+}
+
+// 我的分享列表项（含分享对应文件的展示信息）
+message MyShareItem {
+  // 分享记录 ID
+  optional uint64 id = 1;
+  // 分享码
+  optional string share_code = 2;
+  // 分享链接 URL
+  optional string share_url = 3;
+  // 文件ID
+  optional string file_id = 4;
+  // 文件名称（文件可能已被删除，此时仅有历史快照信息）
+  optional string file_name = 5;
+  // 文件类型（文件夹/图片/视频等，用于前端图标展示）
+  optional FileType file_type = 6;
+  // 文件大小
+  optional uint64 file_size = 7;
+  // 文件是否已不存在（永久删除/从未找到），只读路径会失败
+  optional bool file_missing = 8;
+  // 文件是否在回收站（软删除）
+  optional bool file_in_trash = 9;
+  // 创建时间
+  optional google.protobuf.Timestamp created_at = 10;
+  // 过期时间
+  optional google.protobuf.Timestamp expire_at = 11;
+  // 是否永久有效
+  optional bool never_expire = 12;
+  // 分享状态
+  optional ShareStatus status = 13;
+  // 访问次数
+  optional uint32 access_count = 14;
+  // 最大访问次数（0=不限制）
+  optional uint32 max_access_count = 15;
+  // 备注
+  optional string remark = 16;
+}
+
+// 获取我的分享列表响应
+message ListMySharesRespData {
+  repeated MyShareItem items = 1;
+  // 总数
+  optional uint32 total = 2;
+  // 是否有更多数据
+  optional bool has_more = 3;
+}
+
+// 更新分享链接请求
+message UpdateShareLinkReq {
+  // 分享码
+  optional string share_code = 1 [(buf.validate.field).required = true];
+  // 过期时间（秒），>0 时重新设置剩余有效期；传 0/不传则保持当前有效期（与 never_expire 配合可将永久改为限时）
+  optional int64 expire_seconds = 2;
+  // 是否改为永久有效：true=永久；false=限时（需配合 expire_seconds>0）
+  optional bool never_expire = 3;
+  // 最大访问次数（0=不限制），不传则保持
+  optional uint32 max_access_count = 4;
+  // 备注，不传则保持
+  optional string remark = 5;
+}
+
+// 更新分享链接响应（sign 随有效期变化重签，需用新 URL 分享）
+message UpdateShareLinkRespData {
+  // 新的分享链接 URL
+  optional string share_url = 1;
+  // 分享码
+  optional string share_code = 2;
+  // 过期时间戳（Unix 时间戳，秒），null 表示永不过期
+  optional int64 expire_at = 3;
 }
 
 // 从回收站恢复文件请求
@@ -578,6 +659,43 @@ message GetTransferConfigResp {
   optional string server_url = 1;
 }
 
+// 照片日期文件名解析规则（单条）
+// type 取值范围（未知类型解析时跳过，保证前后端向前兼容）：
+//   prefix_segment_date: 前缀+分隔符取 segment_index 段，段内按 YYYYMMDD 或 YYYY-MM-DD 解析
+//                        例：IMG_20260811_063006.jpg / Screenshot_2018-12-31-xxx.jpg（前缀+下划线）
+//   prefix_compact_date: 前缀后紧跟 8 位 YYYYMMDD
+//                        例：IMG20150908xxx.jpg（前缀 IMG）
+//   prefix_timestamp:    前缀后紧跟 10 位秒级时间戳
+//                        例：mmexport1713701399029.jpg / wx_camera_1725958479520.jpg / microMsg.1713701399029.jpg
+//   leading_timestamp:   文件名开头连续数字，前 10 位为秒级时间戳
+//                        例：1784212534296.png
+message PhotoDateFilenameRule {
+  optional string type = 1;
+  // 匹配前缀（prefix_segment_date / prefix_compact_date / prefix_timestamp 使用；
+  // leading_timestamp 忽略此字段）
+  repeated string prefixes = 2;
+  // prefix_segment_date 专用：按分隔符切分后日期所在段的下标（从 0 开始）
+  optional uint32 segment_index = 3;
+}
+
+// 照片日期解析配置（相册备份按"年/月"归档用）
+// 服务端为权威源（config.photo_date），前端拉取并缓存，拉取失败回退内置默认
+message PhotoDateConfig {
+  // EXIF DateTimeOriginal 是否启用（仅前端相册备份有效，后端 migrate 无本地文件头）
+  optional bool exif_enabled = 1;
+  // EXIF 读取文件头上限（字节），默认 262144（256KB）
+  optional uint32 exif_head_read_limit = 2;
+  // 文件名解析规则（顺序敏感，先命中先返回；全部未命中则走媒体库时间兜底）
+  repeated PhotoDateFilenameRule filename_rules = 3;
+  // 时间戳防误判：解析年份下界，默认 2000
+  optional uint32 ts_min_year = 4;
+  // 时间戳防误判：允许的年份上界偏移（当前年份 + 偏移），默认 1
+  optional uint32 ts_max_year_offset = 5;
+}
+
+// 获取照片日期解析配置请求
+message GetPhotoDateConfigReq {}
+
 // 文件服务
 service FileService {
   // 获取文件列表
@@ -622,6 +740,12 @@ service FileService {
   // 取消分享链接
   rpc CancelShareLink(CancelShareLinkReq) returns (BaseResp);
 
+  // 获取我的分享列表（含文件状态，用于分享管理）
+  rpc ListMyShares(ListMySharesReq) returns (BaseResp);
+
+  // 更新分享链接（有效期/永久/访问上限/备注；有效期变更会重签 URL）
+  rpc UpdateShareLink(UpdateShareLinkReq) returns (BaseResp);
+
   // 从回收站恢复文件
   rpc RestoreFromTrash(RestoreFromTrashReq) returns (BaseResp);
 
@@ -654,4 +778,7 @@ service FileService {
 
   // 获取传输服务配置（上传/下载高带宽地址）
   rpc GetTransferConfig(GetTransferConfigReq) returns (BaseResp);
+
+  // 获取照片日期解析配置（相册备份按年/月归档用）
+  rpc GetPhotoDateConfig(GetPhotoDateConfigReq) returns (BaseResp);
 }

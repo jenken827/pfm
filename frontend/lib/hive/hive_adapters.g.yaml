@@ -23,19 +23,10 @@ types:
         index: 1
       dark:
         index: 2
-  CasdoorConfig:
-    typeId: 2
-    nextIndex: 4
-    fields:
-      clientId:
-        index: 0
-      serverUrl:
-        index: 1
-      organizationName:
-        index: 2
-      appName:
-        index: 3
-  CasdoorToken:
+  # CasdoorConfig(typeId 2) 已随 Casdoor 移除而删除，槽位不再使用
+  AuthToken:
+    # 继承原 CasdoorToken(typeId 3) 的 typeId 与字段索引，
+    # 保证旧版本已存储的登录令牌在升级后仍可被读取（免重新登录）
     typeId: 3
     nextIndex: 5
     fields:

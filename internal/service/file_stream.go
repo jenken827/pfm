@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"jenken827.com/jenken827/pfm/driver/telegram"
 	"jenken827.com/jenken827/pfm/driver/types"
@@ -16,13 +17,19 @@ import (
 	"jenken827.com/jenken827/pfm/utils"
 )
 
+// waitForReadyProviderWait 等待首个 provider 完成的最大时长（写后立读场景兜底）
+const waitForReadyProviderWait = 10 * time.Second
+
+// waitForReadyProviderWaitInterval 轮询间隔
+const waitForReadyProviderWaitInterval = 150 * time.Millisecond
+
 // FileStreamResult 文件流式传输结果
 type FileStreamResult struct {
-	Reader        types.ReadSeekCloser
-	FileName      string
-	ContentType   string
-	FileSize      int64
-	IsPreDownload bool   // 是否为 Telegram 大文件预下载状态
+	Reader          types.ReadSeekCloser
+	FileName        string
+	ContentType     string
+	FileSize        int64
+	IsPreDownload   bool           // 是否为 Telegram 大文件预下载状态
 	PreDownloadData map[string]any // 预下载状态数据
 }
 
@@ -62,7 +69,24 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 	} else {
 		sourceProviderID, sourceLocations, err = storage.SelectBestSourceProvider(locations)
 		if err != nil {
-			return nil, fmt.Errorf("no available provider: %w", err)
+			// 无可用 provider：文件可能正处于异步分发上传窗口（如 WebDAV PUT 后立即读）。
+			// 降级 1：读本地 staging 明文（TempDir/<hash>/<fileName>，上传期必在）；
+			// 降级 2：短轮询等待首个 provider 完成后再选源。
+			if result, ok := tryServeFromLocalTemp(file); ok {
+				return result, nil
+			}
+			if waitErr := waitForReadyProvider(ctx, *file.Hash); waitErr != nil {
+				return nil, fmt.Errorf("no available provider: %w", err)
+			}
+			// 等待期间 location 状态已变化，重新拉取后选源
+			locations, err = db.GetFileLocationsByBlake3Hash(*file.Hash)
+			if err != nil {
+				return nil, fmt.Errorf("file location not found: %w", err)
+			}
+			sourceProviderID, sourceLocations, err = storage.SelectBestSourceProvider(locations)
+			if err != nil {
+				return nil, fmt.Errorf("no available provider: %w", err)
+			}
 		}
 	}
 
@@ -121,6 +145,56 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 		ContentType: contentType,
 		FileSize:    fileSize,
 	}, nil
+}
+
+// tryServeFromLocalTemp 上传窗口期从本地 staging 明文直读（无 complete provider 时的降级源）
+// staging 位于 TempDir/<hash>/<fileName>（加密前原文、原文件名），
+// 与远程 provider 解密后的内容字节等价，可直接返回；不存在时返回 false 走轮询兜底。
+func tryServeFromLocalTemp(file *native.FileORM) (*FileStreamResult, bool) {
+	if file.Hash == nil || *file.Hash == "" || file.Name == nil || *file.Name == "" {
+		return nil, false
+	}
+	tempPath := utils.GetFileTempPath(*file.Hash, *file.Name)
+	f, err := os.Open(tempPath)
+	if err != nil {
+		return nil, false
+	}
+	contentType := "application/octet-stream"
+	if file.Mime != nil && *file.Mime != "" {
+		contentType = *file.Mime
+	}
+	fileSize := int64(0)
+	if file.Size != nil {
+		fileSize = int64(*file.Size)
+	}
+	llog.L().Infof("stream file from local staging (upload in progress): %s, path: %s", *file.Name, tempPath)
+	return &FileStreamResult{
+		Reader:      f,
+		FileName:    *file.Name,
+		ContentType: contentType,
+		FileSize:    fileSize,
+	}, true
+}
+
+// waitForReadyProvider 轮询等待文件出现任一 complete provider（写后立读兜底）
+func waitForReadyProvider(ctx context.Context, fileHash string) error {
+	deadline := time.Now().Add(waitForReadyProviderWait)
+	for {
+		locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
+		if err == nil && len(locations) > 0 {
+			if providers, perr := storage.GetCompleteProviders(locations); perr == nil && len(providers) > 0 {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("file %s has no complete provider within %v", fileHash, waitForReadyProviderWait)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitForReadyProviderWaitInterval):
+		}
+	}
 }
 
 // GetFileHistoryStream 获取文件历史版本流

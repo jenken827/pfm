@@ -4,21 +4,21 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
 	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
-// getCurrentUserIDFromCtx 从 context 获取当前用户 ID（Casdoor UUID，稳定不变）
+// getCurrentUserIDFromCtx 从 context 获取当前用户 ID（UUID，稳定不变）
 // 如果未登录返回空字符串
 func getCurrentUserIDFromCtx(ctx context.Context) string {
 	val := ctx.Value(globals.ContextUserKey)
 	if val == nil {
 		return ""
 	}
-	claims, ok := val.(*casdoorsdk.Claims)
+	claims, ok := val.(*auth.Claims)
 	if !ok || claims == nil {
 		return ""
 	}

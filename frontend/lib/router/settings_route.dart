@@ -22,6 +22,7 @@ part 'settings_route.g.dart';
     TypedGoRoute<AlbumBackupRoute>(path: 'album-backup'),
     TypedGoRoute<ContactBackupRoute>(path: 'contact-backup'),
         TypedGoRoute<PermissionManagementRoute>(path: 'permission'),
+        TypedGoRoute<ShareManageRoute>(path: 'share-manage'),
         TypedGoRoute<LogRoute>(path: 'logs'),
       ],
 )
@@ -104,6 +105,16 @@ class PermissionManagementRoute extends GoRouteData
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const PermissionManagementPage();
+  }
+}
+
+/// 分享管理路由
+class ShareManageRoute extends GoRouteData with $ShareManageRoute {
+  const ShareManageRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const ShareManagePage();
   }
 }
 

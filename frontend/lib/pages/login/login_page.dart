@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/api/api.dart';
+import 'package:pfm/l10n/app_localizations.dart';
 import '../../models/models.dart';
 import '../../router/router.dart';
 import '../../services/services.dart';
-import '../../utils/utils.dart';
-import 'package:pfm/l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,19 +16,9 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
-  // 认证模式：默认 casdoor（兼容未配置过服务器的旧客户端），
-  // 打开页面时从服务器 /api/auth/config 刷新
-  String _authMode = AuthMode.casdoor;
   final _ls = GetIt.I.get<LocalStorage>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _authMode = _ls.authMode ?? AuthMode.casdoor;
-    _refreshAuthMode();
-  }
 
   @override
   void dispose() {
@@ -38,18 +27,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// 从服务器获取认证模式（非阻塞刷新，失败时保持本地缓存值）
-  Future<void> _refreshAuthMode() async {
-    if (!_ls.fileServerConfigured) return;
-    final result = await FmRepository().getAuthConfig();
-    if (mounted && result.success && result.data != null) {
-      setState(() => _authMode = result.data!);
-    }
-  }
-
-  bool get _isLocalMode => _authMode == AuthMode.local;
-
-  /// 本地认证登录（auth.mode=local）
+  /// 本地认证登录（账号密码 → 服务端签发 JWT）
   Future<void> _handleLocalLogin() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
@@ -71,8 +49,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final login = result.data!;
-      // 保存 token 与用户信息（复用 Casdoor 存储结构，后续逻辑无感）
-      final token = CasdoorToken()..accessToken = login.token;
+      // 保存 token 与用户信息
+      final token = AuthToken()..accessToken = login.token;
       await _ls.saveToken(token);
       final user = User(
         id: login.userId,
@@ -85,41 +63,6 @@ class _LoginPageState extends State<LoginPage> {
       FmRepository().fetchTransferConfig();
 
       if (mounted) {
-        _navigateToHome();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  /// Casdoor 登录（桌面端浏览器 / 移动端 WebView）
-  Future<void> _handleLogin() async {
-    if (_isLoading) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      User? user;
-
-      if (isDesktop()) {
-        // 桌面端：使用浏览器登录
-        final oauthService = DesktopOAuthService();
-        user = await oauthService.login();
-        oauthService.dispose();
-      } else if (isMobile()) {
-        // 移动端：使用 WebView 登录
-        user = await showCasdoorWebViewLogin(context);
-      }
-
-      if (user != null && mounted) {
         _navigateToHome();
       }
     } catch (e) {
@@ -137,11 +80,6 @@ class _LoginPageState extends State<LoginPage> {
 
   void _navigateToHome() {
     const HomeRoute().go(context);
-  }
-
-  Future<void> _navigateToConfig() async {
-    await const LoginCasdoorConfigRoute().push(context);
-    setState(() {});
   }
 
   /// 显示设置文件服务器对话框
@@ -174,11 +112,9 @@ class _LoginPageState extends State<LoginPage> {
                 if (ctx.mounted && mounted) {
                   context.read<FmRepository>().setBaseUrl(url);
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(al.login_serverSaved)));
-                  // 服务器变了，重新获取认证模式
-                  _refreshAuthMode();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(al.login_serverSaved)),
+                  );
                   setState(() {}); // 刷新界面显示新地址
                 }
               }
@@ -199,10 +135,8 @@ class _LoginPageState extends State<LoginPage> {
     final screenSize = MediaQuery.of(context).size;
     final isWideScreen = screenSize.width > 600;
 
-    // 登录入口可用性：本地模式只需文件服务器；casdoor 模式还需 casdoor 配置
-    final canLogin = _isLocalMode
-        ? _ls.fileServerConfigured
-        : (_ls.fileServerConfigured && _ls.casdoorConfig != null);
+    // 登录入口可用性：已配置文件服务器即可登录
+    final canLogin = _ls.fileServerConfigured;
 
     return Scaffold(
       body: Center(
@@ -245,105 +179,61 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 48),
 
-                if (_isLocalMode) ...[
-                  // ===== 本地认证模式：账号密码表单 =====
-                  TextField(
-                    controller: _usernameController,
-                    enabled: !_isLoading,
-                    decoration: InputDecoration(
-                      labelText: al.login_username,
-                      prefixIcon: const Icon(Icons.person_outline),
-                      border: const OutlineInputBorder(),
-                    ),
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    autofillHints: const [AutofillHints.username],
+                // ===== 本地认证模式：账号密码表单 =====
+                TextField(
+                  controller: _usernameController,
+                  enabled: !_isLoading,
+                  decoration: InputDecoration(
+                    labelText: al.login_username,
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: const OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _passwordController,
-                    enabled: !_isLoading,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: al.login_password,
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                    ),
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.password],
-                    onSubmitted: (_) => _handleLocalLogin(),
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                  autofillHints: const [AutofillHints.username],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _passwordController,
+                  enabled: !_isLoading,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: al.login_password,
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: canLogin && !_isLoading
-                        ? _handleLocalLogin
-                        : null,
-                    icon: _isLoading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colorScheme.onPrimary,
-                            ),
-                          )
-                        : const Icon(Icons.login),
-                    label: Text(
-                      _isLoading ? al.login_signingIn : al.login_signIn,
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.password],
+                  onSubmitted: (_) => _handleLocalLogin(),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: canLogin && !_isLoading ? _handleLocalLogin : null,
+                  icon: _isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.onPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.login),
+                  label: Text(
+                    _isLoading ? al.login_signingIn : al.login_signIn,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    al.login_localHint,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                ] else ...[
-                  // ===== Casdoor 认证模式：原有登录按钮 =====
-                  FilledButton.icon(
-                    onPressed: canLogin && !_isLoading ? _handleLogin : null,
-                    icon: _isLoading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colorScheme.onPrimary,
-                            ),
-                          )
-                        : const Icon(Icons.login),
-                    label: Text(
-                      _isLoading ? al.login_signingIn : al.login_signIn,
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  al.login_localHint,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    al.login_casdoorHint,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Config Button (Outlined)
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _navigateToConfig,
-                    icon: const Icon(Icons.key),
-                    label: const Text('Configure Casdoor'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ],
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
 
                 // Server Config Button (Tonal)
@@ -376,9 +266,7 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            _isLocalMode
-                                ? 'Please configure file server first'
-                                : 'Please configure Casdoor service first',
+                            'Please configure file server first',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),

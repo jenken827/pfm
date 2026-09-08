@@ -7,8 +7,7 @@ type Config struct {
 	Cors    Cors    `json:"cors" yaml:"cors"`
 	Log     Log     `json:"log" yaml:"log"`
 	DB      DB      `json:"db" yaml:"db"`
-	Casdoor Casdoor `json:"casdoor" yaml:"casdoor"`
-	// 认证配置（casdoor / local 双模式）
+	// 认证配置（本地认证：users 表 + HS256 JWT）
 	Auth AuthConfig `json:"auth" yaml:"auth"`
 	//服务对外地址，用于telegram回调，i.e. https://example.com
 	ServerURL string      `json:"server_url" yaml:"server_url"`
@@ -19,13 +18,41 @@ type Config struct {
 	Upload UploadConfig `json:"upload" yaml:"upload"`
 	// 传输服务配置（高带宽上传下载地址）
 	Transfer TransferConfig `json:"transfer" yaml:"transfer"`
+	// 照片日期解析配置（相册备份按"年/月"归档；不配置时使用内置默认规则）
+	PhotoDate PhotoDateConfig `json:"photo_date" yaml:"photo_date"`
+}
+
+// PhotoDateFilenameRule 照片日期文件名解析规则（单条）
+// Type 取值（未知类型解析时跳过，保证前后端向前兼容）：
+//
+//	prefix_segment_date: 前缀+分隔符取 SegmentIndex 段，段内按 YYYYMMDD 或 YYYY-MM-DD 解析
+//	prefix_compact_date: 前缀后紧跟 8 位 YYYYMMDD
+//	prefix_timestamp:    前缀后紧跟 10 位秒级时间戳
+//	leading_timestamp:   文件名开头连续数字，前 10 位为秒级时间戳
+type PhotoDateFilenameRule struct {
+	Type         string   `json:"type" yaml:"type"`
+	Prefixes     []string `json:"prefixes" yaml:"prefixes"`
+	SegmentIndex uint32   `json:"segment_index" yaml:"segment_index"`
+}
+
+// PhotoDateConfig 照片日期解析配置
+type PhotoDateConfig struct {
+	// EXIF DateTimeOriginal 是否启用（仅前端相册备份有效），默认 true
+	ExifEnabled *bool `json:"exif_enabled" yaml:"exif_enabled"`
+	// EXIF 读取文件头上限（字节），默认 262144（256KB）
+	ExifHeadReadLimit uint32 `json:"exif_head_read_limit" yaml:"exif_head_read_limit"`
+	// 文件名解析规则（顺序敏感，先命中先返回；留空使用内置默认规则）
+	FilenameRules []PhotoDateFilenameRule `json:"filename_rules" yaml:"filename_rules"`
+	// 时间戳防误判：解析年份下界，默认 2000
+	TsMinYear uint32 `json:"ts_min_year" yaml:"ts_min_year"`
+	// 时间戳防误判：允许的年份上界偏移（当前年份 + 偏移），默认 1
+	TsMaxYearOffset uint32 `json:"ts_max_year_offset" yaml:"ts_max_year_offset"`
 }
 
 // AuthConfig 认证配置
+// 本地认证：users 表（bcrypt）+ 自签 HS256 JWT（无外部认证服务依赖）
 type AuthConfig struct {
-	// 认证模式：casdoor（默认，OAuth2 + Casdoor JWT）或 local（本地用户表 + 自签 JWT）
-	Mode string `json:"mode" yaml:"mode"`
-	// 本地认证配置（仅 mode=local 时生效）
+	// 本地认证配置
 	Local LocalAuthConfig `json:"local" yaml:"local"`
 }
 
@@ -92,16 +119,6 @@ type Cors struct {
 	AllowOrigins []string `json:"allow_origins" yaml:"allow_origins"`
 	AllowMethods []string `json:"allow_methods" yaml:"allow_methods"`
 	AllowHeaders []string `json:"allow_headers" yaml:"allow_headers"`
-}
-
-// Casdoor casdoor config
-type Casdoor struct {
-	Endpoint         string `json:"endpoint" yaml:"endpoint"`
-	ClientID         string `json:"client_id" yaml:"client_id"`
-	ClientSecret     string `json:"client_secret" yaml:"client_secret"`
-	Certificate      string `json:"certificate" yaml:"certificate"`
-	OrganizationName string `json:"organization_name" yaml:"organization_name"`
-	ApplicationName  string `json:"application_name" yaml:"application_name"`
 }
 
 // Aria2Config aria2 downloader config

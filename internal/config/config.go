@@ -87,9 +87,8 @@ func defaultConfig() *models.Config {
 			AllowHeaders: []string{"*"},
 		},
 
-		// 默认使用 Casdoor 认证（与历史配置兼容）
+		// 本地认证：users 表 + HS256 JWT（默认 token 有效期 30 天）
 		Auth: models.AuthConfig{
-			Mode: "casdoor",
 			Local: models.LocalAuthConfig{
 				TokenTTLHours: 720,
 			},
