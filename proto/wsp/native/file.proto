@@ -81,6 +81,12 @@ message File {
     default: "''",
     index: "idx_f_npoi,idx_f_owner,length:64"
   }];
+  // 文件内容版本号（并发上传仲裁用）：每次内容被新 PUT 接管时递增，
+  // 分发完成回调通过比对 version 判断自己是否仍是最新内容
+  optional uint64 version = 16 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
 }
 message FileHistory {
   option (gorm.opts).ormable = true;
@@ -580,6 +586,16 @@ message DeleteFileHistoryReq {
   repeated uint64 ids = 1 [(buf.validate.field).required = true];
 }
 
+// 恢复文件历史版本请求
+message RestoreFileHistoryReq {
+  // 历史版本ID
+  optional uint64 history_id = 1 [(buf.validate.field).required = true];
+  // 恢复目标文件名（可选）：
+  //  为空 → 覆盖当前文件（当前内容自动写入历史，不丢失）
+  //  非空 → 以该名称在文件所在目录新建副本（不覆盖当前文件，重名自动加后缀）
+  optional string new_name = 2;
+}
+
 // 搜索文件请求
 message SearchFilesReq {
   // 搜索关键词（按文件名或标签模糊匹配）
@@ -760,6 +776,7 @@ service FileService {
 
   // 删除文件历史版本
   rpc DeleteFileHistory(DeleteFileHistoryReq) returns (BaseResp);
+  rpc RestoreFileHistory(RestoreFileHistoryReq) returns (BaseResp);
 
   // 更新文件标签
   rpc UpdateFileTags(UpdateFileTagsReq) returns (BaseResp);

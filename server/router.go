@@ -29,11 +29,12 @@ func route(mux *http.ServeMux) {
 	fileRoute(mux)
 	uploadRoute(mux)
 	storageProviderRoute(mux)
-	backupRoute(mux)           // 备份服务路由
-	permissionRoute(mux)       // 权限服务路由
-	userSpaceRoute(mux)        // 用户空间服务路由
-	fileStreamRoute(mux)       // 文件流式传输路由
-	publicDownloadRoute(mux)   // 公共下载路由
+	backupRoute(mux)         // 备份服务路由
+	permissionRoute(mux)     // 权限服务路由
+	userSpaceRoute(mux)      // 用户空间服务路由
+	fileStreamRoute(mux)     // 文件流式传输路由
+	publicDownloadRoute(mux) // 公共下载路由
+	downloadRoute(mux)       // 离线下载服务路由
 
 	// Then create transcoder with all registered services
 	transcoder, err := vanguard.NewTranscoder(vanguardServices)
@@ -151,6 +152,20 @@ func backupRoute(mux *http.ServeMux) {
 	backup := &api.BackupServer{}
 	path, handler := nativeconnect.NewBackupServiceHandler(
 		backup,
+		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
+	)
+
+	mux.Handle(path, handler)
+
+	service := vanguard.NewService(path, handler)
+	vanguardServices = append(vanguardServices, service)
+}
+
+// 离线下载服务路由
+func downloadRoute(mux *http.ServeMux) {
+	downloadSvc := &api.DownloadServer{}
+	path, handler := nativeconnect.NewDownloadServiceHandler(
+		downloadSvc,
 		connect.WithInterceptors(middleware.GInterceptor(), middleware.AuthInterceptor(), validate.NewInterceptor()),
 	)
 

@@ -19,10 +19,10 @@ import (
 type AsyncTaskStatus string
 
 const (
-	TaskPending  AsyncTaskStatus = "PENDING"
-	TaskRunning  AsyncTaskStatus = "RUNNING"
-	TaskSuccess  AsyncTaskStatus = "SUCCESS"
-	TaskFailed   AsyncTaskStatus = "FAILED"
+	TaskPending AsyncTaskStatus = "PENDING"
+	TaskRunning AsyncTaskStatus = "RUNNING"
+	TaskSuccess AsyncTaskStatus = "SUCCESS"
+	TaskFailed  AsyncTaskStatus = "FAILED"
 )
 
 type AsyncTask struct {
@@ -180,16 +180,21 @@ func countFilesRecursive(fileID string) int32 {
 // saveSingleFile 保存单个文件（创建新记录，hash 引用同一内容）
 func saveSingleFile(source *native.FileORM, parentID, name, ownerID string) error {
 	newFile := &native.FileORM{
-		Name:        &name,
-		ParentId:    &parentID,
-		OwnerId:     &ownerID,
-		Hash:        source.Hash,
-		Size:        source.Size,
-		Mime:        source.Mime,
-		Type:        source.Type,
-		IsReady:     boolPtr(true),
+		Name:     &name,
+		ParentId: &parentID,
+		OwnerId:  &ownerID,
+		Hash:     source.Hash,
+		Size:     source.Size,
+		Mime:     source.Mime,
+		Type:     source.Type,
+		IsReady:  boolPtr(true),
 	}
-	return db.CreateFile(newFile)
+	// 容量统计：分享保存新增文件影响用户占用
+	if err := db.CreateFile(newFile); err != nil {
+		return err
+	}
+	MarkFileCapacityChanged(ownerID)
+	return nil
 }
 
 // saveFolderRecursive 递归保存目录
@@ -247,7 +252,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // === UserSpace 管理 ===
 
-// GetUserSpace 获取当前用户的空间信息
+// GetUserSpace 获取当前用户的空间信息（用量由异步容量更新器维护，纯读表零聚合）
 func GetUserSpace(ctx context.Context) (*native.UserSpace, error) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {

@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/design/design_tokens.dart';
+import 'package:pfm/services/local_storage.dart';
 import 'home_route.dart' as home;
 import 'files_route.dart' as files;
 import 'transfer_route.dart' as transfer;
@@ -360,6 +361,26 @@ class MainScaffold extends StatelessWidget {
 
   /// 构建用户信息区域
   Widget _buildNavUser(BuildContext context, ColorScheme colorScheme) {
+    final al = AppLocalizations.of(context);
+    // 从登录态读取真实用户（此前为写死的 ken json / ken@example.com）
+    final ls = GetIt.I.get<LocalStorage>();
+    final user = ls.user;
+
+    final displayName = (user != null && user.name.isNotEmpty)
+        ? user.name
+        : al.common_notLoggedIn;
+    // 副标题：优先邮箱，其次角色，都没有则隐藏
+    String subtitle = '';
+    if (user != null && user.email != null && user.email!.isNotEmpty) {
+      subtitle = user.email!;
+    } else if (user != null && user.roles.isNotEmpty) {
+      subtitle = user.roles.join(', ');
+    }
+    // 头像首字母：取显示名首个非空字符（大写），无用户时用图标
+    final initial = displayName.isNotEmpty
+        ? displayName.characters.first.toUpperCase()
+        : '';
+
     return Container(
       padding: const EdgeInsets.all(PfmSpacing.lg),
       decoration: BoxDecoration(
@@ -378,15 +399,21 @@ class MainScaffold extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(PfmRadius.full),
             ),
-            child: const Center(
-              child: Text(
-                'K',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
+            child: Center(
+              child: initial.isNotEmpty
+                  ? Text(
+                      initial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    )
+                  : Icon(
+                      Icons.person_outline,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
             ),
           ),
           const SizedBox(width: PfmSpacing.md),
@@ -396,18 +423,20 @@ class MainScaffold extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'ken json',
+                  displayName,
                   style: PfmTypography.labelLarge.copyWith(
                     color: colorScheme.onSurface,
                   ),
-                ),
-                Text(
-                  'ken@example.com',
-                  style: PfmTypography.labelSmall.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: PfmTypography.labelSmall.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
               ],
             ),
           ),

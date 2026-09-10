@@ -37,7 +37,7 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 1.1 归属校验：仅文件所有者（或管理员）可创建分享
+	// 1.1 归属校验：仅文件所有者可创建分享（管理员不可越权分享他人文件）
 	if !CheckOwnership(ctx, fileID) {
 		return nil, &models.Err{E: errors.New("permission denied: only file owner can share"), C: native.RespCode_PERMISSION_DENIED}
 	}

@@ -33,6 +33,27 @@ func UpdateUserSpace(space *native.UserSpaceORM) error {
 	return err
 }
 
+// UpdateUserSpaceUsedBytes 按 user_id 写回用户已用容量（容量异步更新器调用）
+func UpdateUserSpaceUsedBytes(userID string, usedBytes uint64) error {
+	ctx := context.Background()
+	return db.WithContext(ctx).
+		Model(&native.UserSpaceORM{}).
+		Where("user_id = ?", userID).
+		Update("used_bytes", usedBytes).Error
+}
+
+// GetAllUserIDs 返回全部用户空间所属 user_id（供容量启动全量刷新用）
+func GetAllUserIDs() ([]string, error) {
+	ctx := context.Background()
+	var ids []string
+	if err := db.WithContext(ctx).
+		Model(&native.UserSpaceORM{}).
+		Pluck("user_id", &ids).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // ListUserSpaces 获取用户空间列表（分页）
 func ListUserSpaces(offset, pageSize uint32) ([]*native.UserSpaceORM, int64, error) {
 	ctx := context.Background()

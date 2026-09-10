@@ -131,7 +131,7 @@ func MoveFile(ctx context.Context, req *native.MoveFileReq) (uint32, []string, m
 			failedReasons[fileID] = "update file parent_id failed"
 			continue
 		}
-
+		// 容量统计说明：移动不改变 owner 归属，用户总占用不变，无需重算
 		successCount++
 		llog.L().Infof("file moved successfully: %s -> %s", fileID, targetParentID)
 	}

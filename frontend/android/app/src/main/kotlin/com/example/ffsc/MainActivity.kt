@@ -4,6 +4,7 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.renderer.FlutterUiDisplayListener
+import io.flutter.plugin.common.MethodChannel
 
 /**
  * 冷启动闪屏卡顿排查：记录 Activity 创建、引擎配置、首个 Flutter 帧渲染的
@@ -40,6 +41,12 @@ class MainActivity : FlutterActivity() {
                 override fun onFlutterUiNoLongerDisplayed() {}
             },
         )
+
+        // 短信/通话记录备份读取通道（任务9）
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "pfm/device_backup",
+        ).setMethodCallHandler(DeviceBackupChannel(this))
         NativeLog.info("configureFlutterEngine end (elapsed=${NativeLog.elapsedMs()}ms)")
     }
 

@@ -218,6 +218,14 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 		}
 	}
 
+	// 并发上传仲裁：请求头到达即发号（body 读取前）。同一文件 key
+	// (owner+parent+name) 下后到达的 PUT 拿到更大的版本号，后续落库 CAS
+	// 保证"后到者赢"，防止两个 PUT 交错时旧请求覆盖新内容。
+	// 注：发号在 resolvePath 之后、流式读取 body 之前——PUT 传输大文件时
+	// 第二个 PUT 可能已到达并接管，本请求 body 收完后 CAS 会发现版本落后。
+	myVersion := service.AllocateFileVersion(b.ownerID, *parentFile.Id, fileName)
+	ctx = service.WithUploadVersion(ctx, myVersion)
+
 	// 流式写入临时文件并计算 blake3 hash（与系统文件 hash 算法一致）。
 	// 大文件不整读进内存：body 边收边写 staging（TempDir 根目录），
 	// hash 确定后再原子迁入规范临时目录 TempDir/<hash>/<fileName>（与
@@ -240,7 +248,7 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 
 	hash := hex.EncodeToString(hasher.Sum(nil))
 
-	if err := utils.CreateFileTempDir(hash, false); err != nil {
+	if err := utils.CreateFileTempDir(hash, b.ownerID, false); err != nil {
 		return nil, false, gowebdav.NewHTTPError(500, fmt.Errorf("create temp dir: %w", err))
 	}
 	tempPath := utils.GetFileTempPath(hash, fileName)

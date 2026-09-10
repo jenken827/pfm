@@ -58,7 +58,7 @@ dependencies:
   fixnum: ^1.1.1
   flutter_background_service: ^5.0.0
   flutter_local_notifications: ^18.0.0
-  photo_manager: ^3.6.4
+  photo_manager: 3.9.0
   connectivity_plus: ^6.1.3
   permission_handler: ^11.3.0
   hive_ce: ^2.19.3

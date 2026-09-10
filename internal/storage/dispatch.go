@@ -42,12 +42,21 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 			return
 		}
 		if _, err := os.Stat(*ur.TempPath); err != nil {
-			// Fallback: 精确路径不存在时，扫描 hash 目录查找任意可用文件
+			// Fallback: 精确路径不存在时，在本人隔离目录内查找可用文件
 			// 场景：用户 rename 重试上传，新 temp 文件名与 upload_record 中的旧文件名不同
+			// 先查 owner 隔离目录（当前布局），再回退内容寻址层（旧布局兼容）
 			if ur.FileHash != nil {
-				if found, ok := utils.FindTempFile(*ur.FileHash); ok {
-					llog.L().Infof("temp file fallback: %s -> %s", *ur.TempPath, found)
-					ur.TempPath = &found
+				var p string
+				ok := false
+				if ur.OwnerId != nil && *ur.OwnerId != "" {
+					p, ok = utils.FindTempFileInDir(utils.GetChunkTempDir(*ur.FileHash, *ur.OwnerId))
+				}
+				if !ok {
+					p, ok = utils.FindTempFile(*ur.FileHash)
+				}
+				if ok {
+					llog.L().Infof("temp file fallback: %s -> %s", *ur.TempPath, p)
+					ur.TempPath = &p
 				} else {
 					markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
 					return
@@ -330,12 +339,19 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 		return true, ""
 	}
 
-	// 上传成功，立即更新文件状态为就绪
+	// 上传成功，立即更新文件状态为就绪。
+	// CAS：仅当文件当前 version 仍等于本次上传创建时的版本（ur.Version）才标记
+	// is_ready——若期间同名文件已被更新的 PUT 接管（version 已递增），本次分发
+	// 属于旧内容，不能把新内容误标为就绪。
 	if parentID != "" && fileName != "" {
-		if updateErr := db.UpdateFileIsReady(parentID, fileName, ""); updateErr != nil {
+		urVersion := uint64(0)
+		if ur.Version != nil {
+			urVersion = *ur.Version
+		}
+		if updateErr := db.UpdateFileIsReady(parentID, fileName, "", urVersion); updateErr != nil {
 			llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
 		} else {
-			llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d", parentID, fileName, tid)
+			llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d, version: %d", parentID, fileName, tid, urVersion)
 		}
 	}
 	return false, ""
@@ -373,16 +389,37 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 		// 部分失败但已有 provider 成功时，内容已安全落库：立即回收 staging 临时文件。
 		// 全部失败时 temp 是内容的唯一副本，保留供排查/重试，由兜底 janitor 超龄回收。
 		if ur.FileHash != nil && hasCompletedLocation(*ur.FileHash) {
-			if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
-				llog.L().Warnf("cleanup file temp dir after partial success failed: %v", err)
-			}
+			cleanupUploadTemp(ur)
 		}
 	} else {
 		completeUpload(ur)
 	}
 }
 
-// hasCompletedLocation 检查文件 hash 是否存在任一已完成（PCOMPLETED）的 location
+// cleanupUploadTemp 清理上传任务的临时文件
+//
+// 临时文件分布在两处，都要清理：
+//   - owner 隔离层 TempDir/users/<owner>/<hash>/  （新布局：分片 + 合并明文）
+//   - 内容寻址层 TempDir/<hash>/                  （旧布局 / 兼容残留）
+//
+// 同一 hash 归不同 owner 的分片互不影响，隔离层只删本 owner 的 hash 目录。
+func cleanupUploadTemp(ur *native.UploadRecordORM) {
+	if ur.FileHash == nil || *ur.FileHash == "" {
+		return
+	}
+	ownerID := ""
+	if ur.OwnerId != nil {
+		ownerID = *ur.OwnerId
+	}
+	if err := utils.CleanupOwnerHashTempDir(*ur.FileHash, ownerID); err != nil {
+		llog.L().Warnf("cleanup owner hash temp dir failed: %v", err)
+	}
+	if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
+		llog.L().Warnf("cleanup file temp dir failed: %v", err)
+	}
+}
+
+// hasCompletedLocation 检查该 hash 是否已有完成的存储位置
 func hasCompletedLocation(fileHash string) bool {
 	locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
 	if err != nil {
@@ -549,10 +586,8 @@ func completeUpload(ur *native.UploadRecordORM) {
 			}
 		}
 
-		// 清理整个文件临时目录
-		if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
-			llog.L().Warnf("cleanup file temp dir failed: %v", err)
-		}
+		// 清理整个文件临时目录（owner 隔离层 + 内容寻址层，兼容新旧布局）
+		cleanupUploadTemp(ur)
 
 		// 删除上传记录（仅当有ID时）
 		if ur.Id != nil {

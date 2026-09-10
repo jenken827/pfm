@@ -501,7 +501,9 @@ func UpdateFileSimple(file *native.FileORM) error {
 
 // UpdateFileIsReady 更新文件is_ready状态
 // 通过parent_id和file_name定位文件，设置is_ready为true
-func UpdateFileIsReady(parentID, fileName, ownerID string) error {
+// version > 0 时仅当文件当前 version 等于该值才更新（CAS，防止旧分发把
+// 已被新 PUT 接管的新 hash 错误标记为就绪）
+func UpdateFileIsReady(parentID, fileName, ownerID string, version uint64) error {
 	ctx := context.Background()
 	isReady := true
 	q := gorm.G[*native.FileORM](db).
@@ -509,8 +511,78 @@ func UpdateFileIsReady(parentID, fileName, ownerID string) error {
 	if ownerID != "" {
 		q = q.Where("owner_id = ?", ownerID)
 	}
+	if version > 0 {
+		q = q.Where("version = ?", version)
+	}
 	_, err := q.Update(ctx, "is_ready", isReady)
 	return err
+}
+
+// TakeoverFileVersion CAS 抢占文件版本号并更新内容字段（hash/size）。
+// 仅当文件当前 version < myVersion 时更新成功（后到达的上传持有更大版本号，
+// 版本落后的请求无法覆盖新内容）。返回是否抢占成功。
+// myVersion == 0（存量任务/无版本上下文）时退化为无条件更新，兼容老数据。
+// updates 额外字段（如 is_ready）通过传入的 file 记录应用。
+func TakeoverFileVersion(fileID string, myVersion uint64, newHash string, newSize uint64, extra map[string]interface{}) (bool, error) {
+	ctx := context.Background()
+	updateMap := map[string]interface{}{
+		"hash":    newHash,
+		"size":    newSize,
+		"version": myVersion,
+	}
+	for k, v := range extra {
+		updateMap[k] = v
+	}
+	q := db.WithContext(ctx).Model(&native.FileORM{})
+	if myVersion > 0 {
+		q = q.Where("id = ? AND version < ?", fileID, myVersion)
+	} else {
+		q = q.Where("id = ?", fileID)
+	}
+	result := q.Updates(updateMap)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// UpdateFileWithHistoryCAS 更新文件记录（CAS 抢占版本）并记录历史。
+// myVersion 必须大于文件当前 version 才生效，返回是否成功。
+// myVersion == 0（存量任务/无版本上下文）时退化为无条件更新，兼容老数据。
+// 旧内容始终写入 file_histories，max_histories 由调用方异步裁剪。
+func UpdateFileWithHistoryCAS(ctx context.Context, file *native.FileORM, oldFile *native.FileORM, myVersion uint64) (bool, error) {
+	taken := false
+	err := db.Transaction(func(tx *gorm.DB) error {
+		updateMap := map[string]interface{}{
+			"hash":    *file.Hash,
+			"size":    *file.Size,
+			"version": myVersion,
+		}
+		q := tx.WithContext(ctx).Model(&native.FileORM{})
+		if myVersion > 0 {
+			q = q.Where("id = ? AND version < ?", *file.Id, myVersion)
+		} else {
+			q = q.Where("id = ?", *file.Id)
+		}
+		result := q.Updates(updateMap)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// 版本落后：被更新的上传接管，不写历史
+			return nil
+		}
+		taken = true
+
+		history := &native.FileHistoryORM{
+			FileId:        file.Id,
+			Hash:          oldFile.Hash,
+			Size:          oldFile.Size,
+			VersionNumber: oldFile.UpdatedAt,
+		}
+		return gorm.G[native.FileHistoryORM](tx).Create(ctx, history)
+	})
+	return taken, err
 }
 
 // UpdateFileLocationStatus 批量更新文件位置记录状态
@@ -637,6 +709,70 @@ func CountFilesByHashIncludingDeleted(hash string) (int64, error) {
 	return count, nil
 }
 
+// CountActiveUploadRecordsByHash 统计指定 hash 的活跃上传记录数（PENDING/UPLOADING）。
+// 用于判断该 hash 的 file_location 是否仍在上传窗口期——分发未完成的 hash
+// 严禁被"覆盖清理"逻辑删除（否则会导致 upload_record 卡死，见并发覆盖场景）。
+func CountActiveUploadRecordsByHash(hash string) (int64, error) {
+	if hash == "" {
+		return 0, nil
+	}
+
+	ctx := context.Background()
+	var count int64
+	err := db.WithContext(ctx).Model(&native.UploadRecordORM{}).
+		Where("file_hash = ? AND task_status IN ?", hash,
+			[]int32{int32(native.UploadStatus_PENDING), int32(native.UploadStatus_UPLOADING)}).
+		Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// ArchiveHashAsHistoryIfAbsent 将 hash 幂等归档为该文件的历史记录（防孤儿）。
+// 场景：并发覆盖中版本落后的上传，其内容可能已分发到存储提供者，但 file
+// 记录已被更新的内容接管。若该 hash 既不在 file 当前 hash 也不在历史中，
+// 其 file_location 将成为无引用的孤儿——这里补一条历史引用使其可被追溯。
+// 幂等：同 (file_id, hash) 已存在则跳过；允许重复历史（不占物理空间）。
+func ArchiveHashAsHistoryIfAbsent(fileID, hash string, size uint64) error {
+	if fileID == "" || hash == "" {
+		return nil
+	}
+
+	ctx := context.Background()
+	var count int64
+	if err := db.WithContext(ctx).Model(&native.FileHistoryORM{}).
+		Where("file_id = ? AND hash = ?", fileID, hash).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil // 已归档过，幂等跳过
+	}
+
+	now := time.Now()
+	history := &native.FileHistoryORM{
+		FileId:        &fileID,
+		Hash:          &hash,
+		Size:          &size,
+		VersionNumber: &now,
+	}
+	return db.WithContext(ctx).Create(history).Error
+}
+
+// GetFileHistoryByFileIDAndHash 按文件ID+hash查询历史记录（幂等归档时用）
+func GetFileHistoryByFileIDAndHash(fileID, hash string) (*native.FileHistoryORM, error) {
+	ctx := context.Background()
+	var history native.FileHistoryORM
+	err := db.WithContext(ctx).
+		Where("file_id = ? AND hash = ?", fileID, hash).
+		First(&history).Error
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
+
 // GetRecentFiles 获取最近使用的文件（排除已删除和文件夹）
 func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
 	var files []*native.FileORM
@@ -730,4 +866,23 @@ func GetSubfoldersByParentID(parentID string, ownerID string) ([]*native.FileORM
 		Order("name ASC").
 		Find(&folders).Error
 	return folders, err
+}
+
+// ==================== 容量/大小统计 ====================
+
+// SumAllFileSizesByOwner 统计用户所有文件（含回收站软删，物理仍占用存储）的 size 总和。
+// 口径：不含文件夹（type != FOLDER）；软删行仍计入（用户空间“已用”应含回收站）；
+// 永久删除/清空回收站后行消失，总量自然回落。供容量异步更新器写回 used_bytes。
+func SumAllFileSizesByOwner(ownerID string) (uint64, error) {
+	ctx := context.Background()
+	var sum int64
+	err := db.WithContext(ctx).Unscoped().
+		Model(&native.FileORM{}).
+		Where("owner_id = ? AND type != ?", ownerID, native.FileType_FOLDER).
+		Select("COALESCE(SUM(size), 0)").
+		Scan(&sum).Error
+	if err != nil {
+		return 0, err
+	}
+	return uint64(sum), nil
 }

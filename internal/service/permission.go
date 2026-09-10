@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -59,16 +60,35 @@ func CheckPermission(userID, fileID string, requiredPerm uint32) bool {
 	return false
 }
 
-// CheckOwnership 检查当前用户是否为文件所有者（或管理员）
-// 从 context 获取当前用户 ID，检查 file.owner_id == userID
+// requireDirPermManager 目录权限管理门槛：仅管理员（或目录所有者）可
+// 授予/撤销/更新/批量授予目录权限。防止普通用户给自己签发任意目录的
+// 权限记录绕过 owner 模型（checkFilePermission 走 CheckPermission 命中
+// directory_permissions 记录即放行）。
+func requireDirPermManager(ctx context.Context, fileID string) *models.Err {
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return &models.Err{E: errors.New("unauthorized"), C: native.RespCode_PERMISSION_DENIED}
+	}
+	if db.IsAdmin(userID) {
+		return nil
+	}
+	if !CheckOwnership(ctx, fileID) {
+		return &models.Err{
+			E: fmt.Errorf("permission denied: only admin or directory owner can manage permissions"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+	return nil
+}
+
+// CheckOwnership 检查当前用户是否为文件所有者
+//
+// 注意：管理员在此**不**享有特权（普通文件操作不能被管理员越权）。
+// 管理功能请用 CheckOwnershipOrAdmin。
 func CheckOwnership(ctx context.Context, fileID string) bool {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return false
-	}
-	// 管理员跳过
-	if db.IsAdmin(userID) {
-		return true
 	}
 	file, err := db.GetFileByID(fileID)
 	if err != nil || file == nil {
@@ -80,9 +100,12 @@ func CheckOwnership(ctx context.Context, fileID string) bool {
 	return false
 }
 
-// CheckOwnershipOrAdmin 检查当前用户是否为文件所有者或管理员
-// 与 CheckOwnership 行为完全一致，保留语义别名
+// CheckOwnershipOrAdmin 检查当前用户是否为文件所有者或管理员（管理功能专用）
+// 仅用于明确的管理场景：分享审查、备份任务跨用户读取等。
 func CheckOwnershipOrAdmin(ctx context.Context, fileID string) bool {
+	if isAdminUser(ctx) {
+		return true
+	}
 	return CheckOwnership(ctx, fileID)
 }
 
@@ -127,6 +150,10 @@ func GetUserAccessibleDirectories(userID string) (map[string]uint32, error) {
 
 // GrantDirectoryPermission 授予目录权限
 func GrantDirectoryPermission(ctx context.Context, req *native.GrantDirectoryPermissionReq, operator string) *models.Err {
+	// 权限授予是管理操作：仅管理员（或目录所有者）可授予他人目录权限
+	if err := requireDirPermManager(ctx, *req.FileId); err != nil {
+		return err
+	}
 	userID := *req.UserId
 	fileID := *req.FileId
 	permissions := *req.Permissions
@@ -241,6 +268,9 @@ func validateDisplayName(userID, fileID, fileName, alias string) *models.Err {
 
 // RevokeDirectoryPermission 撤销目录权限
 func RevokeDirectoryPermission(ctx context.Context, req *native.RevokeDirectoryPermissionReq, operator string) *models.Err {
+	if err := requireDirPermManager(ctx, *req.FileId); err != nil {
+		return err
+	}
 	userID := *req.UserId
 	fileID := *req.FileId
 
@@ -268,6 +298,9 @@ func RevokeDirectoryPermission(ctx context.Context, req *native.RevokeDirectoryP
 
 // UpdateDirectoryPermission 更新目录权限
 func UpdateDirectoryPermission(ctx context.Context, req *native.UpdateDirectoryPermissionReq, operator string) *models.Err {
+	if err := requireDirPermManager(ctx, *req.FileId); err != nil {
+		return err
+	}
 	userID := *req.UserId
 	fileID := *req.FileId
 
@@ -435,6 +468,13 @@ func appendChildrenPermissions(parentID string, result *native.GetDirectoryPermi
 
 // BatchGrantPermission 批量授予权限
 func BatchGrantPermission(ctx context.Context, req *native.BatchGrantPermissionReq, operator string) *models.Err {
+	// 逐目录走 requireDirPermManager（GrantDirectoryPermission 内部已校验，
+	// 这里仅提前校验首个以快速失败；循环内每个目录仍有独立门槛）
+	if len(req.FileIds) > 0 {
+		if err := requireDirPermManager(ctx, req.FileIds[0]); err != nil {
+			return err
+		}
+	}
 	userID := *req.UserId
 	permissions := *req.Permissions
 	inherit := true

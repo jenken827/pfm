@@ -2,15 +2,20 @@ package download
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 
+	"lukechampine.com/blake3"
+
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/downloader"
+	"jenken827.com/jenken827/pfm/internal/fileutil"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
@@ -125,8 +130,170 @@ func handleDownloadComplete(gid string) {
 
 	llog.L().Infof("download record updated, gid: %s, file: %s, size: %s", gid, filePath, totalLength)
 
+	// URL 离线下载任务（任务14）：url 非空且无中转 upload_record → 入库
+	// 中转同步任务：provider→provider（有 upload_record_id）→ 原有恢复逻辑
+	if dr.Url != nil && *dr.Url != "" && (dr.UploadRecordId == nil || *dr.UploadRecordId == 0) {
+		importOfflineDownload(dr, filePath)
+		return
+	}
+
 	// 恢复同步任务：从下载的文件批量上传到目标提供者
 	resumeSyncFromDownload(dr, filePath)
+}
+
+// importOfflineDownload URL 离线下载完成后的入库链路（任务14）
+//
+// aria2 已把文件下载到 .offline/ 目录，这里：
+//  1. 计算 blake3（增量，避免大文件整读内存）
+//  2. 把文件移入 staging 临时目录（TempDir/<hash>/，供 Dispatch 上传，
+//     上传完成后由 completeUpload 清理——与普通上传生命周期一致）
+//  3. 检查目标目录是否已存在同 hash 文件（秒传跳过上传）
+//  4. 创建 File 记录（owner/parent 来自 DownloadRecord）
+//  5. 查 UserSpace 绑定 providers → 创建 UploadRecord → Dispatch
+func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath string) {
+	if dr.OwnerId == nil || *dr.OwnerId == "" || dr.ParentId == nil || *dr.ParentId == "" {
+		llog.L().Errorf("offline download record missing owner/parent, download_record_id: %v", dr.Id)
+		return
+	}
+	ownerID := *dr.OwnerId
+	parentID := *dr.ParentId
+
+	// 1. 计算 hash（增量流式）
+	hash, err := computeBlake3(downloadedFilePath)
+	if err != nil {
+		llog.L().Errorf("offline download compute hash failed, file: %s, err: %v", downloadedFilePath, err)
+		updateDownloadRecordState(*dr.Gid, native.DownloadRecordState_DOWNLOAD_FAILED, "hash 计算失败: "+err.Error())
+		return
+	}
+	llog.L().Infof("offline download hash computed: %s, file: %s", hash, downloadedFilePath)
+
+	// 文件信息
+	fileInfo, err := os.Stat(downloadedFilePath)
+	if err != nil {
+		llog.L().Errorf("offline download stat failed, file: %s, err: %v", downloadedFilePath, err)
+		return
+	}
+	fileSize := uint64(fileInfo.Size())
+	fileName := filepath.Base(downloadedFilePath)
+	if dr.SourceName != nil && *dr.SourceName != "" {
+		fileName = *dr.SourceName
+	}
+
+	// 2. 移入 staging（owner 隔离：TempDir/users/<ownerID>/<hash>/chunks/）：
+	//    与普通上传分片目录同布局，避免多用户并发下载同一内容互相覆盖；
+	//    Dispatch 上传完成后清理，进行中 janitor 不回收
+	stagingDir := utils.GetChunkTempDir(hash, ownerID)
+	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
+		llog.L().Errorf("offline download create staging dir failed: %v", err)
+		return
+	}
+	stagingPath := filepath.Join(stagingDir, "merged_"+fileName)
+	if err := os.Rename(downloadedFilePath, stagingPath); err != nil {
+		// Windows/跨盘等 rename 失败场景退化为复制
+		if cErr := copyFile(downloadedFilePath, stagingPath); cErr != nil {
+			llog.L().Errorf("offline download move to staging failed: %v / %v", err, cErr)
+			return
+		}
+		_ = os.Remove(downloadedFilePath)
+	}
+
+	// 3. 检查目标目录同名同 hash（秒传：内容已在该目录 → 无需上传）
+	if existing, qErr := db.GetFileByParentAndName(parentID, fileName, ownerID); qErr == nil &&
+		existing != nil && existing.Hash != nil && *existing.Hash == hash {
+		llog.L().Infof("offline download: same content exists in target dir, skip upload: %s", fileName)
+		_ = os.Remove(stagingPath)
+		updateDownloadRecordState(*dr.Gid, native.DownloadRecordState_DOWNLOAD_COMPLETED, "")
+		return
+	}
+
+	// 4. 创建 File 记录
+	fileType, mime := fileutil.GetFileType(stagingPath, fileName)
+	isReady := false
+	newFile := &native.FileORM{
+		Name:     &fileName,
+		ParentId: &parentID,
+		Size:     &fileSize,
+		Hash:     &hash,
+		Type:     utils.Int32Ptr(fileType),
+		Mime:     &mime,
+		IsReady:  &isReady,
+		OwnerId:  &ownerID,
+	}
+	if err := db.CreateFile(newFile); err != nil {
+		llog.L().Errorf("offline download create file record failed: %v", err)
+		return
+	}
+	llog.L().Infof("offline download file record created, id: %s, name: %s", *newFile.Id, fileName)
+
+	// 5. 绑定 providers → UploadRecord → Dispatch
+	providerIds, pErr := db.GetBoundProviderIdsByOwnerID(ownerID)
+	if pErr != nil || len(providerIds) == 0 {
+		llog.L().Errorf("offline download: no bound providers for owner %s, err: %v", ownerID, pErr)
+		return
+	}
+	providerIdsJSON, _ := json.Marshal(providerIds)
+	targetProviderIds := string(providerIdsJSON)
+
+	uploadRecord := &native.UploadRecordORM{
+		FileHash:          &hash,
+		FileName:          &fileName,
+		FileSize:          &fileSize,
+		ParentId:          &parentID,
+		TempPath:          &stagingPath,
+		OverwriteId:       utils.StringPtr(""),
+		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
+		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
+		TargetProviderIds: &targetProviderIds,
+		TaskType:          utils.EnumPtr(native.UploadTaskType_UPLOAD),
+		OwnerId:           &ownerID,
+	}
+	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
+		llog.L().Errorf("offline download create upload record failed: %v", err)
+		return
+	}
+	llog.L().Infof("offline download dispatching, file: %s, hash: %s, providers: %s", fileName, hash, targetProviderIds)
+	go storage.Dispatch(context.Background(), uploadRecord)
+}
+
+// computeBlake3 增量计算文件 blake3（大文件安全）
+func computeBlake3(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := blake3.New(32, nil)
+	buf := make([]byte, 1024*1024)
+	for {
+		n, rErr := f.Read(buf)
+		if n > 0 {
+			_, _ = h.Write(buf[:n])
+		}
+		if rErr == io.EOF {
+			break
+		}
+		if rErr != nil {
+			return "", rErr
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// copyFile 复制文件（rename 跨设备失败时兜底）
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // resumeSyncFromDownload 从下载的文件恢复同步任务

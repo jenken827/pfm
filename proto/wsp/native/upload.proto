@@ -23,7 +23,9 @@ message UploadRecord {
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
 
   // blake3 hash
-  optional string file_hash = 4 [(gorm.field).tag = {unique_index: "idx_ur_fh, length:10"}];
+  // 唯一约束为复合 (file_hash, owner_id)：同一用户同 hash 只能有一条活跃
+  // 上传记录（秒传复用），不同用户同 hash 互不干扰（并发上传隔离）
+  optional string file_hash = 4 [(gorm.field).tag = {unique_index: "idx_ur_fh_owner,priority:1, length:10"}];
   optional string file_name = 5 [(gorm.field).tag = {not_null: true}];
   // unit: byte
   optional uint64 file_size = 6 [(gorm.field).tag = {not_null: true}];
@@ -67,6 +69,20 @@ message UploadRecord {
   optional UploadStatus task_status = 17 [(gorm.field).tag = {
     not_null: true
     default: "0"
+  }];
+  // 创建时文件的内容版本号（与 files.version 对齐）：分发完成回调用它
+  // 做 CAS 判断是否仍是最新内容，防止并发覆盖场景下旧分发把 file 状态改坏
+  optional uint64 version = 18 [(gorm.field).tag = {
+    not_null: true
+    default: "0"
+  }];
+  // 上传发起者（owner_id 模型鉴权）：Cancel/Delete/Retry/Detail 按 owner
+  // 或管理员放行；与 file_hash 组成复合唯一索引（并发上传隔离）
+  optional string owner_id = 19 [(gorm.field).tag = {
+    not_null: true
+    default: "''"
+    index: "idx_ur_owner"
+    unique_index: "idx_ur_fh_owner,priority:2"
   }];
 }
 

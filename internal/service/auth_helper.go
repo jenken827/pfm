@@ -35,14 +35,11 @@ func isAdminUser(ctx context.Context) bool {
 }
 
 // checkFilePermission 检查当前用户对文件的权限
-// 管理员跳过检查，普通用户需要检查权限
+//
+// 注意：管理员在此**不**享有特权。上传/移动等文件操作必须落在自己拥有的
+// 目录内，管理员也不能把文件写进他人目录。
 // 返回 true 表示有权限，false 表示无权限
 func checkFilePermission(ctx context.Context, fileID string, perm uint32) bool {
-	// 管理员跳过权限检查
-	if isAdminUser(ctx) {
-		return true
-	}
-
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return false

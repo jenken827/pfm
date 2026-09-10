@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"jenken827.com/jenken827/pfm/driver/telegram"
@@ -148,15 +149,38 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 }
 
 // tryServeFromLocalTemp 上传窗口期从本地 staging 明文直读（无 complete provider 时的降级源）
-// staging 位于 TempDir/<hash>/<fileName>（加密前原文、原文件名），
-// 与远程 provider 解密后的内容字节等价，可直接返回；不存在时返回 false 走轮询兜底。
+// 合并后的明文位于 owner 隔离目录：
+//
+//	TempDir/users/<ownerID>/<hash>/chunks/merged_<fileName>
+//
+// 兼容旧布局：早期版本写在内容寻址层 TempDir/<hash>/<fileName>，这里做回退查找。
+// 与远程 provider 解密后的内容字节等价，可直接返回；都找不到时返回 false 走轮询兜底。
 func tryServeFromLocalTemp(file *native.FileORM) (*FileStreamResult, bool) {
 	if file.Hash == nil || *file.Hash == "" || file.Name == nil || *file.Name == "" {
 		return nil, false
 	}
-	tempPath := utils.GetFileTempPath(*file.Hash, *file.Name)
-	f, err := os.Open(tempPath)
-	if err != nil {
+
+	// 候选路径：owner 隔离目录（当前布局） → 内容寻址层（旧布局兼容）
+	var candidates []string
+	if ownerID := strPtrVal(file.OwnerId); ownerID != "" {
+		candidates = append(candidates,
+			filepath.Join(utils.GetChunkTempDir(*file.Hash, ownerID), "merged_"+*file.Name))
+	}
+	candidates = append(candidates, utils.GetFileTempPath(*file.Hash, *file.Name))
+
+	var (
+		f        *os.File
+		tempPath string
+		openErr  error
+	)
+	for _, p := range candidates {
+		f, openErr = os.Open(p)
+		if openErr == nil {
+			tempPath = p
+			break
+		}
+	}
+	if f == nil {
 		return nil, false
 	}
 	contentType := "application/octet-stream"

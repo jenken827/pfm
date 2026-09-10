@@ -270,6 +270,20 @@ class _FileViewState extends State<_FileView> {
             onSelected: (value) => _handleMenuAction(context, value, state),
             itemBuilder: (context) => [
               PopupMenuItem(
+                value: 'offline_download',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.link,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: PfmSpacing.md),
+                    Text(al.file_offlineDownload),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
                 value: 'trash',
                 child: Row(
                   children: [
@@ -695,11 +709,12 @@ class _FileViewState extends State<_FileView> {
   }
 
   /// 格式化文件信息
+  /// 文件夹不展示大小（遍历子树统计不划算，与主流网盘一致），显示 "-"
   String _formatFileInfo(File file) {
-    final size = file.size.toInt();
+    final isFolder = file.type == pbenum.FileType.FOLDER;
+    final sizeStr = isFolder ? '-' : _formatSize(file.size.toInt());
     final updatedAt = file.updatedAt;
 
-    final sizeStr = _formatSize(size);
     String dateStr = '';
     if (updatedAt.seconds > 0) {
       final date = DateTime.fromMillisecondsSinceEpoch(
@@ -807,6 +822,9 @@ class _FileViewState extends State<_FileView> {
       case 'view':
         bloc.add(FileViewModeEvent(!state.isGridView));
         break;
+      case 'offline_download':
+        _showOfflineDownloadDialog(context, state);
+        break;
       case 'trash':
         context.push(const TrashRoute().location);
         break;
@@ -827,6 +845,92 @@ class _FileViewState extends State<_FileView> {
       case 'sort_created':
         bloc.add(const FileSortEvent(FileSort(type: FileSortType.createdTime)));
         break;
+    }
+  }
+
+  /// 离线下载对话框：输入 URL，下载到当前目录
+  Future<void> _showOfflineDownloadDialog(
+    BuildContext context,
+    FileState state,
+  ) async {
+    final al = AppLocalizations.of(context);
+    final urlController = TextEditingController();
+    final repo = FmRepository();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(al.file_offlineDownload),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${al.file_offlineDownloadTo}: ${state.currentDirName.isEmpty ? al.file_offlineDownloadRoot : state.currentDirName}',
+              style: Theme.of(
+                dialogContext,
+              ).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                hintText: 'https://example.com/file.zip',
+                labelText: al.file_offlineDownloadUrl,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              al.file_offlineDownloadHint,
+              style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(al.common_cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(al.common_confirm),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      urlController.dispose();
+      return;
+    }
+    final url = urlController.text.trim();
+    urlController.dispose();
+
+    if (url.isEmpty || !context.mounted) return;
+
+    // 调起创建请求
+    final result = await repo.createOfflineDownload(
+      url: url,
+      parentId: state.currentDirId.isEmpty ? null : state.currentDirId,
+    );
+
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (result.success) {
+      messenger.showSnackBar(SnackBar(content: Text(al.file_offlineDownloadOk)));
+      // 刷新列表（文件异步落库，稍后出现在当前目录）
+      context.read<FileBloc>().add(FileRefreshEvent());
+    } else {
+      messenger.showSnackBar(
+        SnackBar(content: Text(result.message ?? al.file_offlineDownloadFail)),
+      );
     }
   }
 
@@ -1407,7 +1511,7 @@ class _FileViewState extends State<_FileView> {
   void _showCreateDirDialog(BuildContext context) {
     final al = AppLocalizations.of(context);
     final nameController = TextEditingController();
-    final maxHistoriesController = TextEditingController();
+    final maxHistoriesController = TextEditingController(text: '10');
     bool enableEncryption = true;
 
     showDialog(

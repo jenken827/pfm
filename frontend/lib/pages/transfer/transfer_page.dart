@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/pages/transfer/offline_download_page.dart';
 import 'package:pfm/widgets/download_task_list.dart';
 import 'package:pfm/widgets/upload_task_list.dart';
 import 'package:pfm/widgets/upload_record_list.dart';
@@ -125,6 +126,23 @@ class _TransferPageState extends State<TransferPage>
             ),
           ),
           const Spacer(),
+          // 离线下载任务管理（服务器 aria2 任务）
+          IconButton(
+            icon: Icon(
+              Icons.cloud_download_outlined,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            tooltip: al.offlineDl_title,
+            visualDensity: VisualDensity.compact,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const OfflineDownloadPage(),
+              ),
+            ),
+          ),
+          const SizedBox(width: PfmSpacing.xs),
           IconButton(
             icon: Icon(
               Icons.refresh,

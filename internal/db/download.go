@@ -28,23 +28,44 @@ func GetDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
 	return &dr, nil
 }
 
+// GetDownloadRecordByID 根据 ID 获取下载记录
+func GetDownloadRecordByID(id uint32) (*native.DownloadRecordORM, error) {
+	ctx := context.Background()
+	var dr native.DownloadRecordORM
+	if err := GetDB().WithContext(ctx).Where("id = ?", id).First(&dr).Error; err != nil {
+		llog.L().Errorf("get download record by id failed, id: %d, err: %v", id, err)
+		return nil, err
+	}
+	return &dr, nil
+}
+
 // GetDownloadRecordByUploadID 根据uploadId获取下载记录
 func GetDownloadRecordByUploadID(uploadID uint32) (*native.DownloadRecordORM, error) {
-
 	ctx := context.Background()
-
 	var dr native.DownloadRecordORM
-
 	if err := GetDB().WithContext(ctx).Where("upload_record_id = ?", uploadID).First(&dr).Error; err != nil {
-
 		llog.L().Errorf("get download record by upload id failed, upload id: %d, err: %v", uploadID, err)
-
 		return nil, err
-
 	}
-
 	return &dr, nil
+}
 
+// ListOfflineDownloadsByOwner 分页列出指定用户的 URL 离线下载任务（按 id 倒序）
+func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*native.DownloadRecordORM, int64, error) {
+	ctx := context.Background()
+	var drs []*native.DownloadRecordORM
+	q := GetDB().WithContext(ctx).Where("owner_id = ?", ownerID).Order("id DESC")
+
+	var total int64
+	if err := q.Model(&native.DownloadRecordORM{}).Count(&total).Error; err != nil {
+		llog.L().Errorf("count download records failed, owner: %s, err: %v", ownerID, err)
+		return nil, 0, err
+	}
+	if err := q.Offset(offset).Limit(limit).Find(&drs).Error; err != nil {
+		llog.L().Errorf("list download records failed, owner: %s, err: %v", ownerID, err)
+		return nil, 0, err
+	}
+	return drs, total, nil
 }
 
 // UpdateDownloadRecord 更新下载记录
@@ -56,26 +77,50 @@ func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) e
 	for _, field := range updateFields {
 		switch field {
 		case "state":
-			updateMap["state"] = *dr.State
+			if dr.State != nil {
+				updateMap["state"] = *dr.State
+			}
 		case "error_message":
-			updateMap["error_message"] = *dr.ErrorMessage
+			if dr.ErrorMessage != nil {
+				updateMap["error_message"] = *dr.ErrorMessage
+			}
 		case "file_path":
-			updateMap["file_path"] = *dr.FilePath
+			if dr.FilePath != nil {
+				updateMap["file_path"] = *dr.FilePath
+			}
 		case "file_size":
-			updateMap["file_size"] = *dr.FileSize
+			if dr.FileSize != nil {
+				updateMap["file_size"] = *dr.FileSize
+			}
 		case "gid":
-			updateMap["gid"] = *dr.Gid
+			if dr.Gid != nil {
+				updateMap["gid"] = *dr.Gid
+			}
 		case "blake3_hash":
-			updateMap["blake3_hash"] = *dr.Blake3Hash
+			if dr.Blake3Hash != nil {
+				updateMap["blake3_hash"] = *dr.Blake3Hash
+			}
 		case "source_location_id":
-			updateMap["source_location_id"] = *dr.SourceLocationId
+			if dr.SourceLocationId != nil {
+				updateMap["source_location_id"] = *dr.SourceLocationId
+			}
 		case "upload_record_id":
-			updateMap["upload_record_id"] = *dr.UploadRecordId
+			if dr.UploadRecordId != nil {
+				updateMap["upload_record_id"] = *dr.UploadRecordId
+			}
 		case "callback_info":
-			updateMap["callback_info"] = *dr.CallbackInfo
+			if dr.CallbackInfo != nil {
+				updateMap["callback_info"] = *dr.CallbackInfo
+			}
 		}
 	}
 
+	if len(updateMap) == 0 {
+		return nil
+	}
+	if dr.Id == nil {
+		return nil
+	}
 	if err := GetDB().WithContext(ctx).Model(&native.DownloadRecordORM{}).Where("id = ?", *dr.Id).Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("update download record failed: %v", err)
 		return err
@@ -83,34 +128,12 @@ func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) e
 	return nil
 }
 
-// GetPendingDownloadRecords 获取等待下载的记录
-// func GetPendingDownloadRecords() ([]*native.DownloadRecordORM, error) {
-// 	ctx := context.Background()
-// 	var drs []*native.DownloadRecordORM
-// 	if err := GetDB().WithContext(ctx).Where("state = ?", native.DownloadRecordState_DOWNLOAD_PENDING).Find(&drs).Error; err != nil {
-// 		llog.L().Errorf("get pending download records failed: %v", err)
-// 		return nil, err
-// 	}
-// 	return drs, nil
-// }
-
-// GetDownloadingDownloadRecords 获取正在下载的记录
-// func GetDownloadingDownloadRecords() ([]*native.DownloadRecordORM, error) {
-// 	ctx := context.Background()
-// 	var drs []*native.DownloadRecordORM
-// 	if err := GetDB().WithContext(ctx).Where("state = ?", native.DownloadRecordState_DOWNLOADING).Find(&drs).Error; err != nil {
-// 		llog.L().Errorf("get downloading download records failed: %v", err)
-// 		return nil, err
-// 	}
-// 	return drs, nil
-// }
-
 // DeleteDownloadRecord 删除下载记录
-// func DeleteDownloadRecord(id uint32) error {
-// 	ctx := context.Background()
-// 	if err := GetDB().WithContext(ctx).Delete(&native.DownloadRecordORM{}, id).Error; err != nil {
-// 		llog.L().Errorf("delete download record failed, id: %d, err: %v", id, err)
-// 		return err
-// 	}
-// 	return nil
-// }
+func DeleteDownloadRecord(id uint32) error {
+	ctx := context.Background()
+	if err := GetDB().WithContext(ctx).Delete(&native.DownloadRecordORM{}, id).Error; err != nil {
+		llog.L().Errorf("delete download record failed, id: %d, err: %v", id, err)
+		return err
+	}
+	return nil
+}

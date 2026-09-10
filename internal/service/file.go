@@ -20,11 +20,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// checkOwnership 检查当前用户是否拥有指定文件（或为管理员）
+// checkOwnership 检查当前用户是否拥有指定文件
+//
+// 注意：管理员在此**不**享有特权。管理员身份只在管理功能（目录权限授予、
+// 用户管理、存储提供者管理、备份任务管理、分享审查）中生效，普通文件操作
+// 必须是自己拥有的资源，不能借管理员身份操作他人文件。
 func checkOwnership(ctx context.Context, fileID string) bool {
-	if isAdminUser(ctx) {
-		return true
-	}
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return false
@@ -73,6 +74,9 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 		llog.L().Errorf("GetFileList failed, err: %v", err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
+
+	// 文件夹大小展示已取消（子树遍历统计不划算，与主流网盘一致）；
+	// 前端将文件夹行 size 显示为 "-"。用户总占用由容量异步更新器维护。
 
 	llog.L().Infof("GetFileList: user=%s, parentId=%s, returned %d files", userID, parentID, len(files))
 	return files, total, hasMore, nil
@@ -196,6 +200,14 @@ func getInheritedEncryption(parentID *string) (bool, *models.Err) {
 
 // UpdateDir 更新文件夹
 func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
+	// 归属校验：仅目录所有者（或管理员）可更新目录设置
+	if req.Id == nil || !CheckOwnership(ctx, *req.Id) {
+		return &models.Err{
+			E: fmt.Errorf("permission denied: not owner of directory"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+
 	orm := native.FileORM{
 		Id:               req.Id,
 		Name:             req.Name,
@@ -243,6 +255,8 @@ func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 	}
 
 	llog.L().Infof("deleted %d files (including %d children)", len(allIDs), len(allChildrenIDs))
+	// 容量统计说明：软删后文件进入回收站，used_bytes 口径含回收站（物理仍占用），
+	// 故无需重算用户占用；文件夹大小已取消统计，无需标记目录。
 	return nil
 }
 
@@ -321,6 +335,20 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 	}
 	if len(selectedFiles) == 0 {
 		return &models.Err{E: fmt.Errorf("no files found"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 所有权检查：仅文件所有者可从回收站恢复（管理员不可越权操作他人回收站）
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PERMISSION_DENIED}
+	}
+	for _, file := range selectedFiles {
+		if strPtrVal(file.OwnerId) != userID {
+			return &models.Err{
+				E: fmt.Errorf("permission denied: not owner of file %s", strPtrVal(file.Id)),
+				C: native.RespCode_PERMISSION_DENIED,
+			}
+		}
 	}
 
 	// 收集所有需要恢复的文件ID
@@ -428,6 +456,8 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 
 	totalRestored := len(selectedRestore) + len(childIDs)
 	llog.L().Infof("restored %d files from trash (selected: %d, children: %d)", totalRestored, len(selectedRestore), len(childIDs))
+	// 容量统计说明：恢复只是清 deleted_at，used_bytes 口径含回收站（物理一直占用），
+	// 无需重算用户占用；文件夹大小已取消统计。
 	return nil
 }
 
@@ -699,6 +729,33 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 		return nil
 	}
 
+	// 所有权检查：物理删除不可逆，逐个校验（与 DeleteFile 同风格）。
+	// 目标是回收站软删文件，checkOwnership 默认作用域查不到会误判，
+	// 因此用 Unscoped 查询后比对 owner_id。管理员不可越权删除他人文件。
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PERMISSION_DENIED}
+	}
+	files, err := db.GetFilesByIDsUnscoped(req.Ids)
+	if err != nil {
+		llog.L().Errorf("get files by IDs failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	ownerByFileID := make(map[string]string, len(files))
+	for _, f := range files {
+		if f.Id != nil {
+			ownerByFileID[*f.Id] = strPtrVal(f.OwnerId)
+		}
+	}
+	for _, id := range req.Ids {
+		if ownerByFileID[id] != userID {
+			return &models.Err{
+				E: fmt.Errorf("permission denied: not owner of file %s", id),
+				C: native.RespCode_PERMISSION_DENIED,
+			}
+		}
+	}
+
 	// 复制 IDs 避免异步访问问题
 	fileIDs := make([]string, len(req.Ids))
 	copy(fileIDs, req.Ids)
@@ -715,7 +772,165 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 	llog.L().Infof("permanently deleting %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
 	permanentlyDeleteFiles(allFileIDs, "permanently deleted")
+
+	// 容量统计：行真正删除后用户占用减少
+	MarkFileCapacityChanged(getCurrentUserIDFromCtx(ctx))
 	return nil
+}
+
+// RestoreFileHistory 恢复文件到某个历史版本
+// 行为：
+//   - req.NewName 为空：覆盖当前文件（当前内容自动写入历史，不丢失；CAS 防并发覆盖冲突）
+//   - req.NewName 非空：以新名称在文件所在目录创建新文件（秒传，物理数据按 hash 共享），不覆盖当前文件
+//
+// 历史版本的 hash 若已无可用存储位置（曾被清理），返回错误提示
+func RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) *models.Err {
+	if req.HistoryId == nil || *req.HistoryId == 0 {
+		return &models.Err{E: errors.New("history_id is required"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 1. 查历史记录
+	history, err := db.GetFileHistoryByID(*req.HistoryId)
+	if err != nil {
+		llog.L().Errorf("get file history failed, id: %d, err: %v", *req.HistoryId, err)
+		return &models.Err{E: errors.New("history not found"), C: native.RespCode_NOT_FOUND}
+	}
+	if history.FileId == nil || history.Hash == nil || *history.Hash == "" {
+		return &models.Err{E: errors.New("history record incomplete"), C: native.RespCode_PARAMS_ERROR}
+	}
+	fileID := *history.FileId
+	targetHash := *history.Hash
+	targetSize := uint64(0)
+	if history.Size != nil {
+		targetSize = *history.Size
+	}
+
+	// 2. 归属校验：仅文件所有者（或管理员）可恢复
+	if !checkOwnership(ctx, fileID) {
+		return &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
+	}
+
+	// 3. 读取当前文件记录
+	file, err := db.GetFileByID(fileID)
+	if err != nil || file == nil {
+		llog.L().Errorf("get file failed, id: %s, err: %v", fileID, err)
+		return &models.Err{E: errors.New("file not found"), C: native.RespCode_NOT_FOUND}
+	}
+	if file.Type != nil && *file.Type == int32(native.FileType_FOLDER) {
+		return &models.Err{E: errors.New("cannot restore history to a folder"), C: native.RespCode_PARAMS_ERROR}
+	}
+
+	// 4. 校验历史 hash 在存储中仍有可用位置（content-address 共享存储：
+	// 历史版本的物理数据可能已被去重清理/覆盖回收，此时无法恢复）
+	locations, err := db.GetFileLocationsByBlake3Hash(targetHash)
+	if err != nil {
+		llog.L().Errorf("get locations for history hash failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	if !hasUsableLocation(locations) {
+		llog.L().Warnf("history hash has no usable location, hash: %s, history_id: %d", targetHash, *req.HistoryId)
+		return &models.Err{
+			E: errors.New("历史版本内容已被清理，无法恢复（请尝试先同步/重新上传）"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	newName := ""
+	if req.NewName != nil {
+		newName = strings.TrimSpace(*req.NewName)
+	}
+
+	// 5a. 覆盖当前文件：CAS 版本仲裁（后到者赢），当前内容写入历史
+	if newName == "" {
+		if file.Hash != nil && *file.Hash == targetHash {
+			return nil // 已经是该版本，无需操作
+		}
+		myVersion := AllocateFileVersion(strPtrVal(file.OwnerId), strPtrVal(file.ParentId), strPtrVal(file.Name))
+		ctx = withUploadVersion(ctx, myVersion)
+		f := &native.FileORM{
+			Id:      file.Id,
+			Hash:    &targetHash,
+			Size:    &targetSize,
+			IsReady: utils.BoolPtr(true),
+		}
+		taken, updateErr := db.UpdateFileWithHistoryCAS(ctx, f, file, myVersion)
+		if updateErr != nil {
+			llog.L().Errorf("restore history (overwrite) failed: %v", updateErr)
+			return &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
+		}
+		if !taken {
+			return &models.Err{
+				E: errors.New("文件已被其他操作更新，请刷新后重试"),
+				C: native.RespCode_ALREADY_EXISTS,
+			}
+		}
+		llog.L().Infof("file restored to history version, file_id: %s, history_id: %d, hash: %s",
+			fileID, *req.HistoryId, targetHash)
+		return nil
+	}
+
+	// 5b. 以新名称创建副本（秒传：数据已存在，仅新增目录条目），不覆盖当前文件
+	if file.ParentId == nil || file.Name == nil {
+		return &models.Err{E: errors.New("file record incomplete"), C: native.RespCode_PARAMS_ERROR}
+	}
+	ownerID := strPtrVal(file.OwnerId)
+	if ownerID == "" {
+		ownerID = getCurrentUserIDFromCtx(ctx)
+	}
+	parentID := *file.ParentId
+
+	// 目标目录存在性/归属校验（创建记录前必须确认）
+	if parentID != "" {
+		parentDir, err := db.GetFileByID(parentID)
+		if err != nil || parentDir == nil {
+			return &models.Err{E: errors.New("target directory not found"), C: native.RespCode_NOT_FOUND}
+		}
+		if parentDir.OwnerId == nil || *parentDir.OwnerId != ownerID {
+			return &models.Err{E: errors.New("permission denied: target directory not owned by you"), C: native.RespCode_PERMISSION_DENIED}
+		}
+	}
+
+	// 重名自动加后缀（与 photo_migrate / 移动冲突处理一致）
+	finalName := resolveNameConflict(parentID, newName, ownerID)
+	if finalName == "" {
+		finalName = newName
+	}
+
+	// 类型/扩展名按新文件名判定（同名恢复时与原文件类型一致）
+	ftype, mime := GetFileType("", finalName)
+	myVersion := AllocateFileVersion(ownerID, parentID, finalName)
+	newFile := &native.FileORM{
+		Name:     &finalName,
+		ParentId: &parentID,
+		Size:     &targetSize,
+		Hash:     &targetHash,
+		Type:     &ftype,
+		Mime:     &mime,
+		IsReady:  utils.BoolPtr(true), // 秒传：内容已在存储
+		OwnerId:  &ownerID,
+		Version:  &myVersion,
+	}
+	if err := db.CreateFile(newFile); err != nil {
+		llog.L().Errorf("restore history (new name) create file failed: %v", err)
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	llog.L().Infof("file history restored as new file, history_id: %d, new_file_id: %s, name: %s",
+		*req.HistoryId, strPtrVal(newFile.Id), finalName)
+	return nil
+}
+
+// hasUsableLocation 判断历史 hash 是否至少有一个可用的（已上传完成/已缓存）存储位置
+func hasUsableLocation(locations []*native.FileLocationORM) bool {
+	for _, loc := range locations {
+		if loc == nil || loc.Status == nil {
+			continue
+		}
+		st := native.LocationStatus(*loc.Status)
+		if st == native.LocationStatus_PCOMPLETED {
+			return true
+		}
+	}
+	return false
 }
 
 // deleteFileHistories 删除文件的历史记录和对应的存储提供者上的文件
@@ -764,6 +979,13 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 		if err != nil {
 			llog.L().Errorf("get file history failed, id: %d, err: %v", id, err)
 			continue
+		}
+		// 归属校验：仅文件所有者（或管理员）可删除其历史
+		if history.FileId == nil || !checkOwnership(ctx, *history.FileId) {
+			return &models.Err{
+				E: fmt.Errorf("permission denied: history %d not owned by you", id),
+				C: native.RespCode_PERMISSION_DENIED,
+			}
 		}
 		histories = append(histories, history)
 	}
@@ -886,6 +1108,9 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	llog.L().Infof("emptying trash: %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
 	permanentlyDeleteFiles(allFileIDs, "emptied trash, deleted")
+
+	// 容量统计：行真正删除后用户占用减少
+	MarkFileCapacityChanged(getCurrentUserIDFromCtx(ctx))
 	return nil
 }
 
@@ -1000,6 +1225,31 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 		}
 	}
 
+	// 归属校验：目标 provider 必须在当前用户绑定列表内（与 MoveFile 一致），
+	// 且文件必须属于当前用户——防止把他人文件同步到任意 provider
+	if !checkOwnership(ctx, *req.FileId) {
+		return &models.Err{
+			E: errors.New("permission denied: not owner of file"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+	boundIDs, mErr := getBoundProviderIdsFromCtx(ctx)
+	if mErr != nil {
+		return mErr
+	}
+	boundSet := make(map[uint32]struct{}, len(boundIDs))
+	for _, id := range boundIDs {
+		boundSet[id] = struct{}{}
+	}
+	for _, pid := range providerIDs {
+		if _, ok := boundSet[pid]; !ok {
+			return &models.Err{
+				E: fmt.Errorf("provider %d is not bound to you", pid),
+				C: native.RespCode_PERMISSION_DENIED,
+			}
+		}
+	}
+
 	// 4. Filter out providers where file already exists and is completed
 	var validProviderIDs []uint32
 	for _, provider := range providers {
@@ -1041,6 +1291,7 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TargetProviderIds: utils.StringPtr(string(providerIDsJSON)), // JSON array like [1,3,5]
 		TaskType:          utils.Int32Ptr(int32(native.UploadTaskType_SYNC)),
+		OwnerId:           utils.StringPtr(getCurrentUserIDFromCtx(ctx)),
 	}
 
 	if err := db.CreateUploadRecord(uploadRecord); err != nil {
@@ -1093,18 +1344,13 @@ func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*nati
 		pageSize = 20
 	}
 
-	files, total, hasMore, err := db.GetRecentFiles(offset, pageSize, getCurrentUserIDFromCtx(ctx))
+	files, _, _, err := db.GetRecentFiles(offset, pageSize, getCurrentUserIDFromCtx(ctx))
 	if err != nil {
 		llog.L().Errorf("GetRecentFiles failed, err: %v", err)
 		return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 管理员直接返回
-	if isAdminUser(ctx) {
-		return files, total, hasMore, nil
-	}
-
-	// 普通用户按权限过滤
+	// 按权限过滤（管理员也只看自己的文件，不再特殊放行）
 	var filtered []*native.FileORM
 	for _, f := range files {
 		if f.ParentId != nil && checkFilePermission(ctx, *f.ParentId, PermRead) {
@@ -1124,17 +1370,10 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 		pageSize = 50
 	}
 
-	// 管理员不过滤
-	if isAdminUser(ctx) {
-		files, total, hasMore, err := db.GetFilesByType(fileType, offset, pageSize, getCurrentUserIDFromCtx(ctx))
-		if err != nil {
-			llog.L().Errorf("GetFilesByType failed, type: %v, err: %v", fileType, err)
-			return nil, 0, false, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-		return files, total, hasMore, nil
-	}
+	// 统一按权限过滤（管理员也只看自己的文件）。db 层已按 userID 过滤，
+	// 这里再做一次目录读权限过滤以覆盖分享/授权目录场景。
 
-	// 普通用户：获取更多数据后按权限过滤（避免分页不足）
+	// 获取更多数据后按权限过滤（避免分页不足）
 	fetchLimit := pageSize * 3
 	if fetchLimit > 200 {
 		fetchLimit = 200

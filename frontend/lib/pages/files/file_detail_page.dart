@@ -672,6 +672,13 @@ class _FileDetailPageState extends State<FileDetailPage> {
             ),
           ),
           const SizedBox(width: 8),
+          // 恢复按钮（覆盖当前文件或以新名称另存，不覆盖）
+          IconButton(
+            icon: const Icon(Icons.history_toggle_off, size: 18),
+            onPressed: () => _confirmRestoreHistory(h),
+            tooltip: al.detail_restoreVersion,
+            visualDensity: VisualDensity.compact,
+          ),
           // 预览按钮（仅对可预览的文件类型显示）
           if (_isHistoryPreviewable(h))
             IconButton(
@@ -1033,6 +1040,140 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
     if (confirmed == true) {
       await _deleteHistory(h.id.toInt());
+    }
+  }
+
+  /// 确认并恢复文件历史版本（支持覆盖当前文件或以新名称另存）
+  Future<void> _confirmRestoreHistory(FileHistory h) async {
+    final al = AppLocalizations.of(context);
+    final nameController = TextEditingController();
+    String restoreMode = 'overwrite'; // overwrite | newname（对话框外变量，pop 后仍可读）
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: Text(al.detail_restoreVersionTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${al.detail_version('${h.versionNumber}')} · '
+                  '${al.detail_versionSize(_formatFileSize(h.size.toInt()))}',
+                  style: Theme.of(dialogContext).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                RadioGroup<String>(
+                  groupValue: restoreMode,
+                  onChanged: (v) => setDialogState(() => restoreMode = v!),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioListTile<String>(
+                        value: 'overwrite',
+                        title: Text(al.detail_restoreOverwrite),
+                        dense: true,
+                      ),
+                      RadioListTile<String>(
+                        value: 'newname',
+                        title: Text(al.detail_restoreNamePlaceholder),
+                        dense: true,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (restoreMode == 'newname')
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: al.detail_restoreNamePlaceholder,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  al.detail_restoreHint,
+                  style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(dialogContext)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(al.common_cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(al.detail_restoreVersion),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      nameController.dispose();
+      return;
+    }
+
+    final newName =
+        restoreMode == 'newname' ? nameController.text.trim() : null;
+    nameController.dispose();
+
+    if (restoreMode == 'newname' && (newName == null || newName.isEmpty)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(al.detail_restoreNamePlaceholder)),
+      );
+      return;
+    }
+
+    await _restoreHistory(h.id.toInt(), newName: newName);
+  }
+
+  /// 恢复文件历史版本
+  Future<void> _restoreHistory(int historyId, {String? newName}) async {
+    final al = AppLocalizations.of(context);
+    try {
+      setState(() => _isLoading = true);
+
+      final repo = FmRepository();
+      final result = await repo.restoreFileHistory(
+        historyId: historyId,
+        newName: newName,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
+
+      if (result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(al.detail_restoreSuccess)),
+        );
+        // 刷新文件详情（历史列表与文件信息都会变化）
+        await _loadDetail();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? al.detail_restoreFailed)),
+        );
+      }
+    } catch (e) {
+      getLogger().error('恢复历史版本失败: $e');
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${al.detail_restoreFailed}: $e')),
+      );
     }
   }
 

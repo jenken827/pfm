@@ -31,6 +31,13 @@ func StartTempCleanup() {
 }
 
 // cleanupOrphanedTempFiles 清理无进行中上传的过期 temp 目录
+//
+// 目录结构（见 utils/path.go）：
+//   - TempDir/<hash>/                  内容寻址层（旧布局 + 合并残留）
+//   - TempDir/users/<ownerID>/<hash>/  上传暂存层（按 owner 隔离）
+//
+// 两层都要按「是否有 PENDING/UPLOADING 记录 + 是否超龄」判定，不能直接删
+// TempDir/users 顶层目录（会被误当作 hash 目录，导致整层用户分片被清空）。
 func cleanupOrphanedTempFiles() {
 	tempDir := globals.TempDir
 	if tempDir == "" {
@@ -52,20 +59,21 @@ func cleanupOrphanedTempFiles() {
 			continue
 		}
 
-		hash := entry.Name()
+		name := entry.Name()
 
-		// 检查是否有进行中的上传（PENDING/UPLOADING）——只有进行中才需要保护 staging
-		// （上传窗口内 GET 可能降级读 TempDir/<hash>/<fileName>，见 service.file_stream）
-		var count int64
-		if err := db.GetDB().Model(&native.UploadRecordORM{}).
-			Where("file_hash = ? AND task_status IN ?", hash,
-				[]int32{int32(native.UploadStatus_PENDING), int32(native.UploadStatus_UPLOADING)}).
-			Count(&count).Error; err != nil {
-			llog.L().Warnf("check upload record for temp cleanup failed: %v", err)
+		// owner 隔离层：进入 users/<ownerID>/ 逐个 hash 判定
+		if name == globals.UsersTempDirName {
+			c, s := cleanupOwnerTempDirs(filepath.Join(tempDir, name), maxAge)
+			cleanedCount += c
+			skippedCount += s
 			continue
 		}
 
-		if count > 0 {
+		// 内容寻址层：目录名即 hash
+		hash := name
+
+		// 检查是否有进行中的上传（PENDING/UPLOADING）——只有进行中才需要保护 staging
+		if hasActiveUploadRecord(hash) {
 			skippedCount++
 			continue // 有对应记录，保留
 		}
@@ -89,4 +97,67 @@ func cleanupOrphanedTempFiles() {
 	if cleanedCount > 0 {
 		llog.L().Infof("temp cleanup: removed %d orphaned dirs, skipped %d with active records", cleanedCount, skippedCount)
 	}
+}
+
+// cleanupOwnerTempDirs 清理 users/<ownerID>/ 下超龄且无活跃上传的 hash 目录
+// 返回 (清理数, 跳过数)。owner 目录本身若清空则一并删除。
+func cleanupOwnerTempDirs(usersDir string, maxAge time.Duration) (int, int) {
+	cleaned, skipped := 0, 0
+
+	owners, err := os.ReadDir(usersDir)
+	if err != nil {
+		llog.L().Warnf("read users temp dir failed: %v", err)
+		return 0, 0
+	}
+
+	for _, ownerEntry := range owners {
+		if !ownerEntry.IsDir() {
+			continue
+		}
+		ownerDir := filepath.Join(usersDir, ownerEntry.Name())
+		hashes, err := os.ReadDir(ownerDir)
+		if err != nil {
+			continue
+		}
+		for _, hashEntry := range hashes {
+			if !hashEntry.IsDir() {
+				continue
+			}
+			hash := hashEntry.Name()
+			if hasActiveUploadRecord(hash) {
+				skipped++
+				continue
+			}
+			info, err := hashEntry.Info()
+			if err != nil {
+				continue
+			}
+			if time.Since(info.ModTime()) > maxAge {
+				if rmErr := os.RemoveAll(filepath.Join(ownerDir, hash)); rmErr != nil {
+					llog.L().Warnf("cleanup orphaned owner temp dir failed: %s/%s, err: %v", ownerEntry.Name(), hash, rmErr)
+				} else {
+					cleaned++
+				}
+			}
+		}
+		// owner 目录已空则移除，避免 users/ 下堆积空目录
+		if remaining, _ := os.ReadDir(ownerDir); len(remaining) == 0 {
+			_ = os.Remove(ownerDir)
+		}
+	}
+
+	return cleaned, skipped
+}
+
+// hasActiveUploadRecord 判断该 hash 是否存在进行中（PENDING/UPLOADING）的上传记录
+func hasActiveUploadRecord(hash string) bool {
+	var count int64
+	if err := db.GetDB().Model(&native.UploadRecordORM{}).
+		Where("file_hash = ? AND task_status IN ?", hash,
+			[]int32{int32(native.UploadStatus_PENDING), int32(native.UploadStatus_UPLOADING)}).
+		Count(&count).Error; err != nil {
+		llog.L().Warnf("check upload record for temp cleanup failed: %v", err)
+		return true // 查询失败时保守保留，避免误删
+	}
+	return count > 0
 }

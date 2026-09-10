@@ -54,6 +54,39 @@
     "file_listView": "List View",
     "file_gridView": "Grid View",
     "file_recycleBin": "Recycle Bin",
+    "file_offlineDownload": "Offline Download",
+    "file_offlineDownloadTo": "Save to",
+    "file_offlineDownloadRoot": "root",
+    "file_offlineDownloadUrl": "Download URL",
+    "file_offlineDownloadHint": "Supports http/https/ftp/magnet links. The server downloads it and saves the file to the current folder when finished.",
+    "file_offlineDownloadOk": "Offline download task created. The file will appear here when finished.",
+    "file_offlineDownloadFail": "Failed to create offline download task",
+    "offlineDl_title": "Offline Downloads",
+    "offlineDl_empty": "No offline download tasks",
+    "offlineDl_pending": "Pending",
+    "offlineDl_downloading": "Downloading",
+    "offlineDl_completed": "Completed",
+    "offlineDl_failed": "Failed",
+    "offlineDl_retry": "Retry",
+    "offlineDl_updated": "Updated {time}",
+    "@offlineDl_updated": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "offlineDl_deleteTitle": "Delete offline download task",
+    "offlineDl_deleteMsg": "Delete \"{name}\"? Running downloads will be stopped.",
+    "@offlineDl_deleteMsg": {
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "offlineDl_deleted": "Task deleted",
+    "offlineDl_retried": "Task restarted",
     "file_sortByName": "Sort by name",
     "file_sortBySize": "Sort by size",
     "file_sortByType": "Sort by type",
@@ -101,8 +134,8 @@
     "file_enableEncryption": "Enable encryption",
     "file_encryptionHint": "Encrypt folder contents",
     "file_maxHistoryCount": "Max history count",
-    "file_maxHistoryHint": "Default 0",
-    "file_maxHistoryDesc": "Number of historical versions to keep when overwriting, 0 means none",
+    "file_maxHistoryHint": "Default 10",
+    "file_maxHistoryDesc": "Number of historical versions to keep when overwriting, default 10, set 0 to disable",
     "file_maxHistoryInvalid": "Must be a valid non-negative integer",
     "file_enterNewName": "Enter new name",
     "file_tagsLoadFailed": "Failed to load tags",
@@ -189,6 +222,13 @@
     "detail_cannotUndo": "This action cannot be undone!",
     "detail_deleteSuccess": "Deleted successfully",
     "detail_deleteFailed": "Delete failed",
+    "detail_restoreVersion": "Restore this version",
+    "detail_restoreVersionTitle": "Restore History Version",
+    "detail_restoreHint": "Leave the name empty to overwrite the current file (current content is kept as a history version); enter a new name to save as a new file without overwriting.",
+    "detail_restoreNamePlaceholder": "New file name (empty = overwrite current)",
+    "detail_restoreOverwrite": "Overwrite current file",
+    "detail_restoreSuccess": "Restored successfully",
+    "detail_restoreFailed": "Restore failed",
     "detail_hashNotExists": "File hash not found, cannot sync",
     "detail_getProvidersFailed": "Failed to get available providers",
     "detail_noAvailableProviders": "No available storage providers",
@@ -275,6 +315,8 @@
     "settings_albumBackupSubtitle": "Auto backup phone album to server",
     "settings_contactBackup": "Contacts Backup",
     "settings_contactBackupSubtitle": "Backup contacts as vCard format",
+    "settings_deviceBackup": "SMS & Call Log Backup",
+    "settings_deviceBackupSubtitle": "Backup SMS and call history from this phone",
     "settings_uploadSetting": "Upload Settings",
     "settings_uploadSubtitle": "Chunk size and concurrency",
     "settings_exportLog": "Export Logs",
@@ -437,6 +479,37 @@
     "contactBackup_restoreStep2": "2. Open the file on your phone",
     "contactBackup_restoreStep3": "3. System will prompt to import contacts",
     "contactRestore_supportedPlatforms": "Supports Android, iOS, Outlook, Google Contacts, etc.",
+    "deviceBackup_title": "SMS & Call Log Backup",
+    "deviceBackup_tabSms": "SMS",
+    "deviceBackup_tabCallLog": "Call Log",
+    "deviceBackup_backupSms": "Back up SMS now",
+    "deviceBackup_backupCallLog": "Back up call log now",
+    "deviceBackup_statusExporting": "Exporting {exported}/{total}",
+    "@deviceBackup_statusExporting": {
+        "placeholders": {
+            "exported": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceBackup_totalCount": "{count} records",
+    "@deviceBackup_totalCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceBackup_instr1": "• SMS is exported as XML (compatible with SMS Backup & Restore), call log as CSV",
+    "deviceBackup_instr2": "• Only reads local SMS and call log; nothing is ever deleted",
+    "deviceBackup_instr3": "• Requires SMS and Phone permissions (grant manually in Android settings)",
+    "deviceBackup_instr4": "• Skips upload automatically when content is unchanged",
+    "deviceBackup_howToRestore": "How to restore",
+    "deviceBackup_restoreStep1": "1. SMS: download the .xml file and import with SMS Backup & Restore",
+    "deviceBackup_restoreStep2": "2. Call log: download the .csv file and open in Excel/WPS",
     "clientBackup_title": "Auto Backup",
     "clientBackup_noTasks": "No auto backup tasks",
     "clientBackup_synced": "Synced",
@@ -571,8 +644,8 @@
     "folderSettings_enableEncryption": "Enable encryption",
     "folderSettings_encryptionHint": "Files in this folder will be stored with encryption",
     "folderSettings_maxHistory": "Max history count",
-    "folderSettings_maxHistoryHint": "Default 0",
-    "folderSettings_maxHistoryDesc": "Number of historical versions to keep when overwriting, 0 means none",
+    "folderSettings_maxHistoryHint": "Default 10",
+    "folderSettings_maxHistoryDesc": "Number of historical versions to keep when overwriting, default 10, set 0 to disable",
     "folderSettings_boundProviders": "Bound storage providers",
     "folderSettings_noProviders": "No available storage providers",
     "docPreview_useFlyfishViewer": "Please use Flyfish Viewer to preview this file type",

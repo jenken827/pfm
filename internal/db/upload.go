@@ -174,24 +174,31 @@ func ClearUploadRecords(id uint32) error {
 	})
 }
 
-// CountUploadRecordsByStatus 按状态统计上传记录数
-func CountUploadRecordsByStatus(status int32) (int64, error) {
+// CountUploadRecordsByStatus 按状态统计上传记录数（可按 owner 过滤，ownerID 空则全局）
+func CountUploadRecordsByStatus(status int32, ownerID string) (int64, error) {
 	var count int64
-	if err := db.Model(&native.UploadRecordORM{}).Where("task_status = ?", status).Count(&count).Error; err != nil {
+	query := db.Model(&native.UploadRecordORM{}).Where("task_status = ?", status)
+	if ownerID != "" {
+		query = query.Where("owner_id = ?", ownerID)
+	}
+	if err := query.Count(&count).Error; err != nil {
 		llog.L().Errorf("count upload records by status failed: %v", err)
 		return 0, err
 	}
 	return count, nil
 }
 
-// ListUploadRecords 分页查询上传记录
-func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRecordORM, int64, error) {
+// ListUploadRecords 分页查询上传记录（按 ownerID 过滤，ownerID 空则全局）
+func ListUploadRecords(page, pageSize int32, status *int32, ownerID string) ([]*native.UploadRecordORM, int64, error) {
 	var total int64
 
 	// 构建基础查询
 	query := db.Model(&native.UploadRecordORM{})
 	if status != nil {
 		query = query.Where("task_status = ?", *status)
+	}
+	if ownerID != "" {
+		query = query.Where("owner_id = ?", ownerID)
 	}
 
 	// 统计总数
@@ -206,7 +213,10 @@ func ListUploadRecords(page, pageSize int32, status *int32) ([]*native.UploadRec
 	if err := db.Model(&native.UploadRecordORM{}).
 		Scopes(func(d *gorm.DB) *gorm.DB {
 			if status != nil {
-				return d.Where("task_status = ?", *status)
+				d = d.Where("task_status = ?", *status)
+			}
+			if ownerID != "" {
+				d = d.Where("owner_id = ?", ownerID)
 			}
 			return d
 		}).

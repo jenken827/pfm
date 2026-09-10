@@ -358,6 +358,15 @@ func checkBackupTaskOwnership(ctx context.Context, task *native.BackupTaskORM) b
 
 // ListBackupFiles 获取备份文件记录
 func ListBackupFiles(ctx context.Context, req *native.ListBackupFilesReq) (*native.ListBackupFilesRespData, *models.Err) {
+	// 归属校验：任务必须属于当前用户（或管理员），防止越权查看他人备份文件
+	task, err := db.GetBackupTaskByID(*req.TaskId)
+	if err != nil || task == nil {
+		return nil, &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
+	}
+	if !checkBackupTaskOwnership(ctx, task) {
+		return nil, &models.Err{E: errors.New("permission denied"), C: native.RespCode_PERMISSION_DENIED}
+	}
+
 	page := req.GetPage()
 	pageSize := req.GetPageSize()
 	if page == 0 {

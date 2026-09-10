@@ -76,6 +76,39 @@
     "file_listView": "列表视图",
     "file_gridView": "网格视图",
     "file_recycleBin": "回收站",
+    "file_offlineDownload": "离线下载",
+    "file_offlineDownloadTo": "保存到",
+    "file_offlineDownloadRoot": "根目录",
+    "file_offlineDownloadUrl": "下载链接",
+    "file_offlineDownloadHint": "支持 http/https/ftp/magnet 链接，服务器下载完成后自动保存到当前目录",
+    "file_offlineDownloadOk": "离线下载任务已创建，完成后文件将出现在此目录",
+    "file_offlineDownloadFail": "创建离线下载任务失败",
+    "offlineDl_title": "离线下载任务",
+    "offlineDl_empty": "暂无离线下载任务",
+    "offlineDl_pending": "等待中",
+    "offlineDl_downloading": "下载中",
+    "offlineDl_completed": "已完成",
+    "offlineDl_failed": "失败",
+    "offlineDl_retry": "重试",
+    "offlineDl_updated": "更新于 {time}",
+    "@offlineDl_updated": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "offlineDl_deleteTitle": "删除离线下载任务",
+    "offlineDl_deleteMsg": "确定删除「{name}」吗？下载中的任务将被停止。",
+    "@offlineDl_deleteMsg": {
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "offlineDl_deleted": "任务已删除",
+    "offlineDl_retried": "任务已重新开始",
     "file_sortByName": "按名称排序",
     "file_sortBySize": "按大小排序",
     "file_sortByType": "按类型排序",
@@ -151,8 +184,8 @@
     "file_enableEncryption": "启用加密",
     "file_encryptionHint": "对文件夹内容进行加密存储",
     "file_maxHistoryCount": "最大历史记录数",
-    "file_maxHistoryHint": "默认 0",
-    "file_maxHistoryDesc": "覆盖文件时保留的历史版本数量，默认 0 表示不保留历史",
+    "file_maxHistoryHint": "默认 10",
+    "file_maxHistoryDesc": "覆盖文件时保留的历史版本数量，默认 10，设为 0 表示不保留历史",
     "file_maxHistoryInvalid": "最大历史记录数必须是有效的非负整数",
     "file_enterNewName": "请输入新名称",
     "file_tagsLoadFailed": "获取文件标签失败",
@@ -298,6 +331,13 @@
     "detail_cannotUndo": "此操作不可撤销！",
     "detail_deleteSuccess": "删除成功",
     "detail_deleteFailed": "删除失败",
+    "detail_restoreVersion": "恢复此版本",
+    "detail_restoreVersionTitle": "恢复历史版本",
+    "detail_restoreHint": "留空名称将覆盖当前文件（当前内容会保留为历史版本）；输入新名称则另存为新文件，不覆盖当前文件。",
+    "detail_restoreNamePlaceholder": "新文件名（留空=覆盖当前文件）",
+    "detail_restoreOverwrite": "覆盖当前文件",
+    "detail_restoreSuccess": "恢复成功",
+    "detail_restoreFailed": "恢复失败",
     "detail_hashNotExists": "文件哈希不存在，无法同步",
     "detail_getProvidersFailed": "获取可用提供者失败",
     "detail_noAvailableProviders": "没有可用的存储提供者",
@@ -426,6 +466,8 @@
     "settings_albumBackupSubtitle": "自动备份手机相册到服务器",
     "settings_contactBackup": "通讯录备份",
     "settings_contactBackupSubtitle": "备份联系人为 vCard 格式",
+    "settings_deviceBackup": "短信与通话记录备份",
+    "settings_deviceBackupSubtitle": "备份手机短信与通话记录",
     "settings_uploadSetting": "上传设置",
     "settings_uploadSubtitle": "分片大小和并发数",
     "settings_exportLog": "导出日志",
@@ -650,6 +692,37 @@
     "contactBackup_restoreStep2": "2. 在手机上打开该文件",
     "contactBackup_restoreStep3": "3. 系统会自动提示导入联系人",
     "contactRestore_supportedPlatforms": "支持 Android、iOS、Outlook、Google Contacts 等",
+    "deviceBackup_title": "短信与通话记录备份",
+    "deviceBackup_tabSms": "短信",
+    "deviceBackup_tabCallLog": "通话记录",
+    "deviceBackup_backupSms": "立即备份短信",
+    "deviceBackup_backupCallLog": "立即备份通话记录",
+    "deviceBackup_statusExporting": "导出中 {exported}/{total}",
+    "@deviceBackup_statusExporting": {
+        "placeholders": {
+            "exported": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceBackup_totalCount": "共 {count} 条记录",
+    "@deviceBackup_totalCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceBackup_instr1": "• 短信导出为 XML（与 SMS Backup & Restore 格式兼容），通话记录导出为 CSV",
+    "deviceBackup_instr2": "• 仅导出手机本地存储的短信与通话记录，不会删除任何数据",
+    "deviceBackup_instr3": "• 需要授予「短信」与「电话」权限（Android 系统设置中手动开启）",
+    "deviceBackup_instr4": "• 内容无变动时会自动跳过上传",
+    "deviceBackup_howToRestore": "如何恢复",
+    "deviceBackup_restoreStep1": "1. 短信：从服务器下载 .xml 文件，用 SMS Backup & Restore 应用导入",
+    "deviceBackup_restoreStep2": "2. 通话记录：下载 .csv 文件，用 Excel/WPS 打开查看",
     "clientBackup_title": "自动备份",
     "clientBackup_noTasks": "暂无自动备份任务",
     "clientBackup_synced": "已同步",
@@ -875,8 +948,8 @@
     "folderSettings_enableEncryption": "启用加密",
     "folderSettings_encryptionHint": "文件夹内的文件将使用加密存储",
     "folderSettings_maxHistory": "最大历史记录数",
-    "folderSettings_maxHistoryHint": "默认 0",
-    "folderSettings_maxHistoryDesc": "覆盖文件时保留的历史版本数量，默认 0 表示不保留历史",
+    "folderSettings_maxHistoryHint": "默认 10",
+    "folderSettings_maxHistoryDesc": "覆盖文件时保留的历史版本数量，默认 10，设为 0 表示不保留历史",
     "folderSettings_boundProviders": "绑定的存储提供者",
     "folderSettings_noProviders": "暂无可用存储提供者",
     "docPreview_useFlyfishViewer": "此文件类型请使用 Flyfish Viewer 预览",

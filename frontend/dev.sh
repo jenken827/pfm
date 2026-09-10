@@ -236,7 +236,10 @@ generate_splash() {
 # 运行代码生成
 run_build_runner() {
     echo "🔨 运行代码生成..."
-    puro flutter pub run build_runner build --delete-conflicting-outputs
+    # --force-jit：本机 Dart 3.10 下依赖图含 native hooks(sqlite3 等)，
+    # AOT 编译 build.dart 报 "dart compile does not support build hooks"，
+    # JIT 模式可正常生成。
+    puro flutter pub run build_runner build --delete-conflicting-outputs --force-jit
     echo "✅ 代码生成完成"
 }
 

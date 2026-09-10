@@ -2,8 +2,11 @@ syntax = "proto3";
 
 package native;
 
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "gorm/gorm.proto";
+import "native/common.proto";
 import "native/enum.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
@@ -45,4 +48,77 @@ message DownloadRecord {
   optional string error_message = 12 [(gorm.field).tag = {default: "''"}];
   // 下载完成后的回调信息（JSON格式，用于存储额外信息）
   optional string callback_info = 13 [(gorm.field).tag = {type: "text"}];
+  // ===== URL 离线下载（任务14）字段，均为可空；中转下载（provider→provider）不需要 =====
+  // 下载源 URL（http/https/ftp/magnet），URL 任务非空
+  optional string url = 14;
+  // 文件归属用户 ID
+  optional string owner_id = 15 [(gorm.field).tag = {index: "idx_dr_owner"}];
+  // 落库目标目录（files.parent_id）
+  optional string parent_id = 16 [(gorm.field).tag = {index: "idx_dr_parent"}];
+  // 来源文件名（从 URL 推断；下载完成后与 aria2 实际文件名校对）
+  optional string source_name = 17;
+}
+
+// ===== URL 离线下载请求/响应（任务14） =====
+
+// 创建离线下载任务请求
+message CreateOfflineDownloadReq {
+  // 下载源 URL（http/https/ftp/magnet）
+  optional string url = 1 [(buf.validate.field).required = true];
+  // 落库目标目录 ID（为空表示用户根目录）
+  optional string parent_id = 2;
+  // 可选：指定文件名（不含路径；为空则从 URL 推断）
+  optional string file_name = 3;
+}
+
+// 创建离线下载任务响应
+message CreateOfflineDownloadResp {
+  // 下载任务记录
+  optional DownloadRecord record = 1;
+}
+
+// 离线下载任务列表请求
+message ListOfflineDownloadsReq {
+  // 页码，默认1
+  optional uint32 page = 1;
+  // 每页数量，默认20
+  optional uint32 page_size = 2;
+}
+
+// 离线下载任务列表响应
+message ListOfflineDownloadsResp {
+  repeated DownloadRecord records = 1;
+  optional uint32 total = 2;
+}
+
+// 删除离线下载任务请求（同时停止 aria2 下载）
+message DeleteOfflineDownloadReq {
+  // 任务记录 ID
+  optional uint32 id = 1 [(buf.validate.field).required = true];
+}
+
+// 重试离线下载任务请求
+message RetryOfflineDownloadReq {
+  // 任务记录 ID
+  optional uint32 id = 1 [(buf.validate.field).required = true];
+}
+
+// DownloadService：URL 离线下载任务管理（任务14）
+service DownloadService {
+  // 创建离线下载任务（aria2 下载到服务器，完成后自动落库到目标目录）
+  rpc CreateOfflineDownload(CreateOfflineDownloadReq) returns (BaseResp) {
+    option (google.api.http) = {post: "/api/download/offline/create"};
+  }
+  // 离线下载任务列表（当前用户）
+  rpc ListOfflineDownloads(ListOfflineDownloadsReq) returns (BaseResp) {
+    option (google.api.http) = {get: "/api/download/offline/list"};
+  }
+  // 删除离线下载任务（停止下载并移除记录）
+  rpc DeleteOfflineDownload(DeleteOfflineDownloadReq) returns (BaseResp) {
+    option (google.api.http) = {post: "/api/download/offline/delete"};
+  }
+  // 重试失败的离线下载任务
+  rpc RetryOfflineDownload(RetryOfflineDownloadReq) returns (BaseResp) {
+    option (google.api.http) = {post: "/api/download/offline/retry"};
+  }
 }

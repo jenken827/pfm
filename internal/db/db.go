@@ -118,7 +118,36 @@ func autoMigrate() error {
 
 	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
 	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
-	return migrateFilesUniqueIndex()
+	if err := migrateFilesUniqueIndex(); err != nil {
+		return err
+	}
+
+	// 上传记录唯一索引：file_hash 全局唯一 → 复合 (file_hash, owner_id)
+	// 旧约束会让不同用户上传同一 hash 时互相撞约束/篡改记录
+	return migrateUploadRecordUniqueIndex()
+}
+
+// migrateUploadRecordUniqueIndex 将 upload_records 的唯一索引从
+// 全局 file_hash 改为复合 (file_hash, owner_id)。
+//
+// 背景：旧布局 file_hash 全局唯一，用户 B 上传与 A 相同 hash 的文件时会命中
+// A 的记录并篡改其 file_name/parent_id（跨用户串台）。改为复合唯一后，同一
+// 用户同 hash 仍只有一条记录（保留秒传复用），不同用户互不干扰。
+//
+// AutoMigrate 只会新建复合索引，不会自动删除旧索引，必须显式 DROP。
+func migrateUploadRecordUniqueIndex() error {
+	// 旧全局唯一索引必须删除，否则仍然拦截跨用户同 hash 插入
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_ur_fh`).Error; err != nil {
+		llog.L().Warnf("drop old index idx_ur_fh failed (may not exist): %v", err)
+	}
+
+	// 复合唯一索引（AutoMigrate 通常已按 tag 创建，这里兜底保证存在）
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ur_fh_owner ON upload_records (file_hash, owner_id)`).Error; err != nil {
+		return fmt.Errorf("create unique index idx_ur_fh_owner failed: %w", err)
+	}
+
+	llog.L().Info("migrated upload_records unique index to composite (file_hash, owner_id)")
+	return nil
 }
 
 // migrateFileShareOwner 为 file_shares 老数据回填 owner_id（分享归属 = 对应文件的所有者）

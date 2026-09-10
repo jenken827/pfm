@@ -312,7 +312,11 @@ class _TrashPageState extends State<TrashPage> {
               return ListTile(
                 leading: Icon(_getFileIcon(file.type)),
                 title: Text(file.name),
-                subtitle: Text(_formatFileSize(file.size.toInt())),
+                subtitle: Text(
+                  file.type == FileType.FOLDER
+                      ? '-'
+                      : _formatFileSize(file.size.toInt()),
+                ),
                 trailing: Checkbox(
                   value: isSelected,
                   onChanged: (checked) {

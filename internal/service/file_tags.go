@@ -35,6 +35,14 @@ func UpdateFileTagsImpl(ctx context.Context, req *native.UpdateFileTagsReq) *mod
 		}
 	}
 
+	// 归属校验：仅文件所有者（或管理员）可修改标签
+	if !CheckOwnership(ctx, *req.FileId) {
+		return &models.Err{
+			E: errors.New("permission denied: not owner of file"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+
 	// 2. 验证和清理标签：去重、过滤空字符串、限制数量
 	cleanTags := validateAndCleanTags(req.Tags)
 	if len(cleanTags) > 50 { // 限制最多50个标签
@@ -109,6 +117,14 @@ func GetFileTags(ctx context.Context, req *native.GetFileTagsReq) (*native.GetFi
 		return nil, &models.Err{
 			E: errors.New("file not found"),
 			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+
+	// 归属校验：仅文件所有者（或管理员）可查看标签
+	if !CheckOwnership(ctx, *req.FileId) {
+		return nil, &models.Err{
+			E: errors.New("permission denied: not owner of file"),
+			C: native.RespCode_PERMISSION_DENIED,
 		}
 	}
 

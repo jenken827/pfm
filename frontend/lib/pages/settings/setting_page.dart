@@ -7,6 +7,7 @@ import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/pages/settings/about_page.dart';
+import 'package:pfm/pages/settings/device_backup_page.dart';
 import 'package:pfm/router/router.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/design/design_tokens.dart';
@@ -243,6 +244,20 @@ class _SettingPageState extends State<SettingPage> {
                       title: al.settings_contactBackup,
                       subtitle: al.settings_contactBackupSubtitle,
                       onTap: () => const ContactBackupRoute().push(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _SettingsTile(
+                      icon: Icons.sms_outlined,
+                      iconBackground: PfmColors.primarySurface,
+                      iconColor: PfmColors.primary,
+                      title: al.settings_deviceBackup,
+                      subtitle: al.settings_deviceBackupSubtitle,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DeviceBackupPage(),
+                        ),
+                      ),
                     ),
                   ],
                   if (_isAdmin) ...[

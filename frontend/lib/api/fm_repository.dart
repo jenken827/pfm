@@ -8,6 +8,7 @@ import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import '../proto/native/backup.pb.dart';
+import '../proto/native/download.pb.dart';
 import '../proto/native/enum.pbenum.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/permission.pb.dart';
@@ -858,9 +859,162 @@ class FmRepository {
     }
   }
 
+  /// 恢复文件历史版本
+  /// [historyId] 历史版本ID；[newName] 为空表示覆盖当前文件，非空表示以新名称创建副本
+  Future<ApiResult<void>> restoreFileHistory({
+    required int historyId,
+    String? newName,
+  }) async {
+    try {
+      final req = RestoreFileHistoryReq()
+        ..historyId = Int64(historyId);
+      if (newName != null && newName.trim().isNotEmpty) {
+        req.newName = newName.trim();
+      }
+
+      final response = await _dio.post(
+        '$_baseUrl/native.FileService/RestoreFileHistory',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('恢复文件历史版本失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('恢复文件历史版本失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 获取文件历史版本下载 URL
   String getFileHistoryDownloadUrl(int historyId) {
     return '$_baseUrl/api/file/history/download?id=$historyId';
+  }
+
+  // ==================== 离线下载（任务14） ====================
+
+  /// 创建离线下载任务
+  Future<ApiResult<CreateOfflineDownloadResp>> createOfflineDownload({
+    required String url,
+    String? parentId,
+    String? fileName,
+  }) async {
+    try {
+      final req = CreateOfflineDownloadReq()
+        ..url = url.trim();
+      if (parentId != null && parentId.isNotEmpty) {
+        req.parentId = parentId;
+      }
+      if (fileName != null && fileName.trim().isNotEmpty) {
+        req.fileName = fileName.trim();
+      }
+
+      final response = await _dio.post(
+        '$_baseUrl/native.DownloadService/CreateOfflineDownload',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<CreateOfflineDownloadResp>(
+        data,
+        CreateOfflineDownloadResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('创建离线下载任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('创建离线下载任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 离线下载任务列表
+  Future<ApiResult<ListOfflineDownloadsResp>> listOfflineDownloads({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final req = ListOfflineDownloadsReq()
+        ..page = page
+        ..pageSize = pageSize;
+
+      final response = await _dio.post(
+        '$_baseUrl/native.DownloadService/ListOfflineDownloads',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<ListOfflineDownloadsResp>(
+        data,
+        ListOfflineDownloadsResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取离线下载列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取离线下载列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 删除离线下载任务
+  Future<ApiResult<void>> deleteOfflineDownload(int id) async {
+    try {
+      final req = DeleteOfflineDownloadReq()..id = id;
+      final response = await _dio.post(
+        '$_baseUrl/native.DownloadService/DeleteOfflineDownload',
+        data: req.toProto3Json(),
+      );
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('删除离线下载任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('删除离线下载任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 重试失败的离线下载任务
+  Future<ApiResult<void>> retryOfflineDownload(int id) async {
+    try {
+      final req = RetryOfflineDownloadReq()..id = id;
+      final response = await _dio.post(
+        '$_baseUrl/native.DownloadService/RetryOfflineDownload',
+        data: req.toProto3Json(),
+      );
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('重试离线下载任务失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('重试离线下载任务失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
   }
 
   /// 获取回收站文件列表

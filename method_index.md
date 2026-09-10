@@ -17,21 +17,51 @@
 | `RetryAllFailedUploadRecords(ctx) *Err` | 一键重试所有失败的上传记录 |
 | `DeleteUploadRecord(ctx, req) (*BaseResp, *Err)` | 删除上传记录 |
 | `ClearCompletedUploadRecords(ctx, req) (*BaseResp, *Err)` | 清除已完成的上传记录 |
+| `checkUploadRecordOwnership(ctx, record) bool` | 上传记录归属校验（**管理员不享有特权**；Cancel/Delete/Retry/Detail 用） |
+
+### version_allocator.go（并发上传版本仲裁）
+
+| 方法 | 说明 |
+|------|------|
+| `AllocateFileVersion(ownerID, parentID, fileName) uint64` | 请求头到达时分配 per-key 单调递增版本号（后到者赢；首次从 DB max(version) 校准含软删） |
+| `WithUploadVersion(ctx, version) context.Context` | 版本号注入 ctx（webdav 入口等调用） |
+| `getUploadVersion(ctx) uint64` | 从 ctx 读取版本号（service 内部） |
+
+### offline_download.go（URL 离线下载，任务14）
+
+| 方法 | 说明 |
+|------|------|
+| `CreateOfflineDownload(ctx, req) (*CreateOfflineDownloadResp, *Err)` | 创建 URL 离线下载：协议白名单(http/https/ftp/magnet/ed2k) + 目标目录归属校验(空=根目录) + aria2 AddURI(dir=DataDir/.offline) + DownloadRecord 落库（失败 ForceRemove 撤销） |
+| `ListOfflineDownloads(ctx, req) (*ListOfflineDownloadsResp, *Err)` | 当前用户离线下载任务分页列表（id 倒序） |
+| `DeleteOfflineDownload(ctx, req) *Err` | 删除任务：非终态先 aria2 ForceRemove 停下载，再删记录（归属校验，管理员可越权） |
+| `RetryOfflineDownload(ctx, req) (*CreateOfflineDownloadResp, *Err)` | 重试失败任务：原 URL 重新 AddURI、换新 gid、重置状态 |
+
+### capacity_updater.go（容量统计异步更新器）
+
+| 方法 | 说明 |
+|------|------|
+| `MarkCapacityChanged(ownerID)` | 用户容量变动标记：进脏集合，防抖后异步重算写回 used_bytes |
+| `MarkFileCapacityChanged(ownerID)` | 便捷入口（单 owner 标记） |
+| `StartCapacityStatsUpdater()` | 启动容量更新器（幂等，bootstrap 调用） |
+| `RefreshAllCapacityStats()` | 全量刷新所有用户 used_bytes（启动时补历史存量） |
+
+注：文件夹大小展示已取消（子树遍历不划算），无 folder 维度统计。
 
 ### file.go
 
 | 方法 | 说明 |
 |------|------|
-| `GetFileList(ctx, req) (*GetFileListResp, *Err)` | 获取文件列表 |
+| `GetFileList(ctx, req) (*GetFileListResp, *Err)` | 获取文件列表（文件夹行 size 前端显示 "-"，不统计子树大小） |
 | `CreateDirectory(ctx, req) (*CreateDirectoryResp, *Err)` | 创建目录 |
 | `UpdateDirectory(ctx, req) (*BaseResp, *Err)` | 更新目录信息 |
-| `DeleteFile(ctx, req) (*BaseResp, *Err)` | 删除文件（移入回收站） |
-| `RestoreFile(ctx, req) (*BaseResp, *Err)` | 恢复回收站文件 |
-| `PermanentDeleteFile(ctx, req) (*BaseResp, *Err)` | 永久删除文件 |
-| `EmptyTrash(ctx, req) (*BaseResp, *Err)` | 清空回收站 |
+| `DeleteFile(ctx, req) (*BaseResp, *Err)` | 删除文件（移入回收站；used_bytes 含回收站口径不变，不触发重算） |
+| `RestoreFile(ctx, req) (*BaseResp, *Err)` | 恢复回收站文件（不触发重算） |
+| `PermanentDeleteFile(ctx, req) (*BaseResp, *Err)` | 永久删除文件（used_bytes 回落，触发重算） |
+| `EmptyTrash(ctx, req) (*BaseResp, *Err)` | 清空回收站（触发重算） |
 | `RenameFile(ctx, req) (*BaseResp, *Err)` | 重命名文件 |
-| `MoveFile(ctx, req) (*BaseResp, *Err)` | 移动文件 |
+| `MoveFile(ctx, req) (*BaseResp, *Err)` | 移动文件（owner 不变，不触发重算） |
 | `GetFileDetail(ctx, req) (*GetFileDetailResp, *Err)` | 获取文件详情 |
+| `RestoreFileHistory(ctx, req) *Err` | 恢复历史版本：new_name 空 → 覆盖当前文件（CAS，当前内容进历史）；非空 → 以新名称另存（秒传，不覆盖） |
 
 ### provider.go
 
@@ -57,8 +87,9 @@
 
 | 方法 | 说明 |
 |------|------|
-| `CheckOwnership(ctx, fileID) bool` | 检查用户是否为文件所有者（或管理员） |
-| `CheckOwnershipOrAdmin(ctx, fileID) bool` | 同上，语义别名 |
+| `CheckOwnership(ctx, fileID) bool` | 检查用户是否为文件所有者（**管理员不享有特权**，普通文件操作用） |
+| `CheckOwnershipOrAdmin(ctx, fileID) bool` | 所有者或管理员（**仅管理功能用**：分享审查/备份跨用户读取等） |
+| `requireDirPermManager(ctx, fileID) *Err` | 目录权限管理门槛：管理员或目录所有者（授权/撤销/更新/批量四件套用） |
 | `CheckPermission(userID, fileID, requiredPerm) bool` | **已废弃** 旧权限检查 |
 | `GrantDirectoryPermission(ctx, req, operator) *Err` | **已废弃** 旧权限授予 |
 
@@ -82,6 +113,7 @@
 | `getRootFileIDFromCtx(ctx) (string, *Err)` | 从 context 获取用户根目录 ID |
 | `GetBoundProviderIdsByOwnerID(ownerID) ([]uint32, error)` | 通过 owner_id 获取绑定的存储提供者（导出） |
 | `RequireAdmin(ctx) *Err` | 检查管理员权限，非管理员返回错误 |
+| `checkFilePermission(ctx, fileID, perm) bool` | 目录写权限检查（**管理员不享有特权**，上传/移动等普通操作用） |
 
 ### ensure_dir.go（按年/月目录归档）
 
@@ -157,13 +189,25 @@
 |------|------|
 | `CreateUploadRecord(record) error` | 创建上传记录 |
 | `GetUploadRecordByID(id) (*UploadRecord, error)` | 按 ID 查询上传记录 |
-| `ListUploadRecords(parentID, status, offset, limit) ([]UploadRecord, int64, error)` | 分页查询上传记录 |
+| `ListUploadRecords(page, pageSize, status, ownerID) ([]UploadRecord, int64, error)` | 分页查询上传记录（**按 ownerID 过滤**，空则全局——管理视角） |
 | `UpdateUploadRecordStatus(id, status, message) error` | 更新上传记录状态 |
 | `TransitionUploadRecordTaskStatus(id, prevStatuses, newStatus, message) error` | 任务状态迁移（乐观锁，操作 task_status 列） |
 | `TransitionFileLocationStatus(id, prevStatuses, newStatus, message) error` | 分片状态迁移（乐观锁，操作 status 列） |
-| `CountUploadRecordsByStatus(status) (int64, error)` | 按状态统计上传记录数 |
+| `CountUploadRecordsByStatus(status, ownerID) (int64, error)` | 按状态统计上传记录数（按 ownerID 过滤，空则全局） |
 | `DeleteUploadRecord(id) error` | 删除上传记录 |
 | `GetPendingUploadRecords() ([]UploadRecord, error)` | 获取所有待处理记录（启动恢复用） |
+
+### download.go（下载记录）
+
+| 方法 | 说明 |
+|------|------|
+| `CreateDownloadRecord(dr) error` | 创建下载记录 |
+| `GetDownloadRecordByGid(gid) (*DownloadRecordORM, error)` | 按 aria2 gid 查询（notifier 回调用） |
+| `GetDownloadRecordByID(id) (*DownloadRecordORM, error)` | 按 ID 查询 |
+| `GetDownloadRecordByUploadID(uploadID) (*DownloadRecordORM, error)` | 按关联上传记录查询 |
+| `ListOfflineDownloadsByOwner(ownerID, offset, limit) ([]DownloadRecordORM, int64, error)` | 分页列出用户离线下载任务（id 倒序） |
+| `UpdateDownloadRecord(dr, updateFields) error` | 更新下载记录（map 更新 + nil 保护） |
+| `DeleteDownloadRecord(id) error` | 删除下载记录 |
 
 ### file.go
 
@@ -178,6 +222,10 @@
 | `MoveFile(id, newParentID) error` | 移动 |
 | `CountActiveFilesByHashExcludingIDs(hash, excludeIDs) (int64, error)` | 统计引用指定 hash 的未删除文件数（排除指定 ID），用于判断 file_location 是否可安全删除 |
 | `CountFilesByHashIncludingDeleted(hash) (int64, error)` | Unscoped 统计引用指定 hash 的全部文件记录数（含回收站软删），用于去重清理物理数据前确认无任何可恢复引用 |
+| `UpdateFileWithHistoryCAS(ctx, file, oldFile, myVersion) (bool, error)` | CAS 抢占版本并记录历史：`WHERE id AND version<myVersion` 成功才更新 hash/size/version，旧内容写 file_histories；myVersion=0 退化无条件更新。返回是否抢占成功 |
+| `TakeoverFileVersion(fileID, myVersion, newHash, newSize, extra) (bool, error)` | 按版本号 CAS 更新文件内容字段（extra 携带 is_ready 等），低配版无历史写入 |
+| `UpdateFileIsReady(parentID, fileName, ownerID, version) error` | 更新 is_ready=true；version>0 时仅当 file 当前 version 等于该值才更新（CAS，防旧分发误标新内容就绪） |
+| `SumAllFileSizesByOwner(ownerID) (uint64, error)` | 统计用户所有文件（Unscoped 含回收站软删）size 总和，供容量更新器写回 used_bytes |
 | `CountFileHistoriesByHash(hash) (int64, error)` | 统计指定 hash 在 file_histories 中的引用数，用于判断该 hash 的存储位置是否仍被历史版本引用 |
 
 ### file_location.go
@@ -216,6 +264,17 @@
 | `GetAllDirectoryPermissions() ([]*DirectoryPermissionORM, error)` | 获取所有目录权限（管理员用） |
 | `CreateAuditLog(log) error` | 创建权限审计日志 |
 
+### user_space.go
+
+| 方法 | 说明 |
+|------|------|
+| `GetUserSpaceByUserID(userID) (*UserSpaceORM, error)` | 按用户 ID 查询用户空间 |
+| `CreateUserSpace(space) error` | 创建用户空间 |
+| `UpdateUserSpace(space) error` | 更新用户空间 |
+| `UpdateUserSpaceUsedBytes(userID, usedBytes) error` | 按 user_id 写回已用容量（容量异步更新器调用） |
+| `GetAllUserIDs() ([]string, error)` | 返回全部用户空间的 user_id（容量全量刷新用） |
+| `ListUserSpaces(offset, pageSize) ([]UserSpaceORM, int64, error)` | 分页列出用户空间（管理员） |
+
 ### admin_user.go
 
 | 方法 | 说明 |
@@ -234,6 +293,7 @@
 |------|------|
 | `Dispatch(uploadRecordID) error` | 调度上传/同步任务 |
 | `RefreshProviderSemaphore(providerID) int` | 刷新 Provider 信号量配置 |
+| `uploadToProviderAsync(ur, ...)`（内部） | 单 provider 上传：成功后调 `db.UpdateFileIsReady(parent, name, "", ur.Version)` 按版本 CAS 标记 is_ready |
 
 ### storage.go
 

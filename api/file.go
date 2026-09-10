@@ -237,6 +237,15 @@ func (s *FileServer) DeleteFileHistory(ctx context.Context, req *connect.Request
 	return response.SuccessResp(nil)
 }
 
+// RestoreFileHistory 恢复文件历史版本
+func (s *FileServer) RestoreFileHistory(ctx context.Context, req *connect.Request[native.RestoreFileHistoryReq]) (*connect.Response[native.BaseResp], error) {
+	mErr := service.RestoreFileHistory(ctx, req.Msg)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(nil)
+}
+
 // GetTrashList 获取回收站文件列表
 func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[native.BaseResp]) (*connect.Response[native.BaseResp], error) {
 	data, mErr := service.GetTrashList(ctx)
