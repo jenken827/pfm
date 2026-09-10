@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	gowebdav "github.com/emersion/go-webdav"
 	"jenken827.com/jenken827/pfm/globals"
@@ -15,16 +16,21 @@ import (
 )
 
 // Handler WebDAV HTTP handler
+//
+// 无状态：每个请求按认证用户构造独立的 gowebdav.Handler / Backend 以实现用户隔离，
+// handler 自身不持有可变字段。此前把 FileSystem 存在共享 handler 上再逐请求赋值，
+// 并发请求会互相覆盖 rootID/ownerID（用户 A 的请求可能落到用户 B 的根目录）。
 type Handler struct {
-	fs *gowebdav.Handler
+	// mountPrefix 是路由 StripPrefix 剥掉的前缀（见 server/router.go），用于把
+	// 后端内部路径还原成客户端可见路径写进 href（RFC 4918 §8.3 / §9.1）。
+	mountPrefix string
 }
 
 // NewHandler 创建 WebDAV handler
 // 每个请求按认证用户解析其 UserSpace 根目录，实现用户隔离
-func NewHandler() *Handler {
-	return &Handler{
-		fs: &gowebdav.Handler{FileSystem: &Backend{}},
-	}
+// mountPrefix 必须与路由上的 StripPrefix 参数一致（例如挂载 "/dav/" 时传 "/dav"）
+func NewHandler(mountPrefix string) *Handler {
+	return &Handler{mountPrefix: strings.TrimSuffix(mountPrefix, "/")}
 }
 
 // ServeHTTP 处理 WebDAV 请求
@@ -83,9 +89,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 使用该用户的根目录构造后端，实现用户隔离
-	h.fs.FileSystem = NewBackend(rootFileID, userID)
-	h.fs.ServeHTTP(w, r)
+	// 使用该用户的根目录构造独立后端（每请求一份），实现用户隔离
+	fs := &gowebdav.Handler{FileSystem: NewBackend(rootFileID, userID, h.mountPrefix)}
+	fs.ServeHTTP(w, r)
 }
 
 // getBoundProviderIds 解析 UserSpace 绑定的存储提供者 ID

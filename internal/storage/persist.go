@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -183,6 +184,56 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) (*native.File
 	}
 
 	return fl, nil
+}
+
+// PreallocateFileLocations 为即将分发的新内容预建未完成的 file_location 行
+//
+// 目的：维持「文件记录指向的 hash 必有 file_location 行」这一不变式。
+//
+// 为什么需要：文件记录切换 hash 是同步立即生效的，而 file_location 行要到异步
+// 分发真正上传成功才落库——中间隔着全局/提供者信号量排队与 provider 上传
+// （实测可达数秒）。该窗口内 GetFileLocationsByBlake3Hash 返回空，读取路径会落在
+// service.getFileStream 的 len(locations)==0 分支上直接返回
+// "no file location found" 硬 500；而「无可用 provider」降级（读本地 staging
+// 明文 / 短轮询等待 provider 完成）的判断在该分支之后，救不回来。表现即
+// WebDAV PUT（覆盖/新建）后立即 GET 的同步客户端稳定拿到 500。
+//
+// 预建行状态为 PPENDING：读取端因此进入既有的降级路径（同一上传的明文此刻
+// 仍在 TempDir/<hash>/ 下，staging 直读可直接命中）；分发完成后
+// updateFirstChunkLocation 就地把同一行更新为 PCOMPLETED，不会多出行。
+//
+// 与异步分发共用 (hash, provider) 互斥锁：file_locations 没有
+// (provider_id, blake3_hash) 唯一索引，check-then-insert 竞态会插出两行，而
+// 分片完整性按「实际行数 == chunk_total」判定——多出的那行会让该 provider
+// 永久被视为不完整（读取端选不到源）。抢不到锁说明已有 worker 在处理该
+// (hash, provider)，行由它创建，跳过即可。
+//
+// 失败不阻断上传：单个 provider 预建失败仅记警告，分发侧
+// uploadToProviderAsync 的 getOrCreateFileLocation 会兜底创建（退化为修复前行为）。
+// 并发输家（CAS 落后被接管的请求）也会留下未被分发的预建行——无害：该 hash
+// 没有任何文件记录引用它，后续同内容上传会复用同一行。
+func PreallocateFileLocations(ctx context.Context, blake3Hash string, providerIDs []uint32) {
+	if blake3Hash == "" || len(providerIDs) == 0 {
+		return
+	}
+
+	ready := make([]uint32, 0, len(providerIDs))
+	for _, providerID := range providerIDs {
+		key := uploadKey{blake3Hash: blake3Hash, providerID: providerID}
+		if !acquireLock(key) {
+			llog.C(ctx).Debugf("preallocate file location skipped, upload in progress: hash=%s, provider=%d", blake3Hash, providerID)
+			continue
+		}
+		_, err := getOrCreateFileLocation(providerID, blake3Hash)
+		releaseLock(key)
+		if err != nil {
+			llog.C(ctx).Warnf("preallocate file location failed: hash=%s, provider=%d, err=%v", blake3Hash, providerID, err)
+			continue
+		}
+		ready = append(ready, providerID)
+	}
+
+	llog.C(ctx).Infof("preallocated file locations: hash=%s, providers=%v", blake3Hash, ready)
 }
 
 // completeUpload 完成上传，清理临时文件

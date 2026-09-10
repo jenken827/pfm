@@ -1,7 +1,6 @@
 package response
 
 import (
-	"connectrpc.com/connect"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -9,46 +8,33 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// SuccessResp 成功响应
-func SuccessResp(data proto.Message) (*connect.Response[native.BaseResp], error) {
+// SuccessResp 构造成功响应。
+// 返回非 nil error 仅在 data 无法转换为 Any 时（调用方应直接返回该 error）。
+func SuccessResp(data proto.Message) (*native.BaseResp, error) {
 	var anyData *anypb.Any
 	if data != nil {
 		var err error
 		anyData, err = anypb.New(data)
 		if err != nil {
 			llog.L().Error("convert data to Anypb failed: ", "data", data, "error", err)
-			// 处理错误
 			return nil, err
 		}
-	} else {
-		anyData = nil
 	}
 
-	res := &native.BaseResp{
-		Code:    func() *native.RespCode { code := native.RespCode_SUCCESS; return &code }(),
-		Message: func() *string { message := "success"; return &message }(),
+	code := native.RespCode_SUCCESS
+	message := "success"
+	return &native.BaseResp{
+		Code:    &code,
+		Message: &message,
 		Data:    anyData,
-	}
-	return connect.NewResponse(res), nil
+	}, nil
 }
 
-// ErrResp 错误响应
-func ErrResp(err *models.Err) (*connect.Response[native.BaseResp], error) {
+// ErrResp 构造错误响应。业务错误通过 BaseResp.Code 表达，HTTP 状态码始终为 200。
+func ErrResp(err *models.Err) (*native.BaseResp, error) {
 	msg := err.E.Error()
-	res := &native.BaseResp{
+	return &native.BaseResp{
 		Code:    &err.C,
 		Message: &msg,
-	}
-	return connect.NewResponse(res), nil
+	}, nil
 }
-
-// ErrRespWithData 错误响应
-// func ErrRespWithData(err *models.Err, data proto.Message) (*connect.Response[native.BaseResp], error) {
-// 	msg := err.E.Error()
-// 	res := &native.BaseResp{
-// 		Code:    &err.C,
-// 		Message: &msg,
-// 		Data:    data,
-// 	}
-// 	return connect.NewResponse(res), nil
-// }

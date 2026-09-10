@@ -131,6 +131,8 @@
     "file_folderName": "Folder name",
     "file_folderNameHint": "Enter folder name",
     "file_bindStorageProvider": "Bind storage provider",
+    "file_providerBindingHint": "Files in this folder will be stored on the selected providers (select at least one)",
+    "file_noProviderAvailable": "No storage provider has been assigned to you yet",
     "file_enableEncryption": "Enable encryption",
     "file_encryptionHint": "Encrypt folder contents",
     "file_maxHistoryCount": "Max history count",
@@ -647,6 +649,8 @@
     "folderSettings_maxHistoryHint": "Default 10",
     "folderSettings_maxHistoryDesc": "Number of historical versions to keep when overwriting, default 10, set 0 to disable",
     "folderSettings_boundProviders": "Bound storage providers",
+    "folderSettings_providerHint": "Files in this folder will be stored on the selected providers (select at least one)",
+    "folderSettings_providerRequired": "Select at least one storage provider",
     "folderSettings_noProviders": "No available storage providers",
     "docPreview_useFlyfishViewer": "Please use Flyfish Viewer to preview this file type",
     "docPreview_loadFailed": "Failed to load document",
@@ -763,5 +767,14 @@
         }
     },
     "shareManage_expiresAt": "Expires {date}",
-    "shareManage_createdAt": "Created {date}"
+    "shareManage_createdAt": "Created {date}",
+    "profile_title": "Profile",
+    "profile_username": "Username",
+    "profile_email": "Email",
+    "profile_usernameRequired": "Username is required",
+    "profile_changeAvatar": "Change avatar",
+    "profile_avatarUpdated": "Avatar updated",
+    "profile_saved": "Profile saved",
+    "profile_avatarUploadFailed": "Avatar upload failed",
+    "profile_saveFailed": "Save failed"
 }

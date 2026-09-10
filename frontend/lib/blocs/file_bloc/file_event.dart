@@ -64,11 +64,16 @@ class FileCreateDirEvent extends FileEvent {
     required this.name,
     this.enableEncryption = false,
     this.maxHistories,
+    this.providerIds,
   });
 
   final String name;
   final bool enableEncryption;
   final int? maxHistories;
+
+  /// 绑定的存储提供者（至少 1 个，须 ⊆ 管理员分配给自己的列表）；
+  /// null/空表示不传，由后端继承父文件夹的绑定
+  final List<int>? providerIds;
 }
 
 /// 删除文件事件

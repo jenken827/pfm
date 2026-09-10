@@ -277,12 +277,12 @@ func handleInstantUpload(
 	if sameNameFile != nil {
 		if *sameNameFile.Hash == fileHash {
 			// 同名且同 hash，直接返回秒传成功（记录就是目标目录里的，parent 正确）
-			llog.L().Infof("same name and same hash, instant upload: %s", *fileName)
+			llog.C(ctx).Infof("same name and same hash, instant upload: %s", *fileName)
 			return true, sameNameFile, nil
 		}
 		// 同名但 hash 不同，检查覆盖标志
 		if !overwrite {
-			llog.L().Infof("same name file exists, overwrite=false: %s", *fileName)
+			llog.C(ctx).Infof("same name file exists, overwrite=false: %s", *fileName)
 			return true, nil, &models.Err{
 				E: fmt.Errorf("file with same name already exists: %s", *fileName),
 				C: native.RespCode_ALREADY_EXISTS,
@@ -292,7 +292,7 @@ func handleInstantUpload(
 		// （写 temp → createSmallFileRecord/handleOverwriteFile → 异步分发，
 		// 由 handleOverwriteFile 统一处理 max_histories 与旧位置清理）。
 		if dataFile == nil {
-			llog.L().Infof("same name overwrite with new content, full upload: %s", *fileName)
+			llog.C(ctx).Infof("same name overwrite with new content, full upload: %s", *fileName)
 			return false, nil, nil
 		}
 		// 需要覆盖，更新文件记录
@@ -310,13 +310,13 @@ func handleInstantUpload(
 		myVersion := getUploadVersion(ctx)
 		taken, updateErr := db.UpdateFileWithHistoryCAS(ctx, f, sameNameFile, myVersion)
 		if updateErr != nil {
-			llog.L().Errorf("update file with history failed: %v", updateErr)
+			llog.C(ctx).Errorf("update file with history failed: %v", updateErr)
 			return true, nil, &models.Err{E: updateErr, C: native.RespCode_DB_ERROR}
 		}
 		if !taken {
 			// 版本落后：有更新的上传已接管该文件。重新读取当前记录返回
 			// （内容归属已由更新者决定，本次秒传数据在存储中已有副本，无孤儿）
-			llog.L().Warnf("instant overwrite rejected (version stale), id: %s, my_version: %d", *sameNameFile.Id, myVersion)
+			llog.C(ctx).Warnf("instant overwrite rejected (version stale), id: %s, my_version: %d", *sameNameFile.Id, myVersion)
 			latest, gErr := db.GetFileByID(*sameNameFile.Id)
 			if gErr == nil && latest != nil {
 				return true, latest, nil
@@ -337,7 +337,7 @@ func handleInstantUpload(
 		return false, nil, nil
 	}
 
-	llog.L().Infof("file already exists by hash: %s", fileHash)
+	llog.C(ctx).Infof("file already exists by hash: %s", fileHash)
 
 	// 注：此处不再做"自己名下同 hash 且同名 → 直接复用"的跨目录去重。
 	// 旧策略：同 hash 文件即使不在同一目录也不允许同时存在（自动备份/照片
@@ -349,7 +349,7 @@ func handleInstantUpload(
 	// 检查文件已经在哪些存储提供者上
 	existingLocations, dbErr := db.GetFileLocationsByBlake3Hash(fileHash)
 	if dbErr != nil {
-		llog.L().Errorf("get existing file locations failed: %v", dbErr)
+		llog.C(ctx).Errorf("get existing file locations failed: %v", dbErr)
 		return true, nil, &models.Err{E: dbErr, C: native.RespCode_DB_ERROR}
 	}
 
@@ -373,7 +373,7 @@ func handleInstantUpload(
 		}
 		existingEncrypted := existingEncryptMap[pid]
 		if existingEncrypted != targetEncrypt {
-			llog.L().Infof("provider %d encryption mismatch: existing=%v, target=%v, need re-upload",
+			llog.C(ctx).Infof("provider %d encryption mismatch: existing=%v, target=%v, need re-upload",
 				pid, existingEncrypted, targetEncrypt)
 			delete(completeProviderMap, pid)
 		}
@@ -389,7 +389,7 @@ func handleInstantUpload(
 
 	// 如果需要同步，创建同步任务（只传需要同步的提供者，不是全部）
 	if len(needSyncProviders) > 0 {
-		llog.L().Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), fileHash)
+		llog.C(ctx).Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), fileHash)
 		createSyncTask(fileName, fileSize, parentID, fileHash, needSyncProviders)
 	}
 
@@ -408,7 +408,7 @@ func handleInstantUpload(
 	ownerID := getCurrentUserIDFromCtx(ctx)
 	newFileRecord.OwnerId = &ownerID
 	if createErr := db.CreateFile(newFileRecord); createErr != nil {
-		llog.L().Errorf("create file record failed: %v", createErr)
+		llog.C(ctx).Errorf("create file record failed: %v", createErr)
 		return true, nil, &models.Err{E: createErr, C: native.RespCode_DB_ERROR}
 	}
 	// 容量统计：秒传新增文件影响用户占用
@@ -431,13 +431,21 @@ func handleInstantUpload(
 // 覆盖已被更新的内容。覆盖时旧内容始终写入 file_histories（供分发中
 // 的旧 hash 位置保留引用，物理清理交给 cleanupOldHistories 的引用检查），
 // 不再在覆盖路径直接删除旧存储位置。
+//
+// 位置行不变式：落库（把文件记录指向新 hash）之前，先为 providerIDs 预建
+// 新 hash 的未完成 file_location 行，使「文件记录指向的 hash 必有位置行」
+// 恒成立——否则从记录落库到异步分发首次上传成功之间（可达数秒）读取端
+// 会命中 len(locations)==0 的硬 500（详见 storage.PreallocateFileLocations）。
 func handleOverwriteFile(
 	ctx context.Context,
 	fileRecord *native.FileORM,
 	overwriteID string,
 	cleanupPath string,
+	providerIDs []uint32,
 ) (*native.FileORM, *models.Err) {
 	myVersion := getUploadVersion(ctx)
+
+	storage.PreallocateFileLocations(ctx, strPtrVal(fileRecord.Hash), providerIDs)
 
 	// 容量统计标记（新建/覆盖都改变用户占用）
 	markUploadedFile := func() {
@@ -455,10 +463,10 @@ func handleOverwriteFile(
 			if cleanupPath != "" {
 				os.Remove(cleanupPath)
 			}
-			llog.L().Errorf("create file record failed: %v", err)
+			llog.C(ctx).Errorf("create file record failed: %v", err)
 			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 		}
-		llog.L().Infof("new file created, id: %s, hash: %s, version: %d", *fileRecord.Id, *fileRecord.Hash, myVersion)
+		llog.C(ctx).Infof("new file created, id: %s, hash: %s, version: %d", *fileRecord.Id, *fileRecord.Hash, myVersion)
 		markUploadedFile()
 		return fileRecord, nil
 	}
@@ -470,7 +478,7 @@ func handleOverwriteFile(
 		if cleanupPath != "" {
 			os.Remove(cleanupPath)
 		}
-		llog.L().Errorf("get old file record failed: %v", err)
+		llog.C(ctx).Errorf("get old file record failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -494,21 +502,21 @@ func handleOverwriteFile(
 			if cleanupPath != "" {
 				os.Remove(cleanupPath)
 			}
-			llog.L().Errorf("update file with history failed: %v", uErr)
+			llog.C(ctx).Errorf("update file with history failed: %v", uErr)
 			return nil, &models.Err{E: uErr, C: native.RespCode_DB_ERROR}
 		}
 		if !taken {
 			// 版本落后：有更新的上传已接管该文件（并发 PUT）。
 			// 本次内容不落库；调用方负责清理临时文件。返回错误通知上层：
 			// WebDAV/客户端可重试，重试会拿到更新的版本号并最终生效。
-			llog.L().Warnf("file takeover rejected (version stale), id: %s, my_version: %d, current_version: %d, new_hash: %s",
+			llog.C(ctx).Warnf("file takeover rejected (version stale), id: %s, my_version: %d, current_version: %d, new_hash: %s",
 				*fileRecord.Id, myVersion, derefVersion(oldFile.Version), *fileRecord.Hash)
 			return nil, &models.Err{
 				E: fmt.Errorf("file has been updated by a concurrent upload, please retry"),
 				C: native.RespCode_ALREADY_EXISTS,
 			}
 		}
-		llog.L().Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s, version: %d",
+		llog.C(ctx).Infof("file updated with history, id: %s, old_hash: %s, new_hash: %s, version: %d",
 			*fileRecord.Id, *oldFile.Hash, *fileRecord.Hash, myVersion)
 
 		// 按 max_histories 异步裁剪历史（超限旧历史被移除后，其 hash 的
@@ -525,10 +533,10 @@ func handleOverwriteFile(
 		if cleanupPath != "" {
 			os.Remove(cleanupPath)
 		}
-		llog.L().Errorf("create file record failed: %v", err)
+		llog.C(ctx).Errorf("create file record failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
-	llog.L().Warnf("overwrite file not found, created new record, id: %s, version: %d", *fileRecord.Id, myVersion)
+	llog.C(ctx).Warnf("overwrite file not found, created new record, id: %s, version: %d", *fileRecord.Id, myVersion)
 	markUploadedFile()
 	return fileRecord, nil
 }
@@ -578,7 +586,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	}
 
 	// 权限检查：检查对父目录的上传权限
-	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+	if !CheckOwnership(ctx, *req.ParentId) {
 		return nil, &models.Err{
 			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
 			C: native.RespCode_PARAMS_ERROR,
@@ -591,7 +599,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	if req.UploadId != nil && *req.UploadId > 0 {
 		record, chunks, err := db.GetUploadRecordByID(*req.UploadId, true)
 		if err != nil && err != gorm.ErrRecordNotFound {
-			llog.L().Errorf("get upload record by ID failed: %v", err)
+			llog.C(ctx).Errorf("get upload record by ID failed: %v", err)
 			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 		}
 		if record != nil {
@@ -599,17 +607,17 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 			if record.FileHash != nil && *record.FileHash == blake3Hash {
 				// hash 相等，认为是续传，更新名称（如果不同的话）
 				if record.FileName != nil && *record.FileName != *req.Name {
-					llog.L().Infof("update filename from %s to %s for upload record %d", *record.FileName, *req.Name, *record.Id)
+					llog.C(ctx).Infof("update filename from %s to %s for upload record %d", *record.FileName, *req.Name, *record.Id)
 					record.FileName = req.Name
 					if err := db.GetDB().Save(record).Error; err != nil {
-						llog.L().Errorf("update filename failed: %v", err)
+						llog.C(ctx).Errorf("update filename failed: %v", err)
 						return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 					}
 				}
 				return resumeExistingUpload(record, chunks, blake3Hash)
 			} else {
 				// hash 不相等，创建新的上传记录
-				llog.L().Infof("hash mismatch for upload record %d, creating new upload", *record.Id)
+				llog.C(ctx).Infof("hash mismatch for upload record %d, creating new upload", *record.Id)
 			}
 		}
 	}
@@ -617,7 +625,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 	// 检查是否有未完成的上传任务（断点续传）
 	record, chunks, err := db.GetUploadRecordByHash(blake3Hash, true)
 	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("get uncomplete uploads failed: %v", err)
+		llog.C(ctx).Errorf("get uncomplete uploads failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
@@ -632,8 +640,8 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 		return nil, mErr
 	}
 
-	// 从 context 获取绑定的存储提供者
-	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
+	// 按目标目录的绑定解析落盘存储提供者（目录绑定 → 祖先继承 → 用户分配集）
+	providerIds, mErr := resolveProviderIdsForFolder(ctx, *req.ParentId)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -714,7 +722,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 
 	// 创建分片临时目录（按 owner 隔离，避免多用户同 hash 并发上传互相覆盖）
 	if err := utils.CreateFileTempDir(blake3Hash, getCurrentUserIDFromCtx(ctx), true); err != nil {
-		llog.L().Errorf("create temp dir failed: %v", err)
+		llog.C(ctx).Errorf("create temp dir failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
@@ -751,7 +759,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 		ownerID := getCurrentUserIDFromCtx(ctx)
 		var existing native.UploadRecordORM
 		if qErr := db.GetDB().Where("file_hash = ? AND owner_id = ?", blake3Hash, ownerID).First(&existing).Error; qErr != nil {
-			llog.L().Errorf("create upload record failed and lookup also failed: %v / %v", err, qErr)
+			llog.C(ctx).Errorf("create upload record failed and lookup also failed: %v / %v", err, qErr)
 			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 		}
 
@@ -765,11 +773,11 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 			"tags":         req.Tags,
 		}
 		if uErr := db.GetDB().Model(&existing).Updates(updates).Error; uErr != nil {
-			llog.L().Errorf("update existing upload record failed: %v", uErr)
+			llog.C(ctx).Errorf("update existing upload record failed: %v", uErr)
 			return nil, &models.Err{E: uErr, C: native.RespCode_INTERNAL_ERROR}
 		}
 
-		llog.L().Infof("reuse existing upload record: %d, new filename: %s", *existing.Id, *req.Name)
+		llog.C(ctx).Infof("reuse existing upload record: %d, new filename: %s", *existing.Id, *req.Name)
 		uploadID := *existing.Id
 		chunkTotal := *existing.ChunkTotal
 		chunkSize := *existing.ChunkSize
@@ -780,7 +788,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 			ChunkSize:      &chunkSize,
 		}, nil
 	}
-	llog.L().Infof("init upload: %d, chunk_total: %d, chunk_size: %d",
+	llog.C(ctx).Infof("init upload: %d, chunk_total: %d, chunk_size: %d",
 		*ur.Id, chunkTotal, chunkSize)
 
 	return &native.InitUploadRespData{
@@ -808,11 +816,11 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	chunkIndex := *req.ChunkIndex
 	chunkHash := *req.ChunkHash
 
-	llog.L().Infof("upload chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+	llog.C(ctx).Infof("upload chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 
 	// 检查上传是否已进入异步完成阶段（防止前端重试报错）
 	if uploadDone.IsDone(uploadID) {
-		llog.L().Infof("upload already processing/done, ignoring chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		llog.C(ctx).Infof("upload already processing/done, ignoring chunk: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 		return nil
 	}
 
@@ -822,7 +830,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 		chunkIndex: chunkIndex,
 	}
 	if !acquireChunkLock(key) {
-		llog.L().Warnf("chunk upload already in progress: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		llog.C(ctx).Warnf("chunk upload already in progress: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 		return &models.Err{
 			E: errors.New("chunk upload already in progress"),
 			C: native.RespCode_PARAMS_ERROR,
@@ -834,17 +842,17 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, false)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(uploadID) {
-			llog.L().Infof("upload record cleaned up but marked done, ignoring chunk: upload_id=%d", uploadID)
+			llog.C(ctx).Infof("upload record cleaned up but marked done, ignoring chunk: upload_id=%d", uploadID)
 			return nil
 		}
-		llog.L().Errorf("get upload record failed: %v", err)
+		llog.C(ctx).Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	// 检查分片记录是否已存在（幂等性）
 	existingChunk, err := db.GetChunkRecord(uploadID, chunkIndex)
 	if err == nil && existingChunk != nil {
-		llog.L().Infof("chunk record already exists, skip: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
+		llog.C(ctx).Infof("chunk record already exists, skip: upload_id=%d, chunk_index=%d", uploadID, chunkIndex)
 		return nil
 	}
 
@@ -853,7 +861,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	// 写入分片文件
 	chunkFile, err := os.Create(chunkPath)
 	if err != nil {
-		llog.L().Errorf("create chunk file failed: %v", err)
+		llog.C(ctx).Errorf("create chunk file failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 	defer chunkFile.Close()
@@ -876,7 +884,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	actualHash := hex.EncodeToString(hasher.Sum(nil))
 	if chunkHash != "" && chunkHash != actualHash {
 		os.Remove(chunkPath)
-		llog.L().Errorf("chunk hash mismatch: expected=%s, actual=%s", chunkHash, actualHash)
+		llog.C(ctx).Errorf("chunk hash mismatch: expected=%s, actual=%s", chunkHash, actualHash)
 		return &models.Err{E: errors.New("chunk hash mismatch"), C: native.RespCode_PARAMS_ERROR}
 	}
 
@@ -887,11 +895,11 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 		Index:    &chunkIndex,
 	}
 	if err := db.GetDB().Create(newRecord).Error; err != nil {
-		llog.L().Errorf("create chunk record failed: %v", err)
+		llog.C(ctx).Errorf("create chunk record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	llog.L().Infof("chunk uploaded successfully: upload_id=%d, chunk_index=%d, size=%d", uploadID, chunkIndex, totalSize)
+	llog.C(ctx).Infof("chunk uploaded successfully: upload_id=%d, chunk_index=%d, size=%d", uploadID, chunkIndex, totalSize)
 	return nil
 }
 
@@ -899,32 +907,32 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.Err {
 	uploadID := *req.UploadId
 
-	llog.L().Infof("complete upload: %d", uploadID)
+	llog.C(ctx).Infof("complete upload: %d", uploadID)
 
 	// 检查上传是否已进入异步完成阶段
 	if uploadDone.IsDone(uploadID) {
-		llog.L().Infof("upload already processing/done, skipping complete: %d", uploadID)
+		llog.C(ctx).Infof("upload already processing/done, skipping complete: %d", uploadID)
 		return nil
 	}
 
 	uploadRecord, chunks, err := db.GetUploadRecordByID(uploadID, true)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound && uploadDone.IsDone(uploadID) {
-			llog.L().Infof("upload record cleaned up but marked done: %d", uploadID)
+			llog.C(ctx).Infof("upload record cleaned up but marked done: %d", uploadID)
 			return nil
 		}
-		llog.L().Errorf("get upload record failed: %v", err)
+		llog.C(ctx).Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	if len(chunks) == 0 {
-		llog.L().Errorf("no chunk records found")
+		llog.C(ctx).Errorf("no chunk records found")
 		return &models.Err{E: errors.New("no upload records found"), C: native.RespCode_PARTIAL_UPLOAD_ERROR}
 	}
 
 	// 检查所有分片是否都已上传
 	if len(chunks) < int(*uploadRecord.ChunkTotal) {
-		llog.L().Errorf("not all chunks uploaded: %d/%d", len(chunks), *uploadRecord.ChunkTotal)
+		llog.C(ctx).Errorf("not all chunks uploaded: %d/%d", len(chunks), *uploadRecord.ChunkTotal)
 		return &models.Err{
 			E: fmt.Errorf("not all chunks uploaded: %d/%d", len(chunks), *uploadRecord.ChunkTotal),
 			C: native.RespCode_PARTIAL_UPLOAD_ERROR,
@@ -941,7 +949,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM) {
 	// 标记上传已进入异步处理阶段，前端重试时可识别
 	uploadDone.MarkDone(*uploadRecord.Id)
-	llog.L().Infof("start processing complete upload: %d", *uploadRecord.Id)
+	llog.C(ctx).Infof("start processing complete upload: %d", *uploadRecord.Id)
 
 	// 1. 合并所有分片到 owner 隔离目录
 	// 注意：合并输出也必须按 owner 隔离。若写内容寻址层 TempDir/<hash>/<name>，
@@ -952,7 +960,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		markUploadFailedSync(uploadRecord, fmt.Sprintf("create merge dir failed: %v", mkErr))
 		return
 	}
-	mergePath := filepath.Join(mergeDir, "merged_"+strPtrVal(uploadRecord.FileName))
+	mergePath := filepath.Join(mergeDir, utils.MergedFileName(strPtrVal(uploadRecord.FileName)))
 	uploadRecord.TempPath = &mergePath
 
 	outputFile, err := os.Create(mergePath)
@@ -993,7 +1001,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		return
 	}
 
-	llog.L().Infof("file merged successfully: %d bytes", totalSize)
+	llog.C(ctx).Infof("file merged successfully: %d bytes", totalSize)
 
 	// 2. 获取文件类型
 	filetype, mime := GetFileType(utils.GetChunkTempPath(*uploadRecord.FileHash, strPtrVal(uploadRecord.OwnerId), 0), *uploadRecord.FileName)
@@ -1030,7 +1038,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	if uploadRecord.OverwriteId != nil {
 		overwriteID = *uploadRecord.OverwriteId
 	}
-	createdFile, mErr := handleOverwriteFile(ctx, fileRecord, overwriteID, "")
+	createdFile, mErr := handleOverwriteFile(ctx, fileRecord, overwriteID, "", targetProviderIDsOf(uploadRecord))
 	if mErr != nil {
 		markUploadFailedSync(uploadRecord, fmt.Sprintf("create file record failed: %v", mErr))
 		cleanupChunks(uploadRecord)
@@ -1042,16 +1050,34 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 		parseAndCreateTags(*createdFile.Id, uploadRecord.Tags)
 	}
 
-	llog.L().Infof("file record created: %s", *createdFile.Id)
+	llog.C(ctx).Infof("file record created: %s", *createdFile.Id)
 
-	// 4. 移除分片临时文件
-	if err := os.RemoveAll(utils.GetChunkTempDir(*uploadRecord.FileHash, strPtrVal(uploadRecord.OwnerId))); err != nil {
-		llog.L().Warnf("remove temp path failed: %v", err)
+	// 4. 移除分片临时文件（只删 chunk_*，保留合并明文 merged_<name>）
+	// 合并明文与分片同处 chunks/，而紧接着的异步分发正是从它读源
+	// （uploadRecord.TempPath = mergePath）——整目录删除会让 Dispatch 报
+	// "temp file not found"，上传编排失败且文件记录已落库（该 hash 永远没有
+	// file_location 行）。整目录清理由 dispatch 终态的 cleanupUploadTemp 负责。
+	if err := utils.RemoveChunkTempFiles(*uploadRecord.FileHash, strPtrVal(uploadRecord.OwnerId)); err != nil {
+		llog.C(ctx).Warnf("remove chunk temp files failed: %v", err)
 	}
 
 	// 5. 上传到存储（异步，在独立协程中执行）
 	// 注意：必须在独立协程中执行，否则 outputFile 的 defer Close() 无法及时释放文件句柄
 	go storage.Dispatch(context.Background(), uploadRecord)
+}
+
+// targetProviderIDsOf 解析 upload_record 的目标提供者列表
+// 供「位置行预建」（handleOverwriteFile）与分发共用，保证预建行与分发目标一致。
+func targetProviderIDsOf(ur *native.UploadRecordORM) []uint32 {
+	if ur == nil || ur.TargetProviderIds == nil || *ur.TargetProviderIds == "" {
+		return nil
+	}
+	var ids []uint32
+	if err := json.Unmarshal([]byte(*ur.TargetProviderIds), &ids); err != nil {
+		llog.L().Warnf("parse target provider ids failed: %v", err)
+		return nil
+	}
+	return ids
 }
 
 // markUploadFailedSync 标记分块上传失败（同步版本，用于 processCompleteUpload 错误路径）
@@ -1092,17 +1118,17 @@ func checkUploadRecordOwnership(ctx context.Context, record *native.UploadRecord
 func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err {
 	uploadID := *req.UploadId
 
-	llog.L().Infof("cancel upload: %d", uploadID)
+	llog.C(ctx).Infof("cancel upload: %d", uploadID)
 
 	// 上传已完成/处理中，无需取消
 	if uploadDone.IsDone(uploadID) {
-		llog.L().Infof("upload already processing/done, ignoring cancel: %d", uploadID)
+		llog.C(ctx).Infof("upload already processing/done, ignoring cancel: %d", uploadID)
 		return nil
 	}
 
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, true)
 	if err != nil && err != gorm.ErrRecordNotFound {
-		llog.L().Errorf("get upload record failed: %v", err)
+		llog.C(ctx).Errorf("get upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	if err == gorm.ErrRecordNotFound {
@@ -1119,7 +1145,7 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 
 	// 删除数据库记录
 	if err := db.ClearUploadRecords(uploadID); err != nil {
-		llog.L().Errorf("delete upload record failed: %v", err)
+		llog.C(ctx).Errorf("delete upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -1129,7 +1155,7 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 // UploadSmall 小文件上传（< 10MB）
 func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.UploadSmallRespData, *models.Err) {
 	// 权限检查：检查对父目录的上传权限
-	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+	if !CheckOwnership(ctx, *req.ParentId) {
 		return nil, &models.Err{
 			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
 			C: native.RespCode_PARAMS_ERROR,
@@ -1138,7 +1164,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 
 	// 验证文件大小（必须小于 10MB）
 	if *req.Size > SmallFileThreshold {
-		llog.L().Errorf("file too large for small file upload: %d > %d", *req.Size, SmallFileThreshold)
+		llog.C(ctx).Errorf("file too large for small file upload: %d > %d", *req.Size, SmallFileThreshold)
 		return nil, &models.Err{
 			E: fmt.Errorf("file too large for small file upload (max %dMB), use chunk upload instead", SmallFileThreshold/1024/1024),
 			C: native.RespCode_PARAMS_ERROR,
@@ -1146,7 +1172,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	blake3Hash := *req.Hash
-	llog.L().Infof("small file upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+	llog.C(ctx).Infof("small file upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
 
 	// 验证父文件夹
 	_, mErr := validateAndGetParent(*req.ParentId)
@@ -1154,8 +1180,8 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 		return nil, mErr
 	}
 
-	// 从 context 获取绑定的存储提供者
-	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
+	// 按目标目录的绑定解析落盘存储提供者（目录绑定 → 祖先继承 → 用户分配集）
+	providerIds, mErr := resolveProviderIdsForFolder(ctx, *req.ParentId)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -1202,13 +1228,13 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	}
 
 	// 创建临时文件
-	tempPath, mErr := writeSmallFileTemp(blake3Hash, getCurrentUserIDFromCtx(ctx), *req.Name, req.Content)
+	tempPath, mErr := writeSmallFileTemp(blake3Hash, *req.Name, req.Content)
 	if mErr != nil {
 		return nil, mErr
 	}
 
 	// 创建文件记录
-	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID)
+	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID, providerIds)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -1250,7 +1276,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 // 依赖该目录的隔离性（RemoveAll 目录是安全的），storage.Dispatch 也按该布局兜底。
 func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempPath string) (*native.FileORM, *models.Err) {
 	// 权限检查：检查对父目录的上传权限
-	if !checkFilePermission(ctx, *req.ParentId, PermUpload) {
+	if !CheckOwnership(ctx, *req.ParentId) {
 		return nil, &models.Err{
 			E: fmt.Errorf("permission denied: no upload access to directory %s", *req.ParentId),
 			C: native.RespCode_PARAMS_ERROR,
@@ -1258,10 +1284,10 @@ func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempP
 	}
 
 	blake3Hash := *req.Hash
-	llog.L().Infof("webdav upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+	llog.C(ctx).Infof("webdav upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
 
-	// 从 context 获取绑定的存储提供者
-	providerIds, mErr := getBoundProviderIdsFromCtx(ctx)
+	// 按目标目录的绑定解析落盘存储提供者（目录绑定 → 祖先继承 → 用户分配集）
+	providerIds, mErr := resolveProviderIdsForFolder(ctx, *req.ParentId)
 	if mErr != nil {
 		removeWebdavTemp(tempPath)
 		return nil, mErr
@@ -1299,7 +1325,7 @@ func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempP
 	}
 
 	// 创建文件记录（覆盖时按父目录 max_histories 决定建历史还是直接更新）
-	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID)
+	newFileRecord, mErr := createSmallFileRecord(ctx, req, blake3Hash, tempPath, overwriteID, providerIds)
 	if mErr != nil {
 		removeWebdavTemp(tempPath)
 		return nil, mErr
@@ -1341,15 +1367,24 @@ func validateSmallFileContent(content []byte, expectedHash string, expectedSize 
 	return nil
 }
 
-// writeSmallFileTemp 将小文件内容写入临时文件
-// 分片目录按 owner 隔离；合并后的明文路径走内容寻址层
-func writeSmallFileTemp(blake3Hash, ownerID, fileName string, content []byte) (string, *models.Err) {
-	if err := utils.CreateFileTempDir(blake3Hash, ownerID, true); err != nil {
+// writeSmallFileTemp 将小文件内容写入临时文件（内容寻址层 TempDir/<hash>/）
+//
+// 目录由 tempPath 推导（os.MkdirAll(filepath.Dir(tempPath))），
+// 从结构上保证「创建目录」与「写入文件」永远指向同一位置，不会再脱节。
+//
+// 历史坑：此处原先调用 CreateFileTempDir(hash, owner, true) 创建分片目录
+// （TempDir/users/<owner>/<hash>/chunks）。owner 隔离改造前，该分片目录位于
+// TempDir/<hash>/chunks，顺带创建了父目录 TempDir/<hash>，因而写入碰巧成功；
+// 改造后分片目录移到 users/ 下，TempDir/<hash>/ 不再被创建，
+// GetFileTempPath 指向的路径父目录缺失，小文件上传写入必然失败。
+//
+// 小文件不涉及分片，故无需创建 owner 隔离的分片目录。
+func writeSmallFileTemp(blake3Hash, fileName string, content []byte) (string, *models.Err) {
+	tempPath := utils.GetFileTempPath(blake3Hash, fileName)
+	if err := os.MkdirAll(filepath.Dir(tempPath), 0755); err != nil {
 		llog.L().Errorf("create temp dir failed: %v", err)
 		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
-
-	tempPath := utils.GetFileTempPath(blake3Hash, fileName)
 	if err := os.WriteFile(tempPath, content, 0644); err != nil {
 		llog.L().Errorf("write temp file failed: %v", err)
 		return "", &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
@@ -1358,7 +1393,7 @@ func writeSmallFileTemp(blake3Hash, ownerID, fileName string, content []byte) (s
 }
 
 // createSmallFileRecord 创建小文件的文件记录
-func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blake3Hash, tempPath, overwriteID string) (*native.FileORM, *models.Err) {
+func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blake3Hash, tempPath, overwriteID string, providerIDs []uint32) (*native.FileORM, *models.Err) {
 	filetype, mime := GetFileType(tempPath, *req.Name)
 
 	newFileRecord := &native.FileORM{
@@ -1380,7 +1415,7 @@ func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blak
 	}
 	newFileRecord.OwnerId = &ownerID
 
-	newFileRecord, mErr := handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath)
+	newFileRecord, mErr := handleOverwriteFile(ctx, newFileRecord, overwriteID, tempPath, providerIDs)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -1416,7 +1451,7 @@ func smallFileUploadToProviders(ctx context.Context, blake3Hash string, req *nat
 	}
 
 	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
-		llog.L().Errorf("create upload record failed: %v", err)
+		llog.C(ctx).Errorf("create upload record failed: %v", err)
 		// 清理 temp 文件
 		os.RemoveAll(filepath.Dir(tempPath))
 		return err
@@ -1489,7 +1524,7 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 	// 查询失败记录总数（用于状态栏统计）
 	failedCount, err := db.CountUploadRecordsByStatus(int32(native.UploadStatus_FAILED), ownerFilter)
 	if err != nil {
-		llog.L().Warnf("count failed upload records error: %v", err)
+		llog.C(ctx).Warnf("count failed upload records error: %v", err)
 		// 不影响主查询，继续返回
 		failedCount = 0
 	}
@@ -1636,7 +1671,7 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) *models.Err {
 	// 上传已完成/处理中，无需删除
 	if uploadDone.IsDone(*req.Id) {
-		llog.L().Infof("upload already processing/done, ignoring delete: %d", *req.Id)
+		llog.C(ctx).Infof("upload already processing/done, ignoring delete: %d", *req.Id)
 		return nil
 	}
 
@@ -1666,7 +1701,7 @@ func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) 
 		for _, loc := range locations {
 			if loc.Status != nil && *loc.Status == int32(native.LocationStatus_PFAILED) {
 				if err := db.DeleteFileLocation(*loc.Id); err != nil {
-					llog.L().Errorf("delete file location failed: %v", err)
+					llog.C(ctx).Errorf("delete file location failed: %v", err)
 					// 继续删除其他记录
 				}
 			}
@@ -1685,7 +1720,7 @@ func DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) 
 func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *models.Err {
 	// 上传已完成/处理中，无需重试
 	if uploadDone.IsDone(*req.Id) {
-		llog.L().Infof("upload already processing/done, ignoring retry: %d", *req.Id)
+		llog.C(ctx).Infof("upload already processing/done, ignoring retry: %d", *req.Id)
 		return nil
 	}
 
@@ -1758,7 +1793,7 @@ func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 
 		// 更新数据库
 		if err := db.UpdateUploadRecord(record, []string{"task_status"}); err != nil {
-			llog.L().Errorf("RetryAllFailedUploadRecords: update record %d failed: %v", *record.Id, err)
+			llog.C(ctx).Errorf("RetryAllFailedUploadRecords: update record %d failed: %v", *record.Id, err)
 			continue
 		}
 
@@ -1766,7 +1801,7 @@ func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 		go storage.Dispatch(context.Background(), record)
 	}
 
-	llog.L().Infof("RetryAllFailedUploadRecords: retried %d records", len(records))
+	llog.C(ctx).Infof("RetryAllFailedUploadRecords: retried %d records", len(records))
 	return nil
 }
 

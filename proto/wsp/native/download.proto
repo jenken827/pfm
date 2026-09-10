@@ -3,7 +3,6 @@ syntax = "proto3";
 package native;
 
 import "buf/validate/validate.proto";
-import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "gorm/gorm.proto";
 import "native/common.proto";
@@ -104,21 +103,14 @@ message RetryOfflineDownloadReq {
 }
 
 // DownloadService：URL 离线下载任务管理（任务14）
+// 路由不再由 proto 注解声明，统一在 server/route_rest.go 中显式维护
 service DownloadService {
   // 创建离线下载任务（aria2 下载到服务器，完成后自动落库到目标目录）
-  rpc CreateOfflineDownload(CreateOfflineDownloadReq) returns (BaseResp) {
-    option (google.api.http) = {post: "/api/download/offline/create"};
-  }
+  rpc CreateOfflineDownload(CreateOfflineDownloadReq) returns (BaseResp);
   // 离线下载任务列表（当前用户）
-  rpc ListOfflineDownloads(ListOfflineDownloadsReq) returns (BaseResp) {
-    option (google.api.http) = {get: "/api/download/offline/list"};
-  }
+  rpc ListOfflineDownloads(ListOfflineDownloadsReq) returns (BaseResp);
   // 删除离线下载任务（停止下载并移除记录）
-  rpc DeleteOfflineDownload(DeleteOfflineDownloadReq) returns (BaseResp) {
-    option (google.api.http) = {post: "/api/download/offline/delete"};
-  }
+  rpc DeleteOfflineDownload(DeleteOfflineDownloadReq) returns (BaseResp);
   // 重试失败的离线下载任务
-  rpc RetryOfflineDownload(RetryOfflineDownloadReq) returns (BaseResp) {
-    option (google.api.http) = {post: "/api/download/offline/retry"};
-  }
+  rpc RetryOfflineDownload(RetryOfflineDownloadReq) returns (BaseResp);
 }

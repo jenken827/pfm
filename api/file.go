@@ -3,23 +3,19 @@ package api
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/response"
 )
 
 // FileServer 文件服务
 type FileServer struct{}
 
-var _ = (nativeconnect.FileServiceHandler)((*FileServer)(nil))
-
 // CreateDir 创建文件夹
-func (s *FileServer) CreateDir(ctx context.Context, req *connect.Request[native.CreateDirReq]) (*connect.Response[native.BaseResp], error) {
-	dirId, err := service.CreateDir(ctx, req.Msg)
+func (s *FileServer) CreateDir(ctx context.Context, req *native.CreateDirReq) (*native.BaseResp, error) {
+	dirId, err := service.CreateDir(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -29,8 +25,8 @@ func (s *FileServer) CreateDir(ctx context.Context, req *connect.Request[native.
 }
 
 // GetFileList 获取文件列表
-func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[native.FileListReq]) (*connect.Response[native.BaseResp], error) {
-	files, total, hasMore, err := service.GetFileList(ctx, req.Msg)
+func (s *FileServer) GetFileList(ctx context.Context, req *native.FileListReq) (*native.BaseResp, error) {
+	files, total, hasMore, err := service.GetFileList(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -38,7 +34,7 @@ func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[nativ
 	for _, f := range files {
 		pb, err := f.ToPB(ctx)
 		if err != nil {
-			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			total--
 			continue
 		}
@@ -53,8 +49,8 @@ func (s *FileServer) GetFileList(ctx context.Context, req *connect.Request[nativ
 }
 
 // GetFolderList 获取文件夹列表
-func (s *FileServer) GetFolderList(ctx context.Context, req *connect.Request[native.FolderListReq]) (*connect.Response[native.BaseResp], error) {
-	folders, mErr := service.GetFolderList(ctx, req.Msg)
+func (s *FileServer) GetFolderList(ctx context.Context, req *native.FolderListReq) (*native.BaseResp, error) {
+	folders, mErr := service.GetFolderList(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -62,7 +58,7 @@ func (s *FileServer) GetFolderList(ctx context.Context, req *connect.Request[nat
 	for _, f := range folders {
 		pb, err := f.ToPB(ctx)
 		if err != nil {
-			llog.L().Errorf("convert folder to pb failed, err: %v", err)
+			llog.C(ctx).Errorf("convert folder to pb failed, err: %v", err)
 			continue
 		}
 		result = append(result, &pb)
@@ -73,8 +69,8 @@ func (s *FileServer) GetFolderList(ctx context.Context, req *connect.Request[nat
 }
 
 // UpdateDir 更新文件夹
-func (s *FileServer) UpdateDir(ctx context.Context, req *connect.Request[native.UpdateDirReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.UpdateDir(ctx, req.Msg)
+func (s *FileServer) UpdateDir(ctx context.Context, req *native.UpdateDirReq) (*native.BaseResp, error) {
+	err := service.UpdateDir(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -83,8 +79,8 @@ func (s *FileServer) UpdateDir(ctx context.Context, req *connect.Request[native.
 }
 
 // DeleteFile 删除文件
-func (s *FileServer) DeleteFile(ctx context.Context, req *connect.Request[native.DeleteFileReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.DeleteFile(ctx, req.Msg)
+func (s *FileServer) DeleteFile(ctx context.Context, req *native.DeleteFileReq) (*native.BaseResp, error) {
+	err := service.DeleteFile(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -93,8 +89,8 @@ func (s *FileServer) DeleteFile(ctx context.Context, req *connect.Request[native
 }
 
 // RenameFile 重命名文件
-func (s *FileServer) RenameFile(ctx context.Context, req *connect.Request[native.RenameFileReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.RenameFile(ctx, req.Msg)
+func (s *FileServer) RenameFile(ctx context.Context, req *native.RenameFileReq) (*native.BaseResp, error) {
+	err := service.RenameFile(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -103,8 +99,8 @@ func (s *FileServer) RenameFile(ctx context.Context, req *connect.Request[native
 }
 
 // MoveFile 移动文件
-func (s *FileServer) MoveFile(ctx context.Context, req *connect.Request[native.MoveFileReq]) (*connect.Response[native.BaseResp], error) {
-	successCount, failedIDs, failedReasons, err := service.MoveFile(ctx, req.Msg)
+func (s *FileServer) MoveFile(ctx context.Context, req *native.MoveFileReq) (*native.BaseResp, error) {
+	successCount, failedIDs, failedReasons, err := service.MoveFile(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -117,8 +113,8 @@ func (s *FileServer) MoveFile(ctx context.Context, req *connect.Request[native.M
 }
 
 // GetFileDetail 获取文件详情
-func (s *FileServer) GetFileDetail(ctx context.Context, req *connect.Request[native.FileDetailReq]) (*connect.Response[native.BaseResp], error) {
-	data, mErr := service.GetFileDetail(ctx, req.Msg)
+func (s *FileServer) GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.BaseResp, error) {
+	data, mErr := service.GetFileDetail(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -126,8 +122,8 @@ func (s *FileServer) GetFileDetail(ctx context.Context, req *connect.Request[nat
 }
 
 // GetFileInfo 获取文件基本信息
-func (s *FileServer) GetFileInfo(ctx context.Context, req *connect.Request[native.GetFileInfoReq]) (*connect.Response[native.BaseResp], error) {
-	data, mErr := service.GetFileInfo(ctx, req.Msg)
+func (s *FileServer) GetFileInfo(ctx context.Context, req *native.GetFileInfoReq) (*native.BaseResp, error) {
+	data, mErr := service.GetFileInfo(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -135,8 +131,8 @@ func (s *FileServer) GetFileInfo(ctx context.Context, req *connect.Request[nativ
 }
 
 // GetFileCacheStatus 查询文件缓存状态
-func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *connect.Request[native.GetFileCacheStatusReq]) (*connect.Response[native.BaseResp], error) {
-	result, err := service.GetFileCacheStatus(ctx, req.Msg)
+func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) (*native.BaseResp, error) {
+	result, err := service.GetFileCacheStatus(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -144,8 +140,8 @@ func (s *FileServer) GetFileCacheStatus(ctx context.Context, req *connect.Reques
 }
 
 // GetAvailableProvidersForSync 获取可用于同步的存储提供者
-func (s *FileServer) GetAvailableProvidersForSync(ctx context.Context, req *connect.Request[native.GetAvailableProvidersReq]) (*connect.Response[native.BaseResp], error) {
-	providers, err := service.GetAvailableProvidersForSync(ctx, *req.Msg.FileHash)
+func (s *FileServer) GetAvailableProvidersForSync(ctx context.Context, req *native.GetAvailableProvidersReq) (*native.BaseResp, error) {
+	providers, err := service.GetAvailableProvidersForSync(ctx, *req.FileHash)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -156,8 +152,8 @@ func (s *FileServer) GetAvailableProvidersForSync(ctx context.Context, req *conn
 }
 
 // SyncFileToProviders 同步文件到指定存储提供者
-func (s *FileServer) SyncFileToProviders(ctx context.Context, req *connect.Request[native.SyncFileToProvidersReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.SyncFileToProviders(ctx, req.Msg)
+func (s *FileServer) SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq) (*native.BaseResp, error) {
+	err := service.SyncFileToProviders(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -166,8 +162,8 @@ func (s *FileServer) SyncFileToProviders(ctx context.Context, req *connect.Reque
 }
 
 // CreateShareLink 创建分享链接
-func (s *FileServer) CreateShareLink(ctx context.Context, req *connect.Request[native.CreateShareLinkReq]) (*connect.Response[native.BaseResp], error) {
-	data, mErr := service.CreateShareLink(ctx, req.Msg)
+func (s *FileServer) CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*native.BaseResp, error) {
+	data, mErr := service.CreateShareLink(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -175,8 +171,8 @@ func (s *FileServer) CreateShareLink(ctx context.Context, req *connect.Request[n
 }
 
 // CancelShareLink 取消分享链接
-func (s *FileServer) CancelShareLink(ctx context.Context, req *connect.Request[native.CancelShareLinkReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.CancelShareLink(ctx, req.Msg)
+func (s *FileServer) CancelShareLink(ctx context.Context, req *native.CancelShareLinkReq) (*native.BaseResp, error) {
+	mErr := service.CancelShareLink(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -184,8 +180,8 @@ func (s *FileServer) CancelShareLink(ctx context.Context, req *connect.Request[n
 }
 
 // ListMyShares 获取我的分享列表
-func (s *FileServer) ListMyShares(ctx context.Context, req *connect.Request[native.ListMySharesReq]) (*connect.Response[native.BaseResp], error) {
-	data, mErr := service.ListMyShares(ctx, req.Msg)
+func (s *FileServer) ListMyShares(ctx context.Context, req *native.ListMySharesReq) (*native.BaseResp, error) {
+	data, mErr := service.ListMyShares(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -193,8 +189,8 @@ func (s *FileServer) ListMyShares(ctx context.Context, req *connect.Request[nati
 }
 
 // UpdateShareLink 更新分享链接
-func (s *FileServer) UpdateShareLink(ctx context.Context, req *connect.Request[native.UpdateShareLinkReq]) (*connect.Response[native.BaseResp], error) {
-	data, mErr := service.UpdateShareLink(ctx, req.Msg)
+func (s *FileServer) UpdateShareLink(ctx context.Context, req *native.UpdateShareLinkReq) (*native.BaseResp, error) {
+	data, mErr := service.UpdateShareLink(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -202,8 +198,8 @@ func (s *FileServer) UpdateShareLink(ctx context.Context, req *connect.Request[n
 }
 
 // RestoreFromTrash 从回收站恢复文件
-func (s *FileServer) RestoreFromTrash(ctx context.Context, req *connect.Request[native.RestoreFromTrashReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.RestoreFromTrash(ctx, req.Msg)
+func (s *FileServer) RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) (*native.BaseResp, error) {
+	mErr := service.RestoreFromTrash(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -211,8 +207,8 @@ func (s *FileServer) RestoreFromTrash(ctx context.Context, req *connect.Request[
 }
 
 // DeletePermanently 彻底删除文件
-func (s *FileServer) DeletePermanently(ctx context.Context, req *connect.Request[native.DeletePermanentlyReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.DeletePermanently(ctx, req.Msg)
+func (s *FileServer) DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) (*native.BaseResp, error) {
+	mErr := service.DeletePermanently(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -220,8 +216,8 @@ func (s *FileServer) DeletePermanently(ctx context.Context, req *connect.Request
 }
 
 // EmptyTrash 清空回收站
-func (s *FileServer) EmptyTrash(ctx context.Context, req *connect.Request[native.EmptyTrashReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.EmptyTrash(ctx, req.Msg)
+func (s *FileServer) EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) (*native.BaseResp, error) {
+	mErr := service.EmptyTrash(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -229,8 +225,8 @@ func (s *FileServer) EmptyTrash(ctx context.Context, req *connect.Request[native
 }
 
 // DeleteFileHistory 删除文件历史版本
-func (s *FileServer) DeleteFileHistory(ctx context.Context, req *connect.Request[native.DeleteFileHistoryReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.DeleteFileHistory(ctx, req.Msg.Ids)
+func (s *FileServer) DeleteFileHistory(ctx context.Context, req *native.DeleteFileHistoryReq) (*native.BaseResp, error) {
+	mErr := service.DeleteFileHistory(ctx, req.Ids)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -238,8 +234,8 @@ func (s *FileServer) DeleteFileHistory(ctx context.Context, req *connect.Request
 }
 
 // RestoreFileHistory 恢复文件历史版本
-func (s *FileServer) RestoreFileHistory(ctx context.Context, req *connect.Request[native.RestoreFileHistoryReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.RestoreFileHistory(ctx, req.Msg)
+func (s *FileServer) RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) (*native.BaseResp, error) {
+	mErr := service.RestoreFileHistory(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -247,7 +243,7 @@ func (s *FileServer) RestoreFileHistory(ctx context.Context, req *connect.Reques
 }
 
 // GetTrashList 获取回收站文件列表
-func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[native.BaseResp]) (*connect.Response[native.BaseResp], error) {
+func (s *FileServer) GetTrashList(ctx context.Context, req *native.BaseResp) (*native.BaseResp, error) {
 	data, mErr := service.GetTrashList(ctx)
 	if mErr != nil {
 		return response.ErrResp(mErr)
@@ -256,8 +252,8 @@ func (s *FileServer) GetTrashList(ctx context.Context, req *connect.Request[nati
 }
 
 // SearchFiles 搜索文件
-func (s *FileServer) SearchFiles(ctx context.Context, req *connect.Request[native.SearchFilesReq]) (*connect.Response[native.BaseResp], error) {
-	files, total, hasMore, mErr := service.SearchFiles(ctx, req.Msg)
+func (s *FileServer) SearchFiles(ctx context.Context, req *native.SearchFilesReq) (*native.BaseResp, error) {
+	files, total, hasMore, mErr := service.SearchFiles(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -265,7 +261,7 @@ func (s *FileServer) SearchFiles(ctx context.Context, req *connect.Request[nativ
 	for _, f := range files {
 		pb, err := f.ToPB(ctx)
 		if err != nil {
-			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
 		result = append(result, &pb)
@@ -279,8 +275,8 @@ func (s *FileServer) SearchFiles(ctx context.Context, req *connect.Request[nativ
 }
 
 // UpdateFileTags 更新文件标签
-func (s *FileServer) UpdateFileTags(ctx context.Context, req *connect.Request[native.UpdateFileTagsReq]) (*connect.Response[native.BaseResp], error) {
-	mErr := service.UpdateFileTags(ctx, req.Msg)
+func (s *FileServer) UpdateFileTags(ctx context.Context, req *native.UpdateFileTagsReq) (*native.BaseResp, error) {
+	mErr := service.UpdateFileTags(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -288,8 +284,8 @@ func (s *FileServer) UpdateFileTags(ctx context.Context, req *connect.Request[na
 }
 
 // GetFileTags 获取文件标签
-func (s *FileServer) GetFileTags(ctx context.Context, req *connect.Request[native.GetFileTagsReq]) (*connect.Response[native.BaseResp], error) {
-	resp, mErr := service.GetFileTags(ctx, req.Msg)
+func (s *FileServer) GetFileTags(ctx context.Context, req *native.GetFileTagsReq) (*native.BaseResp, error) {
+	resp, mErr := service.GetFileTags(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -297,8 +293,8 @@ func (s *FileServer) GetFileTags(ctx context.Context, req *connect.Request[nativ
 }
 
 // GetRecentFiles 获取最近使用的文件
-func (s *FileServer) GetRecentFiles(ctx context.Context, req *connect.Request[native.GetRecentFilesReq]) (*connect.Response[native.BaseResp], error) {
-	files, total, hasMore, mErr := service.GetRecentFiles(ctx, req.Msg)
+func (s *FileServer) GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) (*native.BaseResp, error) {
+	files, total, hasMore, mErr := service.GetRecentFiles(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -306,7 +302,7 @@ func (s *FileServer) GetRecentFiles(ctx context.Context, req *connect.Request[na
 	for _, f := range files {
 		pb, err := f.ToPB(ctx)
 		if err != nil {
-			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
 		result = append(result, &pb)
@@ -320,8 +316,8 @@ func (s *FileServer) GetRecentFiles(ctx context.Context, req *connect.Request[na
 }
 
 // GetFilesByType 按文件类型获取文件列表
-func (s *FileServer) GetFilesByType(ctx context.Context, req *connect.Request[native.GetFilesByTypeReq]) (*connect.Response[native.BaseResp], error) {
-	files, total, hasMore, mErr := service.GetFilesByType(ctx, req.Msg)
+func (s *FileServer) GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) (*native.BaseResp, error) {
+	files, total, hasMore, mErr := service.GetFilesByType(ctx, req)
 	if mErr != nil {
 		return response.ErrResp(mErr)
 	}
@@ -329,7 +325,7 @@ func (s *FileServer) GetFilesByType(ctx context.Context, req *connect.Request[na
 	for _, f := range files {
 		pb, err := f.ToPB(ctx)
 		if err != nil {
-			llog.L().Errorf("convert file to pb failed, err: %v", err)
+			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
 		result = append(result, &pb)
@@ -343,7 +339,7 @@ func (s *FileServer) GetFilesByType(ctx context.Context, req *connect.Request[na
 }
 
 // GetTransferConfig 获取传输服务配置（上传/下载高带宽地址）
-func (s *FileServer) GetTransferConfig(ctx context.Context, req *connect.Request[native.GetTransferConfigReq]) (*connect.Response[native.BaseResp], error) {
+func (s *FileServer) GetTransferConfig(ctx context.Context, req *native.GetTransferConfigReq) (*native.BaseResp, error) {
 	serverURL := config.GetConfig().Transfer.ServerURL
 	return response.SuccessResp(&native.GetTransferConfigResp{
 		ServerUrl: &serverURL,
@@ -351,6 +347,24 @@ func (s *FileServer) GetTransferConfig(ctx context.Context, req *connect.Request
 }
 
 // GetPhotoDateConfig 获取照片日期解析配置（相册备份按年/月归档用）
-func (s *FileServer) GetPhotoDateConfig(ctx context.Context, req *connect.Request[native.GetPhotoDateConfigReq]) (*connect.Response[native.BaseResp], error) {
+func (s *FileServer) GetPhotoDateConfig(ctx context.Context, req *native.GetPhotoDateConfigReq) (*native.BaseResp, error) {
 	return response.SuccessResp(service.GetPhotoDateConfig())
+}
+
+// GetOrCreateSubfolder 相册备份：获取有空位的编号子目录（都满则新建）
+func (s *FileServer) GetOrCreateSubfolder(ctx context.Context, req *native.GetOrCreateSubfolderReq) (*native.BaseResp, error) {
+	resp, err := service.GetOrCreateSubfolder(ctx, req)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(resp)
+}
+
+// EnsureDirPath 相册备份：按相对路径逐级创建目录（mkdir -p 语义）
+func (s *FileServer) EnsureDirPath(ctx context.Context, req *native.EnsureDirPathReq) (*native.BaseResp, error) {
+	resp, err := service.EnsureDirPath(ctx, req)
+	if err != nil {
+		return response.ErrResp(err)
+	}
+	return response.SuccessResp(resp)
 }

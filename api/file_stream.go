@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/server/middleware"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // PreviewFileHandler 文件预览HTTP handler
@@ -65,7 +67,7 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5.1 更新文件访问时间（异步，不阻塞响应）
-	go service.UpdateFileAccess(fileID)
+	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
 	// 6. 处理 Telegram 大文件预下载状态
 	if result.IsPreDownload {
@@ -108,7 +110,7 @@ func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3.1 更新文件访问时间（异步，不阻塞响应）
-	go service.UpdateFileAccess(fileID)
+	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
 	// 3.2 处理 Telegram 大文件预下载状态
 	if result.IsPreDownload {
@@ -149,7 +151,12 @@ func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string, size 
 	// 缩略图不存在，触发异步生成
 	if needGenerate && file != nil {
 		llog.L().Infof("thumbnail not found, triggering async generation: %s", fileID)
-		go service.RegenerateThumbnail(r.Context(), file)
+		// 注意：必须用后台 ctx。r.Context() 在 handler 返回时即被取消，
+		// 若把请求 ctx 传给异步任务，任务里的下游调用（如 Telegram getFile）
+		// 会随 ctx 取消而失败（"context canceled"），缩略图永远无法生成。
+		utils.Go(func() {
+			service.RegenerateThumbnail(context.Background(), file)
+		})
 	}
 
 	return false
@@ -420,7 +427,7 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4.1 更新文件访问时间
-	go service.UpdateFileAccess(fileID)
+	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
 	defer result.Reader.Close()
 

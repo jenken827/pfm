@@ -7,6 +7,7 @@ import 'package:pfm/models/models.dart';
 import 'package:protobuf/well_known_types/google/protobuf/empty.pb.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
+import '../proto/native/auth.pb.dart';
 import '../proto/native/backup.pb.dart';
 import '../proto/native/download.pb.dart';
 import '../proto/native/enum.pbenum.dart';
@@ -119,7 +120,7 @@ class FmRepository {
   Future<void> fetchTransferConfig() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetTransferConfig',
+        '$_baseUrl/api/file/transfer-config',
         data: GetTransferConfigReq().toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
@@ -145,7 +146,7 @@ class FmRepository {
       final req = GetPhotoDateConfigReq();
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetPhotoDateConfig',
+        '$_baseUrl/api/file/photo-date-config',
         data: req.toProto3Json(),
       );
 
@@ -169,17 +170,29 @@ class FmRepository {
 
   /// 本地认证登录（账号密码 → 服务端签发 JWT）
   /// 成功后调用方负责保存 token 与用户信息
+  /// 请求/响应均走 proto 契约（LoginReq / LoginResp），使用 Proto3Json 编解码。
   Future<ApiResult<LocalLoginResult>> loginWithPassword({
     required String username,
     required String password,
   }) async {
     try {
+      final req = LoginReq()
+        ..username = username
+        ..password = password;
       final response = await _dio.post(
         '$_baseUrl/api/auth/login',
-        data: {'username': username, 'password': password},
+        data: req.toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
-      final result = LocalLoginResult.fromMap(data);
+      final resp = LoginResp();
+      resp.mergeFromProto3Json(data);
+      final result = LocalLoginResult(
+        token: resp.token,
+        userId: resp.userId,
+        name: resp.name,
+        email: resp.email,
+        isAdmin: resp.isAdmin,
+      );
       _logger.info('本地登录成功: user=${result.name}');
       return ApiResult(success: true, data: result);
     } on DioException catch (e) {
@@ -273,7 +286,7 @@ class FmRepository {
       if (pageSize != 50) req.pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/SearchFiles',
+        '$_baseUrl/api/file/search',
         data: req.toProto3Json(),
       );
 
@@ -312,7 +325,7 @@ class FmRepository {
       if (pageSize != null) req.pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFileList',
+        '$_baseUrl/api/file/list',
         data: req.toProto3Json(),
       );
 
@@ -341,7 +354,7 @@ class FmRepository {
     try {
       final req = FolderListReq(parentId: parentId);
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFolderList',
+        '$_baseUrl/api/file/folders',
         data: req.toProto3Json(),
       );
 
@@ -365,11 +378,14 @@ class FmRepository {
 
   /// 创建目录
   /// [enableEncryption] 加密设置，null 表示从父文件夹继承
+  /// [providerIds] 绑定的存储提供者（至少 1 个，须 ⊆ 管理员分配给自己的列表）；
+  /// null/空表示不传 → 由后端继承父文件夹的绑定
   Future<ApiResult<CreateDirRespData>> createDir({
     required String name,
     required String parentId,
     bool? enableEncryption,
     int? maxHistories,
+    List<int>? providerIds,
   }) async {
     try {
       final req = CreateDirReq(
@@ -381,8 +397,11 @@ class FmRepository {
       if (enableEncryption != null) {
         req.enableEncryption = enableEncryption;
       }
+      if (providerIds != null && providerIds.isNotEmpty) {
+        req.providerIds.addAll(providerIds);
+      }
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/CreateDir',
+        '$_baseUrl/api/file/create-dir',
         data: req.toProto3Json(),
       );
 
@@ -406,20 +425,26 @@ class FmRepository {
   }
 
   /// 更新目录
+  /// [providerIds] 非空时更新存储提供者绑定（至少 1 个，须 ⊆ 管理员分配列表）；
+  /// null/空表示保持原绑定不变
   Future<ApiResult<void>> updateDir({
     required String id,
     String? name,
     bool? enableEncryption,
     int? maxHistories,
+    List<int>? providerIds,
   }) async {
     try {
       final req = UpdateDirReq()..id = id;
       if (name != null) req.name = name;
       if (enableEncryption != null) req.enableEncryption = enableEncryption;
       if (maxHistories != null) req.maxHistories = maxHistories;
+      if (providerIds != null && providerIds.isNotEmpty) {
+        req.providerIds.addAll(providerIds);
+      }
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/UpdateDir',
+        '$_baseUrl/api/file/update-dir',
         data: req.toProto3Json(),
       );
 
@@ -442,7 +467,7 @@ class FmRepository {
   Future<ApiResult<void>> deleteFile(List<String> ids) async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/DeleteFile',
+        '$_baseUrl/api/file/delete',
         data: (DeleteFileReq()..ids.addAll(ids)).toProto3Json(),
       );
 
@@ -467,7 +492,7 @@ class FmRepository {
       final req = RenameFileReq(renameObjs: renameItems);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/RenameFile',
+        '$_baseUrl/api/file/rename',
         data: req.toProto3Json(),
       );
 
@@ -490,7 +515,7 @@ class FmRepository {
   Future<ApiResult<GetFileInfoRespData>> getFileInfo(String fileId) async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFileInfo',
+        '$_baseUrl/api/file/info',
         data: {'file_id': fileId},
       );
 
@@ -516,7 +541,7 @@ class FmRepository {
   Future<ApiResult<FileDetailRespData>> getFileDetail(String fileId) async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFileDetail',
+        '$_baseUrl/api/file/detail',
         data: {'file_id': fileId},
       );
 
@@ -637,7 +662,7 @@ class FmRepository {
       );
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/CreateShareLink',
+        '$_baseUrl/api/file/share/create',
         data: req.toProto3Json(),
       );
 
@@ -665,7 +690,7 @@ class FmRepository {
       final req = CancelShareLinkReq(shareCode: shareCode);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/CancelShareLink',
+        '$_baseUrl/api/file/share/cancel',
         data: req.toProto3Json(),
       );
 
@@ -693,7 +718,7 @@ class FmRepository {
       final req = ListMySharesReq(offset: offset, pageSize: pageSize);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/ListMyShares',
+        '$_baseUrl/api/file/share/list',
         data: req.toProto3Json(),
       );
 
@@ -734,7 +759,7 @@ class FmRepository {
       if (remark != null) req.remark = remark;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/UpdateShareLink',
+        '$_baseUrl/api/file/share/update',
         data: req.toProto3Json(),
       );
 
@@ -764,7 +789,7 @@ class FmRepository {
       final req = RestoreFromTrashReq()..ids.addAll(ids);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/RestoreFromTrash',
+        '$_baseUrl/api/file/trash/restore',
         data: req.toProto3Json(),
       );
 
@@ -789,7 +814,7 @@ class FmRepository {
       final req = DeletePermanentlyReq()..ids.addAll(ids);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/DeletePermanently',
+        '$_baseUrl/api/file/trash/delete-permanently',
         data: req.toProto3Json(),
       );
 
@@ -814,7 +839,7 @@ class FmRepository {
       final req = EmptyTrashReq();
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/EmptyTrash',
+        '$_baseUrl/api/file/trash/empty',
         data: req.toProto3Json(),
       );
 
@@ -840,7 +865,7 @@ class FmRepository {
         ..ids.addAll(ids.map((id) => Int64(id)));
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/DeleteFileHistory',
+        '$_baseUrl/api/file/history/delete',
         data: req.toProto3Json(),
       );
 
@@ -873,7 +898,7 @@ class FmRepository {
       }
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/RestoreFileHistory',
+        '$_baseUrl/api/file/history/restore',
         data: req.toProto3Json(),
       );
 
@@ -916,7 +941,7 @@ class FmRepository {
       }
 
       final response = await _dio.post(
-        '$_baseUrl/native.DownloadService/CreateOfflineDownload',
+        '$_baseUrl/api/download/offline/create',
         data: req.toProto3Json(),
       );
 
@@ -949,7 +974,7 @@ class FmRepository {
         ..pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.DownloadService/ListOfflineDownloads',
+        '$_baseUrl/api/download/offline/list',
         data: req.toProto3Json(),
       );
 
@@ -976,7 +1001,7 @@ class FmRepository {
     try {
       final req = DeleteOfflineDownloadReq()..id = id;
       final response = await _dio.post(
-        '$_baseUrl/native.DownloadService/DeleteOfflineDownload',
+        '$_baseUrl/api/download/offline/delete',
         data: req.toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
@@ -999,7 +1024,7 @@ class FmRepository {
     try {
       final req = RetryOfflineDownloadReq()..id = id;
       final response = await _dio.post(
-        '$_baseUrl/native.DownloadService/RetryOfflineDownload',
+        '$_baseUrl/api/download/offline/retry',
         data: req.toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
@@ -1021,7 +1046,7 @@ class FmRepository {
   Future<ApiResult<TrashListRespData>> getTrashList() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetTrashList',
+        '$_baseUrl/api/file/trash/list',
         data: {},
       );
 
@@ -1053,7 +1078,7 @@ class FmRepository {
     try {
       final req = MoveFileReq(fileIds: fileIds, targetParentId: targetParentId);
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/MoveFile',
+        '$_baseUrl/api/file/move',
         data: req.toProto3Json(),
       );
 
@@ -1081,7 +1106,7 @@ class FmRepository {
   Future<ApiResult<StorageProviderListRespData>> listStorageProviders() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.StorageProviderService/ListStorageProviders',
+        '$_baseUrl/api/admin/provider/list',
         data: Empty().toProto3Json(),
       );
       _logger.info('获取存储提供者列表成功 $response');
@@ -1108,7 +1133,7 @@ class FmRepository {
   getStorageProviderTypes() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.StorageProviderService/GetStorageProviderTypes',
+        '$_baseUrl/api/admin/provider/types',
         data: GetStorageProviderTypesReq().toProto3Json(),
       );
       _logger.info('获取存储提供者类型列表成功');
@@ -1164,7 +1189,7 @@ class FmRepository {
       }
 
       final response = await _dio.post(
-        '$_baseUrl/native.StorageProviderService/AddStorageProvider',
+        '$_baseUrl/api/admin/provider/add',
         data: req.toProto3Json(),
       );
 
@@ -1213,7 +1238,7 @@ class FmRepository {
       }
 
       final response = await _dio.post(
-        '$_baseUrl/native.StorageProviderService/UpdateStorageProvider',
+        '$_baseUrl/api/admin/provider/update',
         data: req.toProto3Json(),
       );
       _logger.info('更新存储提供者成功,$response');
@@ -1238,7 +1263,7 @@ class FmRepository {
       final req = StorageProviderDeleteReq()..ids.addAll(ids);
 
       final response = await _dio.post(
-        '$_baseUrl/native.StorageProviderService/DeleteStorageProvider',
+        '$_baseUrl/api/admin/provider/delete',
         data: req.toProto3Json(),
       );
 
@@ -1288,7 +1313,7 @@ class FmRepository {
       }
 
       final response = await _uploadDio.post(
-        '$_uploadBaseUrl/native.UploadService/UploadSmall',
+        '$_uploadBaseUrl/api/upload/small',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
       );
@@ -1340,7 +1365,7 @@ class FmRepository {
       }
 
       final response = await _uploadDio.post(
-        '$_uploadBaseUrl/native.UploadService/InitUpload',
+        '$_uploadBaseUrl/api/upload/init',
         data: req.toProto3Json(),
       );
 
@@ -1383,7 +1408,7 @@ class FmRepository {
       if (chunkHash != null) req.chunkHash = chunkHash;
 
       final response = await _uploadDio.post(
-        '$_uploadBaseUrl/native.UploadService/UploadChunk',
+        '$_uploadBaseUrl/api/upload/chunk',
         data: req.toProto3Json(),
         onSendProgress: onSendProgress,
       );
@@ -1410,7 +1435,7 @@ class FmRepository {
       final req = CompleteUploadReq()..uploadId = uploadId;
 
       final response = await _uploadDio.post(
-        '$_uploadBaseUrl/native.UploadService/CompleteUpload',
+        '$_uploadBaseUrl/api/upload/complete',
         data: req.toProto3Json(),
       );
 
@@ -1436,7 +1461,7 @@ class FmRepository {
       final req = CancelUploadReq()..uploadId = uploadId;
 
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/CancelUpload',
+        '$_baseUrl/api/upload/cancel',
         data: req.toProto3Json(),
       );
 
@@ -1469,7 +1494,7 @@ class FmRepository {
       }
 
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/ListUploadRecords',
+        '$_baseUrl/api/upload/records/list',
         data: req.toProto3Json(),
       );
 
@@ -1499,7 +1524,7 @@ class FmRepository {
       final req = GetUploadRecordDetailReq(id: id);
 
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/GetUploadRecordDetail',
+        '$_baseUrl/api/upload/records/detail',
         data: req.toProto3Json(),
       );
 
@@ -1533,7 +1558,7 @@ class FmRepository {
       );
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFileCacheStatus',
+        '$_baseUrl/api/file/cache-status',
         data: req.toProto3Json(),
       );
 
@@ -1561,7 +1586,7 @@ class FmRepository {
       final req = RetryUploadRecordReq(id: id);
 
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/RetryUploadRecord',
+        '$_baseUrl/api/upload/records/retry',
         data: req.toProto3Json(),
       );
 
@@ -1584,7 +1609,7 @@ class FmRepository {
   Future<ApiResult<void>> retryAllFailedUploadRecords() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/RetryAllFailedUploadRecords',
+        '$_baseUrl/api/upload/records/retry-all',
         data: Empty().toProto3Json(),
       );
 
@@ -1609,7 +1634,7 @@ class FmRepository {
       final req = DeleteUploadRecordReq(id: id);
 
       final response = await _dio.post(
-        '$_baseUrl/native.UploadService/DeleteUploadRecord',
+        '$_baseUrl/api/upload/records/delete',
         data: req.toProto3Json(),
       );
 
@@ -1637,7 +1662,7 @@ class FmRepository {
       final req = GetAvailableProvidersReq()..fileHash = fileHash;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetAvailableProvidersForSync',
+        '$_baseUrl/api/file/sync-providers',
         data: req.toProto3Json(),
       );
 
@@ -1671,7 +1696,7 @@ class FmRepository {
         ..providerIds.addAll(providerIds.map((id) => id));
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/SyncFileToProviders',
+        '$_baseUrl/api/file/sync',
         data: req.toProto3Json(),
       );
 
@@ -1702,7 +1727,7 @@ class FmRepository {
         ..tags.addAll(tags);
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/UpdateFileTags',
+        '$_baseUrl/api/file/tags/update',
         data: req.toProto3Json(),
       );
 
@@ -1727,7 +1752,7 @@ class FmRepository {
       final req = GetFileTagsReq()..fileId = fileId;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFileTags',
+        '$_baseUrl/api/file/tags/get',
         data: req.toProto3Json(),
       );
 
@@ -1774,7 +1799,7 @@ class FmRepository {
       if (enabled != null) req.enabled = enabled;
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/CreateBackupTask',
+        '$_baseUrl/api/admin/backup/task/create',
         data: req.toProto3Json(),
       );
 
@@ -1817,7 +1842,7 @@ class FmRepository {
       if (enabled != null) req.enabled = enabled;
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/UpdateBackupTask',
+        '$_baseUrl/api/admin/backup/task/update',
         data: req.toProto3Json(),
       );
 
@@ -1842,7 +1867,7 @@ class FmRepository {
       final req = DeleteBackupTaskReq()..ids.addAll(ids.map((id) => Int64(id)));
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/DeleteBackupTask',
+        '$_baseUrl/api/admin/backup/task/delete',
         data: req.toProto3Json(),
       );
 
@@ -1874,7 +1899,7 @@ class FmRepository {
       if (enabled != null) req.enabled = enabled;
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/ListBackupTasks',
+        '$_baseUrl/api/admin/backup/task/list',
         data: req.toProto3Json(),
       );
 
@@ -1902,7 +1927,7 @@ class FmRepository {
       final req = GetBackupTaskReq()..id = Int64(id);
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/GetBackupTask',
+        '$_baseUrl/api/admin/backup/task/get',
         data: req.toProto3Json(),
       );
 
@@ -1930,7 +1955,7 @@ class FmRepository {
       final req = TriggerBackupReq()..id = Int64(id);
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/TriggerBackup',
+        '$_baseUrl/api/admin/backup/trigger',
         data: req.toProto3Json(),
       );
 
@@ -1963,7 +1988,7 @@ class FmRepository {
       if (status != null) req.status = status;
 
       final response = await _dio.post(
-        '$_baseUrl/native.BackupService/ListBackupFiles',
+        '$_baseUrl/api/admin/backup/files',
         data: req.toProto3Json(),
       );
 
@@ -1996,7 +2021,7 @@ class FmRepository {
       if (pageSize != null) req.pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetRecentFiles',
+        '$_baseUrl/api/file/recent',
         data: req.toProto3Json(),
       );
 
@@ -2030,7 +2055,7 @@ class FmRepository {
       if (pageSize != null) req.pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.FileService/GetFilesByType',
+        '$_baseUrl/api/file/by-type',
         data: req.toProto3Json(),
       );
 
@@ -2052,21 +2077,26 @@ class FmRepository {
     }
   }
 
-  /// 获取有空位的子目录（相册备份用）
-  /// 查找 parentID 下以 prefix 开头的子目录，返回第一个文件数 < 500 的目录 ID
-  /// 如果都满了，自动创建新目录
+  /// 获取有空位的编号子目录（相册备份用）
+  /// 返回 parentId 下第一个文件数 < 500 的编号目录 ID；
+  /// 若都满了，按最大编号 +1 自动创建新目录（命名 001、002…）
   Future<ApiResult<String>> getOrCreateSubfolder({
     required String parentId,
-    String prefix = '00',
   }) async {
     try {
+      final req = GetOrCreateSubfolderReq()..parentId = parentId;
+
       final response = await _dio.post(
         '$_baseUrl/api/file/get-or-create-subfolder',
-        data: {'parent_id': parentId, 'prefix': prefix},
+        data: req.toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
-      final folderId = data['folder_id'] as String?;
-      if (folderId == null || folderId.isEmpty) {
+      final respData = extractRespData<GetOrCreateSubfolderResp>(
+        data,
+        GetOrCreateSubfolderResp(),
+      );
+      final folderId = respData.folderId;
+      if (folderId.isEmpty) {
         return ApiResult(success: false, message: '未返回目录ID');
       }
       return ApiResult(success: true, data: folderId);
@@ -2090,13 +2120,21 @@ class FmRepository {
     required String path,
   }) async {
     try {
+      final req = EnsureDirPathReq()
+        ..parentId = parentId
+        ..path = path;
+
       final response = await _dio.post(
         '$_baseUrl/api/file/ensure-dir-path',
-        data: {'parent_id': parentId, 'path': path},
+        data: req.toProto3Json(),
       );
       final data = response.data as Map<String, dynamic>;
-      final folderId = data['folder_id'] as String?;
-      if (folderId == null || folderId.isEmpty) {
+      final respData = extractRespData<EnsureDirPathResp>(
+        data,
+        EnsureDirPathResp(),
+      );
+      final folderId = respData.folderId;
+      if (folderId.isEmpty) {
         return ApiResult(success: false, message: '未返回目录ID');
       }
       return ApiResult(success: true, data: folderId);
@@ -2112,284 +2150,8 @@ class FmRepository {
     }
   }
 
-  // ==================== Permission Service ====================
 
-  /// 授予目录权限
-  Future<ApiResult<void>> grantDirectoryPermission({
-    required String userId,
-    required String fileId,
-    required int permissions,
-    bool inherit = true,
-    String alias = '',
-  }) async {
-    try {
-      final req = GrantDirectoryPermissionReq()
-        ..userId = userId
-        ..fileId = fileId
-        ..permissions = permissions
-        ..inherit = inherit
-        ..alias = alias;
 
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/GrantDirectoryPermission',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('授予权限失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('授予权限失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 撤销目录权限
-  Future<ApiResult<void>> revokeDirectoryPermission({
-    required String userId,
-    required String fileId,
-  }) async {
-    try {
-      final req = RevokeDirectoryPermissionReq()
-        ..userId = userId
-        ..fileId = fileId;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/RevokeDirectoryPermission',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('撤销权限失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('撤销权限失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 更新目录权限
-  Future<ApiResult<void>> updateDirectoryPermission({
-    required String userId,
-    required String fileId,
-    int? permissions,
-    bool? inherit,
-  }) async {
-    try {
-      final req = UpdateDirectoryPermissionReq()
-        ..userId = userId
-        ..fileId = fileId;
-      if (permissions != null) req.permissions = permissions;
-      if (inherit != null) req.inherit = inherit;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/UpdateDirectoryPermission',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('更新权限失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('更新权限失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 获取用户的目录权限列表
-  Future<ApiResult<GetUserPermissionsResp>> getUserPermissions({
-    required String userId,
-  }) async {
-    try {
-      final req = GetUserPermissionsReq()..userId = userId;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/GetUserPermissions',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetUserPermissionsResp>(
-        data,
-        GetUserPermissionsResp(),
-      );
-      return ApiResult(success: true, data: respData);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('获取用户权限失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取用户权限失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 获取目录的权限列表
-  Future<ApiResult<GetDirectoryPermissionsResp>> getDirectoryPermissions({
-    required String fileId,
-    bool recursive = false,
-  }) async {
-    try {
-      final req = GetDirectoryPermissionsReq()
-        ..fileId = fileId
-        ..recursive = recursive;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/GetDirectoryPermissions',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetDirectoryPermissionsResp>(
-        data,
-        GetDirectoryPermissionsResp(),
-      );
-      return ApiResult(success: true, data: respData);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('获取目录权限失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取目录权限失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 批量授予权限
-  Future<ApiResult<void>> batchGrantPermission({
-    required String userId,
-    required List<String> fileIds,
-    required int permissions,
-    bool inherit = true,
-    bool includeChildren = false,
-  }) async {
-    try {
-      final req = BatchGrantPermissionReq()
-        ..userId = userId
-        ..fileIds.addAll(fileIds)
-        ..permissions = permissions
-        ..inherit = inherit
-        ..includeChildren = includeChildren;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/BatchGrantPermission',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      extractRespData<Empty>(data, Empty());
-      return ApiResult(success: true);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('批量授权失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('批量授权失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 获取用户可访问的目录列表
-  Future<ApiResult<GetAccessibleDirectoriesResp>> getAccessibleDirectories({
-    required String userId,
-  }) async {
-    try {
-      final req = GetAccessibleDirectoriesReq()..userId = userId;
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/GetAccessibleDirectories',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetAccessibleDirectoriesResp>(
-        data,
-        GetAccessibleDirectoriesResp(),
-      );
-      return ApiResult(success: true, data: respData);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('获取可访问目录失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取可访问目录失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 获取用户列表（管理员用）
-  Future<ApiResult<ListUsersResp>> listUsers() async {
-    try {
-      final req = ListUsersReq();
-
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/ListUsers',
-        data: req.toProto3Json(),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<ListUsersResp>(data, ListUsersResp());
-      return ApiResult(success: true, data: respData);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('获取用户列表失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取用户列表失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
-
-  /// 获取当前用户角色
-  Future<ApiResult<GetMyRolesResp>> getMyRoles() async {
-    try {
-      final response = await _dio.post(
-        '$_baseUrl/native.PermissionService/GetMyRoles',
-        data: {},
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<GetMyRolesResp>(data, GetMyRolesResp());
-      return ApiResult(success: true, data: respData);
-    } on TokenInvalidException {
-      await _handleTokenInvalid();
-      return ApiResult(success: false, message: '登录已过期，请重新登录');
-    } on DioException catch (e) {
-      _logger.error('获取用户角色失败: ${e.message}');
-      return ApiResult(success: false, message: _handleDioError(e));
-    } catch (e) {
-      _logger.error('获取用户角色失败: $e');
-      return ApiResult(success: false, message: e.toString());
-    }
-  }
 
   // ==================== UserSpace Service ====================
 
@@ -2397,7 +2159,7 @@ class FmRepository {
   Future<ApiResult<GetUserSpaceResp>> getUserSpace() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/GetUserSpace',
+        '$_baseUrl/api/space/get',
         data: {},
       );
 
@@ -2432,7 +2194,7 @@ class FmRepository {
       if (displayName != null) req.displayName = displayName;
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/SaveShareToMySpace',
+        '$_baseUrl/api/space/save-share',
         data: req.toProto3Json(),
       );
 
@@ -2462,7 +2224,7 @@ class FmRepository {
       final req = AsyncTaskProgressReq()..taskId = taskId;
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/GetAsyncTaskProgress',
+        '$_baseUrl/api/space/async-task-progress',
         data: req.toProto3Json(),
       );
 
@@ -2495,7 +2257,7 @@ class FmRepository {
       if (pageSize > 0) req.pageSize = pageSize;
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/ListUserSpaces',
+        '$_baseUrl/api/admin/user/spaces',
         data: req.toProto3Json(),
       );
 
@@ -2528,7 +2290,7 @@ class FmRepository {
         ..providerIds.addAll(providerIds);
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/AssignRootDir',
+        '$_baseUrl/api/admin/user/assign-root',
         data: req.toProto3Json(),
       );
 
@@ -2561,7 +2323,7 @@ class FmRepository {
         ..quotaBytes = Int64(quotaBytes);
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/UpdateUserSpace',
+        '$_baseUrl/api/admin/user/update-space',
         data: req.toProto3Json(),
       );
 
@@ -2581,12 +2343,12 @@ class FmRepository {
   }
 
   /// 获取用户列表（UserSpace 版本）
-  Future<ApiResult<ListUsersResp>> listUsersNew() async {
+  Future<ApiResult<ListUsersResp>> listUsers() async {
     try {
       final req = ListUsersReq();
 
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/ListUsers',
+        '$_baseUrl/api/admin/user/list',
         data: req.toProto3Json(),
       );
 
@@ -2605,11 +2367,11 @@ class FmRepository {
     }
   }
 
-  /// 获取当前用户角色（UserSpace 版本）
-  Future<ApiResult<GetMyRolesResp>> getMyRolesNew() async {
+  /// 获取当前用户角色（走 UserSpaceService）
+  Future<ApiResult<GetMyRolesResp>> getMyRoles() async {
     try {
       final response = await _dio.post(
-        '$_baseUrl/native.UserSpaceService/GetMyRoles',
+        '$_baseUrl/api/space/my-roles',
         data: {},
       );
 
@@ -2626,5 +2388,106 @@ class FmRepository {
       _logger.error('获取用户角色失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
+  }
+
+  /// 获取管理员分配给当前用户的存储提供者（文件夹绑定选择用，仅启用的）
+  Future<ApiResult<GetMyBoundProvidersResp>> getMyBoundProviders() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/space/my-providers',
+        data: {},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<GetMyBoundProvidersResp>(
+        data,
+        GetMyBoundProvidersResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取可用存储提供者失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取可用存储提供者失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新当前用户资料（用户名/邮箱，仅本人可改）
+  Future<ApiResult<UpdateProfileResp>> updateProfile({
+    required String username,
+    String email = '',
+  }) async {
+    try {
+      final req = UpdateProfileReq()
+        ..username = username
+        ..email = email;
+
+      final response = await _dio.post(
+        '$_baseUrl/api/space/profile/update',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UpdateProfileResp>(
+        data,
+        UpdateProfileResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('更新资料失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新资料失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 上传当前用户头像（multipart/form-data，字段名 file）
+  Future<ApiResult<UploadAvatarResp>> uploadAvatar({
+    required String filePath,
+  }) async {
+    try {
+      final form = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+
+      final response = await _uploadDio.post(
+        '$_baseUrl/api/user/profile/avatar',
+        data: form,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<UploadAvatarResp>(
+        data,
+        UploadAvatarResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('上传头像失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('上传头像失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 把服务端返回的相对头像路径拼成完整 URL（供 Image.network 使用）
+  String? resolveAvatarUrl(String? avatar) {
+    if (avatar == null || avatar.isEmpty) return null;
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+      return avatar;
+    }
+    final base = _baseUrl ?? '';
+    return '$base$avatar';
   }
 }

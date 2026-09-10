@@ -97,9 +97,6 @@ func autoMigrate() error {
 		&native.DownloadRecordORM{},
 		&native.BackupTaskORM{},
 		&native.BackupFileRecordORM{},
-		&native.DirectoryPermissionORM{},
-		&native.AdminUserORM{},
-		&native.PermissionAuditLogORM{},
 		&native.UserSpaceORM{},
 		&native.UserORM{},
 	); err != nil {

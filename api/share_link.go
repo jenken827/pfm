@@ -105,10 +105,10 @@ func PublicDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	llog.L().Infof("public download request: share_code=%s, file_id=%s", shareCode, *fs.FileId)
 
 	// 7. 增加访问次数
-	go db.IncrementShareAccessCount(*fs.Id)
+	utils.Go(func() { _ = db.IncrementShareAccessCount(*fs.Id) })
 
 	// 8. 获取文件流
-	result, err := service.GetFileStream(r.Context(), *fs.FileId, nil)
+	result, err := service.GetFileStreamForShare(r.Context(), *fs.FileId, nil)
 	if err != nil {
 		llog.L().Errorf("get file stream failed: %v", err)
 		http.Error(w, "file not found", http.StatusNotFound)

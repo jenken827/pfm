@@ -238,22 +238,22 @@ func truncateStr(s string, max int) string {
 
 // NameSuffixDedupResult 文件名后缀去重结果统计
 type NameSuffixDedupResult struct {
-	Scanned      int      // 扫描到的非文件夹文件数
-	Groups       int      // 同名配对组数（原文件 + 1..N 个后缀候选）
-	Duplicates   int      // 核验为重复的候选文件数（同尺寸：hash 相同/像素一致/字节一致）
-	CompressedDup int     // 压缩衍生副本数（不同尺寸但画面一致，删小保大）
-	KeepSuffix   int      // 保留后缀副本（删除原文件）的组数
-	DiffSize     int      // 同名但尺寸不同且非衍生（需人工确认）
-	DiffContent  int      // 同尺寸但内容不同（需人工确认）
-	Skipped      int      // 无法核验（无本地副本/JPEG 结构异常/解码失败）
-	Unpaired     int      // 带 (N) 后缀但同目录无同名原文件的文件数
-	ToDelete     int      // 待删除冗余文件数（dry-run 预览值）
-	Deleted      int      // 实际删除数（dry-run 为 0）
-	Renamed      int      // 幸存文件改回原名的次数
-	Reclaimed    int64    // 实际释放的本地存储字节数
-	DryRun       bool     // 是否为预览模式
-	Details      []string // 每组明细
-	Warnings     []string // 汇总警告
+	Scanned       int      // 扫描到的非文件夹文件数
+	Groups        int      // 同名配对组数（原文件 + 1..N 个后缀候选）
+	Duplicates    int      // 核验为重复的候选文件数（同尺寸：hash 相同/像素一致/字节一致）
+	CompressedDup int      // 压缩衍生副本数（不同尺寸但画面一致，删小保大）
+	KeepSuffix    int      // 保留后缀副本（删除原文件）的组数
+	DiffSize      int      // 同名但尺寸不同且非衍生（需人工确认）
+	DiffContent   int      // 同尺寸但内容不同（需人工确认）
+	Skipped       int      // 无法核验（无本地副本/JPEG 结构异常/解码失败）
+	Unpaired      int      // 带 (N) 后缀但同目录无同名原文件的文件数
+	ToDelete      int      // 待删除冗余文件数（dry-run 预览值）
+	Deleted       int      // 实际删除数（dry-run 为 0）
+	Renamed       int      // 幸存文件改回原名的次数
+	Reclaimed     int64    // 实际释放的本地存储字节数
+	DryRun        bool     // 是否为预览模式
+	Details       []string // 每组明细
+	Warnings      []string // 汇总警告
 }
 
 // suffixNameRe 匹配 "xxx (1).jpg" / "xxx(1).jpg" / "xxx (2).png" 形式的副本命名

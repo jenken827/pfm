@@ -182,6 +182,7 @@ class FileBloc extends Bloc<FileEvent, FileState> {
       parentId: state.currentDirId,
       enableEncryption: event.enableEncryption,
       maxHistories: event.maxHistories,
+      providerIds: event.providerIds,
     );
 
     if (resp.success) {
@@ -288,11 +289,13 @@ class FileBloc extends Bloc<FileEvent, FileState> {
   }
 
   /// 加载存储提供者列表
+  /// 加载「管理员分配给当前用户的存储提供者」（用于文件夹绑定选择）
+  /// 走 /api/space/my-providers（旧实现调 admin 接口，普通用户拿不到）
   Future<void> _onLoadStorageProviders(
     FileLoadStorageProvidersEvent event,
     Emitter<FileState> emit,
   ) async {
-    final resp = await fmRepository.listStorageProviders();
+    final resp = await fmRepository.getMyBoundProviders();
     if (resp.success && resp.data != null) {
       emit(state.copyWith(storageProviders: resp.data!.providers.toList()));
     }

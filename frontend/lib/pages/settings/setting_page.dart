@@ -117,7 +117,18 @@ class _SettingPageState extends State<SettingPage> {
                     iconColor: PfmColors.document,
                     title: al.settings_currentUser,
                     subtitle: ls.user?.name ?? al.common_notLoggedIn,
-                    onTap: null,
+                    avatarUrl: isLoggedIn
+                        ? FmRepository().resolveAvatarUrl(ls.user?.avatar)
+                        : null,
+                    onTap: isLoggedIn
+                        ? () async {
+                            final changed = await const ProfileEditRoute()
+                                .push<bool>(context);
+                            if (changed == true && mounted) {
+                              setState(() {}); // 刷新头像/用户名
+                            }
+                          }
+                        : null,
                   ),
                 ],
               ),
@@ -646,6 +657,7 @@ class _SettingsTile extends StatelessWidget {
     required this.onTap,
     this.iconColor,
     this.iconBackground,
+    this.avatarUrl,
   });
 
   final IconData icon;
@@ -654,6 +666,9 @@ class _SettingsTile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? iconColor;
   final Color? iconBackground;
+
+  /// 有值时用头像图替代左侧图标（当前用户条目用）
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -675,11 +690,23 @@ class _SettingsTile extends StatelessWidget {
                 color: iconBackground ?? colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(PfmRadius.sm),
               ),
-              child: Icon(
-                icon,
-                color: iconColor ?? colorScheme.onSurfaceVariant,
-                size: 18,
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: avatarUrl != null
+                  ? Image.network(
+                      avatarUrl!,
+                      fit: BoxFit.cover,
+                      // 加载失败（未设置头像/网络问题）退化为图标
+                      errorBuilder: (context, error, stack) => Icon(
+                        icon,
+                        color: iconColor ?? colorScheme.onSurfaceVariant,
+                        size: 18,
+                      ),
+                    )
+                  : Icon(
+                      icon,
+                      color: iconColor ?? colorScheme.onSurfaceVariant,
+                      size: 18,
+                    ),
             ),
             const SizedBox(width: PfmSpacing.md),
             Expanded(

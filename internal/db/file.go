@@ -2,10 +2,13 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"github.com/google/uuid"
@@ -19,6 +22,53 @@ func GetFileByID(id string) (*native.FileORM, error) {
 		return nil, err
 	}
 	return file, nil
+}
+
+// maxAncestorDepth 祖先链回溯上限，防止脏数据造成的父子环导致死循环
+const maxAncestorDepth = 256
+
+// GetNearestBoundProviderIds 沿 parent_id 祖先链向上查找最近一个「显式绑定」了
+// 存储提供者的文件夹，返回其 bound_provider_ids（JSON 数组）。
+//
+// 语义（见设计方案 7. 存储提供者绑定策略）：
+//   - 从 fileID 自身开始向上回溯；fileID 可以是文件也可以是文件夹
+//     （文件自身永远为空值，等价于从父目录开始）；
+//   - 链上全部为空（'[]'、空串、NULL）时返回 (nil, nil)，由调用方回退到
+//     用户分配集 UserSpace.bound_provider_ids；
+//   - JSON 解析失败属脏数据：打告警日志并按「未绑定」继续向上，不中断业务。
+func GetNearestBoundProviderIds(fileID string) ([]uint32, error) {
+	if fileID == "" || fileID == "0" {
+		return nil, nil
+	}
+
+	current := fileID
+	for depth := 0; depth < maxAncestorDepth; depth++ {
+		if current == "" || current == "0" {
+			break
+		}
+		file, err := GetFileByID(current)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// 祖先链断在软删/不存在的节点上，视作未绑定
+				return nil, nil
+			}
+			return nil, err
+		}
+		if file.BoundProviderIds != nil && *file.BoundProviderIds != "" && *file.BoundProviderIds != "[]" {
+			var ids []uint32
+			if err := json.Unmarshal([]byte(*file.BoundProviderIds), &ids); err != nil {
+				llog.L().Warnf("invalid bound_provider_ids on file %s: %v", current, err)
+			} else if len(ids) > 0 {
+				return ids, nil
+			}
+		}
+		if file.ParentId == nil {
+			break
+		}
+		current = *file.ParentId
+	}
+
+	return nil, nil
 }
 
 // GetFilesByIDs 批量获取文件
@@ -90,6 +140,23 @@ func FindFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, e
 		return nil, nil
 	}
 	return files[0], nil
+}
+
+// GetFileNamesInParent 获取指定父目录下当前用户的「文件名 -> file」映射（单条 SQL）
+// 用于批量同名冲突检测，避免逐文件查询的 N+1。key 为文件名。
+func GetFileNamesInParent(parentID, ownerID string) (map[string]*native.FileORM, error) {
+	var files []*native.FileORM
+	if err := db.Where("parent_id=? AND owner_id=?", parentID, ownerID).
+		Find(&files).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[string]*native.FileORM, len(files))
+	for _, f := range files {
+		if f.Name != nil {
+			result[*f.Name] = f
+		}
+	}
+	return result, nil
 }
 
 // CreateFile 创建文件
@@ -358,6 +425,12 @@ func UpdateDir(orm *native.FileORM) error {
 	if orm.EnableEncryption != nil {
 		fields = append(fields, "enable_encryption")
 	}
+	if orm.BoundProviderIds != nil {
+		fields = append(fields, "bound_provider_ids")
+	}
+	if orm.MaxHistories != nil {
+		fields = append(fields, "max_histories")
+	}
 
 	if len(fields) == 0 {
 		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
@@ -372,6 +445,11 @@ func UpdateDir(orm *native.FileORM) error {
 			updateMap["name"] = *orm.Name
 		case "enable_encryption":
 			updateMap["enable_encryption"] = *orm.EnableEncryption
+		case "bound_provider_ids":
+			updateMap["bound_provider_ids"] = *orm.BoundProviderIds
+		case "max_histories":
+			// 0 是合法值（不保留历史），必须用 map 写入绕开 GORM 零值忽略
+			updateMap["max_histories"] = *orm.MaxHistories
 		}
 	}
 
@@ -627,6 +705,19 @@ func GetFileHistoryByID(id uint64) (*native.FileHistoryORM, error) {
 		return nil, err
 	}
 	return &history, nil
+}
+
+// GetFileHistoriesByIDs 批量获取文件历史记录（用于避免逐条查询的 N+1）
+func GetFileHistoriesByIDs(ids []uint64) ([]*native.FileHistoryORM, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	ctx := context.Background()
+	var histories []*native.FileHistoryORM
+	if err := db.WithContext(ctx).Where("id IN ?", ids).Find(&histories).Error; err != nil {
+		return nil, err
+	}
+	return histories, nil
 }
 
 // DeleteFileHistoryByIDs 批量删除历史记录（根据 ID）

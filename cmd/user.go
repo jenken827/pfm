@@ -160,7 +160,7 @@ var userAddCmd = &cobra.Command{
 
 		isAdmin, _ := cmd.Flags().GetBool("admin")
 		if isAdmin {
-			if err := db.AddAdminUser(userID); err != nil {
+			if err := db.SetAdmin(userID, true); err != nil {
 				return fmt.Errorf("用户创建成功但设置管理员失败: %w", err)
 			}
 		}
@@ -193,7 +193,7 @@ var userListCmd = &cobra.Command{
 		fmt.Printf("%-40s %-20s %-30s %s\n", "USER_ID", "USERNAME", "EMAIL", "ADMIN")
 		for _, u := range users {
 			admin := "否"
-			if db.IsAdmin(derefStr2(u.UserId)) {
+			if u.IsAdmin != nil && *u.IsAdmin {
 				admin = "是"
 			}
 			fmt.Printf("%-40s %-20s %-30s %s\n", derefStr2(u.UserId), derefStr2(u.Username), derefStr2(u.Email), admin)
@@ -223,8 +223,6 @@ var userDeleteCmd = &cobra.Command{
 		if err := db.DeleteUser(userID); err != nil {
 			return fmt.Errorf("删除用户失败: %w", err)
 		}
-		// 清理管理员标记
-		_ = db.RemoveAdminUser(userID)
 
 		fmt.Printf("✅ 用户 %s 已删除（user_id=%s）\n", username, userID)
 		fmt.Println("注意：该用户的 UserSpace（网盘根目录）与文件数据未删除，如需清理请联系管理员操作")
@@ -302,12 +300,12 @@ var userSetAdminCmd = &cobra.Command{
 
 		remove, _ := cmd.Flags().GetBool("remove")
 		if remove {
-			if err := db.RemoveAdminUser(userID); err != nil {
+			if err := db.SetAdmin(userID, false); err != nil {
 				return fmt.Errorf("取消管理员失败: %w", err)
 			}
 			fmt.Printf("✅ 用户 %s 已取消管理员\n", username)
 		} else {
-			if err := db.AddAdminUser(userID); err != nil {
+			if err := db.SetAdmin(userID, true); err != nil {
 				return fmt.Errorf("设置管理员失败: %w", err)
 			}
 			fmt.Printf("✅ 用户 %s 已设为管理员\n", username)

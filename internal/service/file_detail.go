@@ -19,10 +19,19 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		return nil, &models.Err{E: errors.New("file_id is required"), C: native.RespCode_PARAMS_ERROR}
 	}
 
+	// 归属校验：仅文件所有者可查看详情（管理员不可越权）
+	// 注：放在最前，避免对他人文件做任何后续查询
+	if !CheckOwnership(ctx, fileID) {
+		return nil, &models.Err{
+			E: errors.New("permission denied: not owner of file"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+
 	// 1. 获取文件信息
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
-		llog.L().Errorf("get file by id failed: %v", err)
+		llog.C(ctx).Errorf("get file by id failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -31,7 +40,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	if file.Hash != nil && *file.Hash != "" {
 		locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
 		if err != nil {
-			llog.L().Errorf("get file locations failed: %v", err)
+			llog.C(ctx).Errorf("get file locations failed: %v", err)
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 
@@ -42,7 +51,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	// 3. 查询文件历史
 	histories, err := db.GetFileHistoriesByFileID(fileID)
 	if err != nil {
-		llog.L().Errorf("get file histories failed: %v", err)
+		llog.C(ctx).Errorf("get file histories failed: %v", err)
 		// 历史记录查询失败不影响整体返回
 		histories = nil
 	}
@@ -50,7 +59,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	// 4. 查询文件标签
 	tags, err := db.GetFileTagsByFileID(fileID)
 	if err != nil {
-		llog.L().Errorf("get file tags failed: %v", err)
+		llog.C(ctx).Errorf("get file tags failed: %v", err)
 		// 标签查询失败不影响整体返回
 		tags = nil
 	}
@@ -60,7 +69,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	for _, h := range histories {
 		pb, err := h.ToPB(ctx)
 		if err != nil {
-			llog.L().Warnf("convert file history to pb failed: %v", err)
+			llog.C(ctx).Warnf("convert file history to pb failed: %v", err)
 			continue
 		}
 		historyPBs = append(historyPBs, &pb)
@@ -69,7 +78,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	// 6. 转换文件为PB格式
 	filePB, err := file.ToPB(ctx)
 	if err != nil {
-		llog.L().Errorf("convert file to pb failed: %v", err)
+		llog.C(ctx).Errorf("convert file to pb failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
@@ -181,17 +190,26 @@ func GetFileInfo(ctx context.Context, req *native.GetFileInfoReq) (*native.GetFi
 		return nil, &models.Err{E: errors.New("file_id is required"), C: native.RespCode_PARAMS_ERROR}
 	}
 
+	// 归属校验：仅文件所有者可查看（管理员不可越权）
+	if !CheckOwnership(ctx, fileID) {
+		return nil, &models.Err{
+			E: errors.New("permission denied: not owner of file"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
-		llog.L().Errorf("get file by id failed: %v", err)
+		llog.C(ctx).Errorf("get file by id failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	resp := &native.GetFileInfoRespData{
-		Id:       file.Id,
-		Name:     file.Name,
-		ParentId: file.ParentId,
-		Size:     file.Size,
+		Id:               file.Id,
+		Name:             file.Name,
+		ParentId:         file.ParentId,
+		Size:             file.Size,
+		BoundProviderIds: file.BoundProviderIds,
 	}
 	if file.Type != nil {
 		ft := native.FileType(*file.Type)
@@ -202,6 +220,21 @@ func GetFileInfo(ctx context.Context, req *native.GetFileInfoReq) (*native.GetFi
 
 // GetFileCacheStatus 查询文件缓存状态
 func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) (*native.GetFileCacheStatusResp, *models.Err) {
+	// 归属校验：入参为 file_hash（全局唯一），必须先确认当前用户拥有引用该 hash 的文件，
+	// 否则任何登录用户都可枚举查询他人文件的缓存/上传状态。
+	userID := getCurrentUserIDFromCtx(ctx)
+	if userID == "" {
+		return nil, &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
+	}
+	ownerFile, err := db.GetFileByHashAndOwner(req.GetFileHash(), userID)
+	if err != nil {
+		return nil, &models.Err{
+			E: errors.New("permission denied: no file with this hash owned by you"),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+	_ = ownerFile
+
 	// 查询文件位置记录
 	location, err := db.GetFileLocationByFileHashAndProvider(*req.FileHash, *req.ProviderId)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"jenken827.com/jenken827/pfm/internal/auth"
 )
 
+const tokenHeader = "Authorization"
+
 // AuthHTTPMiddleware HTTP认证中间件（用于非RPC的HTTP handler）
 func AuthHTTPMiddleware(w http.ResponseWriter, r *http.Request) (*auth.Claims, error) {
 	accessToken := r.Header.Get(tokenHeader)

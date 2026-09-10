@@ -1,17 +1,11 @@
 package middleware
 
 import (
-	"context"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"connectrpc.com/connect"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/server/response"
 )
 
 // RateLimiter defines the interface for rate limiting
@@ -161,29 +155,6 @@ func (irl *IPRateLimiter) Allow(ip string, endpoint string) bool {
 
 // Global rate limiter instance
 var rateLimiter = NewIPRateLimiter()
-
-// RateLimitInterceptor rate limiting middleware
-func RateLimitInterceptor() connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(
-			ctx context.Context,
-			req connect.AnyRequest,
-		) (connect.AnyResponse, error) {
-			// Extract client IP
-			ip := extractClientIP(req.Header())
-
-			// Get endpoint/procedure name
-			endpoint := req.Spec().Procedure
-
-			// Check rate limit
-			if !rateLimiter.Allow(ip, endpoint) {
-				return response.ErrResp(&models.Err{C: native.RespCode_RATE_LIMIT_EXCEEDED, E: connect.NewError(connect.CodeResourceExhausted, nil)})
-			}
-
-			return next(ctx, req)
-		}
-	}
-}
 
 // extractClientIP extracts the client IP address from HTTP headers or context
 func extractClientIP(header http.Header) string {

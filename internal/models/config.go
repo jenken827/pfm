@@ -4,9 +4,9 @@ package models
 type Config struct {
 	Schema Schema `json:"schema" yaml:"schema"`
 	// Redis   Redis   `json:"redis" yaml:"redis"`
-	Cors    Cors    `json:"cors" yaml:"cors"`
-	Log     Log     `json:"log" yaml:"log"`
-	DB      DB      `json:"db" yaml:"db"`
+	Cors Cors `json:"cors" yaml:"cors"`
+	Log  Log  `json:"log" yaml:"log"`
+	DB   DB   `json:"db" yaml:"db"`
 	// 认证配置（本地认证：users 表 + HS256 JWT）
 	Auth AuthConfig `json:"auth" yaml:"auth"`
 	//服务对外地址，用于telegram回调，i.e. https://example.com

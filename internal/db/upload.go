@@ -230,5 +230,3 @@ func ListUploadRecords(page, pageSize int32, status *int32, ownerID string) ([]*
 
 	return records, total, nil
 }
-
-

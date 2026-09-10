@@ -19,8 +19,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/robfig/cron/v3"
 	ignore "github.com/sabhiram/go-gitignore"
-	"lukechampine.com/blake3"
 	"gorm.io/gorm"
+	"lukechampine.com/blake3"
 )
 
 // BackupScheduler 备份调度器
@@ -371,16 +371,16 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		fileID = *newFile.Id
 	}
 
-	// 5. 获取目标目录的 owner_id，通过 UserSpace 获取绑定的存储提供者
+	// 5. 目标目录绑定决定落盘 provider（目录绑定 → 祖先继承 → 用户分配集）
 	targetDir, err := db.GetFileByID(*task.TargetDirId)
 	if err != nil || targetDir == nil || targetDir.OwnerId == nil || *targetDir.OwnerId == "" {
 		llog.L().Errorf("get target dir or owner failed, target_dir_id: %s, err: %v", *task.TargetDirId, err)
 		return
 	}
 
-	providerIds, err := db.GetBoundProviderIdsByOwnerID(*targetDir.OwnerId)
+	providerIds, err := storage.ResolveProviderIds(*targetDir.OwnerId, *task.TargetDirId)
 	if err != nil {
-		llog.L().Errorf("get bound providers for owner %s failed: %v", *targetDir.OwnerId, err)
+		llog.L().Errorf("resolve providers for owner %s, dir %s failed: %v", *targetDir.OwnerId, *task.TargetDirId, err)
 		return
 	}
 
@@ -396,12 +396,12 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		FileName:          &fileName,
 		FileSize:          &candidate.FileSize,
 		ParentId:          &targetParentID,
-		TempPath:          &candidate.AbsPath,            // 源文件路径作为临时文件路径
-		OverwriteId:       utils.StringPtr(""),           // 空字符串表示不覆盖
+		TempPath:          &candidate.AbsPath,  // 源文件路径作为临时文件路径
+		OverwriteId:       utils.StringPtr(""), // 空字符串表示不覆盖
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
-		TargetProviderIds: &targetProviderIds,             // 从 UserSpace 获取的 provider
-		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP), // 自动备份任务
+		TargetProviderIds: &targetProviderIds,                              // 目标目录绑定解析出的 provider
+		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP),     // 自动备份任务
 	}
 
 	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
@@ -450,7 +450,7 @@ func (s *BackupScheduler) updateBackupFileRecord(task *native.BackupTaskORM, can
 // 创建子目录时逐层继承父目录的加密属性
 func ensureDirStructure(ctx context.Context, targetParentID, relativePath, ownerID string) (string, error) {
 	dir := filepath.Dir(relativePath)
-	llog.L().Debugf("ensureDirStructure: relativePath=%s, dir=%s, targetParentID=%s", relativePath, dir, targetParentID)
+	llog.C(ctx).Debugf("ensureDirStructure: relativePath=%s, dir=%s, targetParentID=%s", relativePath, dir, targetParentID)
 	if dir == "." || dir == "" {
 		return targetParentID, nil
 	}
@@ -458,7 +458,7 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 	// 检查目标父目录的加密设置
 	targetDir, err := db.GetFileByID(targetParentID)
 	if err == nil && targetDir != nil {
-		llog.L().Infof("ensureDirStructure: target folder encryption=%v, targetParentID=%s",
+		llog.C(ctx).Infof("ensureDirStructure: target folder encryption=%v, targetParentID=%s",
 			targetDir.EnableEncryption != nil && *targetDir.EnableEncryption, targetParentID)
 	}
 
@@ -476,7 +476,7 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 				// 检查加密属性
 				if parentDir.EnableEncryption != nil &&
 					(existing.EnableEncryption == nil || *existing.EnableEncryption != *parentDir.EnableEncryption) {
-					llog.L().Infof("ensureDirStructure: updating folder '%s' encryption from %v to %v",
+					llog.C(ctx).Infof("ensureDirStructure: updating folder '%s' encryption from %v to %v",
 						part, existing.EnableEncryption, parentDir.EnableEncryption)
 					existing.EnableEncryption = parentDir.EnableEncryption
 					fieldsToUpdate = append(fieldsToUpdate, "enable_encryption")
@@ -496,10 +496,10 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 		if err == nil && parentDir != nil {
 			if parentDir.EnableEncryption != nil {
 				parentEncrypt = parentDir.EnableEncryption
-				llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=%v, parentID=%s",
+				llog.C(ctx).Infof("ensureDirStructure: creating folder '%s', parent encryption=%v, parentID=%s",
 					part, *parentEncrypt, currentParentID)
 			} else {
-				llog.L().Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
+				llog.C(ctx).Infof("ensureDirStructure: creating folder '%s', parent encryption=nil/false, parentID=%s",
 					part, currentParentID)
 			}
 		}
@@ -509,14 +509,21 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 			ParentId:         &currentParentID,
 			Type:             utils.EnumPtr(native.FileType_FOLDER),
 			IsReady:          utils.BoolPtr(true),
-			EnableEncryption: parentEncrypt,  // 继承父目录的加密属性
+			EnableEncryption: parentEncrypt, // 继承父目录的加密属性
 			OwnerId:          &ownerID,
+		}
+		// 继承父目录的存储提供者绑定（父目录未显式绑定时回退用户分配集）
+		if ids, rErr := storage.ResolveProviderIds(ownerID, currentParentID); rErr == nil && len(ids) > 0 {
+			encoded := storage.EncodeProviderIds(ids)
+			newDir.BoundProviderIds = &encoded
+		} else if rErr != nil {
+			llog.C(ctx).Warnf("ensureDirStructure: resolve providers failed (owner=%s, dir=%s): %v", ownerID, currentParentID, rErr)
 		}
 		if err := db.CreateFile(newDir); err != nil {
 			// 并发竞态：其他 goroutine 可能刚创建了同一目录，重试查找
 			existing, retryErr := db.GetFileByParentAndName(currentParentID, part, ownerID)
 			if retryErr == nil && existing != nil {
-				llog.L().Debugf("ensureDirStructure: directory '%s' created by concurrent goroutine, using existing", part)
+				llog.C(ctx).Debugf("ensureDirStructure: directory '%s' created by concurrent goroutine, using existing", part)
 				currentParentID = *existing.Id
 				continue
 			}

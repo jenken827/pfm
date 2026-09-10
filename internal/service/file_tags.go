@@ -24,7 +24,7 @@ func UpdateFileTagsImpl(ctx context.Context, req *native.UpdateFileTagsReq) *mod
 	// 1. 验证文件是否存在
 	file, err := db.GetFileByID(*req.FileId)
 	if err != nil {
-		llog.L().Errorf("get file failed: %v", err)
+		llog.C(ctx).Errorf("get file failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -67,11 +67,11 @@ func UpdateFileTagsImpl(ctx context.Context, req *native.UpdateFileTagsReq) *mod
 	})
 
 	if dbErr != nil {
-		llog.L().Errorf("update file tags transaction failed: %v", dbErr)
+		llog.C(ctx).Errorf("update file tags transaction failed: %v", dbErr)
 		return &models.Err{E: dbErr, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("updated tags for file %s: %v", *req.FileId, cleanTags)
+	llog.C(ctx).Infof("updated tags for file %s: %v", *req.FileId, cleanTags)
 	return nil
 }
 
@@ -83,7 +83,7 @@ func validateAndCleanTags(tags []string) []string {
 	for _, tag := range tags {
 		// 去除首尾空白字符
 		trimmedTag := strings.TrimSpace(tag)
-		
+
 		// 过滤空字符串和过长标签
 		if trimmedTag != "" && len(trimmedTag) <= 50 { // 限制单个标签长度不超过50字符
 			// 去重
@@ -109,7 +109,7 @@ func GetFileTags(ctx context.Context, req *native.GetFileTagsReq) (*native.GetFi
 	// 1. 验证文件是否存在
 	file, err := db.GetFileByID(*req.FileId)
 	if err != nil {
-		llog.L().Errorf("get file failed: %v", err)
+		llog.C(ctx).Errorf("get file failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -131,7 +131,7 @@ func GetFileTags(ctx context.Context, req *native.GetFileTagsReq) (*native.GetFi
 	// 2. 获取文件标签
 	tags, err := db.GetFileTagsByFileID(*req.FileId)
 	if err != nil {
-		llog.L().Errorf("get file tags failed: %v", err)
+		llog.C(ctx).Errorf("get file tags failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 

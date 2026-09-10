@@ -26,12 +26,17 @@ import (
 type Backend struct {
 	rootID  string
 	ownerID string
+	// mountPrefix 是 HTTP 路由 StripPrefix 剥掉的前缀（见 server/router.go 的
+	// "/dav/"）。PROPFIND/MKCOL 等响应里的 href 必须与请求 URI 的路径一致
+	// （RFC 4918 §8.3、§9.1），否则客户端按路径匹配子项时会把条目全部丢掉。
+	mountPrefix string
 }
 
 // NewBackend 创建 WebDAV 后端
 // rootID 为用户根目录文件 ID，ownerID 为当前用户 ID（与 File.owner_id 一致）
-func NewBackend(rootID, ownerID string) *Backend {
-	return &Backend{rootID: rootID, ownerID: ownerID}
+// mountPrefix 为路由上被 StripPrefix 剥掉的前缀（客户端可见路径 = mountPrefix + 路径）
+func NewBackend(rootID, ownerID, mountPrefix string) *Backend {
+	return &Backend{rootID: rootID, ownerID: ownerID, mountPrefix: mountPrefix}
 }
 
 // resolvePath 解析 WebDAV 路径到 PFM 文件
@@ -71,12 +76,23 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 }
 
 // toFileInfo 转换为 WebDAV FileInfo
+//
+// Path 必须是「客户端可见路径」：本 handler 挂在 /dav/ 上并由 StripPrefix("/dav")
+// 处理，后端看到的路径是剥掉前缀后的 "/webvav/…"，而 PROPFIND 的 href 必须与请求
+// URI 的路径（"/dav/webvav/…"）一致，否则按路径匹配子项的客户端会把所有条目丢掉
+// （ReadAny 因此判定「远端没有任何书」，每轮重传整个本地书库）。
 func (b *Backend) toFileInfo(file *native.FileORM, webdavPath string) gowebdav.FileInfo {
-	fi := gowebdav.FileInfo{Path: webdavPath}
+	fi := gowebdav.FileInfo{Path: b.mountPrefix + webdavPath}
 	if file.Size != nil {
 		fi.Size = int64(*file.Size)
 	}
-	if file.CreatedAt != nil {
+	if file.UpdatedAt != nil {
+		// Last-Modified 必须是「内容最后修改时间」。用 CreatedAt 时，覆盖上传
+		// 不会让这个值前进，客户端拿 Last-Modified 做 If-Modified-Since 或计算
+		// 启发式新鲜度时会把旧副本当成最新的（ReadAny 曾在 Android 上因此读到
+		// 几小时前的书文件，把对端的注解覆盖掉）。
+		fi.ModTime = *file.UpdatedAt
+	} else if file.CreatedAt != nil {
 		fi.ModTime = *file.CreatedAt
 	}
 	if file.Type != nil {
@@ -150,7 +166,7 @@ func (b *Backend) ReadDir(ctx context.Context, name string, recursive bool) ([]g
 		if recursive && f.Type != nil && *f.Type == int32(native.FileType_FOLDER) {
 			children, err := b.ReadDir(ctx, childPath, true)
 			if err != nil {
-				llog.L().Warnf("recursive readdir failed: %v", err)
+				llog.C(ctx).Warnf("recursive readdir failed: %v", err)
 				continue
 			}
 			result = append(result, children...)
@@ -396,7 +412,7 @@ func (b *Backend) Move(ctx context.Context, name, dest string, options *gowebdav
 			},
 		})
 		if renameErr != nil {
-			llog.L().Warnf("rename after move failed: %v", renameErr)
+			llog.C(ctx).Warnf("rename after move failed: %v", renameErr)
 		}
 	}
 

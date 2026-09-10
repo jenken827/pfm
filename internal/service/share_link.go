@@ -32,12 +32,8 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 		return nil, &models.Err{E: errors.New("file_id is required"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	_, err := db.GetFileByID(fileID)
-	if err != nil {
-		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-	}
-
-	// 1.1 归属校验：仅文件所有者可创建分享（管理员不可越权分享他人文件）
+	// 1. 归属校验：仅文件所有者可创建分享（管理员不可越权分享他人文件）
+	// 一次查询同时完成「存在性」与「归属」校验，避免重复查库
 	if !CheckOwnership(ctx, fileID) {
 		return nil, &models.Err{E: errors.New("permission denied: only file owner can share"), C: native.RespCode_PERMISSION_DENIED}
 	}
@@ -68,7 +64,7 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 			break
 		}
 		if err != nil {
-			llog.L().Errorf("check share code failed: %v", err)
+			llog.C(ctx).Errorf("check share code failed: %v", err)
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 	}
@@ -107,7 +103,7 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 	}
 
 	if err := db.CreateFileShare(fs); err != nil {
-		llog.L().Errorf("create file share failed: %v", err)
+		llog.C(ctx).Errorf("create file share failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -198,7 +194,7 @@ func ListMyShares(ctx context.Context, req *native.ListMySharesReq) (*native.Lis
 
 	shares, total, err := db.ListFileSharesByOwner(userID, offset, pageSize)
 	if err != nil {
-		llog.L().Errorf("list shares failed: %v", err)
+		llog.C(ctx).Errorf("list shares failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -213,7 +209,7 @@ func ListMyShares(ctx context.Context, req *native.ListMySharesReq) (*native.Lis
 	if len(fileIDs) > 0 {
 		files, fErr := db.GetFilesByIDsUnscoped(fileIDs)
 		if fErr != nil {
-			llog.L().Errorf("get share files failed: %v", fErr)
+			llog.C(ctx).Errorf("get share files failed: %v", fErr)
 		} else {
 			for _, f := range files {
 				if f.Id != nil {
@@ -376,7 +372,7 @@ func UpdateShareLink(ctx context.Context, req *native.UpdateShareLinkReq) (*nati
 	}
 
 	if err := db.UpdateFileShare(update, fields); err != nil {
-		llog.L().Errorf("update share failed: %v", err)
+		llog.C(ctx).Errorf("update share failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 

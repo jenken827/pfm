@@ -80,15 +80,4 @@ class LocalLoginResult {
     required this.email,
     required this.isAdmin,
   });
-
-  factory LocalLoginResult.fromMap(Map<String, dynamic> map) {
-    final user = map['user'] as Map<String, dynamic>? ?? const {};
-    return LocalLoginResult(
-      token: map['token']?.toString() ?? '',
-      userId: user['id']?.toString() ?? '',
-      name: user['name']?.toString() ?? '',
-      email: user['email']?.toString() ?? '',
-      isAdmin: user['is_admin'] == true,
-    );
-  }
 }

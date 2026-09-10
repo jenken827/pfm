@@ -6,61 +6,14 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 import "gorm/gorm.proto";
+import "native/auth.proto";
 import "native/common.proto";
 import "native/enum.proto";
+import "native/provider.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// ===== 废弃消息（保留用于 DB 兼容，不再用于新功能） =====
-
-// 权限位掩码枚举（废弃：不再使用 bitmask 权限模型）
-enum FilePermissionBit {
-    FILE_PERMISSION_BIT_UNSPECIFIED = 0;
-    FILE_PERMISSION_BIT_READ     = 1;
-    FILE_PERMISSION_BIT_UPLOAD   = 2;
-    FILE_PERMISSION_BIT_MKDIR    = 4;
-    FILE_PERMISSION_BIT_DELETE   = 8;
-    FILE_PERMISSION_BIT_MOVE     = 16;
-    FILE_PERMISSION_BIT_RENAME   = 32;
-}
-
-// 目录权限记录（废弃：已改用 owner_id 隔离模型）
-message DirectoryPermission {
-    option (gorm.opts).ormable = true;
-    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
-    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-    optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique_index: "idx_dp_user_file, length:64"}];
-    optional string file_id = 5 [(gorm.field).tag = {not_null: true, unique_index: "idx_dp_user_file, length:36"}];
-    optional uint32 permissions = 6 [(gorm.field).tag = {not_null: true, default: "0"}];
-    optional bool inherit = 7 [(gorm.field).tag = {not_null: true, default: "true"}];
-    optional string granted_by = 8 [(gorm.field).tag = {default: "''"}];
-    optional string alias = 9 [(gorm.field).tag = {size:32, default: "''"}];
-}
-
-// 权限审计日志（废弃：旧权限模型遗留）
-message PermissionAuditLog {
-    option (gorm.opts).ormable = true;
-    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
-    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    optional string operator = 3 [(gorm.field).tag = {not_null: true}];
-    optional string target_user = 4 [(gorm.field).tag = {not_null: true}];
-    optional string file_id = 5 [(gorm.field).tag = {not_null: true}];
-    optional string action = 6 [(gorm.field).tag = {not_null: true}];
-    optional uint32 old_permissions = 7;
-    optional uint32 new_permissions = 8;
-}
-
-// ===== 新模型 =====
-
-// 管理员用户表（本地管理员判定）
-message AdminUser {
-    option (gorm.opts).ormable = true;
-    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
-    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    // 用户 ID（UUID，关联本地用户表 users.user_id / user_spaces.user_id）
-    optional string user_id = 3 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
-}
+// ===== 模型 =====
 
 // 用户空间（每个用户独立的网盘根目录和配额）
 message UserSpace {
@@ -167,9 +120,15 @@ message GetMyRolesResp {
     optional bool is_admin = 2;
 }
 
+// 获取当前用户被分配的存储提供者（供文件夹绑定选择使用）
+message GetMyBoundProvidersResp {
+    // 当前用户被管理员分配且已启用的存储提供者
+    repeated StorageProvider providers = 1;
+}
+
 // ===== 服务定义 =====
 
-// 用户空间服务（替代旧的 PermissionService）
+// 用户空间服务（用户空间、配额、用户列表与角色、个人资料）
 service UserSpaceService {
     // 获取当前用户的空间信息（含根目录、配额、已用）
     rpc GetUserSpace(google.protobuf.Empty) returns (BaseResp);
@@ -181,99 +140,14 @@ service UserSpaceService {
     rpc ListUsers(ListUsersReq) returns (BaseResp);
     // 获取当前用户角色
     rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
+    // 获取当前用户被分配的存储提供者（文件夹绑定选择用）
+    rpc GetMyBoundProviders(google.protobuf.Empty) returns (BaseResp);
+    // 更新当前用户资料（用户名/邮箱，仅本人）
+    rpc UpdateProfile(UpdateProfileReq) returns (BaseResp);
     // 管理员：列出所有用户空间
     rpc ListUserSpaces(ListUserSpacesReq) returns (BaseResp);
     // 管理员：更新用户空间配额
     rpc UpdateUserSpace(UpdateUserSpaceReq) returns (BaseResp);
     // 管理员：为用户分配根目录
     rpc AssignRootDir(AssignRootDirReq) returns (BaseResp);
-}
-
-// 旧权限服务（废弃，保留用于 DB 兼容，所有方法返回 UNIMPLEMENTED）
-service PermissionService {
-    rpc GrantDirectoryPermission(GrantDirectoryPermissionReq) returns (BaseResp);
-    rpc RevokeDirectoryPermission(RevokeDirectoryPermissionReq) returns (BaseResp);
-    rpc UpdateDirectoryPermission(UpdateDirectoryPermissionReq) returns (BaseResp);
-    rpc GetUserPermissions(GetUserPermissionsReq) returns (BaseResp);
-    rpc GetDirectoryPermissions(GetDirectoryPermissionsReq) returns (BaseResp);
-    rpc BatchGrantPermission(BatchGrantPermissionReq) returns (BaseResp);
-    rpc GetAccessibleDirectories(GetAccessibleDirectoriesReq) returns (BaseResp);
-    rpc ListUsers(ListUsersReq) returns (BaseResp);
-    rpc GetMyRoles(google.protobuf.Empty) returns (BaseResp);
-}
-
-// ===== 废弃请求消息（保留用于旧 service 签名兼容） =====
-
-message GrantDirectoryPermissionReq {
-    optional string user_id = 1;
-    optional string file_id = 2;
-    optional uint32 permissions = 3;
-    optional bool inherit = 4;
-    optional string alias = 5;
-}
-
-message RevokeDirectoryPermissionReq {
-    optional string user_id = 1;
-    optional string file_id = 2;
-}
-
-message UpdateDirectoryPermissionReq {
-    optional string user_id = 1;
-    optional string file_id = 2;
-    optional uint32 permissions = 3;
-    optional bool inherit = 4;
-}
-
-message GetUserPermissionsReq {
-    optional string user_id = 1;
-}
-
-message GetUserPermissionsResp {
-    repeated DirectoryPermissionInfo permissions = 1;
-}
-
-message DirectoryPermissionInfo {
-    optional uint32 id = 1;
-    optional string user_id = 2;
-    optional string file_id = 3;
-    optional string file_name = 4;
-    optional string file_path = 5;
-    optional uint32 permissions = 6;
-    optional bool inherit = 7;
-    optional string granted_by = 8;
-    optional google.protobuf.Timestamp created_at = 9;
-    optional string alias = 10;
-}
-
-message GetDirectoryPermissionsReq {
-    optional string file_id = 1;
-    optional bool recursive = 2;
-}
-
-message GetDirectoryPermissionsResp {
-    repeated DirectoryPermissionInfo permissions = 1;
-}
-
-message BatchGrantPermissionReq {
-    optional string user_id = 1;
-    repeated string file_ids = 2;
-    optional uint32 permissions = 3;
-    optional bool inherit = 4;
-    optional bool include_children = 5;
-}
-
-message GetAccessibleDirectoriesReq {
-    optional string user_id = 1;
-}
-
-message GetAccessibleDirectoriesResp {
-    repeated AccessibleDirectory directories = 1;
-}
-
-message AccessibleDirectory {
-    optional string file_id = 1;
-    optional string file_name = 2;
-    optional string parent_id = 3;
-    optional uint32 permissions = 4;
-    optional bool is_inherited = 5;
 }

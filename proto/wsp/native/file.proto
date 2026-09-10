@@ -3,7 +3,6 @@ syntax = "proto3";
 package native;
 
 import "buf/validate/validate.proto";
-import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 import "gorm/gorm.proto";
@@ -86,6 +85,13 @@ message File {
   optional uint64 version = 16 [(gorm.field).tag = {
     not_null: true
     default: "0"
+  }];
+  // 绑定的存储提供者ID列表（JSON 数组，仅文件夹有效）。
+  // 语义：'[]' = 未显式绑定（解析时沿祖先链向上继承，最终回退到 UserSpace.bound_provider_ids）；
+  // 非空 = 该目录下文件只分发到这些 provider（必须 ⊆ 管理员分配给该用户的列表）
+  optional string bound_provider_ids = 17 [(gorm.field).tag = {
+    not_null: true
+    default: "'[]'"
   }];
 }
 message FileHistory {
@@ -249,12 +255,45 @@ message CreateDirReq {
   optional bool enable_encryption = 3;
   // 最大历史记录数（0表示不限制）
   optional uint32 max_histories = 4;
+  // 绑定的存储提供者ID列表：至少 1 个，且必须 ⊆ 管理员分配给当前用户的列表。
+  // 不传 = 继承父文件夹的绑定（父文件夹未绑定则用管理员分配集）
+  repeated uint32 provider_ids = 5;
 }
 
 // 创建目录响应数据
 message CreateDirRespData {
   // 新创建的目录 ID
   optional string id = 1;
+}
+
+// ===== 相册备份专用：目录辅助 =====
+
+// 获取有空位的编号子目录，都满则新建一个
+// 语义：在 parent_id 下找「纯数字名称」且文件数未达上限的第一个目录；
+// 若都满或不存在，则按最大编号 +1 新建（格式 001、002）。
+message GetOrCreateSubfolderReq {
+  // 父目录 ID
+  optional string parent_id = 1 [(buf.validate.field).required = true];
+}
+
+message GetOrCreateSubfolderResp {
+  // 可用于继续写入的目录 ID
+  optional string folder_id = 1;
+}
+
+// 按相对路径逐级确保目录存在（mkdir -p 语义）
+// 语义：rel_path 形如 "2026/07"，按 "/" 逐级查找/创建，返回叶子目录 ID。
+// 幂等：重复调用返回同一目录；并发安全（唯一索引兜底）。
+message EnsureDirPathReq {
+  // 起始父目录 ID
+  optional string parent_id = 1 [(buf.validate.field).required = true];
+  // 相对路径（以 "/" 分隔的多级目录名）
+  optional string path = 2 [(buf.validate.field).required = true];
+}
+
+message EnsureDirPathResp {
+  // 路径末级目录 ID
+  optional string folder_id = 1;
 }
 
 // 更新目录请求
@@ -267,6 +306,9 @@ message UpdateDirReq {
   optional bool enable_encryption = 3;
   // 最大历史记录数（0表示不限制）
   optional uint32 max_histories = 4;
+  // 更新绑定的存储提供者ID列表：非空时必须 ⊆ 管理员分配给当前用户的列表；
+  // 不传 = 绑定关系保持不变
+  repeated uint32 provider_ids = 5;
 }
 
 // 删除文件请求
@@ -325,6 +367,8 @@ message GetFileInfoRespData {
   optional FileType type = 4;
   // 文件大小
   optional uint64 size = 5;
+  // 绑定的存储提供者ID列表（JSON 数组，仅文件夹有效；'[]' = 未显式绑定）
+  optional string bound_provider_ids = 6;
 }
 
 // 存储提供者位置信息（按提供者分组后）
@@ -713,25 +757,22 @@ message PhotoDateConfig {
 message GetPhotoDateConfigReq {}
 
 // 文件服务
+// 路由不再由 proto 注解声明，统一在 server/route_rest.go 中显式维护
 service FileService {
   // 获取文件列表
-  rpc GetFileList(FileListReq) returns (BaseResp) {
-    option (google.api.http) = {get: "/api/file/list"};
-  }
+  rpc GetFileList(FileListReq) returns (BaseResp);
   // 获取文件夹列表（用于移动文件选择目标文件夹）
-  rpc GetFolderList(FolderListReq) returns (BaseResp) {
-    option (google.api.http) = {get: "/api/file/folders"};
-  }
+  rpc GetFolderList(FolderListReq) returns (BaseResp);
   // 获取文件详情
-  rpc GetFileDetail(FileDetailReq) returns (BaseResp) {
-    option (google.api.http) = {get: "/api/file/detail"};
-  }
+  rpc GetFileDetail(FileDetailReq) returns (BaseResp);
   // 获取文件基本信息
-  rpc GetFileInfo(GetFileInfoReq) returns (BaseResp) {
-    option (google.api.http) = {get: "/api/file/info"};
-  }
+  rpc GetFileInfo(GetFileInfoReq) returns (BaseResp);
   // 创建目录
   rpc CreateDir(CreateDirReq) returns (BaseResp);
+  // 相册备份：获取有空位的编号子目录（都满则新建）
+  rpc GetOrCreateSubfolder(GetOrCreateSubfolderReq) returns (BaseResp);
+  // 相册备份：按相对路径逐级创建目录（mkdir -p 语义）
+  rpc EnsureDirPath(EnsureDirPathReq) returns (BaseResp);
   // 更新目录
   rpc UpdateDir(UpdateDirReq) returns (BaseResp);
   // 删除文件

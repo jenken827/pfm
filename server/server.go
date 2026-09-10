@@ -48,8 +48,8 @@ func Run() {
 	// Apply rate limiting middleware
 	handlerWithRateLimit := middleware.RateLimitHTTPMiddleware(handlerWithCors)
 
-	// Apply recover middleware (panic recovery)
-	handlerWithRecover := middleware.HTTPRecoverMiddleware(handlerWithRateLimit)
+	// Apply request log middleware (请求日志 + request_id + panic recovery)
+	handlerWithLog := middleware.HTTPLogMiddleware(handlerWithRateLimit)
 
 	route(mux)
 
@@ -76,7 +76,7 @@ func Run() {
 
 	s := &http.Server{
 		Addr:      fmt.Sprintf("%s:%d", addr, port),
-		Handler:   handlerWithRecover,
+		Handler:   handlerWithLog,
 		Protocols: p,
 	}
 

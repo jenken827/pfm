@@ -322,7 +322,6 @@ class AlbumBackupService {
         final repo = FmRepository();
         final result = await repo.getOrCreateSubfolder(
           parentId: _config.targetParentId,
-          prefix: '00',
         );
         if (result.success && result.data != null) {
           targetFolderId = result.data!;

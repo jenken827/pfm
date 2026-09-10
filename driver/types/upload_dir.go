@@ -40,7 +40,7 @@ func AllocateUploadDir(ctx context.Context, root string, backend DirBackend) (st
 	// 由 List fallback 与后续 create 兜底——恢复重构前的容错行为）
 	for _, dir := range []string{root, path.Join(root, year), path.Join(root, year, month)} {
 		if err := backend.Mkdir(ctx, dir); err != nil {
-			llog.L().Warnf("ensure directory %s failed (may already exist): %v", dir, err)
+			llog.C(ctx).Warnf("ensure directory %s failed (may already exist): %v", dir, err)
 		}
 	}
 
@@ -49,7 +49,7 @@ func AllocateUploadDir(ctx context.Context, root string, backend DirBackend) (st
 	entries, err := backend.List(ctx, yearMonthDir)
 	if err != nil {
 		// 列出失败（如百度 -7 目录不存在/名错误）→ 直接使用年月目录，后续 create 兜底
-		llog.L().Warnf("list year-month directory failed: %v, fallback to %s", err, yearMonthDir)
+		llog.C(ctx).Warnf("list year-month directory failed: %v, fallback to %s", err, yearMonthDir)
 		return yearMonthDir, nil
 	}
 
@@ -82,7 +82,7 @@ func AllocateUploadDir(ctx context.Context, root string, backend DirBackend) (st
 	subEntries, err := backend.List(ctx, maxSubDir)
 	if err != nil {
 		// 子目录列表失败（如百度 -7）→ 创建新子目录（恢复重构前行为）
-		llog.L().Warnf("list subdirectory %d failed: %v, creating new subfolder", maxSubDirNum, err)
+		llog.C(ctx).Warnf("list subdirectory %d failed: %v, creating new subfolder", maxSubDirNum, err)
 		newSubDir := path.Join(yearMonthDir, strconv.Itoa(maxSubDirNum+1))
 		if err := backend.Mkdir(ctx, newSubDir); err != nil {
 			return "", fmt.Errorf("create subdirectory %d failed: %w", maxSubDirNum+1, err)

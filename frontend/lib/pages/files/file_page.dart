@@ -1508,8 +1508,45 @@ class _FileViewState extends State<_FileView> {
   // 对话框
   // ============================================================
 
-  void _showCreateDirDialog(BuildContext context) {
+  Future<void> _showCreateDirDialog(BuildContext context) async {
     final al = AppLocalizations.of(context);
+    final bloc = context.read<FileBloc>();
+    final repo = bloc.fmRepository;
+
+    // 可选存储提供者 = 管理员分配给当前用户的列表（未加载过则补一次请求）
+    var providers = bloc.state.storageProviders;
+    if (providers.isEmpty) {
+      final resp = await repo.getMyBoundProviders();
+      providers = resp.data?.providers.toList() ?? const [];
+    }
+    if (!context.mounted) return;
+    if (providers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(al.file_noProviderAvailable)),
+      );
+      return;
+    }
+
+    // 默认绑定 = 父文件夹的绑定（父目录未显式绑定时视作全部可用）
+    final selectedIds = providers.map((p) => p.id.toInt()).toList();
+    final parentId = bloc.state.currentDirId;
+    if (parentId.isNotEmpty) {
+      final info = await repo.getFileInfo(parentId);
+      final parentBinding = parseProviderIdsJson(
+        info.data?.boundProviderIds ?? '',
+      );
+      if (parentBinding.isNotEmpty) {
+        selectedIds
+          ..clear()
+          ..addAll(
+            providers
+                .map((p) => p.id.toInt())
+                .where(parentBinding.contains),
+          );
+      }
+    }
+    if (!context.mounted) return;
+
     final nameController = TextEditingController();
     final maxHistoriesController = TextEditingController(text: '10');
     bool enableEncryption = true;
@@ -1531,6 +1568,37 @@ class _FileViewState extends State<_FileView> {
                     hintText: al.file_folderNameHint,
                   ),
                   autofocus: true,
+                ),
+                const SizedBox(height: PfmSpacing.lg),
+                Text(
+                  al.file_bindStorageProvider,
+                  style: PfmTypography.titleSmall,
+                ),
+                const SizedBox(height: PfmSpacing.xs),
+                ...providers.map((provider) {
+                  final id = provider.id.toInt();
+                  return CheckboxListTile(
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(provider.name),
+                    value: selectedIds.contains(id),
+                    onChanged: (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          if (!selectedIds.contains(id)) selectedIds.add(id);
+                        } else {
+                          selectedIds.remove(id);
+                        }
+                      });
+                    },
+                  );
+                }),
+                Text(
+                  al.file_providerBindingHint,
+                  style: PfmTypography.labelSmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: PfmSpacing.lg),
                 SwitchListTile(
@@ -1567,28 +1635,32 @@ class _FileViewState extends State<_FileView> {
               child: Text(al.common_cancel),
             ),
             FilledButton(
-              onPressed: () {
-                if (nameController.text.isNotEmpty) {
-                  int? maxHistories;
-                  if (maxHistoriesController.text.isNotEmpty) {
-                    maxHistories = int.tryParse(maxHistoriesController.text);
-                    if (maxHistories == null || maxHistories < 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(al.file_maxHistoryInvalid)),
+              onPressed: selectedIds.isEmpty
+                  ? null
+                  : () {
+                      if (nameController.text.isEmpty) {
+                        return;
+                      }
+                      int? maxHistories;
+                      if (maxHistoriesController.text.isNotEmpty) {
+                        maxHistories = int.tryParse(maxHistoriesController.text);
+                        if (maxHistories == null || maxHistories < 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(al.file_maxHistoryInvalid)),
+                          );
+                          return;
+                        }
+                      }
+                      context.read<FileBloc>().add(
+                        FileCreateDirEvent(
+                          name: nameController.text,
+                          enableEncryption: enableEncryption,
+                          maxHistories: maxHistories,
+                          providerIds: List<int>.from(selectedIds),
+                        ),
                       );
-                      return;
-                    }
-                  }
-                  context.read<FileBloc>().add(
-                    FileCreateDirEvent(
-                      name: nameController.text,
-                      enableEncryption: enableEncryption,
-                      maxHistories: maxHistories,
-                    ),
-                  );
-                  Navigator.pop(ctx);
-                }
-              },
+                      Navigator.pop(ctx);
+                    },
               child: Text(al.common_create),
             ),
           ],

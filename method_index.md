@@ -52,8 +52,9 @@
 | 方法 | 说明 |
 |------|------|
 | `GetFileList(ctx, req) (*GetFileListResp, *Err)` | 获取文件列表（文件夹行 size 前端显示 "-"，不统计子树大小） |
-| `CreateDirectory(ctx, req) (*CreateDirectoryResp, *Err)` | 创建目录 |
-| `UpdateDirectory(ctx, req) (*BaseResp, *Err)` | 更新目录信息 |
+| `CreateDir(ctx, req) (*CreateDirResp, *Err)` | 创建目录：写入加密属性、`max_histories`（未传则继承父目录）与 provider 绑定（显式 ≥1 且 ⊆ 分配集，或继承父目录） |
+| `UpdateDir(ctx, req) (*BaseResp, *Err)` | 更新目录信息：`name` / `enable_encryption` / `max_histories` / `bound_provider_ids`（后两者字段为 nil 时不改，provider 显式传时校验 ⊆ 分配集）|
+| `getInheritedMaxHistories(parentID) uint32`（内部） | 从父目录继承历史版本数（父目录缺失/未配置返回 0 = 不保留历史），与 `getInheritedEncryption` 同语义 |
 | `DeleteFile(ctx, req) (*BaseResp, *Err)` | 删除文件（移入回收站；used_bytes 含回收站口径不变，不触发重算） |
 | `RestoreFile(ctx, req) (*BaseResp, *Err)` | 恢复回收站文件（不触发重算） |
 | `PermanentDeleteFile(ctx, req) (*BaseResp, *Err)` | 永久删除文件（used_bytes 回落，触发重算） |
@@ -62,6 +63,25 @@
 | `MoveFile(ctx, req) (*BaseResp, *Err)` | 移动文件（owner 不变，不触发重算） |
 | `GetFileDetail(ctx, req) (*GetFileDetailResp, *Err)` | 获取文件详情 |
 | `RestoreFileHistory(ctx, req) *Err` | 恢复历史版本：new_name 空 → 覆盖当前文件（CAS，当前内容进历史）；非空 → 以新名称另存（秒传，不覆盖） |
+| `resolveCreateDirProviderIds(ctx, parentID, requested) (string, *Err)`（内部） | 计算新建目录的绑定：显式 `providerIds`（≥1 且 ⊆ 分配集 + 存在且启用）→ 原样使用；未传 → 继承父目录解析结果（`getNearestBound` + 分配集兜底）。`CreateDir` / `UpdateDir` 均先经 `validateProviderIdsAssigned` + `validateProvidersUsable` |
+| `SyncFileToProviders(ctx, req) *Err` | 同步文件到指定 provider；目标必须在**文件所在目录的有效绑定**内（`resolveProviderIdsForFolder`），且文件属于当前用户 |
+| `GetAvailableProvidersForSync(ctx, fileHash) ([]*StorageProvider, *Err)` | 可同步 provider 列表：先按 owner 定位该 hash 的文件，再用其所在目录的有效绑定过滤（修掉旧实现「列出用户无权同步的 provider」越权展示） |
+
+### file_stream.go（文件流：预览/下载）
+
+| 方法 | 说明 |
+|------|------|
+| `GetFileStream(ctx, fileID, providerID) (*FileStreamResult, error)` | **用户场景**取文件流，内部强制 `CheckOwnership`（仅 owner 可取） |
+| `GetFileStreamForShare(ctx, fileID, providerID) (*FileStreamResult, error)` | **分享场景**取流，跳过归属校验；调用方须已完成分享有效性校验（见 `api/share_link.go`） |
+| `GetFileHistoryStream(ctx, historyID, isPreview) (*FileStreamResult, error)` | 取历史版本流；经 `history.FileId` 校验归属 |
+
+### file_detail.go（文件详情）
+
+| 方法 | 说明 |
+|------|------|
+| `GetFileDetail(ctx, req) (*FileDetailRespData, *Err)` | 获取文件详情（含存储位置、历史、标签）；**仅 owner** |
+| `GetFileInfo(ctx, req) (*GetFileInfoRespData, *Err)` | 获取文件基本信息；**仅 owner**。响应含 `boundProviderIds`（JSON 数组，仅文件夹有效），供前端回显/预选绑定 |
+| `GetFileCacheStatus(ctx, req) (*GetFileCacheStatusResp, *Err)` | 查询缓存状态；入参为全局 file_hash，须先按 `(hash, owner)` 确认归属 |
 
 ### provider.go
 
@@ -83,16 +103,6 @@
 | `UpdateShareLink(ctx, req) (*UpdateShareLinkRespData, *Err)` | 更新分享（有效期/永久/访问上限/备注；有效期变更重签 URL） |
 
 
-### permission.go
-
-| 方法 | 说明 |
-|------|------|
-| `CheckOwnership(ctx, fileID) bool` | 检查用户是否为文件所有者（**管理员不享有特权**，普通文件操作用） |
-| `CheckOwnershipOrAdmin(ctx, fileID) bool` | 所有者或管理员（**仅管理功能用**：分享审查/备份跨用户读取等） |
-| `requireDirPermManager(ctx, fileID) *Err` | 目录权限管理门槛：管理员或目录所有者（授权/撤销/更新/批量四件套用） |
-| `CheckPermission(userID, fileID, requiredPerm) bool` | **已废弃** 旧权限检查 |
-| `GrantDirectoryPermission(ctx, req, operator) *Err` | **已废弃** 旧权限授予 |
-
 ### share_save.go (UserSpace 管理)
 
 | 方法 | 说明 |
@@ -100,7 +110,8 @@
 | `GetUserSpace(ctx) (*UserSpace, error)` | 获取当前用户的空间信息 |
 | `ListUserSpaces(ctx, req) (*ListUserSpacesResp, *Err)` | 管理员：列出所有用户空间 |
 | `UpdateUserSpace(ctx, req) *Err` | 管理员：更新用户空间配额 |
-| `AssignRootDir(ctx, req) (*AssignRootDirResp, *Err)` | 管理员：为用户分配根目录及存储提供者 |
+| `AssignRootDir(ctx, req) (*AssignRootDirResp, *Err)` | 管理员：为用户分配根目录及存储提供者（`UserSpace.bound_provider_ids` = 用户的可用范围上限）。已有 UserSpace 时同时把根目录 File 行的 `bound_provider_ids` 写成同一份值（`updateRootDirBinding`），根目录是"未显式绑定目录"的继承兜底点 |
+| `updateRootDirBinding(space, boundProviderIds) *Err`（内部） | 同步根目录行的绑定（`db.UpdateDir`），保持与 UserSpace 一致 |
 
 ### auth_helper.go
 
@@ -109,17 +120,30 @@
 | `getCurrentUserIDFromCtx(ctx) string` | 从 context 获取当前用户 ID |
 | `isAdminUser(ctx) bool` | 检查当前用户是否为管理员 |
 | `getUserContext(ctx) *UserContext` | 从 context 获取完整用户空间信息 |
-| `getBoundProviderIdsFromCtx(ctx) ([]uint32, *Err)` | 从 context 获取绑定的存储提供者 |
+| `getBoundProviderIdsFromCtx(ctx) ([]uint32, *Err)` | 从 context 获取**管理员分配给当前用户**的存储提供者（可用范围上限，非落盘目标） |
+| `resolveProviderIdsForFolder(ctx, folderID) ([]uint32, *Err)` | 解析当前用户在某目录下应落盘到哪些 provider（`storage.ResolveProviderIds`；未配置 UserSpace 返回"根目录未配置"） |
+| `validateProviderIdsAssigned(ctx, ids) *Err` | 校验目录绑定请求：≥1 个且全部 ⊆ 管理员分配集（越界 `PERMISSION_DENIED`） |
+| `validateProvidersUsable(ctx, ids) *Err` | 校验 provider 存在且启用（禁用/删除的不能再绑） |
+| `inheritBoundProviderIds(ownerID, parentID) string` | 程序化建目录（相册编号子目录 / mkdir -p / 保存分享）继承父目录的绑定，返回 JSON 字符串（空串 = 未显式绑定） |
+| `uniqueCount(ids) int` | provider 去重计数（用于数量比对校验） |
 | `getRootFileIDFromCtx(ctx) (string, *Err)` | 从 context 获取用户根目录 ID |
-| `GetBoundProviderIdsByOwnerID(ownerID) ([]uint32, error)` | 通过 owner_id 获取绑定的存储提供者（导出） |
+| `GetBoundProviderIdsByOwnerID(ownerID) ([]uint32, error)` | 通过 owner_id 获取管理员分配的存储提供者（导出，无 context 场景） |
 | `RequireAdmin(ctx) *Err` | 检查管理员权限，非管理员返回错误 |
-| `checkFilePermission(ctx, fileID, perm) bool` | 目录写权限检查（**管理员不享有特权**，上传/移动等普通操作用） |
+| `checkOwnershipBatch(ctx, fileIDs) (string, *Err)` | 批量归属校验（单条 `id IN (...)` SQL，替代循环调用 `checkOwnership` 的 N+1）。返回第一个无权限的 id，空串表示全部通过 |
+
+### permission.go（归属与角色）
+
+| 方法 | 说明 |
+|------|------|
+| `CheckOwnership(ctx, fileID) bool` | 当前用户是否为文件 owner（管理员不享有特权） |
+| `GetMyRoles(ctx) (*GetMyRolesResp, *Err)` | 当前用户角色（`pfm_admin` / `pfm_user`） |
+| `GetMyBoundProviders(ctx) (*GetMyBoundProvidersResp, *Err)` | 管理员分配给当前用户且已启用的存储提供者（文件夹绑定选择的候选范围）。路由 `POST /api/space/my-providers`；顺序沿用分配顺序，禁用/已删除的分配项不下发 |
 
 ### ensure_dir.go（按年/月目录归档）
 
 | 方法 | 说明 |
 |------|------|
-| `EnsureDirPath(ctx, parentID, relPath) (string, *Err)` | 在 parentID 下按相对路径逐级确保目录存在（mkdir -p，并发安全，唯一索引兜底），返回叶子目录 ID。相册备份按"年/月"归档用 |
+| `EnsureDirPath(ctx, *native.EnsureDirPathReq) (*native.EnsureDirPathResp, *Err)` | 在 parent_id 下按相对路径逐级确保目录存在（mkdir -p，并发安全，唯一索引兜底）。相册备份按"年/月"归档用。新建目录的 `bound_provider_ids` 继承父目录解析结果（`inheritBoundProviderIds`） |
 
 ### photo_date.go（照片日期解析，规则可配置）
 
@@ -155,7 +179,7 @@
 
 | 方法 | 说明 |
 |------|------|
-| `GetOrCreateSubfolder(ctx, parentID, prefix) (string, *Err)` | 获取有空位的编号子目录（500 文件封顶），满了自动创建新目录 |
+| `GetOrCreateSubfolder(ctx, *native.GetOrCreateSubfolderReq) (*native.GetOrCreateSubfolderResp, *Err)` | 获取有空位的编号子目录（500 文件封顶），满了按最大编号 +1 新建（格式 001/002）。兼容历史命名 01 / 00001（统一按「纯数字」识别）。新建目录的 `bound_provider_ids` 继承父目录解析结果 |
 
 ## internal/auth/
 
@@ -227,6 +251,11 @@
 | `UpdateFileIsReady(parentID, fileName, ownerID, version) error` | 更新 is_ready=true；version>0 时仅当 file 当前 version 等于该值才更新（CAS，防旧分发误标新内容就绪） |
 | `SumAllFileSizesByOwner(ownerID) (uint64, error)` | 统计用户所有文件（Unscoped 含回收站软删）size 总和，供容量更新器写回 used_bytes |
 | `CountFileHistoriesByHash(hash) (int64, error)` | 统计指定 hash 在 file_histories 中的引用数，用于判断该 hash 的存储位置是否仍被历史版本引用 |
+| `GetFilesByIDs(ids []string) ([]*FileORM, error)` | 批量按 ID 查询文件（默认过滤软删），用于批量归属校验等场景，避免 N+1 |
+| `GetFileHistoriesByIDs(ids []uint64) ([]*FileHistoryORM, error)` | 批量获取文件历史记录，避免逐条查询 N+1 |
+| `GetFileNamesInParent(parentID, ownerID) (map[string]*FileORM, error)` | 取父目录下「文件名 → file」映射（单条 SQL），用于批量同名冲突检测 |
+| `GetNearestBoundProviderIds(fileID) ([]uint32, error)` | 沿 `parent_id` 祖先链向上取最近一个显式绑定 `bound_provider_ids` 的目录（256 层上限防环；JSON 脏数据告警后按未绑定继续向上；查不到返回 `nil, nil`）。目录绑定解析的底层原语 |
+| `UpdateDir(orm) error` | 更新目录配置（白名单：`name` / `enable_encryption` / `bound_provider_ids` / `max_histories`）；字段为 nil 则不更新。`max_histories` 用 map 写入以绕开 GORM 零值忽略（0 = 不保留历史是合法值） |
 
 ### file_location.go
 
@@ -237,6 +266,7 @@
 | `GetFileLocationsByProvider(providerID) ([]FileLocation, error)` | 按 Provider 查询副本 |
 | `DeleteFileLocation(id) error` | 删除副本记录 |
 | `DeleteFileLocationsByHash(hash) error` | 按哈希批量删除 |
+| `GetFileLocationsByBlake3Hashes(hashes) ([]FileLocation, error)` | 批量按哈希列表查副本（避免逐文件查询 N+1，如批量移动/删除） |
 | `TransitionFileLocationStatus(id, prevStatuses, newStatus, message) error` | 状态迁移（乐观锁：仅当当前状态在 prevStatuses 中才更新） |
 
 ### provider.go
@@ -250,19 +280,6 @@
 | `DeleteProvider(id) error` | 删除提供者 |
 | `GetEnabledProviders() ([]StorageProvider, error)` | 获取启用的提供者 |
 
-
-### permission.go
-
-| 方法 | 说明 |
-|------|------|
-| `GetDirectoryPermission(userID, fileID) (*DirectoryPermissionORM, error)` | 获取用户对指定目录的权限 |
-| `GetUserDirectoryPermissions(userID) ([]*DirectoryPermissionORM, error)` | 获取用户的所有目录权限 |
-| `GetDirectoryPermissionsByFileID(fileID) ([]*DirectoryPermissionORM, error)` | 获取目录的所有用户权限 |
-| `CreateDirectoryPermission(perm) error` | 创建目录权限 |
-| `UpdateDirectoryPermission(perm) error` | 更新目录权限 |
-| `DeleteDirectoryPermission(userID, fileID) error` | 删除目录权限 |
-| `GetAllDirectoryPermissions() ([]*DirectoryPermissionORM, error)` | 获取所有目录权限（管理员用） |
-| `CreateAuditLog(log) error` | 创建权限审计日志 |
 
 ### user_space.go
 
@@ -315,6 +332,22 @@
 |------|------|
 | `SelectBestSource(locations) (*FileLocation, error)` | 按 sort_order 选择最优读取源 |
 
+### persist.go
+
+| 方法 | 说明 |
+|------|------|
+| `PreallocateFileLocations(ctx, blake3Hash, providerIDs)` | 落库（切 hash）前为新 hash 预建 `PPENDING` 位置行，维持「文件记录指向的 hash 必有 file_location 行」不变式：消除 PUT 后立即 GET 的硬 500 窗口，读端转入 staging 直读降级。预建与分发共用 `(hash, provider)` 锁（防重复行被判为分片数不符），失败仅告警不阻断上传 |
+
+### binding.go（目录绑定 → 落盘 provider 解析）
+
+放在 storage 包（而非 service）的原因：service 依赖 backup/download，而后两者也要用同一规则，放 service 会成 import 环。
+
+| 方法 | 说明 |
+|------|------|
+| `ResolveProviderIds(ownerID, folderID) ([]uint32, error)` | 解析目录下的文件应落盘到哪些 provider：目录绑定 → 沿祖先链继承 → 回退 `UserSpace.bound_provider_ids` → 与分配集取交集（越界项告警丢弃，交集空则回退分配集）。owner 未配置 UserSpace 时返回 error |
+| `OutOfAssigned(ids, assigned) []uint32` | 返回 `ids` 中不在分配集内的项（校验"用户只能绑定被分配的 provider"）。空切片 = 全部合法 |
+| `EncodeProviderIds(ids) string` | 把 provider ID 列表编码为落库用 JSON 数组字符串 |
+
 ## driver/types/（驱动抽象层，阶段2 DTO 化）
 
 ### driver.go
@@ -366,4 +399,66 @@
 |------|------|
 | `CacheUpdater` / `CacheUpdaterSetter` | 缓存状态更新回调（telegram） |
 | `ProviderConfigPersister` / `ConfigPersisterSetter` | 配置持久化回调（baidu token 刷新） |
+
+### multi_chunk_reader.go（多分片合并读取）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `MultiChunkReader` | 多分片合并的 `ReadSeekCloser`。**长度与偏移一律在明文空间**：加密分片的 `FileRef.ChunkSize` 是密文长度，先经 `crypt.DecryptedSize` 换算再累加，`Seek(io.SeekEnd)` 返回明文总长 |
+| `NewMultiChunkReader(ctx, opener, locations, encryptor) (*MultiChunkReader, error)` | 预计算明文总长与各分片起始偏移；加密分片长度非法（数据损坏）时返回错误，让调用方在写响应头之前失败 |
+| `TotalSize()` | 返回明文总大小 |
+
+> 长度语义是硬约束：`api/file_stream.go` 用 `files.Size` 作 `Content-Length`，WebDAV 则由
+> `emersion/go-webdav` 内部的 `http.ServeContent` 以 `Seek(io.SeekEnd)` 的返回值覆盖
+> `Content-Length`。任一环节返回密文长度都会使声明长度大于实际输出，Go 在 flush 时判定响应
+> 不完整、丢弃缓冲并关闭连接。
+
+## server/（REST 传输层）
+
+### route_rest.go（REST 分发器）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `HandlerFunc[TReq proto.Message]` | 业务处理器签名：`func(ctx, TReq) (*native.BaseResp, error)` |
+| `Register[TReq](mux, method, path, fn)` | 注册一条 REST 路由；泛型从零值经 protobuf 反射构造请求实例 |
+| `serveREST` / `decodeRequest` / `decodeQuery` | 反序列化（POST 取 JSON body、GET/DELETE 取 query）→ 校验 → 调用 → 序列化 |
+| `callHandler` | 调用业务函数并 recover panic（转 INTERNAL_ERROR，HTTP 仍 200） |
+| `writeProtoJSON` / `writeProtoError` | proto3 JSON 响应输出（camelCase、EmitUnpopulated，Any 自动展开） |
+
+### route_table.go（路由表，显式维护）
+
+| 方法 | 说明 |
+|------|------|
+| `registerRESTServices(mux)` | 注册全部业务路由的总入口 |
+| `registerFileRoutes` / `registerUploadRoutes` / `registerProviderRoutes` / `registerBackupRoutes` / `registerUserSpaceRoutes` / `registerDownloadRoutes` | 各服务分组路由注册（共 67 条，路径形如 `/api/file/list`） |
+
+### middleware_rest.go / validate.go
+
+| 方法 | 说明 |
+|------|------|
+| `restAuthMiddleware(next)` | REST 业务路由鉴权（等价原 connect AuthInterceptor；含 Debug 绕过；失败返回 TOKEN_INVALID） |
+| `validateMessage(msg)` | 按 proto 的 `buf.validate.field` 注解校验请求（等价原 validate 拦截器） |
+
+### server/middleware/log.go（请求日志 + panic 恢复）
+
+| 方法 | 说明 |
+|------|------|
+| `HTTPLogMiddleware(next)` | 合并中间件（替代 connect GInterceptor）：生成 uuid 注入 ctx（`globals.ContextRequestIDKey`）+ 回写响应头 `X-Request-Id`；记录「request received / request completed」两条 Info 日志（method/path/uuid/status/size/cost）；panic 时同样记录完成日志并转为 `BaseResp(INTERNAL_ERROR)` + HTTP 500 |
+| `statusRecorder` | 包装 ResponseWriter 捕获状态码与响应字节数（不改变对外行为） |
+
+### internal/llog（请求级日志关联）
+
+| 方法 | 说明 |
+|------|------|
+| `llog.C(ctx) *logrus.Entry` | 若 ctx 含 request_id 则自动携带该字段（`llog.C(ctx).Errorf(...)`），使日志可按请求关联；无则等价于 `logrus.NewEntry(L())` |
+| `llog.CtxRequestID(ctx) string` | 从 ctx 取请求 ID |
+
+注：原 connect 拦截器（`GInterceptor` / `AuthInterceptor` / `PermInterceptor` / `RateLimitInterceptor`）已随传输层改造移除；panic 恢复与请求日志由 `HTTPLogMiddleware` 承担，限流由 `middleware.RateLimitHTTPMiddleware` 承担。
+
+## utils/
+
+| 方法 | 说明 |
+|------|------|
+| `MergedFileName(fileName) string` | 分片合并产物文件名（`merged_<name>`）；写入方 `service.processCompleteUpload` 与读取方 `service.tryServeFromLocalTemp` 共用，避免两侧字符串漂移 |
+| `RemoveChunkTempFiles(fileHash, ownerID) error` | 只删 owner 隔离目录下的分片 `chunk_*`，**保留合并明文 `merged_<name>`**（异步分发读的源，整目录删除会让 Dispatch 报 `temp file not found`）；目录不存在视为无事发生。整目录清理由 dispatch 终态的 `cleanupUploadTemp` 负责 |
 

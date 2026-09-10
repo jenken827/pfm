@@ -17,25 +17,25 @@ import (
 // errInvalidDirPath 目录路径非法（路径穿越/非法字符）
 var errInvalidDirPath = errors.New("invalid directory path")
 
-// EnsureDirPath 在 parentID 下按相对路径逐级确保目录存在（mkdir -p 语义）
-// relPath 形如 "2026/07"，按 "/" 分割逐级查找/创建，返回叶子目录 ID。
+// EnsureDirPath 在 req.ParentId 下按相对路径逐级确保目录存在（mkdir -p 语义）
+// req.Path 形如 "2026/07"，按 "/" 分割逐级查找/创建，返回叶子目录 ID。
 //
 // 并发安全：files 表存在 (owner_id, name, parent_id) partial unique index
 // （WHERE deleted_at IS NULL），多个客户端并发创建同名目录时，后到者
 // 触发唯一键冲突，捕获后重新查询返回已存在的目录。
-func EnsureDirPath(ctx context.Context, parentID, relPath string) (string, *models.Err) {
+func EnsureDirPath(ctx context.Context, req *native.EnsureDirPathReq) (*native.EnsureDirPathResp, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
-		return "", &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
+		return nil, &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
 	}
-	folderID, err := ensureDirPathForOwner(userID, parentID, relPath)
+	folderID, err := ensureDirPathForOwner(userID, req.GetParentId(), req.GetPath())
 	if err == nil {
-		return folderID, nil
+		return &native.EnsureDirPathResp{FolderId: &folderID}, nil
 	}
 	if errors.Is(err, errInvalidDirPath) {
-		return "", &models.Err{E: err, C: native.RespCode_PARAMS_ERROR}
+		return nil, &models.Err{E: err, C: native.RespCode_PARAMS_ERROR}
 	}
-	return "", &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 }
 
 // ensureDirPathForOwner 按显式 ownerID 确保目录存在（无 context 场景：CLI 数据修复等）
@@ -81,6 +81,10 @@ func ensureDirPathForOwner(userID, parentID, relPath string) (string, error) {
 			OwnerId:          utils.StringPtr(userID),
 			EnableEncryption: parent.EnableEncryption,
 			MaxHistories:     parent.MaxHistories,
+		}
+		// 继承父目录的存储提供者绑定（父目录未显式绑定时回退用户分配集）
+		if binding := inheritBoundProviderIds(userID, currentID); binding != "" {
+			newDir.BoundProviderIds = utils.StringPtr(binding)
 		}
 		if err := db.CreateFile(newDir); err != nil {
 			// 并发创建同名目录 → 唯一键冲突，重查已存在的目录

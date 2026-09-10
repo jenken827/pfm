@@ -145,11 +145,14 @@ func handleDownloadComplete(gid string) {
 //
 // aria2 已把文件下载到 .offline/ 目录，这里：
 //  1. 计算 blake3（增量，避免大文件整读内存）
-//  2. 把文件移入 staging 临时目录（TempDir/<hash>/，供 Dispatch 上传，
+//  2. 把文件移入 staging 临时目录（TempDir/users/<owner>/<hash>/chunks/，供 Dispatch 上传，
 //     上传完成后由 completeUpload 清理——与普通上传生命周期一致）
 //  3. 检查目标目录是否已存在同 hash 文件（秒传跳过上传）
-//  4. 创建 File 记录（owner/parent 来自 DownloadRecord）
-//  5. 查 UserSpace 绑定 providers → 创建 UploadRecord → Dispatch
+//  4. 取 UserSpace 绑定 providers（取不到即返回，不留孤儿记录）
+//  5. 位置行不变式：落库前为新 hash 预建 file_location 行（见
+//     storage.PreallocateFileLocations），消除「记录已指向新 hash、位置行未落库」窗口的读取硬 500
+//  6. 创建 File 记录（owner/parent 来自 DownloadRecord）
+//  7. 创建 UploadRecord → Dispatch
 func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath string) {
 	if dr.OwnerId == nil || *dr.OwnerId == "" || dr.ParentId == nil || *dr.ParentId == "" {
 		llog.L().Errorf("offline download record missing owner/parent, download_record_id: %v", dr.Id)
@@ -187,7 +190,7 @@ func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath stri
 		llog.L().Errorf("offline download create staging dir failed: %v", err)
 		return
 	}
-	stagingPath := filepath.Join(stagingDir, "merged_"+fileName)
+	stagingPath := filepath.Join(stagingDir, utils.MergedFileName(fileName))
 	if err := os.Rename(downloadedFilePath, stagingPath); err != nil {
 		// Windows/跨盘等 rename 失败场景退化为复制
 		if cErr := copyFile(downloadedFilePath, stagingPath); cErr != nil {
@@ -208,6 +211,22 @@ func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath stri
 
 	// 4. 创建 File 记录
 	fileType, mime := fileutil.GetFileType(stagingPath, fileName)
+	// 4. 绑定 providers（必须先取：位置行预建与 UploadRecord 都要用，
+	//    且取不到时直接返回，避免留下「有文件记录但没有分发」的孤儿）
+	// 目标目录绑定的存储提供者（目录绑定 → 祖先继承 → 用户分配集）
+	providerIds, pErr := storage.ResolveProviderIds(ownerID, parentID)
+	if pErr != nil || len(providerIds) == 0 {
+		llog.L().Errorf("offline download: resolve providers failed for owner %s, dir %s, err: %v", ownerID, parentID, pErr)
+		_ = os.Remove(stagingPath)
+		return
+	}
+
+	// 5. 位置行不变式：落库（文件记录指向新 hash）之前先预建位置行，
+	//    否则从落库到异步分发首次上传成功之间的读取会命中
+	//    len(locations)==0 硬 500（详见 storage.PreallocateFileLocations）
+	storage.PreallocateFileLocations(context.Background(), hash, providerIds)
+
+	// 6. 创建 File 记录
 	isReady := false
 	newFile := &native.FileORM{
 		Name:     &fileName,
@@ -225,12 +244,7 @@ func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath stri
 	}
 	llog.L().Infof("offline download file record created, id: %s, name: %s", *newFile.Id, fileName)
 
-	// 5. 绑定 providers → UploadRecord → Dispatch
-	providerIds, pErr := db.GetBoundProviderIdsByOwnerID(ownerID)
-	if pErr != nil || len(providerIds) == 0 {
-		llog.L().Errorf("offline download: no bound providers for owner %s, err: %v", ownerID, pErr)
-		return
-	}
+	// 7. 创建 UploadRecord → Dispatch
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
 

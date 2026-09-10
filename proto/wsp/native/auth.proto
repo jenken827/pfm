@@ -2,14 +2,69 @@ syntax = "proto3";
 
 package native;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "gorm/gorm.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
+// 本地登录请求
+// 注意：登录是鉴权之前的端点（无 token），因此不参与统一的鉴权路由链；
+// 其响应也不使用 BaseResp 包装（前端依赖 HTTP 401 判断凭据错误）。
+// 但请求/响应仍作为 proto 契约定义，避免前后端手写 JSON 结构。
+message LoginReq {
+  // 登录用户名
+  optional string username = 1;
+  // 登录密码（明文传输，由 TLS 保护）
+  optional string password = 2;
+}
+
+// 本地登录响应
+// 注意：不要复用 User 消息——User 是 GORM 实体且含 password_hash，不可外泄。
+message LoginResp {
+  // 签发的 JWT（HS256）
+  optional string token = 1;
+  // 用户唯一 ID（UUID），与 owner_id / user_spaces.user_id 一致
+  optional string user_id = 2;
+  // 登录用户名
+  optional string name = 3;
+  // 邮箱
+  optional string email = 4;
+  // 是否为管理员
+  optional bool is_admin = 5;
+  // 头像 URL（相对路径，前端拼 baseUrl；空串表示未设置）
+  optional string avatar = 6;
+}
+
+// 更新当前用户资料（仅本人可改）
+message UpdateProfileReq {
+  // 新用户名（必填，唯一）
+  optional string username = 1 [(buf.validate.field).required = true,
+                                (buf.validate.field).string.min_len = 1,
+                                (buf.validate.field).string.max_len = 64];
+  // 新邮箱（可为空）
+  optional string email = 2 [(buf.validate.field).string.max_len = 128];
+}
+
+// 更新资料响应
+message UpdateProfileResp {
+  // 更新后的用户名
+  optional string username = 1;
+  // 更新后的邮箱
+  optional string email = 2;
+  // 头像 URL（未变更时原样返回）
+  optional string avatar = 3;
+}
+
+// 上传头像响应（multipart 上传成功后的结果）
+message UploadAvatarResp {
+  // 新的头像 URL（相对路径）
+  optional string avatar = 1;
+}
+
 // 本地用户表（auth 认证用户）
-// user_id 为该用户的稳定唯一 ID（UUID），与 owner_id / user_spaces.user_id /
-// admin_users.user_id 一致，用于跨表关联。
+// user_id 为该用户的稳定唯一 ID（UUID），与 owner_id / user_spaces.user_id 一致，
+// 用于跨表关联。
 message User {
   option (gorm.opts).ormable = true;
   optional uint32 id = 1 [(gorm.field).tag = {
@@ -18,7 +73,7 @@ message User {
   }];
   optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  // 用户唯一 ID（UUID），作为 owner_id / user_id 关联 UserSpace、admin_users
+  // 用户唯一 ID（UUID），作为 owner_id / user_id 关联 UserSpace
   optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 36}];
   // 登录用户名（唯一）
   optional string username = 5 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
@@ -26,4 +81,8 @@ message User {
   optional string password_hash = 6 [(gorm.field).tag = {not_null: true}];
   // 邮箱（可选）
   optional string email = 7 [(gorm.field).tag = {default: "''", size: 128}];
+  // 是否为管理员（替代原 admin_users 表）
+  optional bool is_admin = 8 [(gorm.field).tag = {not_null: true, default: "false"}];
+  // 头像 URL（相对路径，形如 /api/user/avatar/<userID>?v=<ts>；空串表示未设置）
+  optional string avatar = 9 [(gorm.field).tag = {default: "''", size: 255}];
 }

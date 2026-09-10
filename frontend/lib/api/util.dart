@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:pfm/proto/native/common.pb.dart';
 import 'package:pfm/proto/native/enum.pb.dart';
 import 'package:pfm/services/logger.dart';
@@ -36,4 +38,15 @@ T extractRespData<T extends GeneratedMessage>(
   final result = message;
   br.data.unpackInto(result);
   return result;
+}
+
+/// 解析 bound_provider_ids（JSON 数组字符串，如 "[1,3]"）为 provider ID 列表。
+/// '[]'、空串、非法 JSON 一律返回空列表（= 未显式绑定，由后端按继承规则解析）。
+List<int> parseProviderIdsJson(String json) {
+  if (json.isEmpty || json == '[]') return const [];
+  try {
+    return (jsonDecode(json) as List).cast<int>();
+  } catch (_) {
+    return const [];
+  }
 }

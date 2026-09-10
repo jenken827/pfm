@@ -158,7 +158,7 @@ func DownloadAndMergeFile(
 		return "", fmt.Errorf("write temp file failed: %w", err)
 	}
 
-	llog.L().Infof("downloaded and merged %d bytes from %d chunks to %s",
+	llog.C(ctx).Infof("downloaded and merged %d bytes from %d chunks to %s",
 		written, len(locations), tempFilePath)
 
 	return tempFilePath, nil

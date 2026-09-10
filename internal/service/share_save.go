@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
+	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"github.com/google/uuid"
@@ -133,8 +134,17 @@ func saveShareTask(taskID string, source *native.FileORM, targetParentID, displa
 	var completed int32
 	var saveErr error
 
+	// 保存到目标目录的文件/目录，其存储提供者绑定继承目标目录
+	// （解析失败不阻断保存：留空 = 未显式绑定，落库后由解析规则回退到分配集）
+	binding := ""
+	if ids, err := storage.ResolveProviderIds(ownerID, targetParentID); err != nil {
+		llog.L().Warnf("resolve provider ids for share save failed (owner=%s, dir=%s): %v", ownerID, targetParentID, err)
+	} else {
+		binding = storage.EncodeProviderIds(ids)
+	}
+
 	if source.Type != nil && *source.Type == int32(native.FileType_FOLDER) {
-		saveErr = saveFolderRecursive(taskID, source, targetParentID, displayName, ownerID, &completed)
+		saveErr = saveFolderRecursive(taskID, source, targetParentID, displayName, ownerID, binding, &completed)
 	} else {
 		saveErr = saveSingleFile(source, targetParentID, displayName, ownerID)
 		completed = 1
@@ -198,7 +208,8 @@ func saveSingleFile(source *native.FileORM, parentID, name, ownerID string) erro
 }
 
 // saveFolderRecursive 递归保存目录
-func saveFolderRecursive(taskID string, source *native.FileORM, parentID, name, ownerID string, completed *int32) error {
+// binding：本次保存创建的目录统一继承目标目录解析出的绑定（JSON 数组，空串 = 未显式绑定）
+func saveFolderRecursive(taskID string, source *native.FileORM, parentID, name, ownerID, binding string, completed *int32) error {
 	// 创建当前目录
 	newDir := &native.FileORM{
 		Name:     &name,
@@ -206,6 +217,9 @@ func saveFolderRecursive(taskID string, source *native.FileORM, parentID, name, 
 		OwnerId:  &ownerID,
 		Type:     source.Type,
 		IsReady:  boolPtr(true),
+	}
+	if binding != "" {
+		newDir.BoundProviderIds = utils.StringPtr(binding)
 	}
 	if err := db.CreateFile(newDir); err != nil {
 		return fmt.Errorf("create folder '%s': %w", name, err)
@@ -229,7 +243,7 @@ func saveFolderRecursive(taskID string, source *native.FileORM, parentID, name, 
 		}
 
 		if child.Type != nil && *child.Type == int32(native.FileType_FOLDER) {
-			if err := saveFolderRecursive(taskID, child, *newDir.Id, childName, ownerID, completed); err != nil {
+			if err := saveFolderRecursive(taskID, child, *newDir.Id, childName, ownerID, binding, completed); err != nil {
 				llog.L().Warnf("save subfolder failed: %s/%s: %v", name, childName, err)
 				continue
 			}
@@ -347,7 +361,7 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 	// 验证提供者是否存在且启用
 	providers, err := db.GetEnabledProvidersByIds(providerIds)
 	if err != nil {
-		llog.L().Errorf("query providers failed: %v", err)
+		llog.C(ctx).Errorf("query providers failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	if len(providers) != len(providerIds) {
@@ -372,7 +386,12 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 		if err := db.UpdateUserSpace(existingSpace); err != nil {
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
-		llog.L().Infof("updated bound_provider_ids for user %s: %s", targetUserID, boundProviderIds)
+		// 根目录行同步该绑定：根目录是「无显式绑定的子孙目录」的兜底来源，
+		// 保持与 UserSpace 一致可让解析规则与展示都直观
+		if mErr := updateRootDirBinding(existingSpace, boundProviderIds); mErr != nil {
+			return nil, mErr
+		}
+		llog.C(ctx).Infof("updated bound_provider_ids for user %s: %s", targetUserID, boundProviderIds)
 		return &native.AssignRootDirResp{RootFileId: existingSpace.RootFileId}, nil
 	}
 
@@ -385,10 +404,11 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
 		IsReady:          utils.BoolPtr(true),
 		EnableEncryption: utils.BoolPtr(false),
+		BoundProviderIds: &boundProviderIds,
 		OwnerId:          &targetUserID,
 	}
 	if err := db.CreateFile(rootFile); err != nil {
-		llog.L().Errorf("create root dir failed: %v", err)
+		llog.C(ctx).Errorf("create root dir failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -400,12 +420,28 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 		UsedBytes:        utils.Uint64Ptr(0),
 	}
 	if err := db.CreateUserSpace(newSpace); err != nil {
-		llog.L().Errorf("create user space failed: %v", err)
+		llog.C(ctx).Errorf("create user space failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("created root dir %s for user %s with providers: %s", rootFileID, targetUserID, boundProviderIds)
+	llog.C(ctx).Infof("created root dir %s for user %s with providers: %s", rootFileID, targetUserID, boundProviderIds)
 	return &native.AssignRootDirResp{RootFileId: &rootFileID}, nil
+}
+
+// updateRootDirBinding 把用户根目录行的 bound_provider_ids 同步为管理员最新分配。
+// 根目录是所有「未显式绑定目录」的解析兜底点，与 UserSpace 保持一致。
+func updateRootDirBinding(space *native.UserSpaceORM, boundProviderIds string) *models.Err {
+	if space == nil || space.RootFileId == nil || *space.RootFileId == "" {
+		return nil
+	}
+	orm := native.FileORM{
+		Id:               space.RootFileId,
+		BoundProviderIds: &boundProviderIds,
+	}
+	if err := db.UpdateDir(&orm); err != nil {
+		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+	return nil
 }
 
 func uint32Ptr(v uint32) *uint32 { return &v }

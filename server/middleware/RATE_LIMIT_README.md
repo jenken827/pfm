@@ -15,7 +15,7 @@ This middleware implements rate limiting for your Go server using a token bucket
 - ✅ Global rate limiting (100 req/min per IP)
 - ✅ Thread-safe implementation using mutex locks
 - ✅ Support for proxied requests (X-Forwarded-For, X-Real-IP, True-Client-IP)
-- ✅ HTTP middleware compatible with Vanguard transcoder
+- ✅ HTTP middleware（作用于 net/http 路由链）
 - ✅ Comprehensive test coverage
 
 ## Architecture

@@ -1,6 +1,7 @@
 package llog
 
 import (
+	"context"
 	"io"
 	"path"
 	"strings"
@@ -85,4 +86,36 @@ func L() *logrus.Logger {
 		return discardLogger
 	}
 	return logger
+}
+
+// C 获取绑定请求上下文的 logger 入口。
+//
+// 若 ctx 中带有 request_id（由 HTTPLogMiddleware 注入），返回的 Entry 会自动携带
+// request_id 字段，使该请求内的所有日志可通过 request_id 关联检索；否则返回
+// 原始 logger 的 Entry（行为与直接调用 L() 一致）。
+//
+// 用法：
+//
+//	llog.C(ctx).Info("something happened")
+//	llog.C(ctx).Errorf("failed: %v", err)
+func C(ctx context.Context) *logrus.Entry {
+	l := L()
+	if ctx == nil {
+		return logrus.NewEntry(l)
+	}
+	if id, ok := ctx.Value(globals.ContextRequestIDKey).(string); ok && id != "" {
+		return l.WithField("request_id", id)
+	}
+	return logrus.NewEntry(l)
+}
+
+// CtxRequestID 从 ctx 取请求 ID（不存在时返回空串）。
+func CtxRequestID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if id, ok := ctx.Value(globals.ContextRequestIDKey).(string); ok {
+		return id
+	}
+	return ""
 }

@@ -221,6 +221,20 @@ func GetFileLocationsByBlake3Hash(hash string) ([]*native.FileLocationORM, error
 	return locations, nil
 }
 
+// GetFileLocationsByBlake3Hashes 批量按 blake3 哈希列表获取文件位置
+// 用于避免逐文件查询的 N+1（如批量移动/删除时检查各 provider 副本存在性）
+func GetFileLocationsByBlake3Hashes(hashes []string) ([]*native.FileLocationORM, error) {
+	if len(hashes) == 0 {
+		return nil, nil
+	}
+	var locations []*native.FileLocationORM
+	if err := GetDB().Where("blake3_hash IN ?", hashes).
+		Order("blake3_hash ASC, chunk_number ASC").Find(&locations).Error; err != nil {
+		return nil, err
+	}
+	return locations, nil
+}
+
 // GetFileLocationsByProviderAndHash 根据提供者ID和blake3哈希获取文件位置
 func GetFileLocationsByProviderAndHash(providerIDs []uint32, blake3Hash string) ([]*native.FileLocationORM, error) {
 	ctx := context.Background()

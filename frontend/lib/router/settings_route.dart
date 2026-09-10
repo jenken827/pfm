@@ -8,6 +8,7 @@ import '../pages/settings/client_backup_page.dart';
 import '../pages/settings/album_backup_page.dart';
 import '../pages/settings/contact_backup_page.dart';
 import '../pages/settings/permission_management_page.dart';
+import '../pages/settings/profile_edit_page.dart';
 
 part 'settings_route.g.dart';
 
@@ -24,6 +25,7 @@ part 'settings_route.g.dart';
         TypedGoRoute<PermissionManagementRoute>(path: 'permission'),
         TypedGoRoute<ShareManageRoute>(path: 'share-manage'),
         TypedGoRoute<LogRoute>(path: 'logs'),
+        TypedGoRoute<ProfileEditRoute>(path: 'profile'),
       ],
 )
 @immutable
@@ -125,5 +127,15 @@ class LogRoute extends GoRouteData with $LogRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const LogPage();
+  }
+}
+
+/// 个人资料编辑路由
+class ProfileEditRoute extends GoRouteData with $ProfileEditRoute {
+  const ProfileEditRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const ProfileEditPage();
   }
 }

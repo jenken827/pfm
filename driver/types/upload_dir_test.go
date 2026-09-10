@@ -86,8 +86,8 @@ func TestAllocateUploadDir_SubDirIncrement(t *testing.T) {
 		sub1Files[i] = DirEntry{Name: fmt.Sprintf("s%d", i), IsDir: false}
 	}
 	m := &mockDirBackend{dirEntries: map[string][]DirEntry{
-		ym:    {{Name: "1", IsDir: true}},
-		sub1:  sub1Files,
+		ym:   {{Name: "1", IsDir: true}},
+		sub1: sub1Files,
 	}}
 	dir, err := AllocateUploadDir(context.Background(), "/root", m)
 	if err != nil {

@@ -29,11 +29,11 @@ import (
 //   - 本命令: 百度侧有文件，数据库侧无 file_locations 行（逆向孤儿）→ 记录到临时文件供人工处理
 //
 // 流程：
-//   1. 递归扫描百度网盘指定根路径下的所有文件（list 接口 Isdir=1 递归）
-//   2. 对每个文件查 file_locations 表（provider_id 固定为 4 AND deleted_at IS NULL；
-//      path 比对两侧都剥掉前导 "/" 以兼容 8-17 前后两种存储形态，
-//      详见 filterExistingDBPaths）
-//   3. 数据库存在 → 跳过；不存在 → 写入临时文件（一行一个 path）
+//  1. 递归扫描百度网盘指定根路径下的所有文件（list 接口 Isdir=1 递归）
+//  2. 对每个文件查 file_locations 表（provider_id 固定为 4 AND deleted_at IS NULL；
+//     path 比对两侧都剥掉前导 "/" 以兼容 8-17 前后两种存储形态，
+//     详见 filterExistingDBPaths）
+//  3. 数据库存在 → 跳过；不存在 → 写入临时文件（一行一个 path）
 //
 // 安全说明：本命令只做"扫描+记录"，不调用百度 delete API。要清理临时文件中
 // 记录的孤儿文件，建议人工审核后再人工登录网盘或单独写脚本删除。
@@ -44,10 +44,11 @@ import (
 // 场景会误报，使用时须知晓此限制。
 //
 // 示例:
-//   pfm -d ./data cleanup-baidu-storage-orphans --root-path /2026
-//       # 扫描 /2026 下所有文件，孤儿路径写入 /tmp/pfm_baidu_orphans_<ts>.txt
-//   pfm -d ./data cleanup-baidu-storage-orphans --output /tmp/list.txt
-//       # 自定义输出文件
+//
+//	pfm -d ./data cleanup-baidu-storage-orphans --root-path /2026
+//	    # 扫描 /2026 下所有文件，孤儿路径写入 /tmp/pfm_baidu_orphans_<ts>.txt
+//	pfm -d ./data cleanup-baidu-storage-orphans --output /tmp/list.txt
+//	    # 自定义输出文件
 var cleanupBaiduStorageOrphansCmd = &cobra.Command{
 	Use:   "cleanup-baidu-storage-orphans",
 	Short: "扫描百度网盘侧实际存在但数据库无 file_locations 的文件（逆向孤儿）",
@@ -438,7 +439,7 @@ func listBaiduDir(token, dir string) ([]baiduListEntry, error) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		var parsed struct {
-			Errno int             `json:"errno"`
+			Errno int              `json:"errno"`
 			List  []baiduListEntry `json:"list"`
 		}
 		if jerr := json.Unmarshal(body, &parsed); jerr != nil {

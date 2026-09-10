@@ -181,6 +181,8 @@
     "file_folderName": "文件夹名称",
     "file_folderNameHint": "请输入文件夹名称",
     "file_bindStorageProvider": "绑定存储提供者",
+    "file_providerBindingHint": "文件夹内文件将保存到所选存储位置（至少选择一个）",
+    "file_noProviderAvailable": "管理员尚未为你分配存储提供者",
     "file_enableEncryption": "启用加密",
     "file_encryptionHint": "对文件夹内容进行加密存储",
     "file_maxHistoryCount": "最大历史记录数",
@@ -951,6 +953,8 @@
     "folderSettings_maxHistoryHint": "默认 10",
     "folderSettings_maxHistoryDesc": "覆盖文件时保留的历史版本数量，默认 10，设为 0 表示不保留历史",
     "folderSettings_boundProviders": "绑定的存储提供者",
+    "folderSettings_providerHint": "文件夹内文件将保存到所选存储位置（至少选择一个）",
+    "folderSettings_providerRequired": "请至少选择一个存储提供者",
     "folderSettings_noProviders": "暂无可用存储提供者",
     "docPreview_useFlyfishViewer": "此文件类型请使用 Flyfish Viewer 预览",
     "docPreview_loadFailed": "加载文档失败",
@@ -1067,5 +1071,14 @@
         }
     },
     "shareManage_expiresAt": "有效期至 {date}",
-    "shareManage_createdAt": "创建于 {date}"
+    "shareManage_createdAt": "创建于 {date}",
+    "profile_title": "个人资料",
+    "profile_username": "用户名",
+    "profile_email": "邮箱",
+    "profile_usernameRequired": "请输入用户名",
+    "profile_changeAvatar": "更换头像",
+    "profile_avatarUpdated": "头像已更新",
+    "profile_saved": "资料已保存",
+    "profile_avatarUploadFailed": "头像上传失败",
+    "profile_saveFailed": "保存失败"
 }

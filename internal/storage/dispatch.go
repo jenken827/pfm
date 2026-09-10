@@ -28,7 +28,7 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 			if ur != nil && ur.FileHash != nil {
 				fileHash = *ur.FileHash
 			}
-			llog.L().Errorf("Dispatch panicked, file_hash: %s, recover: %v", fileHash, r)
+			llog.C(ctx).Errorf("Dispatch panicked, file_hash: %s, recover: %v", fileHash, r)
 		}
 	}()
 
@@ -55,7 +55,7 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 					p, ok = utils.FindTempFile(*ur.FileHash)
 				}
 				if ok {
-					llog.L().Infof("temp file fallback: %s -> %s", *ur.TempPath, p)
+					llog.C(ctx).Infof("temp file fallback: %s -> %s", *ur.TempPath, p)
 					ur.TempPath = &p
 				} else {
 					markUploadFailed(ctx, ur, fmt.Sprintf("temp file not found: %s", *ur.TempPath))
@@ -96,7 +96,7 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 	// 1. 查询文件已经在哪些存储提供者上
 	existingLocations, err := db.GetFileLocationsByBlake3Hash(*ur.FileHash)
 	if err != nil {
-		llog.L().Errorf("get existing file locations failed: %v", err)
+		llog.C(ctx).Errorf("get existing file locations failed: %v", err)
 	}
 
 	// 2. 构建已存在的提供者映射（按提供者分组）
@@ -106,38 +106,19 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 	}
 
 	// 3. 检查每个提供者的所有分片是否都完成
+	// 用 CheckProviderComplete 统一判定：它容忍 chunk_total 为 nil 的行
+	// （未完成/预建的位置行没有 chunk_total，直接解引用会 panic）。
 	completedProviderMap := make(map[uint32]bool)
 	for providerID, chunks := range providerChunksMap {
-		if len(chunks) == 0 {
-			continue
-		}
-
-		// 获取预期的分片总数（从第一个分片获取）
-		expectedChunkTotal := *chunks[0].ChunkTotal
-
-		// 检查分片数量是否正确
-		if len(chunks) != int(expectedChunkTotal) {
-			llog.L().Warnf("provider %d has incomplete chunks: expected %d, got %d",
-				providerID, expectedChunkTotal, len(chunks))
-			continue
-		}
-
-		// 检查所有分片是否都完成
-		allCompleted := true
-		for _, chunk := range chunks {
-			if *chunk.Status != int32(native.LocationStatus_PCOMPLETED) {
-				allCompleted = false
-				llog.L().Debugf("provider %d chunk %d not completed, status: %d",
-					providerID, *chunk.ChunkNumber, *chunk.Status)
-				break
-			}
-		}
-
-		if allCompleted {
+		complete, expectedTotal, actualTotal := CheckProviderComplete(chunks)
+		if complete {
 			completedProviderMap[providerID] = true
-			llog.L().Infof("provider %d is available with all %d chunks completed",
-				providerID, expectedChunkTotal)
+			llog.C(ctx).Infof("provider %d is available with all %d chunks completed",
+				providerID, expectedTotal)
+			continue
 		}
+		llog.C(ctx).Debugf("provider %d incomplete: expected %d chunks, got %d",
+			providerID, expectedTotal, actualTotal)
 	}
 
 	// 3. 计算需要上传的提供者
@@ -150,7 +131,7 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 
 	// 4. 如果所有提供者都已有文件，直接完成
 	if len(needUploadProviders) == 0 {
-		llog.L().Infof("file already exists in all target providers, hash: %s", *ur.FileHash)
+		llog.C(ctx).Infof("file already exists in all target providers, hash: %s", *ur.FileHash)
 		completeUpload(ur)
 		return
 	}
@@ -159,7 +140,7 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 	if isSyncTask {
 		// 同步任务：必须有已完成的提供者才能同步
 		if len(completedProviderMap) == 0 {
-			llog.L().Errorf("sync task has no source provider, hash: %s", *ur.FileHash)
+			llog.C(ctx).Errorf("sync task has no source provider, hash: %s", *ur.FileHash)
 			markUploadFailed(ctx, ur, "no available source provider for sync task")
 			return
 		}
@@ -189,12 +170,12 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 	// 1. 选择最优源提供者（支持分片完整性检查）
 	sourceProviderID, sourceLocations, err := SelectBestSourceProvider(existingLocations)
 	if err != nil {
-		llog.L().Errorf("select best source provider failed: %v", err)
+		llog.C(ctx).Errorf("select best source provider failed: %v", err)
 		markUploadFailed(ctx, ur, "no available source provider")
 		return
 	}
 
-	llog.L().Infof("selected source provider: %d with %d chunks", sourceProviderID, len(sourceLocations))
+	llog.C(ctx).Infof("selected source provider: %d with %d chunks", sourceProviderID, len(sourceLocations))
 
 	// 2. 获取源存储实例
 	sourceStorage := GetStorage(sourceProviderID)
@@ -225,7 +206,7 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 	// 4. 下载并合并所有分片到临时文件
 	tempFilePath, err := DownloadAndMergeFile(ctx, sourceStorage, sourceLocations, encryptor, *ur.FileHash)
 	if err != nil {
-		llog.L().Errorf("download and merge file failed: %v", err)
+		llog.C(ctx).Errorf("download and merge file failed: %v", err)
 		markUploadFailed(ctx, ur, fmt.Sprintf("download file failed: %v", err))
 		return
 	}
@@ -234,7 +215,7 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 	// 更新 upload record 的 TempPath，驱动从这里读取文件路径
 	ur.TempPath = &tempFilePath
 
-	llog.L().Infof("file downloaded and merged to: %s", tempFilePath)
+	llog.C(ctx).Infof("file downloaded and merged to: %s", tempFilePath)
 
 	// 5. 批量上传到所有目标提供者（并发）
 	batchUploadFromSource(ctx, ur, needUploadProviders, tempFilePath)
@@ -310,7 +291,7 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
 			n := runtime.Stack(buf, false)
-			llog.L().Errorf("[PANIC] uploadToProviderAsync panic: %v\nstack: %s", r, string(buf[:n]))
+			llog.C(ctx).Errorf("[PANIC] uploadToProviderAsync panic: %v\nstack: %s", r, string(buf[:n]))
 			failed = true
 			errMsg = fmt.Sprintf("panic: %v", r)
 		}
@@ -318,7 +299,7 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 
 	key := uploadKey{blake3Hash: *ur.FileHash, providerID: tid}
 	if !acquireLock(key) {
-		llog.L().Infof("upload already in progress, hash: %s, provider: %d", *ur.FileHash, tid)
+		llog.C(ctx).Infof("upload already in progress, hash: %s, provider: %d", *ur.FileHash, tid)
 		return false, ""
 	}
 	defer releaseLock(key)
@@ -329,13 +310,13 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 	}
 
 	if *fl.Status == int32(native.LocationStatus_PCOMPLETED) {
-		llog.L().Infof("file already exists in provider %d", tid)
+		llog.C(ctx).Infof("file already exists in provider %d", tid)
 		return false, ""
 	}
 
 	err := uploadToProvider(ctx, sourcePath, ur, tid, fl, fileEncrypt)
 	if err != nil {
-		llog.L().Errorf("upload to provider %d failed: %v", tid, err)
+		llog.C(ctx).Errorf("upload to provider %d failed: %v", tid, err)
 		return true, ""
 	}
 
@@ -349,9 +330,9 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 			urVersion = *ur.Version
 		}
 		if updateErr := db.UpdateFileIsReady(parentID, fileName, "", urVersion); updateErr != nil {
-			llog.L().Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
+			llog.C(ctx).Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
 		} else {
-			llog.L().Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d, version: %d", parentID, fileName, tid, urVersion)
+			llog.C(ctx).Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d, version: %d", parentID, fileName, tid, urVersion)
 		}
 	}
 	return false, ""
@@ -438,7 +419,7 @@ func hasCompletedLocation(fileHash string) bool {
 // providerID: 目标存储提供者ID
 // fileEncrypt: 文件是否启用加密（文件夹设置）
 func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadRecordORM, providerID uint32, fl *native.FileLocationORM, fileEncrypt bool) error {
-	llog.L().Infof("[uploadToProvider] start, provider: %d", providerID)
+	llog.C(ctx).Infof("[uploadToProvider] start, provider: %d", providerID)
 
 	fileName := ""
 	if ur.FileName != nil {
@@ -460,31 +441,31 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 	// 获取存储实例
 	st := GetStorage(providerID)
 	if st == nil {
-		llog.L().Errorf("[uploadToProvider] storage not found, provider: %d", providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] storage not found, provider: %d", providerID)
 		return failFileLocation(fl, fmt.Sprintf("storage provider not found, id: %d", providerID))
 	}
 
 	// 获取类型化配置视图
 	pcfg := st.GetProviderConfig()
 	if pcfg == nil {
-		llog.L().Errorf("[uploadToProvider] provider config is nil, provider: %d", providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] provider config is nil, provider: %d", providerID)
 		return failFileLocation(fl, fmt.Sprintf("storage provider config is nil, id: %d", providerID))
 	}
 	if !pcfg.Enabled {
-		llog.L().Errorf("[uploadToProvider] provider not enabled, provider: %d", providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] provider not enabled, provider: %d", providerID)
 		return failFileLocation(fl, fmt.Sprintf("storage provider not enabled, id: %d", providerID))
 	}
 
 	// 检查源文件是否存在
 	if _, err := os.Stat(sourcePath); err != nil {
-		llog.L().Errorf("[uploadToProvider] source file not found: %s, err: %v", sourcePath, err)
+		llog.C(ctx).Errorf("[uploadToProvider] source file not found: %s, err: %v", sourcePath, err)
 		return failFileLocation(fl, fmt.Sprintf("source file not found: %s", sourcePath))
 	}
 
 	// 生成加密器（如果需要加密），并记录加密状态到 fl
 	encryptor, salt, err := prepareEncryptor(fileEncrypt, pcfg)
 	if err != nil {
-		llog.L().Errorf("[uploadToProvider] prepare encryptor failed: %v, provider: %d", err, providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] prepare encryptor failed: %v, provider: %d", err, providerID)
 		return failFileLocation(fl, err.Error())
 	}
 	encryptedFlag := salt != ""
@@ -505,14 +486,14 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 		EncryptionSuffix: pcfg.EncryptionSuffix,
 	})
 	if err != nil {
-		llog.L().Errorf("[uploadToProvider] upload failed: %v, provider: %d", err, providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] upload failed: %v, provider: %d", err, providerID)
 		return failFileLocation(fl, err.Error())
 	}
-	llog.L().Infof("[uploadToProvider] upload returned, chunks: %d, provider: %d", len(refs), providerID)
+	llog.C(ctx).Infof("[uploadToProvider] upload returned, chunks: %d, provider: %d", len(refs), providerID)
 
 	// 检查返回的分片信息
 	if len(refs) == 0 {
-		llog.L().Errorf("[uploadToProvider] no file info returned, provider: %d", providerID)
+		llog.C(ctx).Errorf("[uploadToProvider] no file info returned, provider: %d", providerID)
 		return failFileLocation(fl, "no file info returned from upload")
 	}
 
@@ -522,7 +503,7 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 	// 更新存储提供者的已使用容量
 	if totalUploadedSize > 0 {
 		if err := db.IncrementUsedCapacity(providerID, totalUploadedSize); err != nil {
-			llog.L().Errorf("[uploadToProvider] update used capacity failed: %v, provider_id: %d, size: %d", err, providerID, totalUploadedSize)
+			llog.C(ctx).Errorf("[uploadToProvider] update used capacity failed: %v, provider_id: %d, size: %d", err, providerID, totalUploadedSize)
 		}
 	}
 
@@ -530,7 +511,7 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 	if fl.Blake3Hash != nil {
 		hash = *fl.Blake3Hash
 	}
-	llog.L().Infof("[uploadToProvider] completed, hash: %s, provider: %d", hash, providerID)
+	llog.C(ctx).Infof("[uploadToProvider] completed, hash: %s, provider: %d", hash, providerID)
 	return nil
 }
 
@@ -607,7 +588,7 @@ func completeUpload(ur *native.UploadRecordORM) {
 // markUploadFailed 标记上传失败
 func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason string) {
 	if ur.Id == nil {
-		llog.L().Errorf("upload failed (no record id): %s, hash: %s", reason, *ur.FileHash)
+		llog.C(ctx).Errorf("upload failed (no record id): %s, hash: %s", reason, *ur.FileHash)
 		return
 	}
 
@@ -615,7 +596,7 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 	_ = db.TransitionUploadRecordTaskStatus(*ur.Id,
 		[]native.UploadStatus{native.UploadStatus_PENDING, native.UploadStatus_UPLOADING, native.UploadStatus_FAILED},
 		native.UploadStatus_FAILED, &reason)
-	llog.L().Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
+	llog.C(ctx).Errorf("upload failed: %s, hash: %s", reason, *ur.FileHash)
 }
 
 // markUploadUploading 标记上传中
@@ -627,7 +608,7 @@ func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
 	if err := db.TransitionUploadRecordTaskStatus(*ur.Id,
 		[]native.UploadStatus{native.UploadStatus_PENDING},
 		native.UploadStatus_UPLOADING, nil); err != nil {
-		llog.L().Errorf("mark uploading failed: %v, id: %d", err, *ur.Id)
+		llog.C(ctx).Errorf("mark uploading failed: %v, id: %d", err, *ur.Id)
 		// 不 return — 允许 Dispatch 继续执行，至少尝试上传
 	}
 }

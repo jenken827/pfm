@@ -66,7 +66,7 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 
 	err := db.CreateStorageProvider(orm)
 	if err != nil {
-		llog.L().Errorf("CreateStorageProvider err: %v", err)
+		llog.C(ctx).Errorf("CreateStorageProvider err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -80,7 +80,7 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) (*native.StorageProviderORM, *models.Err) {
 	provider, err := db.GetProviderByID(req.GetId())
 	if err != nil {
-		llog.L().Errorf("GetStorageProviders, id: %d, err: %v", req.GetId(), err)
+		llog.C(ctx).Errorf("GetStorageProviders, id: %d, err: %v", req.GetId(), err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -91,7 +91,7 @@ func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) 
 func ListStorageProviders(ctx context.Context) ([]*native.StorageProviderORM, *models.Err) {
 	providers, err := db.GetAllProviders()
 	if err != nil {
-		llog.L().Errorf("GetStorageProviders, err: %v", err)
+		llog.C(ctx).Errorf("GetStorageProviders, err: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	return providers, nil
@@ -142,7 +142,7 @@ func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProvide
 	// 查询完整数据后异步更新存储实例（不阻塞请求）
 	fullOrm, err := db.GetProviderByID(req.GetId())
 	if err != nil {
-		llog.L().Errorf("GetProviderByID err: %v", err)
+		llog.C(ctx).Errorf("GetProviderByID err: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 	storage.UpdateStorage(fullOrm)

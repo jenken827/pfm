@@ -42,7 +42,7 @@ func (l *LocalDriver) Upload(ctx context.Context, src types.UploadSource, opt ty
 	// 1. 获取上传目录（年/月/数字子目录结构）
 	uploadDir, err := types.AllocateUploadDir(ctx, rootDir, &localDirBackend{})
 	if err != nil {
-		llog.L().Errorf("get upload directory failed: %v", err)
+		llog.C(ctx).Errorf("get upload directory failed: %v", err)
 		return nil, fmt.Errorf("get upload directory failed: %w", err)
 	}
 
@@ -55,7 +55,7 @@ func (l *LocalDriver) Upload(ctx context.Context, src types.UploadSource, opt ty
 	// 3. 打开源文件
 	srcFile, err := os.Open(filePath)
 	if err != nil {
-		llog.L().Errorf("open source file failed: %v", err)
+		llog.C(ctx).Errorf("open source file failed: %v", err)
 		return nil, fmt.Errorf("open source file failed: %w", err)
 	}
 	defer srcFile.Close()
@@ -63,7 +63,7 @@ func (l *LocalDriver) Upload(ctx context.Context, src types.UploadSource, opt ty
 	// 4. 创建目标文件
 	dstFile, err := os.Create(targetPath)
 	if err != nil {
-		llog.L().Errorf("create target file failed: %v", err)
+		llog.C(ctx).Errorf("create target file failed: %v", err)
 		return nil, fmt.Errorf("create target file failed: %w", err)
 	}
 	defer dstFile.Close()
@@ -71,11 +71,11 @@ func (l *LocalDriver) Upload(ctx context.Context, src types.UploadSource, opt ty
 	// 5. 直接复制数据（不加密）
 	written, err := io.Copy(dstFile, srcFile)
 	if err != nil {
-		llog.L().Errorf("copy file failed: %v", err)
+		llog.C(ctx).Errorf("copy file failed: %v", err)
 		return nil, fmt.Errorf("copy file failed: %w", err)
 	}
 
-	llog.L().Infof("upload completed, file: %s, size: %d bytes", targetPath, written)
+	llog.C(ctx).Infof("upload completed, file: %s, size: %d bytes", targetPath, written)
 
 	// 6. 返回文件引用（本地存储只有一个文件，不涉及分片）
 	ref := types.FileRef{

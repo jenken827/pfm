@@ -16,6 +16,10 @@ import (
 
 // CreateBackupTask 创建备份任务
 func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *models.Err {
+	// 管理员专属：源路径为服务端本地文件系统路径，普通用户不得访问
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return mErr
+	}
 	// 获取当前用户作为 owner
 	ownerID := getCurrentUserIDFromCtx(ctx)
 	if ownerID == "" {
@@ -77,11 +81,11 @@ func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *mod
 	}
 
 	orm := &native.BackupTaskORM{
-		Name:           req.Name,
-		SourcePath:     req.SourcePath,
-		TargetDirId:    req.TargetDirId,
-		IgnoreRules:    req.IgnoreRules,
-		OwnerId:        &ownerID,
+		Name:        req.Name,
+		SourcePath:  req.SourcePath,
+		TargetDirId: req.TargetDirId,
+		IgnoreRules: req.IgnoreRules,
+		OwnerId:     &ownerID,
 	}
 
 	orm.Strategy = utils.Int32Ptr(int32(strategy))
@@ -103,7 +107,7 @@ func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *mod
 	orm.LastRunStatus = &idleStatus
 
 	if err := db.CreateBackupTask(orm); err != nil {
-		llog.L().Errorf("create backup task failed: %v", err)
+		llog.C(ctx).Errorf("create backup task failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -117,6 +121,10 @@ func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *mod
 
 // UpdateBackupTask 更新备份任务
 func UpdateBackupTask(ctx context.Context, req *native.UpdateBackupTaskReq) *models.Err {
+	// 管理员专属：可修改服务端源路径
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return mErr
+	}
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
 		return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
@@ -197,7 +205,7 @@ func UpdateBackupTask(ctx context.Context, req *native.UpdateBackupTaskReq) *mod
 	}
 
 	if err := db.UpdateBackupTask(task); err != nil {
-		llog.L().Errorf("update backup task failed: %v", err)
+		llog.C(ctx).Errorf("update backup task failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -211,6 +219,10 @@ func UpdateBackupTask(ctx context.Context, req *native.UpdateBackupTaskReq) *mod
 
 // DeleteBackupTask 删除备份任务
 func DeleteBackupTask(ctx context.Context, req *native.DeleteBackupTaskReq) *models.Err {
+	// 管理员专属
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return mErr
+	}
 	// 所有权检查：验证每个任务都属于当前用户
 	for _, id := range req.Ids {
 		task, err := db.GetBackupTaskByID(id)
@@ -228,7 +240,7 @@ func DeleteBackupTask(ctx context.Context, req *native.DeleteBackupTaskReq) *mod
 	}
 
 	if err := db.DeleteBackupTask(req.Ids); err != nil {
-		llog.L().Errorf("delete backup task failed: %v", err)
+		llog.C(ctx).Errorf("delete backup task failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -237,6 +249,10 @@ func DeleteBackupTask(ctx context.Context, req *native.DeleteBackupTaskReq) *mod
 
 // ListBackupTasks 获取备份任务列表
 func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*native.ListBackupTasksRespData, *models.Err) {
+	// 管理员专属：任务列表暴露服务端源路径
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return nil, mErr
+	}
 	ownerID := getCurrentUserIDFromCtx(ctx)
 	if ownerID == "" {
 		return nil, &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
@@ -256,7 +272,7 @@ func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*nati
 
 	tasks, total, err := db.ListBackupTasks(page, pageSize, req.Enabled, filterOwnerID)
 	if err != nil {
-		llog.L().Errorf("list backup tasks failed: %v", err)
+		llog.C(ctx).Errorf("list backup tasks failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -264,7 +280,7 @@ func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*nati
 	for _, t := range tasks {
 		pb, pbErr := t.ToPB(ctx)
 		if pbErr != nil {
-			llog.L().Errorf("convert backup task to PB failed: %v", pbErr)
+			llog.C(ctx).Errorf("convert backup task to PB failed: %v", pbErr)
 			continue
 		}
 		items = append(items, &pb)
@@ -279,6 +295,10 @@ func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*nati
 
 // GetBackupTask 获取备份任务详情
 func GetBackupTask(ctx context.Context, req *native.GetBackupTaskReq) (*native.GetBackupTaskRespData, *models.Err) {
+	// 管理员专属：任务详情暴露服务端源路径
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return nil, mErr
+	}
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
 		return nil, &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
@@ -306,17 +326,21 @@ func GetBackupTask(ctx context.Context, req *native.GetBackupTaskReq) (*native.G
 	}
 
 	return &native.GetBackupTaskRespData{
-		Task:         &pb,
+		Task:        &pb,
 		RecentFiles: recentFiles,
 	}, nil
 }
 
 // TriggerBackup 手动触发备份
 func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Err {
-	llog.L().Infof("TriggerBackup called, req.Id: %v", req.Id)
+	// 管理员专属
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return mErr
+	}
+	llog.C(ctx).Infof("TriggerBackup called, req.Id: %v", req.Id)
 	task, err := db.GetBackupTaskByID(*req.Id)
 	if err != nil {
-		llog.L().Errorf("TriggerBackup: task not found, id: %v, err: %v", req.Id, err)
+		llog.C(ctx).Errorf("TriggerBackup: task not found, id: %v, err: %v", req.Id, err)
 		return &models.Err{E: errors.New("backup task not found"), C: native.RespCode_NOT_FOUND}
 	}
 
@@ -336,7 +360,7 @@ func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Er
 		return &models.Err{E: errors.New("backup task is disabled"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	llog.L().Infof("TriggerBackup: calling scheduler.TriggerBackup, task_id: %d", *task.Id)
+	llog.C(ctx).Infof("TriggerBackup: calling scheduler.TriggerBackup, task_id: %d", *task.Id)
 	backup.GetScheduler().TriggerBackup(*task.Id)
 	return nil
 }
@@ -358,6 +382,10 @@ func checkBackupTaskOwnership(ctx context.Context, task *native.BackupTaskORM) b
 
 // ListBackupFiles 获取备份文件记录
 func ListBackupFiles(ctx context.Context, req *native.ListBackupFilesReq) (*native.ListBackupFilesRespData, *models.Err) {
+	// 管理员专属
+	if mErr := RequireAdmin(ctx); mErr != nil {
+		return nil, mErr
+	}
 	// 归属校验：任务必须属于当前用户（或管理员），防止越权查看他人备份文件
 	task, err := db.GetBackupTaskByID(*req.TaskId)
 	if err != nil || task == nil {
@@ -375,7 +403,7 @@ func ListBackupFiles(ctx context.Context, req *native.ListBackupFilesReq) (*nati
 
 	records, total, err := db.ListBackupFileRecords(*req.TaskId, page, pageSize, req.Status)
 	if err != nil {
-		llog.L().Errorf("list backup files failed: %v", err)
+		llog.C(ctx).Errorf("list backup files failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 

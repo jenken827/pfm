@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/utils"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/utils"
 )
 
 // TestEnsureDirStructureRaceCondition 测试 ensureDirStructure 的并发竞态修复
@@ -31,11 +31,11 @@ func TestEnsureDirStructureRaceCondition(t *testing.T) {
 
 	// 获取目标目录 ID（需要先创建）
 	targetDirID := createTestTargetDir(t)
-	
+
 	// 并发测试
 	var wg sync.WaitGroup
 	errors := make(chan error, len(paths))
-	
+
 	for _, p := range paths {
 		wg.Add(1)
 		go func(path string) {
@@ -46,15 +46,15 @@ func TestEnsureDirStructureRaceCondition(t *testing.T) {
 			}
 		}(p)
 	}
-	
+
 	wg.Wait()
 	close(errors)
-	
+
 	// 检查错误
 	for err := range errors {
 		t.Error(err)
 	}
-	
+
 	// 验证所有目录都已创建
 	verifyDirectoriesCreated(t, targetDirID, paths)
 }
@@ -81,7 +81,7 @@ func verifyDirectoriesCreated(t *testing.T, targetDirID string, paths []string) 
 			dirSet[dir] = true
 		}
 	}
-	
+
 	// 验证每个目录都存在
 	for dir := range dirSet {
 		_, err := db.GetFileByParentAndName(targetDirID, dir, "")

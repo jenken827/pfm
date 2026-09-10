@@ -3,10 +3,8 @@ package api
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/proto/gen/native/nativeconnect"
 	"jenken827.com/jenken827/pfm/server/response"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -14,11 +12,9 @@ import (
 // UploadServer 上传服务
 type UploadServer struct{}
 
-var _ = (nativeconnect.UploadServiceHandler)((*UploadServer)(nil))
-
 // UploadSmall 小文件上传（< 10MB）
-func (s *UploadServer) UploadSmall(ctx context.Context, req *connect.Request[native.UploadSmallReq]) (*connect.Response[native.BaseResp], error) {
-	result, err := service.UploadSmall(ctx, req.Msg)
+func (s *UploadServer) UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.BaseResp, error) {
+	result, err := service.UploadSmall(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -26,9 +22,9 @@ func (s *UploadServer) UploadSmall(ctx context.Context, req *connect.Request[nat
 }
 
 // InitUpload 初始化上传任务
-func (s *UploadServer) InitUpload(ctx context.Context, req *connect.Request[native.InitUploadReq]) (*connect.Response[native.BaseResp], error) {
+func (s *UploadServer) InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.BaseResp, error) {
 
-	result, err := service.InitUpload(ctx, req.Msg)
+	result, err := service.InitUpload(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -36,8 +32,8 @@ func (s *UploadServer) InitUpload(ctx context.Context, req *connect.Request[nati
 }
 
 // UploadChunk 上传分片（非流式）
-func (s *UploadServer) UploadChunk(ctx context.Context, req *connect.Request[native.UploadChunkReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.UploadChunkSingle(ctx, req.Msg)
+func (s *UploadServer) UploadChunk(ctx context.Context, req *native.UploadChunkReq) (*native.BaseResp, error) {
+	err := service.UploadChunkSingle(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -45,8 +41,8 @@ func (s *UploadServer) UploadChunk(ctx context.Context, req *connect.Request[nat
 }
 
 // CompleteUpload 完成上传
-func (s *UploadServer) CompleteUpload(ctx context.Context, req *connect.Request[native.CompleteUploadReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.CompleteUpload(ctx, req.Msg)
+func (s *UploadServer) CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) (*native.BaseResp, error) {
+	err := service.CompleteUpload(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -54,8 +50,8 @@ func (s *UploadServer) CompleteUpload(ctx context.Context, req *connect.Request[
 }
 
 // CancelUpload 取消上传
-func (s *UploadServer) CancelUpload(ctx context.Context, req *connect.Request[native.CancelUploadReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.CancelUpload(ctx, req.Msg)
+func (s *UploadServer) CancelUpload(ctx context.Context, req *native.CancelUploadReq) (*native.BaseResp, error) {
+	err := service.CancelUpload(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -63,8 +59,8 @@ func (s *UploadServer) CancelUpload(ctx context.Context, req *connect.Request[na
 }
 
 // ListUploadRecords 获取上传记录列表
-func (s *UploadServer) ListUploadRecords(ctx context.Context, req *connect.Request[native.ListUploadRecordsReq]) (*connect.Response[native.BaseResp], error) {
-	result, err := service.ListUploadRecords(ctx, req.Msg)
+func (s *UploadServer) ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*native.BaseResp, error) {
+	result, err := service.ListUploadRecords(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -72,8 +68,8 @@ func (s *UploadServer) ListUploadRecords(ctx context.Context, req *connect.Reque
 }
 
 // GetUploadRecordDetail 获取上传记录详情
-func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *connect.Request[native.GetUploadRecordDetailReq]) (*connect.Response[native.BaseResp], error) {
-	result, err := service.GetUploadRecordDetail(ctx, req.Msg)
+func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetailReq) (*native.BaseResp, error) {
+	result, err := service.GetUploadRecordDetail(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -81,8 +77,8 @@ func (s *UploadServer) GetUploadRecordDetail(ctx context.Context, req *connect.R
 }
 
 // RetryUploadRecord 重试上传记录
-func (s *UploadServer) RetryUploadRecord(ctx context.Context, req *connect.Request[native.RetryUploadRecordReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.RetryUploadRecord(ctx, req.Msg)
+func (s *UploadServer) RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) (*native.BaseResp, error) {
+	err := service.RetryUploadRecord(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}
@@ -90,7 +86,7 @@ func (s *UploadServer) RetryUploadRecord(ctx context.Context, req *connect.Reque
 }
 
 // RetryAllFailedUploadRecords 重试所有失败的上传记录
-func (s *UploadServer) RetryAllFailedUploadRecords(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[native.BaseResp], error) {
+func (s *UploadServer) RetryAllFailedUploadRecords(ctx context.Context, req *emptypb.Empty) (*native.BaseResp, error) {
 	err := service.RetryAllFailedUploadRecords(ctx)
 	if err != nil {
 		return response.ErrResp(err)
@@ -99,8 +95,8 @@ func (s *UploadServer) RetryAllFailedUploadRecords(ctx context.Context, req *con
 }
 
 // DeleteUploadRecord 删除上传记录
-func (s *UploadServer) DeleteUploadRecord(ctx context.Context, req *connect.Request[native.DeleteUploadRecordReq]) (*connect.Response[native.BaseResp], error) {
-	err := service.DeleteUploadRecord(ctx, req.Msg)
+func (s *UploadServer) DeleteUploadRecord(ctx context.Context, req *native.DeleteUploadRecordReq) (*native.BaseResp, error) {
+	err := service.DeleteUploadRecord(ctx, req)
 	if err != nil {
 		return response.ErrResp(err)
 	}

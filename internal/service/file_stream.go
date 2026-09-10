@@ -34,10 +34,27 @@ type FileStreamResult struct {
 	PreDownloadData map[string]any // 预下载状态数据
 }
 
-// GetFileStream 获取文件流（用于预览/下载）
-// fileID: 文件ID
-// providerID: 指定存储提供者ID（可选，为空则自动选择）
+// GetFileStream 获取文件流（用户场景：内部强制归属校验）
+//
+// 仅文件所有者可取流。分享场景请用 GetFileStreamForShare（访问者不是 owner）。
+// fileID: 文件ID；providerID: 指定存储提供者ID（可选，为空则自动选择）
 func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*FileStreamResult, error) {
+	if !CheckOwnership(ctx, fileID) {
+		return nil, fmt.Errorf("permission denied: not owner of file")
+	}
+	return getFileStream(ctx, fileID, providerID)
+}
+
+// GetFileStreamForShare 获取文件流（分享场景：跳过归属校验）
+//
+// 调用方必须已完成分享有效性校验（分享码有效、未过期、未超访问次数），
+// 见 api/share_link.go 的 PublicDownload/RawFilePreview 流程。
+func GetFileStreamForShare(ctx context.Context, fileID string, providerID *uint32) (*FileStreamResult, error) {
+	return getFileStream(ctx, fileID, providerID)
+}
+
+// getFileStream 取流的内部实现（不含归属校验，由调用方保证已授权）
+func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*FileStreamResult, error) {
 	// 1. 获取文件信息
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
@@ -91,7 +108,7 @@ func GetFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 		}
 	}
 
-	llog.L().Infof("stream file: %s, provider: %d, chunks: %d", *file.Name, sourceProviderID, len(sourceLocations))
+	llog.C(ctx).Infof("stream file: %s, provider: %d, chunks: %d", *file.Name, sourceProviderID, len(sourceLocations))
 
 	// 4. 获取存储实例
 	sourceStorage := storage.GetStorage(sourceProviderID)
@@ -164,7 +181,7 @@ func tryServeFromLocalTemp(file *native.FileORM) (*FileStreamResult, bool) {
 	var candidates []string
 	if ownerID := strPtrVal(file.OwnerId); ownerID != "" {
 		candidates = append(candidates,
-			filepath.Join(utils.GetChunkTempDir(*file.Hash, ownerID), "merged_"+*file.Name))
+			filepath.Join(utils.GetChunkTempDir(*file.Hash, ownerID), utils.MergedFileName(*file.Name)))
 	}
 	candidates = append(candidates, utils.GetFileTempPath(*file.Hash, *file.Name))
 
@@ -227,6 +244,11 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool)
 	history, err := db.GetFileHistoryByID(historyID)
 	if err != nil {
 		return nil, fmt.Errorf("history not found: %w", err)
+	}
+
+	// 归属校验：历史版本归属其宿主文件，仅文件所有者可取流（管理员不可越权）
+	if history.FileId == nil || !CheckOwnership(ctx, *history.FileId) {
+		return nil, fmt.Errorf("permission denied: not owner of file history")
 	}
 
 	if history.Hash == nil || *history.Hash == "" {
@@ -345,14 +367,14 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	// 1. 查找文件位置
 	locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
 	if err != nil || len(locations) == 0 {
-		llog.L().Warnf("no file locations found for thumbnail regeneration: %s", *file.Hash)
+		llog.C(ctx).Warnf("no file locations found for thumbnail regeneration: %s", *file.Hash)
 		return
 	}
 
 	// 2. 选择一个可用的存储提供者
 	sourceProviderID, sourceLocations, err := storage.SelectBestSourceProvider(locations)
 	if err != nil {
-		llog.L().Warnf("select source provider failed for thumbnail: %v", err)
+		llog.C(ctx).Warnf("select source provider failed for thumbnail: %v", err)
 		return
 	}
 
@@ -365,14 +387,14 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	// 4. 创建加密器（如果需要）
 	encryptor, err := createEncryptorIfNeeded(sourceStorage, sourceLocations)
 	if err != nil {
-		llog.L().Errorf("create encryptor for thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("create encryptor for thumbnail failed: %v", err)
 		return
 	}
 
 	// 5. 下载文件到临时目录
 	tempFile, err := os.CreateTemp("", "thumbnail-*")
 	if err != nil {
-		llog.L().Errorf("create temp file for thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("create temp file for thumbnail failed: %v", err)
 		return
 	}
 	defer os.Remove(tempFile.Name())
@@ -381,14 +403,14 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	// 6. 打开文件
 	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
-		llog.L().Errorf("open file for thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("open file for thumbnail failed: %v", err)
 		return
 	}
 	defer reader.Close()
 
 	// 7. 复制到临时文件
 	if _, err := io.Copy(tempFile, reader); err != nil {
-		llog.L().Errorf("copy file for thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("copy file for thumbnail failed: %v", err)
 		return
 	}
 	tempFile.Close()
@@ -396,13 +418,13 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	// 8. 获取图片信息
 	imgInfo, err := thumbnail.GetImageInfo(tempFile.Name())
 	if err != nil {
-		llog.L().Warnf("get image info for thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("get image info for thumbnail failed: %v", err)
 		return
 	}
 
 	// 9. 检查是否需要生成缩略图
 	if !thumbnail.NeedThumbnail(imgInfo, *file.Name) {
-		llog.L().Debugf("thumbnail not needed for regenerated file: %s", *file.Name)
+		llog.C(ctx).Debugf("thumbnail not needed for regenerated file: %s", *file.Name)
 		return
 	}
 
@@ -411,11 +433,11 @@ func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
 	generator := thumbnail.NewGenerator(cacheDir)
 	thumbnailPaths, err := generator.GenerateAll(tempFile.Name(), *file.Hash)
 	if err != nil {
-		llog.L().Errorf("regenerate thumbnail failed: %v", err)
+		llog.C(ctx).Warnf("regenerate thumbnail failed: %v", err)
 		return
 	}
 
-	llog.L().Infof("thumbnails regenerated for file: %s, paths: %v", *file.Name, thumbnailPaths)
+	llog.C(ctx).Infof("thumbnails regenerated for file: %s, paths: %v", *file.Name, thumbnailPaths)
 }
 
 // CheckFileIsImage 检查文件是否是图片

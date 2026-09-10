@@ -42,7 +42,7 @@ class _PermissionManagementPageState extends State<PermissionManagementPage> {
 
     try {
       // 并行获取用户列表、空间列表和存储提供者
-      final usersResult = await _repo.listUsersNew();
+      final usersResult = await _repo.listUsers();
       final spacesResult = await _repo.listUserSpaces(pageSize: 200);
       final providersResult = await _repo.listStorageProviders();
 

@@ -7,8 +7,8 @@ import (
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
-func namePtr(s string) *string  { return &s }
-func idPtr(s string) *string    { return &s }
+func namePtr(s string) *string       { return &s }
+func idPtr(s string) *string         { return &s }
 func timePtr(t time.Time) *time.Time { return &t }
 
 func TestPickKeeper(t *testing.T) {
@@ -58,7 +58,7 @@ func TestPickKeeper(t *testing.T) {
 	t.Run("中文名按字符数", func(t *testing.T) {
 		group := []*native.FileORM{
 			mk("a", "照片备份最终版最终版.jpg", base), // 12 字符
-			mk("b", "照片.jpg", base),                 // 5 字符
+			mk("b", "照片.jpg", base),         // 5 字符
 		}
 		keeper := pickKeeper(group)
 		if *keeper.Id != "b" {

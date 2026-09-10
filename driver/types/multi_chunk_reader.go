@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"jenken827.com/jenken827/pfm/pkg/crypt"
 )
 
 // ChunkOpener 分片打开器接口
@@ -20,7 +22,18 @@ type ChunkOpener interface {
 }
 
 // MultiChunkReader 多分片合并读取器
-// 支持将多个分片合并为一个连续的 ReadSeekCloser
+// 支持将多个分片合并为一个连续的 ReadSeekCloser。
+//
+// 长度与偏移一律工作在「明文空间」：加密分片在存储上是密文
+// （FileRef.ChunkSize 记录的是密文长度），必须换算回明文长度再参与
+// totalSize / chunkOffset 计算。否则 Seek(io.SeekEnd) 会返回密文总长，
+// 上层（如 net/http.ServeContent）据此声明的 Content-Length 将大于
+// reader 实际能输出的明文字节数，响应被判定为不完整、连接被截断
+// （客户端表现为 "Empty reply from server"）。
+//
+// 解密侧同样以明文偏移定位（pkg/crypt 的 calculateUnderlying 把明文
+// offset 换算为底层密文偏移），故 openCurrentChunk 传入的
+// chunkInternalOffset 也依赖 chunkOffset 是明文累积值。
 type MultiChunkReader struct {
 	ctx         context.Context
 	opener      ChunkOpener // 分片打开器
@@ -30,18 +43,27 @@ type MultiChunkReader struct {
 	currentRC   io.ReadCloser
 	offset      int64
 	totalSize   int64
-	chunkOffset []int64 // 每个分片的起始偏移（预先计算）
+	chunkOffset []int64 // 每个分片的起始偏移（明文空间，预先计算）
 	mu          sync.Mutex
 }
 
 // NewMultiChunkReader 创建多分片合并读取器
-func NewMultiChunkReader(ctx context.Context, opener ChunkOpener, locations []FileRef, encryptor Encryptor) *MultiChunkReader {
-	// 预先计算总大小和每个分片的偏移
+// 预先按明文空间计算总大小与每个分片的起始偏移。
+// 加密分片长度非法（如数据损坏）时返回错误，由调用方提前失败，
+// 避免在响应头写出后才暴露问题导致连接截断。
+func NewMultiChunkReader(ctx context.Context, opener ChunkOpener, locations []FileRef, encryptor Encryptor) (*MultiChunkReader, error) {
+	encrypted := encryptor != nil && encryptor.IsEncrypted()
+
+	// 预先计算明文总大小和每个分片的起始偏移
 	var totalSize int64
 	chunkOffset := make([]int64, len(locations))
 	for i, loc := range locations {
+		plainSize, err := plainChunkSize(int64(loc.ChunkSize), encrypted)
+		if err != nil {
+			return nil, fmt.Errorf("chunk %d: %w", loc.ChunkNumber, err)
+		}
 		chunkOffset[i] = totalSize
-		totalSize += int64(loc.ChunkSize)
+		totalSize += plainSize
 	}
 
 	return &MultiChunkReader{
@@ -53,7 +75,17 @@ func NewMultiChunkReader(ctx context.Context, opener ChunkOpener, locations []Fi
 		offset:      0,
 		totalSize:   totalSize,
 		chunkOffset: chunkOffset,
+	}, nil
+}
+
+// plainChunkSize 把存储分片大小换算为明文大小
+// 未加密分片的存储大小即明文大小；加密分片存储的是密文
+// （33B 文件头 + 每 64KiB 明文块 16B 认证标签），用 DecryptedSize 精确换算。
+func plainChunkSize(storedSize int64, encrypted bool) (int64, error) {
+	if !encrypted {
+		return storedSize, nil
 	}
+	return crypt.DecryptedSize(storedSize)
 }
 
 // Read 读取数据
@@ -188,7 +220,7 @@ func (m *MultiChunkReader) findChunkIndex(offset int64) int {
 	return 0
 }
 
-// TotalSize 返回总大小
+// TotalSize 返回明文总大小
 func (m *MultiChunkReader) TotalSize() int64 {
 	return m.totalSize
 }

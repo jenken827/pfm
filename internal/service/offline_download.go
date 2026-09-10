@@ -84,7 +84,7 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 		map[string]any{"dir": downloadDir},
 	)
 	if err != nil {
-		llog.L().Errorf("aria2 addUri failed, url: %s, err: %v", rawURL, err)
+		llog.C(ctx).Errorf("aria2 addUri failed, url: %s, err: %v", rawURL, err)
 		return nil, &models.Err{
 			E: fmt.Errorf("aria2 添加下载失败: %v", err),
 			C: native.RespCode_INTERNAL_ERROR,
@@ -112,7 +112,7 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	llog.L().Infof("offline download created, id: %d, gid: %s, url: %s, parent: %s, user: %s",
+	llog.C(ctx).Infof("offline download created, id: %d, gid: %s, url: %s, parent: %s, user: %s",
 		*dr.Id, gid, rawURL, parentID, userID)
 
 	pb, _ := dr.ToPB(ctx)
@@ -213,7 +213,7 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 		map[string]any{"dir": downloadDir},
 	)
 	if aErr != nil {
-		llog.L().Errorf("aria2 addUri retry failed, id: %d, err: %v", *req.Id, aErr)
+		llog.C(ctx).Errorf("aria2 addUri retry failed, id: %d, err: %v", *req.Id, aErr)
 		return nil, &models.Err{E: fmt.Errorf("aria2 添加下载失败: %v", aErr), C: native.RespCode_INTERNAL_ERROR}
 	}
 
@@ -224,7 +224,7 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 	dr.ErrorMessage = utils.StringPtr("")
 	_ = db.UpdateDownloadRecord(dr, []string{"gid", "state", "error_message"})
 
-	llog.L().Infof("offline download retried, id: %d, new gid: %s", *req.Id, gid)
+	llog.C(ctx).Infof("offline download retried, id: %d, new gid: %s", *req.Id, gid)
 	pb, _ := dr.ToPB(ctx)
 	return &native.CreateOfflineDownloadResp{Record: &pb}, nil
 }
