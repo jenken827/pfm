@@ -7,6 +7,7 @@ import 'package:path/path.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/services.dart';
+import 'package:pfm/utils/utils.dart';
 import 'package:uuid/uuid.dart';
 
 part 'transfer_event.dart';
@@ -239,7 +240,19 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         state.copyWith(uploadTasks: tasks, fakeStatus: state.fakeStatus + 1),
       );
     } else {
-      await _bgService.transferStorage.deleteDownloadTask(event.taskId);
+      // 删除前取出记录：已完成的下载若已发布到公共「下载」目录，
+      // 需要一并清理，否则公共目录会留下孤儿文件
+      final taskId = event.taskId;
+      final record = taskId == null
+          ? null
+          : await _bgService.transferStorage.getDownloadTaskAsync(taskId);
+      await _bgService.transferStorage.deleteDownloadTask(taskId);
+
+      if (record != null &&
+          record.status == DownloadStatus.completed &&
+          record.savePath.isNotEmpty) {
+        await DownloadDir.deletePublished(record.savePath);
+      }
 
       final records = await _bgService.transferStorage
           .getAllDownloadTasksAsync();
@@ -431,6 +444,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       status: _toDownloadTaskStatus(record.status),
       errorMessage: record.errorMessage,
       localPath: record.savePath,
+      contentUri: record.contentUri,
     );
   }
 

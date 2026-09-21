@@ -5,3 +5,4 @@ export 'download_task_record.dart';
 export 'client_backup_config.dart';
 export 'contact_backup_config.dart';
 export 'device_backup_config.dart';
+export 'call_recording_backup_config.dart';

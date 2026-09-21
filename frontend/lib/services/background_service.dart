@@ -249,11 +249,14 @@ class BackgroundService {
 
       // 上传完成后，回填 backup_file_records（仅相册备份任务有 tags）
       final task = await _transferStorage.getUploadTaskAsync(taskId);
-      if (task != null &&
-          task.tags != null &&
-          task.tags!.isNotEmpty &&
-          task.status == UploadStatus.COMPLETED) {
-        await _syncBackupRecordOnComplete(task);
+      if (task != null && task.tags != null && task.tags!.isNotEmpty) {
+        if (task.status == UploadStatus.COMPLETED) {
+          await _syncBackupRecordOnComplete(task);
+        } else if (task.status == UploadStatus.FAILED) {
+          // 失败也回写，否则记录停在 pending 会被后续增量判定当成"需重传"，
+          // 但实际上从未成功过 —— 两者语义不同，必须区分
+          await _syncBackupRecordOnFailed(task);
+        }
       }
     } catch (e, s) {
       _logger.error('Upload failed: $taskId', e, s);
@@ -277,13 +280,23 @@ class BackgroundService {
     }
   }
 
+  /// 解析 tags 得到 (configId, relativePath)。
+  ///
+  /// 约定：`configId|relativePath` 表示非相册备份（如通话录音）；
+  /// 不含 `|` 时按相册备份处理（历史行为：tags 直接是 asset id）。
+  /// 之所以复用 tags 而不新增字段：上传任务表结构已固定，
+  /// 且回写逻辑只需这两个值，避免改表与迁移。
+  (String, String) _parseBackupTag(String tags) {
+    final i = tags.indexOf('|');
+    if (i < 0) return (Sqlite3Storage.albumBackupConfigId, tags);
+    return (tags.substring(0, i), tags.substring(i + 1));
+  }
+
   /// 上传成功后回填 backup_file_records
   Future<void> _syncBackupRecordOnComplete(UploadTaskRecord task) async {
     try {
-      final record = await _storage.getBackupFileRecord(
-        Sqlite3Storage.albumBackupConfigId,
-        task.tags!,
-      );
+      final (configId, relativePath) = _parseBackupTag(task.tags!);
+      final record = await _storage.getBackupFileRecord(configId, relativePath);
       if (record != null) {
         await _storage.updateBackupFileRecord(record['id'] as String, {
           'file_hash': task.fileHash,
@@ -302,10 +315,8 @@ class BackgroundService {
   /// 上传失败后更新 backup_file_records 状态
   Future<void> _syncBackupRecordOnFailed(UploadTaskRecord task) async {
     try {
-      final record = await _storage.getBackupFileRecord(
-        Sqlite3Storage.albumBackupConfigId,
-        task.tags!,
-      );
+      final (configId, relativePath) = _parseBackupTag(task.tags!);
+      final record = await _storage.getBackupFileRecord(configId, relativePath);
       if (record != null) {
         await _storage.updateBackupFileRecord(record['id'] as String, {
           'status': BackupFileStatus.failed.index,

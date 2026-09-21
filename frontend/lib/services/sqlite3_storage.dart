@@ -14,7 +14,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// 确保数据库操作在后台线程执行，不阻塞 UI
 class Sqlite3Storage {
   static const String _dbName = 'pfm.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
   static const String uploadTaskTableName = 'upload_tasks';
   static const String downloadTaskTableName = 'download_tasks';
   static const String backupFileTableName = 'backup_file_records';
@@ -124,6 +124,25 @@ class Sqlite3Storage {
     );
     if (oldVersion < 2) {
       await db.execute(_createBackupFileTableSql());
+    }
+    // v3：下载任务新增 content_uri（已发布到公共「下载」后的 MediaStore uri）
+    if (oldVersion < 3) {
+      await _addColumnIfMissing(db, downloadTaskTableName, 'content_uri', 'TEXT');
+    }
+  }
+
+  /// 幂等加列：SQLite 无 ADD COLUMN IF NOT EXISTS，先查 PRAGMA 再决定
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String type,
+  ) async {
+    final cols = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = cols.any((c) => c['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+      getLogger().info('added column $column to $table');
     }
   }
 
@@ -593,6 +612,10 @@ class Sqlite3Storage {
     int? downloadedBytes,
     int? speed,
     int? chunkTotal,
+    int? providerId,
+    String? savePath,
+    String? contentUri,
+    bool clearContentUri = false,
   }) async {
     final values = <String, dynamic>{};
 
@@ -606,6 +629,16 @@ class Sqlite3Storage {
     if (downloadedBytes != null) values['downloaded_bytes'] = downloadedBytes;
     if (speed != null) values['speed'] = speed;
     if (chunkTotal != null) values['chunk_total'] = chunkTotal;
+    if (providerId != null) values['provider_id'] = providerId;
+    // 下载完成后私有文件被发布到公共下载目录，需把记录指向最终可见路径
+    if (savePath != null) values['save_path'] = savePath;
+    // 已发布文件的 MediaStore uri，供「打开文件」使用（内容为 null 时也要写入，
+    // 以清理可能残留的旧 uri），故用显式标记区分「不改」与「置空」
+    if (clearContentUri) {
+      values['content_uri'] = null;
+    } else if (contentUri != null) {
+      values['content_uri'] = contentUri;
+    }
 
     if (values.isEmpty) return;
 

@@ -59,6 +59,10 @@ android {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // 通话录音备份走 SAF（ACTION_OPEN_DOCUMENT_TREE）读目录：
+    // 录音目录属 media_rw 组、本应用不在该组，路径与 MediaStore 都拿不到，
+    // 必须经 SAF 授权的 content:// 逐文件读取
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
 
 flutter {

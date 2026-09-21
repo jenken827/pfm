@@ -5,7 +5,6 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/router/files_route.dart';
@@ -13,6 +12,7 @@ import 'package:pfm/services/services.dart';
 import 'package:pfm/widgets/document_preview_widget.dart';
 import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/api/fm_repository.dart';
+import 'package:pfm/utils/download_dir.dart';
 import 'package:pfm/utils/file_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pfm/l10n/app_localizations.dart';
@@ -661,12 +661,14 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   void _downloadFile(BuildContext context) async {
     final al = AppLocalizations.of(context);
     try {
-      final downloadDir = await getDownloadsDirectory();
+      // 下载到应用私有目录，完成后再发布到公共「下载」（分区存储限制）
+      final downloadDir = await DownloadDir.resolveWriteDir();
+      if (!context.mounted) return;
 
       final fileName = _currentFile.name.isNotEmpty
           ? _currentFile.name
           : 'unnamed';
-      final initialPath = '${downloadDir!.path}/$fileName';
+      final initialPath = '$downloadDir/$fileName';
       // 生成唯一文件路径，避免覆盖
       final savePath = await FileUtils.getUniqueFilePath(initialPath);
       if (!context.mounted) return;

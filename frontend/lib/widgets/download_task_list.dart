@@ -6,8 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
-import 'package:pfm/utils/format.dart';
-import 'package:pfm/utils/platform.dart';
+import 'package:pfm/utils/utils.dart';
 import 'package:pfm/design/design_tokens.dart';
 
 /// 下载任务列表
@@ -281,6 +280,22 @@ class _DownloadTaskItem extends StatelessWidget {
 
   Future<void> _openFile(BuildContext context) async {
     final al = AppLocalizations.of(context);
+
+    // Android 上已发布的文件必须用 MediaStore 的 content:// uri 打开：
+    // open_file 插件对公共目录**路径**会要求 MANAGE_EXTERNAL_STORAGE
+    // （本应用不申请该权限），走路径必然报 Permission denied。
+    final uri = task.contentUri;
+    if (Platform.isAndroid && uri != null && uri.isNotEmpty) {
+      // mimeType 留空：原生侧会经 ContentResolver.getType(uri) 自动解析
+      final ok = await DownloadDir.openPublished(uri: uri);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(al.downloadTask_cannotOpenFile)),
+        );
+      }
+      return;
+    }
+
     if (task.localPath == null) return;
 
     final file = File(task.localPath!);
@@ -330,15 +345,11 @@ class _DownloadTaskItem extends StatelessWidget {
         } else if (Platform.isLinux) {
           await Process.run('xdg-open', [dir]);
         }
-      } else if (Platform.isAndroid) {
-        // Android: 使用 open_file 打开目录
-        final result = await OpenFile.open(dir);
-        if (result.type != ResultType.done && context.mounted) {
-          // 如果打开目录失败，复制路径
-          _copyPath(context);
-        }
       } else {
-        // iOS 不支持打开目录，复制路径提示用户
+        // Android / iOS：系统没有「打开指定目录」的标准 Intent
+        // （ACTION_VIEW + resource/folder 非官方 API，仅少数文件管理器支持），
+        // 旧实现的 OpenFile.open(dir) 会因 mime=application/octet-stream
+        // 无匹配应用而必然失败。故直接提示用户文件所在目录的路径。
         if (context.mounted) _copyPath(context);
       }
     } catch (e) {

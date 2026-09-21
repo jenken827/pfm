@@ -325,6 +325,9 @@ class TransferStorage {
     int? speed,
     int? chunkTotal,
     int? providerId,
+    String? savePath,
+    String? contentUri,
+    bool clearContentUri = false,
   }) async {
     final raw = _downloadBox.get(id);
     if (raw == null) return;
@@ -341,6 +344,14 @@ class TransferStorage {
     if (speed != null) existing['speed'] = speed;
     if (chunkTotal != null) existing['chunk_total'] = chunkTotal;
     if (providerId != null) existing['provider_id'] = providerId;
+    // 下载完成后私有文件被发布到公共下载目录，需把记录指向最终可见路径
+    if (savePath != null) existing['save_path'] = savePath;
+    // 已发布文件的 MediaStore uri，供「打开文件」使用（显式置空用于清理旧值）
+    if (clearContentUri) {
+      existing['content_uri'] = null;
+    } else if (contentUri != null) {
+      existing['content_uri'] = contentUri;
+    }
 
     await _downloadBox.put(id, existing);
   }

@@ -1,4 +1,4 @@
-{
+﻿{
     "@@locale": "en",
     "common_cancel": "Cancel",
     "common_confirm": "Confirm",
@@ -455,6 +455,193 @@
     "albumBackup_rebackupHint": "Skip check, re-backup all photos",
     "albumBackup_rebackupConfirm": "This will re-backup all photos in selected albums, ignoring previously backed-up records. Use this when backend issues caused uploads to fail. Continue?",
     "contactBackup_title": "Contacts Backup",
+    "contactMerge_title": "Duplicate Contacts",
+    "contactRestore_title": "Restore contacts",
+    "contactRestore_pickFile": "Choose backup file",
+    "contactRestore_noFiles": "No .vcf backup files found in the target folder",
+    "contactRestore_loadFailed": "Failed to list backups",
+    "contactRestore_downloading": "Downloading and parsing backup…",
+    "contactRestore_confirmTitle": "Confirm restore",
+    "contactRestore_confirmMsg": "Restore from \"{name}\":\n\n{create} new\n{merge} merged\n{skip} skipped (already present)\n\nRestoring never deletes local contacts.",
+    "@contactRestore_confirmMsg": {
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "create": {
+                "type": "int"
+            },
+            "merge": {
+                "type": "int"
+            },
+            "skip": {
+                "type": "int"
+            }
+        }
+    },
+    "contactRestore_done": "Restore complete: {create} added, {merge} merged",
+    "@contactRestore_done": {
+        "placeholders": {
+            "create": {
+                "type": "int"
+            },
+            "merge": {
+                "type": "int"
+            }
+        }
+    },
+    "contactRestore_nothingToDo": "Backup matches local contacts; nothing to change",
+    "contactRestore_fileInfo": "{size} · {time}",
+    "@contactRestore_fileInfo": {
+        "placeholders": {
+            "size": {
+                "type": "String"
+            },
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "contactMerge_confirmTitle": "Confirm merge",
+    "contactMerge_confirmMsg": "This will merge {groups} duplicate group(s) and delete {deleted} redundant record(s).\n\nAn undo point is created first, so you can revert via \"Undo last merge\".",
+    "@contactMerge_confirmMsg": {
+        "placeholders": {
+            "groups": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_confirmOk": "Merge",
+    "contactMerge_done": "Merged {groups} group(s), deleted {deleted}",
+    "@contactMerge_done": {
+        "placeholders": {
+            "groups": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_partialFailed": "{count} group(s) failed",
+    "@contactMerge_partialFailed": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_needWritePermission": "Contacts write permission is required to merge",
+    "contactMerge_undo": "Undo last merge",
+    "contactMerge_undoNone": "No undo point available (undo only applies to the most recent merge)",
+    "contactMerge_undoConfirmTitle": "Undo last merge",
+    "contactMerge_undoConfirmMsg": "This will recreate {deleted} deleted contact(s) and roll back {modified} modified contact(s).\n\nDeleted contacts cannot keep their original IDs; the system will assign new ones.",
+    "@contactMerge_undoConfirmMsg": {
+        "placeholders": {
+            "deleted": {
+                "type": "int"
+            },
+            "modified": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_undoDone": "Recreated {restored}, rolled back {rolledBack}",
+    "@contactMerge_undoDone": {
+        "placeholders": {
+            "restored": {
+                "type": "int"
+            },
+            "rolledBack": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_undoPoint": "Undo point: {time} (modified {modified}, deleted {deleted})",
+    "@contactMerge_undoPoint": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            },
+            "modified": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_deleteBlockedTitle": "Numbers merged, but redundant contacts could not be deleted",
+    "contactMerge_deleteBlockedMsg": "The system blocked the delete operation (common on Xiaomi/MIUI).\n\nThe numbers have been merged into the kept contact, but {count} duplicate record(s) remain and must be deleted manually in the system Contacts app.",
+    "@contactMerge_deleteBlockedMsg": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_deleteBlockedHint": "To allow automatic deletion, grant contacts-modification permission in System Settings → Apps → this app → Permissions, and check the Security app's privacy protection settings",
+    "contactMerge_keepUndoHint": "The undo point was kept, so you can revert this merge at any time",
+    "contactMerge_scan": "Scan duplicates",
+    "contactMerge_selectAll": "Select all",
+    "contactMerge_deselectAll": "Deselect all",
+    "contactMerge_execute": "Merge selected",
+    "contactMerge_noDuplicates": "No duplicate contacts found",
+    "contactMerge_scannedCount": "Scanned {count} contacts",
+    "@contactMerge_scannedCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_foundGroups": "Found {count} suspected duplicate groups",
+    "@contactMerge_foundGroups": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_statMergeable": "Auto-mergeable",
+    "contactMerge_statSuspicious": "Uncertain (unchecked)",
+    "contactMerge_statBlocked": "Needs manual handling",
+    "contactMerge_suspiciousHint": "Uncertain groups are unchecked by default; tick them manually after review",
+    "contactMerge_memberCount": "{count} contacts",
+    "@contactMerge_memberCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_phoneSummary": "Phones: {info}",
+    "@contactMerge_phoneSummary": {
+        "placeholders": {
+            "info": {
+                "type": "String"
+            }
+        }
+    },
+    "contactMerge_selectedCount": "{count} group(s) selected",
+    "@contactMerge_selectedCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_willDelete": "Will delete {count} duplicate contact(s)",
+    "@contactMerge_willDelete": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "contactBackup_mobileOnly": "Contacts backup is only available on mobile",
     "contactBackup_mobileOnlyDesc": "Please use this feature on Android or iOS",
     "contactBackup_backupTo": "Backup to",
@@ -509,14 +696,57 @@
     "deviceBackup_instr2": "• Only reads local SMS and call log; nothing is ever deleted",
     "deviceBackup_instr3": "• Requires SMS and Phone permissions (grant manually in Android settings)",
     "deviceBackup_instr4": "• Skips upload automatically when content is unchanged",
+    "deviceBackup_deviceLabel": "This device's label",
+    "deviceBackup_deviceLabelHint": "SMS and call logs are not merged across devices; the label is added to file names so you can tell the source apart",
+    "deviceBackup_lastDevice": "Last backup from: {device}",
+    "@deviceBackup_lastDevice": {
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+
     "deviceBackup_howToRestore": "How to restore",
     "deviceBackup_restoreStep1": "1. SMS: download the .xml file and import with SMS Backup & Restore",
     "deviceBackup_restoreStep2": "2. Call log: download the .csv file and open in Excel/WPS",
+
+    "callRecording_tab": "Call Rec.",
+    "callRecording_backupNow": "Back up recordings now",
+    "callRecording_sourceDir": "Recording folder",
+    "callRecording_sourceDirHint": "Tap to choose where recordings are stored (varies by phone)",
+    "callRecording_pickDir": "Select recording folder",
+    "callRecording_targetFolder": "Back up to",
+    "callRecording_statusScanning": "Scanning",
+    "callRecording_statusNotConfigured": "Not configured",
+    "callRecording_summary": "{total} recordings, {pending} to back up",
+    "@callRecording_summary": {
+        "placeholders": {
+            "total": {"type": "int"},
+            "pending": {"type": "int"}
+        }
+    },
+    "callRecording_instr1": "• Only uploads the recordings themselves; nothing is deleted or modified",
+    "callRecording_instr2": "• Only new recordings are backed up; already-backed-up unchanged ones are skipped",
+    "callRecording_instr3": "• Requires Music and audio read permission (grant manually in Android settings)",
+    "callRecording_missingConfig": "Please set: {items}",
+    "@callRecording_missingConfig": {
+        "placeholders": { "items": {"type": "String"} }
+    },
+    "callRecording_nothingToBackup": "Scanned {total} recordings; all already backed up",
+    "@callRecording_nothingToBackup": {
+        "placeholders": { "total": {"type": "int"} }
+    },
+    "callRecording_dirGranted": "Recording folder authorized",
+    "callRecording_dirNotGranted": "Recording folder not authorized; cannot read recordings",
+    "callRecording_restoreStep1": "Download the recording (.amr/.m4a etc.) from the server and play it with any audio player",
+
     "clientBackup_title": "Auto Backup",
     "clientBackup_noTasks": "No auto backup tasks",
     "clientBackup_synced": "Synced",
     "clientBackup_executeNow": "Execute Now",
     "clientBackup_deleteTask": "Delete Client Backup Task",
+
     "clientBackup_deleteConfirm": "Delete「{name}」? Backup records will also be cleared.",
     "clientBackup_editTask": "Edit Auto Backup",
     "clientBackup_createTask": "Create Auto Backup",
@@ -610,6 +840,23 @@
     "downloadTask_statusFailed": "Failed",
     "downloadTask_statusPreDownload": "Pre-download",
     "uploadRecord_loadFailed": "Loading failed",
+    "uploadRecord_openLocalDir": "Open local folder",
+    "uploadRecord_pathCopied": "Path copied to clipboard: {path}",
+    "@uploadRecord_pathCopied": {
+        "placeholders": {
+            "path": {
+                "type": "String"
+            }
+        }
+    },
+    "uploadRecord_openFailed": "Open failed: {error}",
+    "@uploadRecord_openFailed": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
     "uploadRecord_noRecords": "No upload records",
     "uploadRecord_recordsHint": "Only shows in-progress and failed cloud upload records",
     "uploadRecord_total": "{count} total",

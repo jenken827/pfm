@@ -15,12 +15,20 @@ class DeviceBackupConfig {
   /// 上次备份的本地文件路径
   final String? lastBackupFilePath;
 
+  /// 上次备份的来源设备标识（设备名/厂商型号）。
+  ///
+  /// 短信与通话记录是本机独有数据，多设备备份到同一目录会混在一起，
+  /// 页面上靠它告诉用户"上次备份来自哪台设备"；同时它也参与导出的
+  /// 文件名与内容（见 DeviceBackupService）。老版本无此字段时为空。
+  final String? deviceLabel;
+
   const DeviceBackupConfig({
     this.targetParentId = '',
     this.targetFolderName = '',
     this.lastBackupHash,
     this.lastBackupTime,
     this.lastBackupFilePath,
+    this.deviceLabel,
   });
 
   DeviceBackupConfig copyWith({
@@ -29,6 +37,7 @@ class DeviceBackupConfig {
     String? lastBackupHash,
     DateTime? lastBackupTime,
     String? lastBackupFilePath,
+    String? deviceLabel,
   }) {
     return DeviceBackupConfig(
       targetParentId: targetParentId ?? this.targetParentId,
@@ -36,6 +45,7 @@ class DeviceBackupConfig {
       lastBackupHash: lastBackupHash ?? this.lastBackupHash,
       lastBackupTime: lastBackupTime ?? this.lastBackupTime,
       lastBackupFilePath: lastBackupFilePath ?? this.lastBackupFilePath,
+      deviceLabel: deviceLabel ?? this.deviceLabel,
     );
   }
 
@@ -45,6 +55,7 @@ class DeviceBackupConfig {
     'lastBackupHash': lastBackupHash,
     'lastBackupTime': lastBackupTime?.toIso8601String(),
     'lastBackupFilePath': lastBackupFilePath,
+    'deviceLabel': deviceLabel,
   };
 
   factory DeviceBackupConfig.fromJson(Map<String, dynamic> json) {
@@ -56,6 +67,7 @@ class DeviceBackupConfig {
           ? DateTime.parse(json['lastBackupTime'])
           : null,
       lastBackupFilePath: json['lastBackupFilePath'],
+      deviceLabel: json['deviceLabel'],
     );
   }
 }

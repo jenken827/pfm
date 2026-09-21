@@ -133,6 +133,9 @@ class DownloadTaskState extends Equatable {
   final DownloadTaskStatus status;
   final String? errorMessage;
   final String? localPath;
+  /// 已发布到公共「下载」目录时的 MediaStore content:// uri。
+  /// Android 上打开文件必须用它，而不是 localPath（详见 DownloadDir.openPublished 注释）。
+  final String? contentUri;
 
   const DownloadTaskState({
     required this.taskId,
@@ -143,6 +146,7 @@ class DownloadTaskState extends Equatable {
     required this.status,
     this.errorMessage,
     this.localPath,
+    this.contentUri,
   });
 
   /// 是否预下载中
@@ -171,6 +175,7 @@ class DownloadTaskState extends Equatable {
     DownloadTaskStatus? status,
     String? errorMessage,
     String? localPath,
+    String? contentUri,
   }) {
     return DownloadTaskState(
       taskId: taskId,
@@ -181,6 +186,7 @@ class DownloadTaskState extends Equatable {
       status: status ?? this.status,
       errorMessage: errorMessage ?? this.errorMessage,
       localPath: localPath ?? this.localPath,
+      contentUri: contentUri ?? this.contentUri,
     );
   }
 
@@ -194,5 +200,6 @@ class DownloadTaskState extends Equatable {
     status,
     errorMessage,
     localPath,
+    contentUri,
   ];
 }

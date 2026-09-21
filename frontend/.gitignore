@@ -61,7 +61,10 @@ linux/flutter/generated_*
 lib/proto/
 # Android build artifacts
 /android/build/
-/android/gradle.properties
+# Kotlin 编译器会话缓存
+/android/.kotlin/
+# gradle.properties 纳入版本控制：org.gradle.jvmargs 内存上限影响构建成败，
+# 各机器需一致（1536M 会在 jetifier 处理 arm64 AAR 时 OOM）
 
 # Lock file (generated, varies by environment)
 pubspec.lock

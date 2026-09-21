@@ -735,7 +735,7 @@ class _UploadTaskItem extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: () => _openLocalDirectory(ctx),
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('打开本地目录'),
+                  label: Text(AppLocalizations.of(ctx).uploadRecord_openLocalDir),
                 ),
               ),
             ],
@@ -786,19 +786,22 @@ class _UploadTaskItem extends StatelessWidget {
           await Process.run('xdg-open', [dir]);
         }
       } else {
-        // 移动端无法直接打开目录，复制路径到剪贴板
+        // Android / iOS：系统没有「打开指定目录」的标准 Intent，复制路径到剪贴板
+        final al = AppLocalizations.of(context);
         await Clipboard.setData(ClipboardData(text: task.filepath));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已复制路径到剪贴板: ${task.filepath}')),
+            SnackBar(content: Text(al.uploadRecord_pathCopied(task.filepath))),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('打开失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).uploadRecord_openFailed('$e')),
+          ),
+        );
       }
     }
   }

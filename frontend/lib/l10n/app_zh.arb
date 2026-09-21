@@ -1,4 +1,4 @@
-{
+﻿{
     "@@locale": "zh",
     "common_cancel": "取消",
     "common_confirm": "确定",
@@ -644,6 +644,193 @@
     "albumBackup_rebackupHint": "跳过检查，重新备份所有照片",
     "albumBackup_rebackupConfirm": "将重新备份所选相册中的所有照片，忽略已备份记录。适用于后端问题导致上传失败的情况。是否继续？",
     "contactBackup_title": "通讯录备份",
+    "contactMerge_title": "重复联系人",
+    "contactRestore_title": "恢复通讯录",
+    "contactRestore_pickFile": "选择备份文件",
+    "contactRestore_noFiles": "目标文件夹里没有找到 .vcf 备份文件",
+    "contactRestore_loadFailed": "获取备份列表失败",
+    "contactRestore_downloading": "正在下载并解析备份…",
+    "contactRestore_confirmTitle": "确认恢复",
+    "contactRestore_confirmMsg": "将从「{name}」恢复：\n\n新增 {create} 条\n合并 {merge} 条\n跳过 {skip} 条（已存在）\n\n恢复不会删除本地联系人。",
+    "@contactRestore_confirmMsg": {
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "create": {
+                "type": "int"
+            },
+            "merge": {
+                "type": "int"
+            },
+            "skip": {
+                "type": "int"
+            }
+        }
+    },
+    "contactRestore_done": "恢复完成：新增 {create} 条，合并 {merge} 条",
+    "@contactRestore_done": {
+        "placeholders": {
+            "create": {
+                "type": "int"
+            },
+            "merge": {
+                "type": "int"
+            }
+        }
+    },
+    "contactRestore_nothingToDo": "备份内容与本地一致，无需变更",
+    "contactRestore_fileInfo": "{size} · {time}",
+    "@contactRestore_fileInfo": {
+        "placeholders": {
+            "size": {
+                "type": "String"
+            },
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "contactMerge_confirmTitle": "确认合并",
+    "contactMerge_confirmMsg": "将合并 {groups} 组重复联系人，删除 {deleted} 条冗余记录。\n\n操作前会自动创建撤销点，可通过「撤销上次合并」还原。",
+    "@contactMerge_confirmMsg": {
+        "placeholders": {
+            "groups": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_confirmOk": "合并",
+    "contactMerge_done": "已合并 {groups} 组，删除 {deleted} 条",
+    "@contactMerge_done": {
+        "placeholders": {
+            "groups": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_partialFailed": "{count} 组合并失败",
+    "@contactMerge_partialFailed": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_needWritePermission": "需要通讯录写入权限才能合并",
+    "contactMerge_undo": "撤销上次合并",
+    "contactMerge_undoNone": "没有可用的撤销点（撤销仅对最近一次合并有效）",
+    "contactMerge_undoConfirmTitle": "撤销上次合并",
+    "contactMerge_undoConfirmMsg": "将重建 {deleted} 条被删除的联系人，并回滚 {modified} 条被修改的联系人。\n\n被删除的联系人无法恢复原 ID，将由系统重新分配。",
+    "@contactMerge_undoConfirmMsg": {
+        "placeholders": {
+            "deleted": {
+                "type": "int"
+            },
+            "modified": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_undoDone": "已重建 {restored} 条、回滚 {rolledBack} 条",
+    "@contactMerge_undoDone": {
+        "placeholders": {
+            "restored": {
+                "type": "int"
+            },
+            "rolledBack": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_undoPoint": "撤销点：{time}（改 {modified}、删 {deleted}）",
+    "@contactMerge_undoPoint": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            },
+            "modified": {
+                "type": "int"
+            },
+            "deleted": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_deleteBlockedTitle": "号码已合并，但冗余联系人未能删除",
+    "contactMerge_deleteBlockedMsg": "系统拦截了删除操作（小米/MIUI 等系统常见）。\n\n号码已经合并到保留的联系人上，但还有 {count} 条重复记录没能删除，需要你在系统通讯录里手动删除。",
+    "@contactMerge_deleteBlockedMsg": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_deleteBlockedHint": "如仍希望自动删除，可在 系统设置 → 应用管理 → 本应用 → 权限 中允许修改通讯录，或检查安全中心的隐私保护设置",
+    "contactMerge_keepUndoHint": "撤销点已保留，可随时撤回本次合并",
+    "contactMerge_scan": "扫描重复",
+    "contactMerge_selectAll": "全选",
+    "contactMerge_deselectAll": "取消全选",
+    "contactMerge_execute": "合并选中",
+    "contactMerge_noDuplicates": "没有发现重复联系人",
+    "contactMerge_scannedCount": "已扫描 {count} 位联系人",
+    "@contactMerge_scannedCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_foundGroups": "发现 {count} 组疑似重复",
+    "@contactMerge_foundGroups": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_statMergeable": "可自动合并",
+    "contactMerge_statSuspicious": "存疑（默认不勾选）",
+    "contactMerge_statBlocked": "需手动处理",
+    "contactMerge_suspiciousHint": "存疑组默认不勾选，请确认后手动勾选",
+    "contactMerge_memberCount": "{count} 人",
+    "@contactMerge_memberCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_phoneSummary": "号码：{info}",
+    "@contactMerge_phoneSummary": {
+        "placeholders": {
+            "info": {
+                "type": "String"
+            }
+        }
+    },
+    "contactMerge_selectedCount": "已选中 {count} 组",
+    "@contactMerge_selectedCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "contactMerge_willDelete": "将删除 {count} 条重复联系人",
+    "@contactMerge_willDelete": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "contactBackup_mobileOnly": "通讯录备份仅在移动端可用",
     "contactBackup_mobileOnlyDesc": "请在 Android 或 iOS 设备上使用此功能",
     "contactBackup_backupTo": "备份到",
@@ -722,14 +909,57 @@
     "deviceBackup_instr2": "• 仅导出手机本地存储的短信与通话记录，不会删除任何数据",
     "deviceBackup_instr3": "• 需要授予「短信」与「电话」权限（Android 系统设置中手动开启）",
     "deviceBackup_instr4": "• 内容无变动时会自动跳过上传",
+    "deviceBackup_deviceLabel": "本机设备标识",
+    "deviceBackup_deviceLabelHint": "短信与通话记录不跨设备合并，文件名会带上此标识以便区分来源设备",
+    "deviceBackup_lastDevice": "上次备份来源设备：{device}",
+    "@deviceBackup_lastDevice": {
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+
     "deviceBackup_howToRestore": "如何恢复",
     "deviceBackup_restoreStep1": "1. 短信：从服务器下载 .xml 文件，用 SMS Backup & Restore 应用导入",
     "deviceBackup_restoreStep2": "2. 通话记录：下载 .csv 文件，用 Excel/WPS 打开查看",
+
+    "callRecording_tab": "通话录音",
+    "callRecording_backupNow": "立即备份录音",
+    "callRecording_sourceDir": "录音目录",
+    "callRecording_sourceDirHint": "点击选择录音所在目录（各手机路径不同）",
+    "callRecording_pickDir": "选择录音目录",
+    "callRecording_targetFolder": "备份到",
+    "callRecording_statusScanning": "扫描中",
+    "callRecording_statusNotConfigured": "尚未配置",
+    "callRecording_summary": "共 {total} 个录音，待备份 {pending} 个",
+    "@callRecording_summary": {
+        "placeholders": {
+            "total": {"type": "int"},
+            "pending": {"type": "int"}
+        }
+    },
+    "callRecording_instr1": "• 仅上传录音文件本身，不会删除或修改手机上的录音",
+    "callRecording_instr2": "• 只备份新增的录音；已备份且未修改的会自动跳过",
+    "callRecording_instr3": "• 需要「音乐和音频」读取权限（Android 系统设置中手动开启）",
+    "callRecording_missingConfig": "请先设置：{items}",
+    "@callRecording_missingConfig": {
+        "placeholders": { "items": {"type": "String"} }
+    },
+    "callRecording_nothingToBackup": "扫描到 {total} 个录音，均已备份，无新增文件",
+    "@callRecording_nothingToBackup": {
+        "placeholders": { "total": {"type": "int"} }
+    },
+    "callRecording_dirGranted": "录音目录已授权",
+    "callRecording_dirNotGranted": "未授权录音目录，无法读取录音",
+    "callRecording_restoreStep1": "从服务器下载录音文件（.amr/.m4a 等），用任意音频播放器播放",
+
     "clientBackup_title": "自动备份",
     "clientBackup_noTasks": "暂无自动备份任务",
     "clientBackup_synced": "已同步",
     "clientBackup_executeNow": "立即执行",
     "clientBackup_deleteTask": "删除客户端备份任务",
+
     "clientBackup_deleteConfirm": "确定要删除「{name}」吗？备份记录也会被清除。",
     "@clientBackup_deleteConfirm": {
         "placeholders": {
@@ -879,6 +1109,23 @@
     "downloadTask_statusFailed": "失败",
     "downloadTask_statusPreDownload": "预下载",
     "uploadRecord_loadFailed": "加载失败",
+    "uploadRecord_openLocalDir": "打开本地目录",
+    "uploadRecord_pathCopied": "已复制路径到剪贴板: {path}",
+    "@uploadRecord_pathCopied": {
+        "placeholders": {
+            "path": {
+                "type": "String"
+            }
+        }
+    },
+    "uploadRecord_openFailed": "打开失败: {error}",
+    "@uploadRecord_openFailed": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
     "uploadRecord_noRecords": "暂无上传记录",
     "uploadRecord_recordsHint": "仅显示进行中和失败的云上传记录，已成功的记录不显示",
     "uploadRecord_total": "共 {count} 条",

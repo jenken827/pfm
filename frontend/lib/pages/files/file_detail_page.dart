@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/proto/native/file.pb.dart';
@@ -12,6 +11,7 @@ import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/services/logger.dart';
+import 'package:pfm/utils/download_dir.dart';
 import 'package:pfm/utils/file_utils.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 
@@ -319,12 +319,13 @@ class _FileDetailPageState extends State<FileDetailPage> {
                 IconButton(
                   icon: const Icon(Icons.download, size: 20),
                   onPressed: () async {
-                    final downloadDir = await getDownloadsDirectory();
+                    // 下载到应用私有目录，完成后再发布到公共「下载」（分区存储限制）
+                    final downloadDir = await DownloadDir.resolveWriteDir();
                     if (!mounted) return;
                     final fileName = widget.file.name.isNotEmpty
                         ? widget.file.name
                         : 'unnamed';
-                    final initialPath = '${downloadDir!.path}/$fileName';
+                    final initialPath = '$downloadDir/$fileName';
                     // 生成唯一文件路径，避免覆盖
                     final savePath = await FileUtils.getUniqueFilePath(
                       initialPath,
@@ -951,7 +952,8 @@ class _FileDetailPageState extends State<FileDetailPage> {
   Future<void> _downloadHistory(FileHistory h) async {
     final al = AppLocalizations.of(context);
     try {
-      final downloadDir = await getDownloadsDirectory();
+      // 下载到应用私有目录，完成后再发布到公共「下载」（分区存储限制）
+      final downloadDir = await DownloadDir.resolveWriteDir();
       if (!mounted) return;
 
       // 获取文件名
@@ -977,7 +979,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
       }
 
       final historyFileName = '${baseName}_history_${h.id}$extension';
-      final initialPath = '${downloadDir!.path}/$historyFileName';
+      final initialPath = '$downloadDir/$historyFileName';
 
       // 生成唯一文件路径，避免覆盖
       final savePath = await FileUtils.getUniqueFilePath(initialPath);

@@ -1,5 +1,6 @@
 package com.shifangyuan.pfm
 
+import android.content.Intent
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,6 +15,9 @@ class MainActivity : FlutterActivity() {
 
     @Volatile
     private var firstFrameLogged = false
+
+    /// 通话录音通道：需要 Activity 拉起 SAF 目录选择器，并在 onActivityResult 回调
+    private var callRecordingChannel: CallRecordingChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         NativeLog.info("MainActivity.onCreate start (elapsed=${NativeLog.elapsedMs()}ms)")
@@ -47,11 +51,46 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "pfm/device_backup",
         ).setMethodCallHandler(DeviceBackupChannel(this))
+
+        // 公共下载目录通道：下载完成后把文件从私有目录发布到系统「下载」（其他应用可见）
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "pfm/public_storage",
+        ).setMethodCallHandler(PublicStorageChannel(applicationContext))
+
+        // 设备标识通道：备份文件名/文件头要标明来源设备（短信、通话记录按设备独有）
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "pfm/device_info",
+        ).setMethodCallHandler(DeviceInfoChannel(this))
+
+        // 通话录音通道：录音目录属 media_rw 组（本应用不在该组），
+        // 路径与 MediaStore 均拿不到，必须经 SAF 授权目录后读 content://。
+        // SAF 需要 Activity 拉起系统目录选择器，故这里把 this 传进去。
+        val recChannel = CallRecordingChannel(applicationContext)
+        recChannel.attachActivity(this)
+        callRecordingChannel = recChannel
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "pfm/call_recording",
+        ).setMethodCallHandler(recChannel)
+
+
         NativeLog.info("configureFlutterEngine end (elapsed=${NativeLog.elapsedMs()}ms)")
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // SAF 目录选择结果先给通话录音通道处理；未消费则交回父类
+        if (callRecordingChannel?.onActivityResult(requestCode, resultCode, data) == true) {
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
         NativeLog.info("MainActivity.onDestroy (elapsed=${NativeLog.elapsedMs()}ms)")
+        callRecordingChannel?.attachActivity(null)
+        callRecordingChannel = null
         super.onDestroy()
     }
 }

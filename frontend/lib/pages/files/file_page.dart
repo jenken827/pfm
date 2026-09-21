@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:pfm/api/api.dart';
 import 'package:pfm/blocs/blocs.dart';
 import 'package:pfm/l10n/app_localizations.dart';
@@ -1106,10 +1105,11 @@ class _FileViewState extends State<_FileView> {
   Future<void> _downloadFile(BuildContext context, File file) async {
     final al = AppLocalizations.of(context);
     try {
-      final downloadDir = await getDownloadsDirectory();
-      if (downloadDir == null) return;
+      // 下载到应用私有目录，完成后再发布到公共「下载」（分区存储限制）
+      final downloadDir = await DownloadDir.resolveWriteDir();
+      if (!context.mounted) return;
       final fileName = file.name.isNotEmpty ? file.name : 'unnamed';
-      final initialPath = '${downloadDir.path}/$fileName';
+      final initialPath = '$downloadDir/$fileName';
       final savePath = await FileUtils.getUniqueFilePath(initialPath);
       if (!context.mounted) return;
       GetIt.I.get<TransferBloc>().add(

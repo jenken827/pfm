@@ -12,3 +12,5 @@ export 'album_backup_service.dart';
 export 'contact_backup_service.dart';
 export 'device_backup_service.dart';
 export 'photo_date_resolver.dart';
+export 'call_recording_content.dart';
+export 'call_recording_backup_service.dart';

@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:pfm/models/models.dart';
 import 'package:pfm/services/services.dart';
+import 'package:pfm/utils/utils.dart';
 
 /// 下载文件核心逻辑
 ///
@@ -198,6 +199,7 @@ Future<void> _downloadSingleThread({
         status: DownloadStatus.completed,
         downloadedBytes: task.fileSize,
       );
+      await _publishIfNeeded(storage: storage, task: task);
       return;
     }
 
@@ -250,6 +252,9 @@ Future<void> _downloadSingleThread({
   } finally {
     await raf.close();
   }
+
+  // 发布必须在文件句柄关闭之后：Native 侧要读整份文件，句柄未刷盘会读到不完整内容
+  await _publishIfNeeded(storage: storage, task: task);
 }
 
 /// 多线程并发下载（用于大文件）
@@ -343,6 +348,9 @@ Future<void> _downloadMultiThread({
   } finally {
     await raf.close();
   }
+
+  // 发布必须在文件句柄关闭之后：Native 侧要读整份文件，句柄未刷盘会读到不完整内容
+  await _publishIfNeeded(storage: storage, task: task);
 }
 
 /// 简单的锁实现，用于保护写操作
@@ -445,4 +453,51 @@ Future<void> _downloadWorker({
   }
 
   l.info('Worker $workerIndex finished');
+}
+
+/// 下载完成后的「发布到公共下载目录」步骤（仅 Android 生效）。
+///
+/// 分区存储下应用私有目录对其他应用不可见，因此完成后把文件发布到系统「下载」，
+/// 由原生侧经 MediaStore 代写（无需 MANAGE_EXTERNAL_STORAGE）。
+///
+/// 成功则把任务记录的 savePath 指向公共路径并删除私有残留；
+/// 失败仅记录日志并保留私有文件 —— 下载本身已成功，不得因此把任务标为 failed。
+Future<void> _publishIfNeeded({
+  required TransferStorage storage,
+  required DownloadTaskRecord task,
+}) async {
+  final l = getLogger();
+  if (!DownloadDir.publishNeeded) return;
+
+  final localPath = task.savePath;
+  final src = io.File(localPath);
+  if (!await src.exists()) {
+    l.warning('publish skipped, local file missing: $localPath');
+    return;
+  }
+
+  final published = await DownloadDir.publish(
+    localPath: localPath,
+    fileName: task.filename,
+  );
+  if (published == null) {
+    l.warning('publish failed, keeping private copy at $localPath');
+    return;
+  }
+
+  // 先更新记录再删源：即使删源失败，savePath 也已指向可见的公共副本。
+  // contentUri 一并落库：Android 上「打开文件」必须用它（open_file 对公共目录
+  // 路径会要求 MANAGE_EXTERNAL_STORAGE，而本应用不申请该权限）。
+  await storage.updateDownloadTask(
+    task.id,
+    savePath: published.path,
+    contentUri: published.uri,
+    // uri 为空（API < 29）时显式置空，避免旧记录残留失效 uri
+    clearContentUri: published.uri == null,
+  );
+  try {
+    await src.delete();
+  } catch (e) {
+    l.warning('failed to delete private copy $localPath: $e');
+  }
 }

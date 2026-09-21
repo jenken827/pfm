@@ -31,6 +31,10 @@ class DownloadTaskRecord {
   String? errorMessage;
   // 本地保存路径
   String savePath;
+  // 已发布到公共「下载」目录时的 MediaStore content:// uri（仅 Android API 29+ 有值）。
+  // 打开文件必须用它而非 savePath：open_file 插件对公共目录的路径会要求
+  // MANAGE_EXTERNAL_STORAGE，而本应用不申请该权限。
+  String? contentUri;
   // 分片大小（默认 5MB）
   int chunkSize;
   // 总分片数
@@ -54,6 +58,7 @@ class DownloadTaskRecord {
     this.status = DownloadStatus.pending,
     this.errorMessage,
     required this.savePath,
+    this.contentUri,
     this.chunkSize = 5 * 1024 * 1024, // 默认 5MB
     this.chunkTotal = 0,
     this.workerCount = 3,
@@ -97,6 +102,7 @@ class DownloadTaskRecord {
       'status': status.index,
       'error_message': errorMessage,
       'save_path': savePath,
+      'content_uri': contentUri,
       'chunk_size': chunkSize,
       'chunk_total': chunkTotal,
       'worker_count': workerCount,
@@ -120,6 +126,7 @@ class DownloadTaskRecord {
           : DownloadStatus.pending,
       errorMessage: json['error_message'],
       savePath: json['save_path'],
+      contentUri: json['content_uri'],
       chunkSize: json['chunk_size'] ?? 5 * 1024 * 1024,
       chunkTotal: json['chunk_total'] ?? 0,
       workerCount: json['worker_count'] ?? 3,
@@ -146,6 +153,7 @@ class DownloadTaskRecord {
         status INTEGER,
         error_message TEXT,
         save_path TEXT,
+        content_uri TEXT,
         chunk_size INTEGER,
         chunk_total INTEGER,
         worker_count INTEGER,
