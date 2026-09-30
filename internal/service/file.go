@@ -377,6 +377,9 @@ func DeleteFile(ctx context.Context, req *native.DeleteFileReq) *models.Err {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
+	// WebDAV 账号绑定目录被删除（进回收站）→ 自动禁用对应账号
+	DisableWebdavAccountsForDeletedRoots(ctx, allIDs)
+
 	llog.C(ctx).Infof("deleted %d files (including %d children)", len(allIDs), len(allChildrenIDs))
 	// 容量统计说明：软删后文件进入回收站，used_bytes 口径含回收站（物理仍占用），
 	// 故无需重算用户占用；文件夹大小已取消统计，无需标记目录。
@@ -927,7 +930,7 @@ func DeletePermanently(ctx context.Context, req *native.DeletePermanentlyReq) *m
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.C(ctx).Infof("permanently deleting %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	permanentlyDeleteFiles(allFileIDs, "permanently deleted")
+	permanentlyDeleteFiles(ctx, allFileIDs, "permanently deleted")
 
 	// 容量统计：行真正删除后用户占用减少
 	MarkFileCapacityChanged(getCurrentUserIDFromCtx(ctx))
@@ -1220,8 +1223,10 @@ func deleteHistoryFromProviders(ctx context.Context, histories []*native.FileHis
 }
 
 // permanentlyDeleteFiles 同步永久删除文件（历史记录 + 存储提供者文件 + 数据库记录）
-func permanentlyDeleteFiles(allFileIDs []string, logLabel string) {
-	ctx := context.Background()
+func permanentlyDeleteFiles(ctx context.Context, allFileIDs []string, logLabel string) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// 删除缩略图缓存
 	deleteThumbnailsForFiles(allFileIDs)
@@ -1233,6 +1238,9 @@ func permanentlyDeleteFiles(allFileIDs []string, logLabel string) {
 		llog.L().Errorf("delete permanently failed: %v", err)
 		return
 	}
+
+	// WebDAV 账号绑定目录被永久删除 → 自动禁用对应账号
+	DisableWebdavAccountsForDeletedRoots(ctx, allFileIDs)
 
 	llog.L().Infof("%s %d files", logLabel, len(allFileIDs))
 }
@@ -1267,7 +1275,7 @@ func EmptyTrash(ctx context.Context, req *native.EmptyTrashReq) *models.Err {
 	allFileIDs := append(fileIDs, allChildrenIDs...)
 	llog.C(ctx).Infof("emptying trash: %d files (including %d children)", len(allFileIDs), len(allChildrenIDs))
 
-	permanentlyDeleteFiles(allFileIDs, "emptied trash, deleted")
+	permanentlyDeleteFiles(ctx, allFileIDs, "emptied trash, deleted")
 
 	// 容量统计：行真正删除后用户占用减少
 	MarkFileCapacityChanged(getCurrentUserIDFromCtx(ctx))

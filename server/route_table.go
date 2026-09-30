@@ -20,12 +20,13 @@ import (
 
 // 各服务的单例。api 层方法无状态，可安全共享。
 var (
-	fileServer     = &api.FileServer{}
-	uploadServer   = &api.UploadServer{}
-	providerServer = &api.StorageProviderServer{}
-	backupServer   = &api.BackupServer{}
-	spaceServer    = &api.UserSpaceServer{}
-	dlServer       = &api.DownloadServer{}
+	fileServer      = &api.FileServer{}
+	uploadServer    = &api.UploadServer{}
+	providerServer  = &api.StorageProviderServer{}
+	backupServer    = &api.BackupServer{}
+	spaceServer     = &api.UserSpaceServer{}
+	dlServer        = &api.DownloadServer{}
+	webdavAccServer = &api.WebdavAccountServer{}
 )
 
 // registerRESTServices 注册全部业务路由。
@@ -36,6 +37,7 @@ func registerRESTServices(mux *http.ServeMux) {
 	registerBackupRoutes(mux)
 	registerUserSpaceRoutes(mux)
 	registerDownloadRoutes(mux)
+	registerWebdavAccountRoutes(mux)
 }
 
 // registerFileRoutes 文件服务路由
@@ -135,6 +137,18 @@ func registerDownloadRoutes(mux *http.ServeMux) {
 	Register(mux, http.MethodPost, "/api/download/offline/list", dlServer.ListOfflineDownloads)
 	Register(mux, http.MethodPost, "/api/download/offline/delete", dlServer.DeleteOfflineDownload)
 	Register(mux, http.MethodPost, "/api/download/offline/retry", dlServer.RetryOfflineDownload)
+}
+
+// registerWebdavAccountRoutes WebDAV 独立账号路由（当前用户自助，无管理员接口）
+//
+// 注意：这些是 App 侧管理接口（JWT 鉴权，走 restAuthMiddleware）；
+// /dav 本身的传输认证是 Basic Auth + webdav_accounts 表，见 server/webdav/handler.go。
+func registerWebdavAccountRoutes(mux *http.ServeMux) {
+	Register(mux, http.MethodPost, "/api/webdav/accounts/list", webdavAccServer.ListWebdavAccounts)
+	Register(mux, http.MethodPost, "/api/webdav/accounts/create", webdavAccServer.CreateWebdavAccount)
+	Register(mux, http.MethodPost, "/api/webdav/accounts/update", webdavAccServer.UpdateWebdavAccount)
+	Register(mux, http.MethodPost, "/api/webdav/accounts/delete", webdavAccServer.DeleteWebdavAccount)
+	Register(mux, http.MethodPost, "/api/webdav/accounts/reset-password", webdavAccServer.ResetWebdavAccountPassword)
 }
 
 // 编译期断言：确保 emptypb 与 native 被引用（请求类型涉及 Empty 与 native 消息）。

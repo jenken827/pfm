@@ -24,6 +24,9 @@ import (
 
 // Backend WebDAV 文件系统后端
 type Backend struct {
+	// rootID 是「WebDAV 账号绑定的目录」file_id（不是用户网盘根）。
+	// 客户端可见的 "/" 即该目录，所有路径都从这里逐级向下解析，
+	// 因此账号天然被限制在该子树内（".." 被当作普通子目录名查库 → 查不到 → 404）。
 	rootID  string
 	ownerID string
 	// mountPrefix 是 HTTP 路由 StripPrefix 剥掉的前缀（见 server/router.go 的
@@ -33,7 +36,7 @@ type Backend struct {
 }
 
 // NewBackend 创建 WebDAV 后端
-// rootID 为用户根目录文件 ID，ownerID 为当前用户 ID（与 File.owner_id 一致）
+// rootID 为账号绑定的根目录 file ID，ownerID 为当前账号归属用户 ID（与 File.owner_id 一致）
 // mountPrefix 为路由上被 StripPrefix 剥掉的前缀（客户端可见路径 = mountPrefix + 路径）
 func NewBackend(rootID, ownerID, mountPrefix string) *Backend {
 	return &Backend{rootID: rootID, ownerID: ownerID, mountPrefix: mountPrefix}

@@ -99,6 +99,7 @@ func autoMigrate() error {
 		&native.BackupFileRecordORM{},
 		&native.UserSpaceORM{},
 		&native.UserORM{},
+		&native.WebdavAccountORM{},
 	); err != nil {
 		return err
 	}

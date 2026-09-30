@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package native;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "gorm/gorm.proto";
+import "native/common.proto";
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
+
+// ===== 模型 =====
+
+// WebdavAccount WebDAV 独立账号
+//
+// 与登录账号（users）完全解耦：用户名/密码只对 /dav 生效，不能登录 App、不能签发 JWT。
+// 每个账号绑定用户自己的一个目录作为「WebDAV 根」（root_file_id），账号可见的 "/"
+// 即该目录，路径逐级解析天然无法越出该子树。read_only 账号只允许读方法。
+message WebdavAccount {
+    option (gorm.opts).ormable = true;
+    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
+    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+    optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+    // 归属用户 ID（UUID，关联 users.user_id）
+    optional string user_id = 4 [(gorm.field).tag = {
+        not_null: true
+        size: 36
+        index: "idx_wa_uid"
+    }];
+    // WebDAV 独立用户名（全局唯一，仅用于 /dav Basic Auth）
+    optional string username = 5 [(gorm.field).tag = {
+        not_null: true
+        size: 64
+        unique_index: "idx_wa_un"
+    }];
+    // 密码哈希（bcrypt，与 users.password_hash 同算法）
+    optional string password_hash = 6 [(gorm.field).tag = {
+        not_null: true
+        default: "''"
+    }];
+    // 客户端标签（如 ReadAny / BeeCount，仅展示用）
+    optional string name = 7 [(gorm.field).tag = {
+        not_null: true
+        default: "''"
+        size: 64
+    }];
+    // 绑定目录 file_id（关联 files.id，即账号可见的 "/"）
+    optional string root_file_id = 8 [(gorm.field).tag = {
+        not_null: true
+        type: "char(36)"
+        index: "idx_wa_rfid"
+    }];
+    // 是否只读（只读账号拦截 PUT/DELETE/MKCOL/MOVE）
+    optional bool read_only = 9 [(gorm.field).tag = {
+        not_null: true
+        default: "false"
+    }];
+    // 是否启用（绑定目录失效时由服务端自动置 false）
+    optional bool enabled = 10 [(gorm.field).tag = {
+        not_null: true
+        default: "true"
+    }];
+    // 最后使用时间（认证成功时节流更新）
+    optional google.protobuf.Timestamp last_used_at = 11;
+    // 失效原因（仅自动禁用时写入，空串表示正常/用户手动禁用）
+    optional string disabled_reason = 12 [(gorm.field).tag = {
+        not_null: true
+        default: "''"
+        size: 128
+    }];
+}
+
+// ===== 视图与请求/响应消息 =====
+
+// WebdavAccountInfo WebDAV 账号视图（不含密码哈希，绝不外泄）
+message WebdavAccountInfo {
+    optional uint32 id = 1;
+    // 独立用户名（客户端填写）
+    optional string username = 2;
+    // 客户端标签
+    optional string name = 3;
+    // 绑定目录 ID
+    optional string root_file_id = 4;
+    // 绑定目录路径（服务端拼好的展示串，如 /readany/abc）
+    optional string root_path = 5;
+    // 绑定目录当前是否有效（false = 已删除/进回收站，账号已被自动禁用）
+    optional bool root_valid = 6;
+    // 是否只读
+    optional bool read_only = 7;
+    // 是否启用
+    optional bool enabled = 8;
+    // 失效原因（自动禁用时非空）
+    optional string disabled_reason = 9;
+    // 创建时间（RFC3339）
+    optional string created_time = 10;
+    // 最后使用时间（RFC3339，空串表示从未使用）
+    optional string last_used_time = 11;
+}
+
+// WebdavAccountListReq 列出当前用户的 WebDAV 账号
+message WebdavAccountListReq {}
+
+message WebdavAccountListResp {
+    repeated WebdavAccountInfo accounts = 1;
+    // WebDAV 服务地址（相对路径，前端拼 baseUrl），如 /dav
+    optional string dav_url = 2;
+}
+
+// WebdavAccountCreateReq 创建 WebDAV 账号
+message WebdavAccountCreateReq {
+    // 绑定目录 ID（必须是当前用户自己的目录）
+    optional string root_file_id = 1 [(buf.validate.field).required = true];
+    // 客户端标签（可空，最长 64）
+    optional string name = 2 [(buf.validate.field).string.max_len = 64];
+    // 独立用户名（可空 = 服务端生成；1-64，字符集 [A-Za-z0-9._-]）
+    optional string username = 3 [(buf.validate.field).string.max_len = 64];
+    // 密码（可空 = 服务端生成随机密码；仅本次响应返回明文）
+    optional string password = 4 [(buf.validate.field).string.max_len = 128];
+    // 是否只读
+    optional bool read_only = 5;
+}
+
+// WebdavAccountCreateResp 创建响应（明文密码只在此处返回一次）
+message WebdavAccountCreateResp {
+    optional WebdavAccountInfo account = 1;
+    optional string password = 2;
+}
+
+// WebdavAccountUpdateReq 更新 WebDAV 账号
+message WebdavAccountUpdateReq {
+    optional uint32 id = 1 [(buf.validate.field).required = true];
+    // 客户端标签
+    optional string name = 2 [(buf.validate.field).string.max_len = 64];
+    // 新的绑定目录 ID
+    optional string root_file_id = 3;
+    // 是否只读
+    optional bool read_only = 4;
+    // 是否启用（手动禁用后再启用会清空 disabled_reason）
+    optional bool enabled = 5;
+}
+
+// WebdavAccountDeleteReq 删除 WebDAV 账号
+message WebdavAccountDeleteReq {
+    optional uint32 id = 1 [(buf.validate.field).required = true];
+}
+
+// WebdavAccountResetPasswordReq 重置密码
+message WebdavAccountResetPasswordReq {
+    optional uint32 id = 1 [(buf.validate.field).required = true];
+    // 指定新密码（可空 = 服务端生成随机密码）
+    optional string password = 2 [(buf.validate.field).string.max_len = 128];
+}
+
+// WebdavAccountResetPasswordResp 重置响应（明文密码只在此处返回一次）
+message WebdavAccountResetPasswordResp {
+    optional string password = 1;
+}
+
+// ===== 服务定义 =====
+
+// WebdavAccountService WebDAV 账号服务（全部为「当前用户自己的账号」自助接口）
+service WebdavAccountService {
+    // 列出当前用户的 WebDAV 账号
+    rpc ListWebdavAccounts(WebdavAccountListReq) returns (BaseResp);
+    // 创建 WebDAV 账号
+    rpc CreateWebdavAccount(WebdavAccountCreateReq) returns (BaseResp);
+    // 更新 WebDAV 账号
+    rpc UpdateWebdavAccount(WebdavAccountUpdateReq) returns (BaseResp);
+    // 删除 WebDAV 账号
+    rpc DeleteWebdavAccount(WebdavAccountDeleteReq) returns (BaseResp);
+    // 重置 WebDAV 账号密码
+    rpc ResetWebdavAccountPassword(WebdavAccountResetPasswordReq) returns (BaseResp);
+}

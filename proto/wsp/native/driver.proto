@@ -26,12 +26,22 @@ message TelegramDriverConfig {
     optional string local_path_replacement = 5;
 }
 
-// 123pan 驱动器配置
+// 123云盘驱动器配置（123开放平台/Open API 模式，不支持账号密码登录）
 message Pan123DriverConfig {
-    optional string username = 1;
-    optional string password = 2;
-    optional string root_id = 3;
-    optional string access_token = 4;
+    // 官方开发者凭据（https://www.123pan.com/developer 申请），与 refresh_token 二选一
+    optional string client_id = 1;
+    optional string client_secret = 2;
+    // 直接填写的 access_token（自带有效期，不建议；用于无法申请开发者凭据时兜底）
+    optional string access_token = 3;
+    // oplist renewapi 续期用的 refresh_ui 令牌：首次用本值请求，
+    // 后续改用接口返回的新 refresh_token（pfm 会自动持久化覆盖）
+    optional string refresh_token = 4;
+    // 在线续期服务地址（默认 https://api.oplist.org/123cloud/renewapi）
+    optional string api_url = 5;
+    // 根目录 fileId（123 云盘以 fileId 组织目录，根目录为 0）
+    optional string root_file_id = 6;
+    // 上传并发线程数（1-32，默认 3）
+    optional string upload_thread = 7;
 }
 
 // 百度网盘驱动器配置
@@ -43,4 +53,65 @@ message BaiduNetdiskDriverConfig {
     optional int64 custom_upload_part_size = 5;
     optional string client_id = 6;
     optional string client_secret = 7;
+}
+
+// 阿里云盘（开放平台）驱动器配置
+message AliyundriveOpenDriverConfig {
+    // refresh_token：oplist renewapi 续期用（与 client 凭据二选一，见 token.go 优先级）
+    optional string refresh_token = 1;
+    // 官方开发者凭据（本地刷新的前提；配了 api_url 时不生效）
+    optional string client_id = 2;
+    optional string client_secret = 3;
+    // 在线续期服务地址（留空则不走在线续期，强制要求 client_id/client_secret）
+    optional string api_url = 4;
+    // 盘类型：default / resource / backup
+    optional string drive_type = 5;
+    // 根目录 file_id（阿里云根为 "root"）
+    optional string root_folder_id = 6;
+    // 列表排序字段：name / size / updated_at / created_at
+    optional string order_by = 7;
+    // 排序方向：ASC / DESC
+    optional string order_direction = 8;
+    // 上传并发分片数（1-32，默认 3）
+    optional string upload_thread = 9;
+    // 删除方式：trash（回收站）/ delete（彻底删除）
+    optional string remove_way = 10;
+    // 阿里云 ECS 同地域可用 OSS 内网上传地址（仅北京 region 的 ECS 有意义）
+    optional bool internal_upload = 11;
+    // 启用 pre_hash 秒传（需完整读取首 1024 字节，进度会短暂停顿）
+    optional bool rapid_upload = 12;
+    // LIVP（阿里云相册格式）下载格式：jpeg / mov
+    optional string livp_download_format = 13;
+    // 已过期或无法续期时的兜底：直接填写的 access_token
+    optional string access_token = 14;
+}
+
+// 移动云盘（139云盘）驱动器配置，仅支持新版个人云（personal_new）
+message Yun139DriverConfig {
+    // Authorization：从 yun.139.com 浏览器 F12 复制的 Authorization 头值
+    // （不含 "Basic " 前缀）。驱动会解析其中的 token 与过期时间，
+    // 剩余有效期 ≤15 天时自动调用官方 authTokenRefresh 接口续期并回写。
+    optional string authorization = 1;
+    // 根目录 fileId（新版个人云根为 "/"）
+    optional string root_id = 2;
+    // 自定义分片大小（MB），0=自动（按文件大小选择，与 OpenList 一致）
+    optional int64 custom_upload_part_size = 3;
+    // 并发上传分片数（1-32，默认 3）
+    optional string upload_thread = 4;
+}
+
+// 天翼云盘（电信云盘）PC 端驱动器配置，仅支持个人云
+message Cloud189PcDriverConfig {
+    // access_token：登录 cloud.189.cn 后的访问令牌。留空则由驱动用 refresh_token 换取
+    optional string access_token = 1;
+    // refresh_token：长期刷新令牌，用于自动续期 access_token（最多重试 3 次）
+    optional string refresh_token = 2;
+    // 根目录 fileId，个人云根目录为 -11
+    optional string root_id = 3;
+    // 排序字段：filename / filesize / lastOpTime
+    optional string order_by = 4;
+    // 排序方向：asc / desc
+    optional string order_direction = 5;
+    // 并发上传分片数（1-32，默认 3）
+    optional string upload_thread = 6;
 }

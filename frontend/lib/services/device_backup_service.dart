@@ -473,15 +473,15 @@ class DeviceBackupService {
 /// 本地保留的历史备份文件上限（按修改时间倒序保留，超出的删除）
 const int _kMaxLocalBackups = 3;
 
-/// 删除文件，失败只记日志不抛出（清理属尽力而为，不能影响备份结论）
-Future<void> _deleteQuietly(File file) async {
-  try {
-    if (await file.exists()) await file.delete();
-  } catch (_) {
-    // 忽略：残留文件由 _pruneOldBackups 的有界清理兜底
-  }
-}
-
+/// 删除文件，失败只记日志不抛出（清理属尽力而为，不能影响备份结论）
+Future<void> _deleteQuietly(File file) async {
+  try {
+    if (await file.exists()) await file.delete();
+  } catch (_) {
+    // 忽略：残留文件由 _pruneOldBackups 的有界清理兜底
+  }
+}
+
 /// 只清理本服务自己生成的备份文件，不碰目录内其他文件
 Future<void> _pruneOldBackups(Directory dir, {required int keep}) async {
   if (!await dir.exists()) return;

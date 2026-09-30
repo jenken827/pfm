@@ -15,6 +15,7 @@ import '../proto/native/file.pb.dart';
 import '../proto/native/permission.pb.dart';
 import '../proto/native/provider.pb.dart';
 import '../proto/native/upload.pb.dart';
+import '../proto/native/webdav.pb.dart';
 import '../router/router.dart';
 import '../services/local_storage.dart';
 import '../services/background_service.dart';
@@ -41,6 +42,9 @@ class FmRepository {
 
   /// 上传/下载用的 base URL，优先使用传输服务地址
   String get _uploadBaseUrl => _transferUrl ?? _baseUrl ?? '';
+
+  /// 当前服务器地址（供展示 WebDAV/分享等需要完整 URL 的场景拼接）
+  String get serverBaseUrl => _baseUrl ?? '';
 
   FmRepository._();
 
@@ -2477,6 +2481,173 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('上传头像失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  // ===== WebDAV 独立账号（第三方客户端专用凭据，与登录账号解耦）=====
+
+  /// 列出当前用户的 WebDAV 账号
+  Future<ApiResult<WebdavAccountListResp>> listWebdavAccounts() async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/webdav/accounts/list',
+        data: WebdavAccountListReq().toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<WebdavAccountListResp>(
+        data,
+        WebdavAccountListResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取 WebDAV 账号列表失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取 WebDAV 账号列表失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 创建 WebDAV 账号
+  ///
+  /// [rootFileId] 绑定目录（账号可见的 "/"）；
+  /// [username]/[password] 留空由服务端生成；返回的明文密码仅此一次可见。
+  Future<ApiResult<WebdavAccountCreateResp>> createWebdavAccount({
+    required String rootFileId,
+    String name = '',
+    String username = '',
+    String password = '',
+    bool readOnly = false,
+  }) async {
+    try {
+      final req = WebdavAccountCreateReq(
+        rootFileId: rootFileId,
+        name: name,
+        readOnly: readOnly,
+      );
+      if (username.trim().isNotEmpty) {
+        req.username = username.trim();
+      }
+      if (password.isNotEmpty) {
+        req.password = password;
+      }
+
+      final response = await _dio.post(
+        '$_baseUrl/api/webdav/accounts/create',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<WebdavAccountCreateResp>(
+        data,
+        WebdavAccountCreateResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('创建 WebDAV 账号失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('创建 WebDAV 账号失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 更新 WebDAV 账号（只传需要修改的字段，null 表示不改）
+  Future<ApiResult<void>> updateWebdavAccount({
+    required int id,
+    String? name,
+    String? rootFileId,
+    bool? readOnly,
+    bool? enabled,
+  }) async {
+    try {
+      final req = WebdavAccountUpdateReq(id: id);
+      if (name != null) req.name = name;
+      if (rootFileId != null && rootFileId.isNotEmpty) {
+        req.rootFileId = rootFileId;
+      }
+      if (readOnly != null) req.readOnly = readOnly;
+      if (enabled != null) req.enabled = enabled;
+
+      final response = await _dio.post(
+        '$_baseUrl/api/webdav/accounts/update',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('更新 WebDAV 账号失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('更新 WebDAV 账号失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 删除 WebDAV 账号
+  Future<ApiResult<void>> deleteWebdavAccount({required int id}) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/webdav/accounts/delete',
+        data: (WebdavAccountDeleteReq(id: id)).toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      extractRespData<Empty>(data, Empty());
+      return ApiResult(success: true);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('删除 WebDAV 账号失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('删除 WebDAV 账号失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 重置 WebDAV 账号密码（[password] 留空由服务端生成，明文仅此一次可见）
+  Future<ApiResult<WebdavAccountResetPasswordResp>> resetWebdavAccountPassword({
+    required int id,
+    String password = '',
+  }) async {
+    try {
+      final req = WebdavAccountResetPasswordReq(id: id);
+      if (password.isNotEmpty) req.password = password;
+
+      final response = await _dio.post(
+        '$_baseUrl/api/webdav/accounts/reset-password',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<WebdavAccountResetPasswordResp>(
+        data,
+        WebdavAccountResetPasswordResp(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('重置 WebDAV 账号密码失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('重置 WebDAV 账号密码失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

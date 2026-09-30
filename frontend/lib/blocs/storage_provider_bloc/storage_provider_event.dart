@@ -15,6 +15,13 @@ class StorageProviderLoadEvent extends StorageProviderEvent {
   const StorageProviderLoadEvent();
 }
 
+/// 写回补拉到的类型列表（页面在首次拉取失败后自行补拉时使用）
+class StorageProviderTypesLoadedEvent extends StorageProviderEvent {
+  const StorageProviderTypesLoadedEvent(this.types);
+
+  final List<StorageProviderTypeInfo> types;
+}
+
 /// 添加存储介质
 class StorageProviderAddEvent extends StorageProviderEvent {
   const StorageProviderAddEvent({

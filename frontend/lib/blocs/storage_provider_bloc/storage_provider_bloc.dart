@@ -15,6 +15,7 @@ class StorageProviderBloc
   StorageProviderBloc(this._repository) : super(const StorageProviderState()) {
     on<StorageProviderLoadTypesEvent>(_onLoadTypes);
     on<StorageProviderLoadEvent>(_onLoad);
+    on<StorageProviderTypesLoadedEvent>(_onTypesLoaded);
     on<StorageProviderAddEvent>(_onAdd);
     on<StorageProviderUpdateEvent>(_onUpdate);
     on<StorageProviderDeleteEvent>(_onDelete);
@@ -44,6 +45,14 @@ class StorageProviderBloc
         ),
       );
     }
+  }
+
+  /// 写回页面补拉到的类型列表（不改变 status，避免覆盖列表加载结果）
+  void _onTypesLoaded(
+    StorageProviderTypesLoadedEvent event,
+    Emitter<StorageProviderState> emit,
+  ) {
+    emit(state.copyWith(providerTypes: event.types));
   }
 
   Future<void> _onLoad(

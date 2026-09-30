@@ -107,20 +107,22 @@ class _StorageProviderView extends StatelessWidget {
   }
 
   /// Shows dialog for adding or editing storage provider
-  void _showProviderDialog({
+  Future<void> _showProviderDialog({
     required BuildContext context,
     StorageProvider? provider,
-  }) {
+  }) async {
     final al = AppLocalizations.of(context);
     // 获取存储提供者类型列表
-    final state = context.read<StorageProviderBloc>().state;
-    final providerTypes = state.providerTypes;
+    var providerTypes = context.read<StorageProviderBloc>().state.providerTypes;
 
-    if (providerTypes.isEmpty && provider == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(al.storageProvider_typesNotLoaded)),
-      );
-      return;
+    // 类型列表为空时现场补拉一次：该请求只在页面首次构建时发出，
+    // 若当时网络不可用（首次拉取失败），本次进入页面没有其它重试入口。
+    // 新增与编辑都需要类型信息（编辑依赖它渲染存储类型与驱动配置字段）。
+    if (providerTypes.isEmpty) {
+      providerTypes = await _reloadProviderTypes(context, al);
+      if (providerTypes.isEmpty) return;
+      // 补拉是异步的，等待期间页面可能已销毁
+      if (!context.mounted) return;
     }
 
     final formKey = GlobalKey<FormBuilderState>();
@@ -635,6 +637,53 @@ class _StorageProviderView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 现场补拉存储提供者类型列表（首次拉取失败后的补救）。
+  /// 成功后写回 bloc，避免同一次进入页面内反复补拉。
+  /// 返回空列表表示仍未成功，失败原因已通过 SnackBar 提示。
+  Future<List<StorageProviderTypeInfo>> _reloadProviderTypes(
+    BuildContext context,
+    AppLocalizations al,
+  ) async {
+    final repository = context.read<FmRepository>();
+    final navigator = Navigator.of(context, rootNavigator: true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) =>
+          const Center(child: CircularProgressIndicator()),
+    );
+
+    final result = await repository.getStorageProviderTypes();
+
+    // loading 对话框无论页面是否已销毁都要关闭
+    if (navigator.mounted) navigator.pop();
+
+    if (!context.mounted) return const [];
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? al.storageProvider_typesNotLoaded),
+        ),
+      );
+      return const [];
+    }
+
+    final types = result.data?.types.toList() ?? <StorageProviderTypeInfo>[];
+    if (types.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(al.storageProvider_typesNotLoaded)),
+      );
+      return const [];
+    }
+
+    context.read<StorageProviderBloc>().add(
+      StorageProviderTypesLoadedEvent(types),
+    );
+    return types;
   }
 
   void _showDeleteDialog(BuildContext context, StorageProvider provider) {

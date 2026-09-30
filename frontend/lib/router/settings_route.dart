@@ -9,6 +9,7 @@ import '../pages/settings/album_backup_page.dart';
 import '../pages/settings/contact_backup_page.dart';
 import '../pages/settings/permission_management_page.dart';
 import '../pages/settings/profile_edit_page.dart';
+import '../pages/settings/webdav_account_page.dart';
 
 part 'settings_route.g.dart';
 
@@ -26,6 +27,7 @@ part 'settings_route.g.dart';
         TypedGoRoute<ShareManageRoute>(path: 'share-manage'),
         TypedGoRoute<LogRoute>(path: 'logs'),
         TypedGoRoute<ProfileEditRoute>(path: 'profile'),
+        TypedGoRoute<WebdavAccountRoute>(path: 'webdav-accounts'),
       ],
 )
 @immutable
@@ -137,5 +139,15 @@ class ProfileEditRoute extends GoRouteData with $ProfileEditRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const ProfileEditPage();
+  }
+}
+
+/// WebDAV 账号管理路由
+class WebdavAccountRoute extends GoRouteData with $WebdavAccountRoute {
+  const WebdavAccountRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const WebdavAccountPage();
   }
 }

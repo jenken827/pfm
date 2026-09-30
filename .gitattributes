@@ -1,0 +1,48 @@
+# 行尾符统一策略
+#
+# 背景：本仓库由 Windows(CRLF 工作区, core.autocrlf=true) 与 Linux 共同编辑。
+# 此前无 .gitattributes，导致某些提交把 CRLF 写进 blob，而其它提交是 LF。
+# 三方合并时 git 认为每一行都变了 —— 整份文件塌成一个巨型冲突块
+# （README.md 1~1283 行全是冲突标记），实际内容其实只差几个段落。
+#
+# 规则：文本文件一律 LF 入库 + LF 检出，跨平台一致，杜绝上述假冲突。
+* text=auto eol=lf
+
+# 明确排除二进制，避免被 text=auto 误判为文本而损坏
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.ttf  binary
+*.otf  binary
+*.woff  binary
+*.woff2 binary
+*.so   binary
+*.dll  binary
+*.dylib binary
+*.a    binary
+*.exe  binary
+*.bin  binary
+*.jar  binary
+*.keystore binary
+*.jks  binary
+*.db   binary
+*.sqlite binary
+*.sqlite3 binary
+*.pdf  binary
+
+# Windows 专有脚本必须保留 CRLF，否则 cmd.exe 解析 .bat/.cmd 会出问题
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# 必须保留 LF 的脚本，避免在 Linux/容器内执行时报
+# "/usr/bin/env: 'bash\r': No such file or directory"
+*.sh   text eol=lf
+*.bash text eol=lf
+dev.sh text eol=lf
+
+# Git 自身与语言标记文件
+.gitattributes text eol=lf
+.gitignore     text eol=lf

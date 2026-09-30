@@ -59,6 +59,7 @@
 | `RestoreFile(ctx, req) (*BaseResp, *Err)` | 恢复回收站文件（不触发重算） |
 | `PermanentDeleteFile(ctx, req) (*BaseResp, *Err)` | 永久删除文件（used_bytes 回落，触发重算） |
 | `EmptyTrash(ctx, req) (*BaseResp, *Err)` | 清空回收站（触发重算） |
+| `permanentlyDeleteFiles(ctx, allFileIDs, logLabel)`（内部） | 同步永久删除（历史 + provider 物理文件 + DB 记录）；删除成功后调 `DisableWebdavAccountsForDeletedRoots` 自动禁用绑定目录被删的 WebDAV 账号 |
 | `RenameFile(ctx, req) (*BaseResp, *Err)` | 重命名文件 |
 | `MoveFile(ctx, req) (*BaseResp, *Err)` | 移动文件（owner 不变，不触发重算） |
 | `GetFileDetail(ctx, req) (*GetFileDetailResp, *Err)` | 获取文件详情 |
@@ -181,6 +182,19 @@
 |------|------|
 | `GetOrCreateSubfolder(ctx, *native.GetOrCreateSubfolderReq) (*native.GetOrCreateSubfolderResp, *Err)` | 获取有空位的编号子目录（500 文件封顶），满了按最大编号 +1 新建（格式 001/002）。兼容历史命名 01 / 00001（统一按「纯数字」识别）。新建目录的 `bound_provider_ids` 继承父目录解析结果 |
 
+### webdav_account.go（WebDAV 独立账号：自助接口 + `/dav` 认证）
+
+| 方法 | 说明 |
+|------|------|
+| `ListWebdavAccounts(ctx) (*WebdavAccountListResp, *Err)` | 当前用户账号列表（不含密码哈希；rootPath 相对网盘根渲染，rootValid 用 1 次批量查询判断） |
+| `CreateWebdavAccount(ctx, req) (*WebdavAccountCreateResp, *Err)` | 创建账号：校验绑定目录（属主 + 文件夹）、用户名唯一/字符集、密码 ≥12 位；返回一次性明文密码 |
+| `UpdateWebdavAccount(ctx, req) *Err` | 更新标签/绑定目录/只读/启用（改后清认证缓存） |
+| `DeleteWebdavAccount(ctx, req) *Err` | 删除自己的账号（硬删 + 清缓存） |
+| `ResetWebdavAccountPassword(ctx, req) (*WebdavAccountResetPasswordResp, *Err)` | 重置密码（留空生成 16 位随机），返回一次性明文 |
+| `AuthenticateWebdav(ctx, username, password) (*WebdavAccountORM, error)` | `/dav` Basic Auth 入口：bcrypt + 10 分钟内存缓存（key=sha256(username\0password)）+ 绑定目录兜底校验；目录失效则自动禁用账号 |
+| `DisableWebdavAccountsForDeletedRoots(ctx, rootIDs)` | 删除路径事件钩子：批量自动禁用绑定目录被删的账号并清缓存（DeleteFile / permanentlyDeleteFiles 调用） |
+| `invalidateWebdavAuthCache(accountID)`（内部） | 按账号清认证缓存（改密/改绑定/启用禁用/删除/自动禁用后调用） |
+
 ## internal/auth/
 
 | 类型/方法 | 说明 |
@@ -302,6 +316,28 @@
 | `AddAdminUser(userID) error` | 添加管理员 |
 | `RemoveAdminUser(userID) error` | 移除管理员 |
 
+### webdav_account.go（WebDAV 独立账号）
+
+| 方法 | 说明 |
+|------|------|
+| `CreateWebdavAccount(a) error` | 创建账号（用户名重复由唯一索引 `idx_wa_un` 兜底） |
+| `GetWebdavAccountByUsername(username) (*WebdavAccountORM, error)` | 按 WebDAV 用户名查询（`/dav` 认证热路径，走唯一索引） |
+| `GetWebdavAccountByID(id) (*WebdavAccountORM, error)` | 按主键查询 |
+| `ListWebdavAccountsByUser(userID) ([]*WebdavAccountORM, error)` | 列出某用户全部账号（id 倒序） |
+| `UpdateWebdavAccountFields(id, fields map[string]any) error` | 按 id 更新指定列（必须用 map，结构体 Updates 会跳过 false/空串） |
+| `UpdateWebdavAccountPassword(id, passwordHash) error` | 更新密码哈希 |
+| `UpdateWebdavAccountLastUsed(id) error` | 记录最后使用时间 |
+| `SetWebdavAccountEnabled(id, enabled, reason) error` | 启用/禁用 + 写失效原因（启用时传空串清空） |
+| `DeleteWebdavAccount(id) error` | 硬删除（纯配置数据，无保留价值） |
+| `DisableWebdavAccountsByRootIDs(rootIDs, reason) ([]uint32, error)` | 绑定目录被删后批量自动禁用账号，返回被禁用 ID（供清认证缓存） |
+
+### file_path.go（目录路径回溯）
+
+| 方法 | 说明 |
+|------|------|
+| `NewFilePathResolver() *FilePathResolver` | 请求级路径解析器（缓存文件行，避免多账号重复回溯同一祖先） |
+| `(*FilePathResolver).DirPath(fileID, stopAtID) (string, error)` | 由 fileID 向上回溯拼出以 stopAtID 为根的可读路径（`/readany/abc`；相等时返回 `/`；节点缺失返回已拼出部分） |
+
 ## internal/storage/
 
 ### dispatch.go
@@ -412,6 +448,303 @@
 > `emersion/go-webdav` 内部的 `http.ServeContent` 以 `Seek(io.SeekEnd)` 的返回值覆盖
 > `Content-Length`。任一环节返回密文长度都会使声明长度大于实际输出，Go 在 flush 时判定响应
 > 不完整、丢弃缓冲并关闭连接。
+
+## driver/pan123/（123云盘，开放平台 Open API 模式）
+
+认证走开放平台而非账号密码（官方已下线密码模式）；参考实现 OpenList `drivers/123_open`。
+端点、认证语义、限速值见 `README.md`「123云盘驱动」与 `设计方案.md` 11.3.1。
+
+### token.go（认证）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `tokenManager` | access_token 有效期与刷新；`blockRefresh` 在刷新失败后置位，避免每次请求都打续期接口 |
+| `initTokenManager(cfg)` | 有 refresh_token 或 client 凭据 → 主动模式（清空手填 access_token）；仅手填 → 被动模式（按 90 天过期，123 JWT 的 exp 不可靠） |
+| `tm.getAccessToken(ctx, creds, force)` | 返回可用 token；命中缓存要求 `now < expiredAt-5min`；`force=true` 用于 401 后强刷 |
+| `tm.flush(ctx, creds)` | 刷新顺序即优先级：oplist renewapi（有 refresh_token）→ 官方 client_id/client_secret → 报错 |
+| `requestAccessToken(ctx, clientID, clientSecret)` | `POST /api/v1/access_token`，按 `expiredAt`(RFC3339) 算过期 |
+| `renewViaOnlineAPI(ctx, apiURL, refreshUI)` | oplist renewapi 在线续期；返回新 access_token 与**轮换后的 refresh_token** |
+| `d.persistTokens()` | 先写回内存配置再序列化（顺序不能反），经 `ConfigPersisterSetter` 持久化到 `storage_providers.config` |
+
+### api.go（请求层与限速）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `Pan123Driver` | 驱动结构（Config/Orm/creds/tm/uid/client） |
+| `credentials` | 驱动持有的认证配置（clientID/clientSecret/apiURL） |
+| `newHTTPClient()` | 专用 http.Client：**不设 Timeout**（大文件传输途中会被强断），只用 ResponseHeaderTimeout 约束响应头等待 |
+| `rateLimiter` / `d.limiterFor(endpoint)` | 按端点的令牌桶限速（QPS 表见 `types.go` 的 `apiEndpoints`，0 = 不限速） |
+| `d.requestJSON(ctx, method, endpoint, query, body)` | 统一鉴权请求：`code=0` 成功；`401` 强制刷新重试；`429` 等 500ms 重试；最多 3 次 |
+| `d.getUserInfo` / `d.getFiles` / `d.getDownloadLink` / `d.mkdir` / `d.trash` | user/info、file/list（游标分页）、download_info、mkdir、批量 trash |
+| `pathJoin(base, name)` / `splitPath(p)` | 123 侧路径拼接（保留前导 /）与分段 |
+
+### driver.go（上传/读取/删除/目录）
+
+| 方法 | 说明 |
+|------|------|
+| `d.rootFileID()` | 解析配置 root_file_id，非法/负数回落 0 |
+| `d.Upload(ctx, src, opt)` | 加密准备 → 年/月目录分配 → MD5+SHA1 → SHA1 秒传 → etag 秒传 → 分片 → complete 轮询 |
+| `d.Open(ctx, refs, opt)` | 复用 `types.NewMultiChunkReader`（明文空间偏移） |
+| `d.OpenChunk(ctx, ref, offset)` | `types.ChunkOpener`：download_info 取直链 + HTTP Range；服务端返回 200（忽略 Range）时手动丢弃前置字节 |
+| `d.OpenChunkRangeSeek(ctx, ref)` | 供加密文件从头读取的 Range+Seek 闭包 |
+| `d.BatchDelete(ctx, refs)` | `types.BatchDeleter`：按 fileId 批量 trash；单个 fileId 非法逐条标 `results[i].Error`，不影响同批合法项 |
+| `dirBackend`（`List`/`Mkdir`/`resolve`/`findChild`） | `types.DirBackend` 实现：把 `AllocateUploadDir` 的路径（`/2026/09`）逐级解析/创建为 fileId，缓存 `路径→fileId` |
+
+### upload.go（上传编排）
+
+| 方法 | 说明 |
+|------|------|
+| `computeFileHashes(file)` | 一次顺序读取同时产出 MD5（etag）与 SHA1，并复位文件游标 |
+| `d.sha1Reuse(ctx, parentFileID, filename, sha1, size)` | SHA1 秒传（`duplicate=2` 同名自动重命名） |
+| `d.create(ctx, parentFileID, filename, etag, size)` | 创建上传任务（带 MD5，命中秒传时 `reuse=true`） |
+| `d.uploadSlices(ctx, file, createResp, fileName, fileSize)` | 并发分片上传；并发度取 `upload_thread`(1-32) 且不超分片数；**每分片单独取 token**（长上传中 token 可能中途过期） |
+| `d.uploadSlice(...)` | 单分片 multipart 上传（`preuploadID`/`sliceNo`(从1)/`sliceMD5`/文件字段 `slice`） |
+| `d.complete(ctx, preuploadID)` | 轮询合并至 `completed=true` 且 `fileID!=0`（最多 60 次，每次 1s） |
+| `d.uploadThreads()` | 解析 upload_thread，越界/非法回落 3 |
+
+### init.go（注册与元数据）
+
+| 方法 | 说明 |
+|------|------|
+| `init()` | 注册 `PAN123` 驱动及 ConfigFields 元数据（client_id/client_secret/refresh_token/access_token/api_url/root_file_id/upload_thread），前端据此渲染配置表单 |
+| `newDriver(provider)` | 构造驱动：解析配置 → 凭据预检（缺失仅告警不阻断）→ 初始化 token 管理器 |
+| `d.warmup()` | 预取 token、持久化、读 user/info 记 uid 与配额（失败仅告警） |
+| `checkCredentials(cfg)` | 校验至少配了一组凭据 |
+
+FileRef 映射：`ProviderFileID`=fileId（删除/下载的唯一依据）、`Path`=123 侧完整路径（保留前导 /）、`Hash`=内容 MD5。
+
+## driver/aliyundrive_open/（阿里云盘，开放平台 Open API 模式）
+
+参考实现 OpenList `drivers/aliyundrive_open`。认证/限流/秒传语义见 `README.md`「阿里云盘驱动」
+与 `设计方案.md` 11.3.2。与 123pan 的关键差异：**限流按账号而非按端点**。
+
+### token.go（认证，含 JWT sub 校验）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `tokenManager` | access_token/refresh_token 管理；`blockRefresh` 续期连续失败后置位 |
+| `initTokenManager(cfg)` | 用解析后的配置初始化 |
+| `tm.getAccessToken(ctx, cfg)` | 命中缓存要求 `now < expiredAt-5min`；否则续期 |
+| `tm.renewForced(ctx, cfg)` | 强制续期（接口返回 token 失效码时调用） |
+| `tm.renew(ctx, cfg)` | 有 `api_url` 走在线续期，否则本地 client 凭据续期 |
+| `renewViaOnlineAPI(ctx, cfg, refreshUI)` | oplist renewapi（`driver_txt=alicloud_qr`），返回轮换后的 refresh_token |
+| `renewViaLocalAPI(ctx, cfg, refreshToken)` | `POST /oauth/access_token`；**校验续期前后 JWT `sub` 一致**，不一致报错 |
+| `jwtSubject(token)` | 解 JWT 第二段取 `sub`（段数不对/base64 非法均报错） |
+| `d.persistTokens()` | 先写回内存配置再序列化，经 `ConfigPersisterSetter` 持久化 |
+
+### limiter.go（按账号分桶）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `limiter` | 一个账号的三个 `rate.Limiter`（list 3.9/s、link 0.9/s、other 14.9/s，burst=1）+ `usedBy` 引用计数 |
+| `getLimiterForUser(userID)` | 全局表取/建并 `usedBy++`（同账号多 provider 共享） |
+| `releaseLimiter(userID)` | `usedBy--`，归零即从全局表删除；全局限流器永不回收 |
+| `l.wait(ctx, typ)` | 按类别阻塞等令牌；`l == nil` 返回 `errNotInit` |
+
+### api.go（驱动结构与请求层）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `AliyundriveOpenDriver` | 驱动结构（Config/Orm/cfg/tm/driveID/limiterKey/client） |
+| `newHTTPClient()` | 专用 http.Client：不设 Timeout（避免大文件传输被强断），只约束响应头等待 |
+| `d.request(ctx, typ, endpoint, method, body)` | 统一请求：先过限流器；token 失效码（`AccessTokenInvalid`/`AccessTokenExpired`/`I400JD`）触发续期并重试一次 |
+| `d.getDriveInfo` / `driveIDFor(info, driveType)` | 取盘信息；按 default/resource/backup 取对应 drive_id |
+| `d.getSpaceInfo` | 个人空间配额 |
+| `d.listFiles(ctx, parentFileID)` | 列目录（marker 游标分页，limit 200） |
+| `d.createFolder(ctx, parent, name)` | 建目录（`check_name_mode=ignore`） |
+| `d.getDownloadURL(ctx, fileID)` | 下载直链；LIVP 无 url 时回退 `streamsUrl` |
+| `d.removeFile(ctx, fileID)` | 按 `remove_way` 走 trash 或 delete |
+
+### driver.go（上传编排/读取/删除/目录）
+
+| 方法 | 说明 |
+|------|------|
+| `d.Upload(ctx, src, opt)` | 加密准备 → 年/月目录 → pre_hash 秒传 → 分片并发 → complete |
+| `d.tryCreateWithPreHash(...)` | 带 pre_hash 的 create；命中 `PreHashMatched` 则走 `retryCreateWithContentHash` |
+| `d.retryCreateWithContentHash(...)` | 补完整 SHA1 + proof_code 重试；命中返回 FileRef |
+| `d.Open` / `d.OpenChunk` / `d.OpenChunkRangeSeek` | `types.ChunkOpener`：download_url + HTTP Range；加密文件从头读 |
+| `d.BatchDelete(ctx, refs)` | 逐个删除（接口一次仅接受一个 file_id）；单个失败标 `results[i].Error` 不影响其它 |
+| `d.Close()` | 归还限流器引用（`releaseLimiter`） |
+| `dirBackend`（`List`/`Mkdir`/`resolve`/`findChild`） | `types.DirBackend`：路径 `/2026/09` 逐级解析/创建为 file_id，缓存 `路径→file_id` |
+
+### upload.go（分片与秒传算法）
+
+| 方法 | 说明 |
+|------|------|
+| `calPartSize(fileSize)` | 按大小选分片（20MB 起，>128GB 递增，>1TB 用 5GB），保证 ≤10000 片；阈值同 OpenList |
+| `partInfoList(count)` / `partCountOf(size, partSize)` | 生成 `part_info_list` / 计算分片数 |
+| `proofRange(accessToken, size)` | `md5(token)` 前 16 位十六进制当无符号数 % size 得起点，取 8 字节（超文件尾则截断） |
+| `d.calcProofCode(file, accessToken, size)` | 按 proof_range 读片段并 base64 |
+| `preHashOf(file, size)` | 首 1024 字节 SHA1（秒传第一步） |
+| `fullSHA1Of(file)` | 整文件 SHA1（秒传第二步的 content_hash） |
+| `d.createUploadFile(...)` / `d.createByContentHash(...)` | 两种 create：前者带 pre_hash，后者带 content_hash+proof_code |
+| `d.refreshUploadURL(...)` | 重新取分片直传地址（OSS 地址约 24h 有效，上传超 50 分钟续期） |
+| `d.uploadPart(ctx, url, r)` | PUT 单片到 OSS；`internal_upload` 时替换为内网域名；409 视为已存在 |
+| `d.uploadPartsConcurrent(...)` | 并发 PUT 全部分片（`upload_thread` 控并发，不超分片数） |
+| `d.completeUpload(...)` | `complete` 合并 |
+
+### init.go（注册与元数据）
+
+| 方法 | 说明 |
+|------|------|
+| `init()` | 注册 `ALIYUNDRIVE_OPEN` 及 ConfigFields 元数据（refresh_token/api_url/client_id/client_secret/access_token/drive_type/root_folder_id/upload_thread/remove_way/rapid_upload/internal_upload） |
+| `newDriver(provider)` | 构造：解析配置 → 初始化 token 管理器 → 借全局限流器 → 凭据预检（仅告警）→ warmup |
+| `d.warmup()` | 续期 → 持久化 → getDriveInfo 定 drive_id → 换成按 user_id 的限流器 |
+| `checkCredentials(cfg)` | refresh_token 必填；未配 api_url 时必须有 client 凭据 |
+
+## driver/yun139/（移动云盘，仅新版个人云 personal_new）
+
+参考 OpenList `drivers/139`。认证/签名/续期语义见 `README.md`「移动云盘驱动」与 `设计方案.md` 11.3.3。
+**未实现**：家庭云/群组云/分享挂载/旧版个人云、邮箱 Cookie 登录、密码登录、SMS 验证码登录。
+
+### auth.go（Authorization 解析与自动续期）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `authInfo` | 解析结果：encryptKey / account / token（第三段原文）/ expiration（毫秒） |
+| `parseAuthorization(authorization)` | base64 解码 → 按 `:` 拆 ≥3 段 → 第三段按 `\|` 拆 ≥4 字段 → 取第 4 字段为过期时间；任一步不符返回错误 |
+| `buildAuthorization(info, tokenSegment)` | 用新第三段重新 base64 拼装 Authorization |
+| `needsRefresh(info, now)` | 剩余 ≤ 15 天（`refreshThreshold`）或已过期则需刷新 |
+| `replaceTokenSegment(oldSegment, newToken, expireMillis)` | 替换第三段首字段并保留其余 `\|...`；`expireMillis>0` 时同时刷新第 4 字段。**不更新过期时间会导致每次请求都重复刷新** |
+| `tokenRefresher` | `refresh(ctx, onRenewed)` 按需续期；`blockRefresh` 续期失败后置位 |
+| `requestTokenRefresh(ctx, token, account)` | 调 `tellin/authTokenRefresh.do`（XML）；`return=="0"` 为成功；返回新 token 与 expiretime |
+| `calSign(body, ts, randStr)` | 请求签名：URI 编码（空格 `%20`）→ 按字符排序 → base64 → md5(prev)+md5(ts+":"+rand) → md5 大写 |
+| `encodeURIComponent` / `randomString` / `md5Hex` | 签名辅助（空格必须编 `%20` 而非 `+`） |
+| `d.persistAuthorization(newAuth)` | 写回内存配置并经 `ConfigPersisterSetter` 持久化 |
+
+### api.go（驱动结构与请求层）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `Yun139Driver` | 驱动结构（Config/Orm/refresher/cloudHost/cron/uploadThread/customPartSize/client） |
+| `newHTTPClient()` | 不设 Timeout（分片直传/下载途中会被强断），只约束响应头等待 |
+| `setPersonalHeaders(req, auth, ts, rand, sign)` | 固定请求头 + `Mcloud-Sign` |
+| `d.post(ctx, endpoint, body, out)` | 序列化 body → `doRequest` → 反序列化到 out |
+| `d.doRequest(...)` | 请求前 `ensureAuthorization`；`authFailed` 时 `forceRefresh` 后重试一次 |
+| `d.sendOnce(...)` | 返回 `(respBody, authFailed, err)`；**鉴权失败返回 authFailed=true 而非 error**，以便上层区分「可恢复的鉴权失败」与传输错误 |
+| `isAuthError(respBody)` | code 含 AUTH/TOKEN/UNAUTHORIZED/FORBIDDEN/EXPIRE 判定为鉴权失败 |
+| `d.ensureAuthorization` / `d.forceRefresh` / `d.currentAuthorization` / `d.account` | 续期与凭据访问 |
+| `d.listFiles(ctx, parentFileID)` | `/file/list` 游标分页（pageSize 100） |
+| `d.getDownloadURL(ctx, fileID)` | `/file/getDownloadUrl`，兼容 data.url 与顶层 url |
+
+### driver.go（上传编排/读取/删除/目录）
+
+| 方法 | 说明 |
+|------|------|
+| `d.Upload(ctx, src, opt)` | 加密准备 → 年/月目录 → SHA256 → `uploadFile` |
+| `d.uploadFile(...)` | create → exist/无分片即秒传 → 上传首批 → >100 片补取地址并上传 → complete |
+| `d.rootID()` | 配置 root_id，默认 `/` |
+| `d.createFolder(ctx, parent, name)` | 移动云无独立 mkdir，用 create 上传 `type=folder` |
+| `d.Open` / `d.OpenChunk` / `d.OpenChunkRangeSeek` | `types.ChunkOpener`：download_url + HTTP Range；加密文件从头读 |
+| `d.BatchDelete(ctx, refs)` | 逐个 `/file/trash`；单个失败标 `results[i].Error` 不影响其它 |
+| `d.removeFile(ctx, fileID)` | 移入回收站 |
+| `d.Close()` | **停止 12 小时刷新 cron**（由 `internal/storage.closeAndDeleteStorage` 在 provider 更新/删除/禁用时调用） |
+| `dirBackend`（`List`/`Mkdir`/`resolve`/`findChild`） | `types.DirBackend`：路径逐级解析/创建为 fileId，缓存 `路径→fileId` |
+
+### upload.go（分片与秒传）
+
+| 方法 | 说明 |
+|------|------|
+| `d.partSizeFor(size)` | 自动分片 1-8MB（随文件增大），`custom_upload_part_size` 优先 |
+| `buildPartInfos(size, partSize)` | 生成 partInfos（含 `parallelHashCtx.partOffset`），末片取实际剩余字节 |
+| `computeSHA256(file)` | 整文件 SHA256（移动云秒传必需） |
+| `d.createUpload(...)` | `/file/create`，`partInfos` 首批最多 100 片，`fileRenameMode=auto_rename` |
+| `d.getMorePartURLs(...)` | `/file/getUploadUrl` 按批（每批 100 片）补取直传地址 |
+| `d.uploadPart(ctx, url, file, offset, size)` | PUT 单片（SectionReader + Content-Length + Origin/Referer） |
+| `d.uploadPartInfos(...)` | 按 partNumber 升序与 allParts 对齐后并发上传（`upload_thread` 控并发） |
+| `d.completeUpload(...)` | `/file/complete` 合并 |
+
+### init.go（注册与元数据）
+
+| 方法 | 说明 |
+|------|------|
+| `init()` | 注册 `YUN139` 及 ConfigFields 元数据（authorization/root_id/custom_upload_part_size/upload_thread） |
+| `newDriver(provider)` | 构造：解析配置 → 初始化 refresher → warmup（失败仅告警）→ 启动 cron |
+| `d.warmup()` | 校验/续期 Authorization → 列根目录验证凭据 → 记账号 |
+| `d.startRefreshCron()` / `d.cronRefresh()` | 每 12 小时（`0 0 */12 * * *`）主动刷新一次 |
+| `parseUploadThread(s)` | 1-32，越界/非法回落 3 |
+
+## driver/cloud189pc/（天翼云盘，仅个人云）
+
+参考 OpenList `drivers/189pc`。认证/签名语义见 `README.md`「天翼云盘驱动」与 `设计方案.md` 11.3.4。
+**未实现**：家庭云、账号密码+OCR 登录、二维码登录、torrent/CAS 秒传、老版上传。
+
+### help.go（签名/加密/分片算法）
+
+| 函数 | 说明 |
+|------|------|
+| `signatureOfHmac(secret, key, operate, fullURL, date, param)` | HMAC-SHA1 签名：`SessionKey=..&Operate=..&RequestURI=..&Date=..[&params=..]`，大写 hex |
+| `extractURLPath(fullURL)` | 正则 `://[^/]+((/[^/\s?#]+)*)` 提取 path（签名只用 path，不含 host） |
+| `aesECBEncrypt(data, key)` | PKCS#7 填充 + 分块 ECB + 大写 hex（params 用，key=sessionSecret 前 16 字节） |
+| `pkcs7Padding` | 整块时也补满一块 |
+| `parseHTTPHeader(str)` | 解析 `k1:v1,k2:v2` 或换行分隔的分片直传请求头 |
+| `partSize(size)` | 10MiB 起；>999 片用 20MiB；超大按 `ceil(size/1999/10MiB)` 放大（保底 5 倍） |
+| `clientSuffix()` | 固定查询参数（clientType/version/channelId/rand） |
+| `httpDateStr()` / `newRequestID()` / `md5UpperHex()` / `urlEscape` / `formatDate` | 辅助 |
+| `rsaEncrypt` | RSA 加密（账号密码登录用；本驱动未实现登录，保留以便扩展） |
+
+### auth.go（token 两段式续期）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `tokenManager` | accessToken/refreshToken/sessionKey/sessionSecret 管理；`blockRefresh` 续期失败置位 |
+| `initTokenManager(access, refresh)` | 初始化 |
+| `tm.ensureToken(ctx, d)` | 无 session 且有 refreshToken 时取一次 |
+| `tm.invalidate()` | 标记 session 失效 |
+| `tm.refreshSessionWithRetry(ctx, d, n)` | 先用现 accessToken 刷 session；`UserInvalidOpenToken` 则先换 token 再刷，**最多 3 次** |
+| `tm.refreshTokenWithRetry(ctx, d, n)` | 调 refreshToken.action 换新 token；超限清空 refreshToken 并报错 |
+| `tm.applyTokens` / `tm.applySessionKeys` | **分开落库**：刷 session 路径只写 session 密钥，避免覆盖刚轮换的 refreshToken |
+| `d.fetchSession(ctx, accessToken)` | getSessionForPC.action 取 session |
+| `d.exchangeRefreshToken(ctx, refreshToken)` | refreshToken.action 换 token |
+| `d.warmup()` | 取 token/session + 读容量信息验证凭据（失败仅告警） |
+| `d.persistTokens()` | 写回内存配置并经 `ConfigPersisterSetter` 持久化 |
+| `isTokenInvalidError` | 判定 `UserInvalidOpenToken` |
+
+### api.go（驱动结构与请求层）
+
+| 类型/方法 | 说明 |
+|------|------|
+| `Cloud189PcDriver` | 驱动结构（Config/Orm/tm/uploadThread/orderBy/orderDir/rootFolderID/client） |
+| `newHTTPClient()` | 不设 Timeout（直传/下载途中会被强断），只约束响应头等待 |
+| `d.request(...)` | 序列化 → `doRequest` → 反序列化 |
+| `d.doRequest(...)` | 请求前 `ensureToken`；`sessionDead` 时 `invalidate` + `refreshSessionWithRetry` 后重试一次 |
+| `d.sendOnce(...)` | 返回 `(respBody, sessionDead, err)`；**session 失效返回标志而非 error**，让上层区分可恢复失败与传输错误 |
+| `d.rawGet` / `d.rawPostForm` | 无签名请求（登录相关接口） |
+| `isSessionInvalid` / `resCodeOK` / `RespErr.HasError` | 失效识别与 `res_code` 判定（数字 0 为成功，与 OpenList types.go:29 一致） |
+| `d.listFiles` | listFiles.action 分页（pageSize 1000） |
+| `d.createFolder` / `d.getDownloadURL` / `d.getCapacityInfo` | 建目录（`&amp;`→`&`、http→https 修正）/ 下载直链 / 容量 |
+
+### driver.go（上传编排/读取/删除/目录）
+
+| 方法 | 说明 |
+|------|------|
+| `d.Upload(ctx, src, opt)` | 加密准备 → 年/月目录 → `uploadFile` |
+| `d.uploadFile(...)` | 分片 MD5 → initMultiUpload → 并发上传 → commitMultiUploadFile |
+| `d.Open` / `d.OpenChunk` / `d.OpenChunkRangeSeek` | `types.ChunkOpener`：download_url + HTTP Range；加密文件从头读 |
+| `d.BatchDelete` | 逐个走批量任务删除；单个失败标 `results[i].Error` |
+| `d.deleteFile` / `d.waitBatchTask` / `buildBatchTaskForm` | createBatchTask + 轮询 checkBatchTask（300ms 间隔、60s 超时；status 4 成功 / 2 冲突） |
+| `d.Close()` | 无长驻资源，对齐 `types.Closer` |
+| `dirBackend`（`List`/`Mkdir`/`resolve`/`findChild`） | `types.DirBackend`：路径逐级解析/创建为 fileId |
+
+### upload.go（分片上传）
+
+| 方法 | 说明 |
+|------|------|
+| `d.initMultiUpload(...)` | params 含 parentFolderId/fileName(转义)/fileSize/sliceSize/lazyCheck |
+| `d.getMultiUploadURLs(...)` | `partInfo` 逗号分隔；返回按 partNumber 升序的直传地址 |
+| `computePartDescriptors` | 各分片 MD5（大写 hex + base64）、偏移与大小 |
+| `hashWholeFile` / `sliceMD5` | 整文件 MD5；单分片直接用、多分片换行拼接后再 MD5 |
+| `partInfoString` | `{分片号}-{base64(分片MD5)}` |
+| `d.uploadPart` / `d.uploadPartsConcurrent` | PUT 单片 / 并发上传（`upload_thread` 控并发，逐片取地址） |
+| `d.commitUpload(...)` | commitMultiUploadFile（fileMd5/sliceMd5/opertype=1） |
+
+### init.go（注册与元数据）
+
+| 方法 | 说明 |
+|------|------|
+| `init()` | 注册 `CLOUD189_PC` 及 ConfigFields（refresh_token/access_token/root_id/order_by/order_direction/upload_thread） |
+| `newDriver(provider)` | 构造：解析配置 → 初始化 token 管理器 → warmup（失败仅告警） |
+| `parseUploadThread` / `parseOrderBy` / `parseOrderDirection` / `parseRootID` | 配置边界收敛（越界回落默认值） |
 
 ## server/（REST 传输层）
 

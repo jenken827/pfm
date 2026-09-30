@@ -200,6 +200,16 @@ class _SettingPageState extends State<SettingPage> {
                     onTap: () => const ShareManageRoute().push(context),
                   ),
                   const Divider(height: 1, indent: 56),
+                  // WebDAV 账号：为第三方客户端分配独立凭据 + 独立目录（普通用户自助）
+                  _SettingsTile(
+                    icon: Icons.key_outlined,
+                    iconBackground: PfmColors.successSurface,
+                    iconColor: PfmColors.success,
+                    title: al.settings_webdavAccounts,
+                    subtitle: al.settings_webdavAccountsSubtitle,
+                    onTap: () => const WebdavAccountRoute().push(context),
+                  ),
+                  const Divider(height: 1, indent: 56),
                   if (_isAdmin) ...[
                     _SettingsTile(
                       icon: Icons.storage_outlined,
