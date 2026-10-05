@@ -14,6 +14,7 @@ import 'package:pfm/platform/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'services/services.dart';
 import 'package:pfm/services/recent_files_storage.dart';
+import 'utils/single_instance.dart';
 import 'router/router.dart';
 import 'app.dart';
 
@@ -39,54 +40,12 @@ Future<void> main() async {
 
       // 桌面平台单实例检查
       if (_isDesktop()) {
-        final lockFile = File(
-          '${Platform.environment['TEMP'] ?? '/tmp'}/pfm_running.lock',
-        );
-        if (lockFile.existsSync()) {
-          // 检查进程是否还活着
-          try {
-            final pid = int.parse(lockFile.readAsStringSync().trim());
-            // 尝试检查进程是否存在
-            // Windows: tasklist 即使找不到进程也返回 0，需要检查输出内容
-            // Linux/Mac: kill -0 找不到进程返回非 0
-            final result = Process.runSync(
-              Platform.isWindows ? 'tasklist' : 'kill',
-              Platform.isWindows ? ['/FI', 'PID eq $pid'] : ['-0', '$pid'],
-            );
-            if (Platform.isWindows) {
-              // Windows tasklist 返回码不可靠，需要检查输出中是否包含实际进程信息
-              // 如果输出只包含"信息"提示行（没有找到任务），则进程不存在
-              final stdout = result.stdout.toString();
-              final stderr = result.stderr.toString();
-              final hasProcess =
-                  result.exitCode == 0 &&
-                  !stdout.contains('没有运行的任务匹配指定标准') &&
-                  !stdout.contains('No tasks are running which match') &&
-                  !stdout.contains('No running task') &&
-                  stderr.isEmpty;
-              if (hasProcess) {
-                getLogger().warning('PFM is already running (PID: $pid)');
-                exit(0);
-              }
-            } else {
-              if (result.exitCode == 0) {
-                getLogger().warning('PFM is already running (PID: $pid)');
-                exit(0);
-              }
-            }
-          } catch (_) {
-            // 解析失败，锁文件无效，继续启动
-          }
-        }
-        // 写入当前 PID
-        lockFile.writeAsStringSync('$pid\n');
-        // 退出时清理锁文件
-        ProcessSignal.sigint.watch().listen((_) {
-          try {
-            lockFile.deleteSync();
-          } catch (_) {}
+        if (hasOtherInstanceRunning()) {
+          getLogger().warning(
+            'PFM is already running (exe: $currentExeName)',
+          );
           exit(0);
-        });
+        }
       }
       tick('single instance check');
 

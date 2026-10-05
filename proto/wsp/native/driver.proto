@@ -106,12 +106,16 @@ message Cloud189PcDriverConfig {
     optional string access_token = 1;
     // refresh_token：长期刷新令牌，用于自动续期 access_token（最多重试 3 次）
     optional string refresh_token = 2;
+    // 账号密码登录：未配置上述 token 时使用（用户名一般为手机号）
+    optional string username = 3;
+    // 账号密码登录：密码（经 RSA 加密后提交，但本字段本身明文存储）
+    optional string password = 4;
     // 根目录 fileId，个人云根目录为 -11
-    optional string root_id = 3;
+    optional string root_id = 5;
     // 排序字段：filename / filesize / lastOpTime
-    optional string order_by = 4;
+    optional string order_by = 6;
     // 排序方向：asc / desc
-    optional string order_direction = 5;
+    optional string order_direction = 7;
     // 并发上传分片数（1-32，默认 3）
-    optional string upload_thread = 6;
+    optional string upload_thread = 8;
 }

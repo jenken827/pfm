@@ -20,6 +20,7 @@ show_help() {
 命令:
   build          编译 Go 服务器（自动注入版本号）
   run            编译并运行服务器
+  deploy         部署到 <服务目录: pfm>（编译 → mv 原子覆盖 → supervisorctl 重启 → 健康检查）
   proto          生成 protobuf 代码（Go + Dart）
   proto-go       仅生成 Go protobuf 代码
   proto-dart     仅生成 Dart protobuf 代码
@@ -51,6 +52,7 @@ show_help() {
   $0 build -o /usr/local/bin/pfm  # 编译到指定路径
   $0 build --skip-tests           # 跳过测试缓存
   $0 run                          # 编译并运行
+  $0 deploy                       # 部署到 <服务目录: pfm>（唯一正确的部署方式）
   $0 dev                          # 开发模式运行（不编译）
   $0 proto                        # 生成所有 protobuf 代码
   $0 proto-go                     # 仅生成 Go protobuf 代码
@@ -184,6 +186,20 @@ cmd_run() {
     "$OUTPUT" server -d ./data
 }
 
+# 部署到 <服务目录: pfm>（编译 → mv 原子覆盖 → supervisorctl 重启 → 健康检查）
+#
+# 只做"编译 + 部署"，不含 git 提交/推送；需要提交并推送时用 <服务目录: pfm>/deploy.sh。
+# 覆盖与重启的实际逻辑在 scripts/deploy.sh，两个禁止事项见该文件头部注释：
+#   1. 禁止用 cp 覆盖运行中的二进制（ETXTBSY / "Text file busy"），必须用 mv；
+#   2. 禁止 pkill/kill + nohup —— pfm 由 supervisord 托管（autorestart=true），
+#      必须用 supervisorctl restart pfm；且 `pfm -d data` 缺少 server 子命令。
+cmd_deploy() {
+    echo "🚀 部署 PFM 到 <服务目录: pfm...>"
+    cmd_build
+    echo ""
+    bash "$SCRIPT_DIR/scripts/deploy.sh"
+}
+
 # 开发模式运行（不编译，直接 go run）
 cmd_dev() {
     echo "🚀 开发模式运行..."
@@ -230,25 +246,25 @@ cmd_proto_dart() {
 
 # 运行测试
 cmd_test() {
-    local TEST_ARGS=""
+    local -a TEST_ARGS=()
     
     # 解析参数
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -v)
-                TEST_ARGS="$TEST_ARGS -v"
+                TEST_ARGS+=("-v")
                 shift
                 ;;
             -run)
-                TEST_ARGS="$TEST_ARGS -run $2"
+                TEST_ARGS+=("-run" "$2")
                 shift 2
                 ;;
             -short)
-                TEST_ARGS="$TEST_ARGS -short"
+                TEST_ARGS+=("-short")
                 shift
                 ;;
             -count)
-                TEST_ARGS="$TEST_ARGS -count $2"
+                TEST_ARGS+=("-count" "$2")
                 shift 2
                 ;;
             -*)
@@ -256,7 +272,7 @@ cmd_test() {
                 exit 1
                 ;;
             *)
-                TEST_ARGS="$TEST_ARGS $1"
+                TEST_ARGS+=("$1")
                 shift
                 ;;
         esac
@@ -264,31 +280,32 @@ cmd_test() {
     
     echo "🧪 运行测试..."
     check_command "go"
-    eval go test $TEST_ARGS ./...
+    # 用数组展开，不要再 eval：eval 会二次解析，-run 里的 | ( ) 等正则元字符会被当成 shell 语法
+    go test "${TEST_ARGS[@]}" ./...
     echo "✅ 测试完成！"
 }
 
 # 运行测试并生成覆盖率报告
 cmd_test_cover() {
-    local TEST_ARGS=""
+    local -a TEST_ARGS=()
     
     # 解析参数
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -v)
-                TEST_ARGS="$TEST_ARGS -v"
+                TEST_ARGS+=("-v")
                 shift
                 ;;
             -run)
-                TEST_ARGS="$TEST_ARGS -run $2"
+                TEST_ARGS+=("-run" "$2")
                 shift 2
                 ;;
             -short)
-                TEST_ARGS="$TEST_ARGS -short"
+                TEST_ARGS+=("-short")
                 shift
                 ;;
             -count)
-                TEST_ARGS="$TEST_ARGS -count $2"
+                TEST_ARGS+=("-count" "$2")
                 shift 2
                 ;;
             -*)
@@ -296,7 +313,7 @@ cmd_test_cover() {
                 exit 1
                 ;;
             *)
-                TEST_ARGS="$TEST_ARGS $1"
+                TEST_ARGS+=("$1")
                 shift
                 ;;
         esac
@@ -305,7 +322,7 @@ cmd_test_cover() {
     echo "🧪 运行测试并生成覆盖率报告..."
     check_command "go"
 
-    eval go test -coverprofile=coverage.out $TEST_ARGS ./...
+    go test -coverprofile=coverage.out "${TEST_ARGS[@]}" ./...
     go tool cover -func=coverage.out
 
     echo ""
@@ -323,13 +340,13 @@ cmd_tidy() {
 
 # 代码检查
 cmd_lint() {
-    local LINT_ARGS=""
+    local -a LINT_ARGS=()
     
     # 解析参数
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --fix)
-                LINT_ARGS="$LINT_ARGS --fix"
+                LINT_ARGS+=("--fix")
                 shift
                 ;;
             -*)
@@ -337,7 +354,7 @@ cmd_lint() {
                 exit 1
                 ;;
             *)
-                LINT_ARGS="$LINT_ARGS $1"
+                LINT_ARGS+=("$1")
                 shift
                 ;;
         esac
@@ -345,7 +362,7 @@ cmd_lint() {
     
     echo "🔍 运行代码检查..."
     check_command "golangci-lint"
-    eval golangci-lint run $LINT_ARGS ./...
+    golangci-lint run "${LINT_ARGS[@]}" ./...
     echo "✅ 代码检查完成！"
 }
 
@@ -396,6 +413,9 @@ case "$ACTION" in
     run)
         cmd_run "$@"
         ;;
+    deploy)
+        cmd_deploy
+        ;;
     dev)
         cmd_dev
         ;;
@@ -409,16 +429,16 @@ case "$ACTION" in
         cmd_proto_dart
         ;;
     test)
-        cmd_test
+        cmd_test "$@"
         ;;
     test-cover)
-        cmd_test_cover
+        cmd_test_cover "$@"
         ;;
     tidy)
         cmd_tidy
         ;;
     lint)
-        cmd_lint
+        cmd_lint "$@"
         ;;
     clean)
         cmd_clean

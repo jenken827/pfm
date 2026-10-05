@@ -44,8 +44,9 @@ func NewBackend(rootID, ownerID, mountPrefix string) *Backend {
 
 // resolvePath 解析 WebDAV 路径到 PFM 文件
 func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM, error) {
-	name = strings.TrimPrefix(name, "/")
-	name = strings.TrimSuffix(name, "/")
+	// 去掉全部尾斜杠（而不是单个）：MKCOL/MOVE 的 URI 允许以 "/" 结尾，
+	// "/a/b//" 也要能解析成同一个目录
+	name = strings.TrimRight(strings.TrimPrefix(name, "/"), "/")
 
 	parentID := b.rootID
 
@@ -65,6 +66,12 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 	parts := strings.Split(name, "/")
 	var current *native.FileORM
 	for _, part := range parts {
+		if part == "" {
+			// 容忍 "/a//b" 这类多余分隔符。注意 ".." 仍按普通名字去库里查
+			// （查不到即 404），所以这里不需要也不允许做路径归一化——
+			// 那会把 "/../xyz" 变成兄弟目录，绕过账号根隔离。
+			continue
+		}
 		if parentID == "" {
 			return nil, gowebdav.NewHTTPError(404, fmt.Errorf("not found: %s", name))
 		}
@@ -76,6 +83,51 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 		parentID = *f.Id
 	}
 	return current, nil
+}
+
+// splitWebdavName 把 WebDAV 请求路径拆成「父路径 + 末级名称」。
+//
+// MKCOL / PUT 的 request-URI 与 MOVE 的 Destination 都允许以 "/" 结尾
+// （RFC 4918 §9.3 只要求 MKCOL 不带请求体，并未禁止尾斜杠；Windows 资源管理器、
+// macOS Finder、rclone 在创建或移动集合时都会带）。而 path.Dir("/a/b/") = "/a/b"、
+// path.Base("/a/b/") = "b"，直接用会变成「在 /a/b 下建 b」——比客户端请求的层级
+// **多一层**：父目录不存在时报 404→409，父目录已存在时则静默建深一层。
+//
+// 判据是「层级」，不是「服务端出现同名嵌套」：绑定目录与目标同名时（用户在网盘里
+// 自建 photos/ 并把 WebDAV 账号绑到它，客户端看不到这一层），客户端建 photos 的
+// 正确服务端路径本来就是 photos/photos，属正常结果。
+//
+// 返回 ok=false 表示该路径指向根目录（"" 或 "/"），不能作为创建/移动目标。
+func splitWebdavName(name string) (dirPath, baseName string, ok bool) {
+	name = strings.TrimRight(name, "/")
+	if name == "" {
+		return "", "", false
+	}
+	dirPath = path.Dir(name)
+	baseName = path.Base(name)
+	if baseName == "" || baseName == "/" || baseName == "." || baseName == ".." {
+		return "", "", false
+	}
+	return dirPath, baseName, true
+}
+
+// stripMountPrefix 去掉 Destination 里客户端可见的挂载前缀（如 "/dav"）。
+//
+// http.StripPrefix 只改 r.URL.Path；MOVE/COPY 的 Destination 头由
+// emersion/go-webdav 的 parseDestination 直接 url.Parse（Href 就是 url.URL），
+// 前缀原样保留。不剥掉的话 dest 会按 "/dav/sub/x" 去库里找名为 "dav" 的子目录，
+// 一律 404 dest not found——即所有正常客户端的 MOVE 都失败。
+func (b *Backend) stripMountPrefix(p string) string {
+	if b.mountPrefix == "" {
+		return p
+	}
+	if p == b.mountPrefix {
+		return "/"
+	}
+	if strings.HasPrefix(p, b.mountPrefix+"/") {
+		return strings.TrimPrefix(p, b.mountPrefix)
+	}
+	return p
 }
 
 // toFileInfo 转换为 WebDAV FileInfo
@@ -214,8 +266,16 @@ func checkPrecondition(existing *native.FileORM, ifMatch, ifNoneMatch gowebdav.C
 
 // Create 创建/更新文件
 func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, opts *gowebdav.CreateOptions) (*gowebdav.FileInfo, bool, error) {
-	dirPath := path.Dir(name)
-	fileName := path.Base(name)
+	// PUT 到以 "/" 结尾的 URI 表示「向集合写内容」，RFC 4918 §9.7.2 明确不允许。
+	// 不拦的话 path.Dir/path.Base 会把 "/foo/" 当「在 /foo 下建文件 foo」，
+	// 父目录不存在时报 404、存在时静默建出 /foo/foo 这种错层文件。
+	if strings.HasSuffix(name, "/") {
+		return nil, false, gowebdav.NewHTTPError(405, fmt.Errorf("cannot PUT to a collection: %s", name))
+	}
+	dirPath, fileName, ok := splitWebdavName(name)
+	if !ok {
+		return nil, false, gowebdav.NewHTTPError(405, fmt.Errorf("invalid PUT target: %s", name))
+	}
 
 	parentFile, err := b.resolvePath(ctx, dirPath)
 	if err != nil {
@@ -349,8 +409,11 @@ func (b *Backend) RemoveAll(ctx context.Context, name string, opts *gowebdav.Rem
 
 // Mkdir 创建目录
 func (b *Backend) Mkdir(ctx context.Context, name string) error {
-	dirPath := path.Dir(name)
-	dirName := path.Base(name)
+	// MKCOL 的 URI 允许带尾斜杠，必须先剥再 Dir/Base（见 splitWebdavName）
+	dirPath, dirName, ok := splitWebdavName(name)
+	if !ok {
+		return gowebdav.NewHTTPError(405, fmt.Errorf("cannot create collection at root: %s", name))
+	}
 
 	parentFile, err := b.resolvePath(ctx, dirPath)
 	if err != nil {
@@ -384,8 +447,12 @@ func (b *Backend) Move(ctx context.Context, name, dest string, options *gowebdav
 		return false, err
 	}
 
-	destDir := path.Dir(dest)
-	destName := path.Base(dest)
+	// Destination 是客户端可见路径（带 mountPrefix），go-webdav 不会剥；
+	// 且集合的 Destination 常以 "/" 结尾。两者都在 splitWebdavName 之前处理。
+	destDir, destName, ok := splitWebdavName(b.stripMountPrefix(dest))
+	if !ok {
+		return false, gowebdav.NewHTTPError(409, fmt.Errorf("invalid move destination: %s", dest))
+	}
 	destFile, err := b.resolvePath(ctx, destDir)
 	if err != nil {
 		return false, gowebdav.NewHTTPError(404, fmt.Errorf("dest not found: %w", err))

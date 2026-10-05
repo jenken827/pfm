@@ -51,8 +51,9 @@ func MergedFileName(fileName string) string {
 // "temp file not found" → 上传编排标失败，且文件记录已落库 → 该 hash 永远没有
 // file_location 行（读取端随后 500，内容也随分片一起丢失）。
 //
-// 整目录清理由 dispatch 终态的 cleanupUploadTemp 负责（全部 provider 成功 / 部分成功 /
-// 分片合并阶段失败时由 cleanupChunks 处理），崩溃残留由 janitor 兜底。
+// 整目录清理由 dispatch 终态的 cleanupUploadTemp 负责：仅在**全部目标 provider 都成功**
+// 时（completeUpload）立即清理；只要有 provider 失败就保留 staging 供重试，由 janitor
+// 超龄回收。分片合并阶段失败时由 cleanupChunks 处理，崩溃残留由 janitor 兜底。
 func RemoveChunkTempFiles(fileHash, ownerID string) error {
 	dir := GetChunkTempDir(fileHash, ownerID)
 	entries, err := os.ReadDir(dir)

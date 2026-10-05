@@ -14,6 +14,25 @@ Widget buildConfigField(
 
   switch (field.fieldType) {
     case ConfigFieldType.STRING:
+      // Flutter 断言 !obscureText || maxLines == 1：密码态不能多行。
+      // 驱动侧可能同时声明 MultilineRows（如移动云盘的 Authorization
+      // 这类长 token）与 inputType=password。两者互斥，此处按密码优先
+      // 强制单行，可读性由 [_ObscuredStringField] 的「显示/隐藏」切换保证。
+      if (field.inputType == 'password') {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: _ObscuredStringField(
+            name: field.name,
+            label: field.label,
+            placeholder: field.placeholder,
+            helperText: field.helperText,
+            iconName: field.iconName,
+            initialValue: initialValue?.toString(),
+            required: field.required == true,
+            multilineRows: field.multilineRows > 0 ? field.multilineRows : 3,
+          ),
+        );
+      }
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: FormBuilderTextField(
@@ -31,7 +50,6 @@ Widget buildConfigField(
           validator: field.required == true
               ? FormBuilderValidators.required(errorText: '请输入${field.label}')
               : null,
-          obscureText: field.inputType == 'password',
         ),
       );
 
@@ -116,6 +134,70 @@ Widget buildConfigField(
 
     default:
       return const SizedBox.shrink();
+  }
+}
+
+/// 密码/凭据类字符串字段。
+///
+/// Flutter 强制 `!obscureText || maxLines == 1`，因此凭据字段恒为单行；
+/// 长 token（如移动云盘 Authorization）靠「显示」按钮切换为明文查看。
+class _ObscuredStringField extends StatefulWidget {
+  const _ObscuredStringField({
+    required this.name,
+    required this.label,
+    required this.required,
+    this.placeholder = '',
+    this.helperText = '',
+    this.iconName = '',
+    this.initialValue,
+    this.multilineRows = 3,
+  });
+
+  final String name;
+  final String label;
+  final bool required;
+  final String placeholder;
+  final String helperText;
+  final String iconName;
+  final String? initialValue;
+
+  /// 明文态的行数，由 driver 的 MultilineRows 决定。
+  final int multilineRows;
+
+  @override
+  State<_ObscuredStringField> createState() => _ObscuredStringFieldState();
+}
+
+class _ObscuredStringFieldState extends State<_ObscuredStringField> {
+  bool _obscured = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return FormBuilderTextField(
+      name: widget.name,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        hintText: widget.placeholder.isNotEmpty ? widget.placeholder : null,
+        helperText: widget.helperText.isNotEmpty ? widget.helperText : null,
+        prefixIcon: widget.iconName.isNotEmpty
+            ? Icon(_getIconData(widget.iconName))
+            : null,
+        suffixIcon: IconButton(
+          icon: Icon(_obscured ? Icons.visibility_off : Icons.visibility),
+          tooltip: _obscured ? '显示' : '隐藏',
+          onPressed: () => setState(() => _obscured = !_obscured),
+        ),
+      ),
+      initialValue: widget.initialValue,
+      // 密码态必须单行（Flutter 断言 !obscureText || maxLines == 1）；
+      // 明文态回落到 driver 声明的行数，保证长 token 完整可读。
+      maxLines: _obscured ? 1 : widget.multilineRows,
+      minLines: 1,
+      obscureText: _obscured,
+      validator: widget.required
+          ? FormBuilderValidators.required(errorText: '请输入${widget.label}')
+          : null,
+    );
   }
 }
 

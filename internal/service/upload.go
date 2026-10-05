@@ -140,10 +140,25 @@ func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.File
 }
 
 // createSyncTask 创建同步任务（支持 UPSERT：如果同 hash 记录已存在则合并 provider 列表并重试）
-func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHash string, providerIds []uint32) {
+//
+// owner_id 必须写入发起者：秒传路径（handleInstantUpload）产出的 SYNC 记录同样
+// 是"某人发起的任务"，缺 owner 会让该记录对任何用户都不可见/不可操作
+// （列表能查到但详情/重试/删除全部 PERMISSION_DENIED）。ctx 由调用方传入以取
+// 发起者身份；取不到身份时从父目录继承，与 createSmallFileRecord 保持一致。
+func createSyncTask(ctx context.Context, fileName *string, fileSize *uint64, parentID *string, fileHash string, providerIds []uint32) {
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
 	emptyStr := ""
+	ownerID := getCurrentUserIDFromCtx(ctx)
+	if ownerID == "" && parentID != nil && *parentID != "" {
+		if parent, pErr := db.GetFileByID(*parentID); pErr == nil && parent != nil && parent.OwnerId != nil {
+			ownerID = *parent.OwnerId
+		}
+	}
+	if ownerID == "" {
+		llog.C(ctx).Warnf("sync task has no resolvable owner (parent: %s, hash: %s), record will be inaccessible",
+			strPtrVal(parentID), fileHash)
+	}
 
 	syncRecord := &native.UploadRecordORM{
 		FileName:          fileName,
@@ -155,13 +170,17 @@ func createSyncTask(fileName *string, fileSize *uint64, parentID *string, fileHa
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
 		TaskType:          utils.EnumPtr(native.UploadTaskType_SYNC),
+		OwnerId:           utils.StringPtr(ownerID),
 	}
 
 	gormDB := db.GetDB()
 	if err := gormDB.Create(syncRecord).Error; err != nil {
-		// 唯一约束冲突 → 查询已有记录，合并 provider 列表并重新 dispatch
+		// 唯一约束冲突 → 查询已有记录，合并 provider 列表并重新 dispatch。
+		// 必须带 owner_id 限定：复合唯一索引是 (file_hash, owner_id)，但查询
+		// 若只按 file_hash，会命中他人同名 hash 记录并覆写其 target_provider_ids
+		// 后重新 dispatch（跨用户串台，与 upload.go:761 同类防护）。
 		var existing native.UploadRecordORM
-		if qErr := gormDB.Where("file_hash = ?", fileHash).First(&existing).Error; qErr != nil {
+		if qErr := gormDB.Where("file_hash = ? AND owner_id = ?", fileHash, ownerID).First(&existing).Error; qErr != nil {
 			llog.L().Errorf("create sync record failed and lookup also failed: %v / %v", err, qErr)
 			return
 		}
@@ -390,7 +409,7 @@ func handleInstantUpload(
 	// 如果需要同步，创建同步任务（只传需要同步的提供者，不是全部）
 	if len(needSyncProviders) > 0 {
 		llog.C(ctx).Infof("file exists but needs sync to %d new providers, hash: %s", len(needSyncProviders), fileHash)
-		createSyncTask(fileName, fileSize, parentID, fileHash, needSyncProviders)
+		createSyncTask(ctx, fileName, fileSize, parentID, fileHash, needSyncProviders)
 	}
 
 	// 没有同名文件，创建新的文件记录（秒传：数据已存在，仅新增目录条目）
@@ -1106,6 +1125,8 @@ func cleanupChunks(ur *native.UploadRecordORM) {
 // checkUploadRecordOwnership 校验当前用户是否为上传记录的发起者
 // 管理/普通操作一律按 owner 判定：上传记录属个人任务，管理员也不能
 // 越权取消/删除/重试他人上传。返回 false 时调用方应拒绝请求。
+// 与 ListUploadRecords / RetryAllFailedUploadRecords 同为"仅本人"口径，
+// 保证列表可见即可操作（owner 为空的历史脏记录不可见也不可操作）。
 func checkUploadRecordOwnership(ctx context.Context, record *native.UploadRecordORM) bool {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
@@ -1511,10 +1532,13 @@ func ListUploadRecords(ctx context.Context, req *native.ListUploadRecordsReq) (*
 		pageSize = int32(*req.PageSize)
 	}
 
-	// 查询数据库：普通用户仅本人记录；管理员（管理功能）可见全部
+	// 查询数据库：一律按 owner 过滤（普通用户仅本人；管理员亦同）。
+	// 上传记录是个人任务，四件套（详情/重试/删除/取消）按 owner 校验，
+	// 列表若对管理员放开全局会出现"看得见却点不开"的矛盾，故策略统一为收紧。
+	// 管理员的全局视角请走管理专用数据（如 backup_tasks 等）。
 	ownerFilter := getCurrentUserIDFromCtx(ctx)
-	if isAdminUser(ctx) {
-		ownerFilter = ""
+	if ownerFilter == "" {
+		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PERMISSION_DENIED}
 	}
 	records, total, err := db.ListUploadRecords(page, pageSize, (*int32)(req.Status), ownerFilter)
 	if err != nil {
@@ -1755,7 +1779,8 @@ func RetryUploadRecord(ctx context.Context, req *native.RetryUploadRecordReq) *m
 
 // RetryAllFailedUploadRecords 重试所有失败的上传记录
 func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
-	// 查询失败的上传记录：普通用户仅本人；管理员（管理功能）可见全部
+	// 查询失败的上传记录：一律仅本人（管理员亦同，与 ListUploadRecords /
+	// checkUploadRecordOwnership 的收紧口径一致，避免批量操作他人任务）
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PERMISSION_DENIED}
@@ -1765,17 +1790,14 @@ func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 非管理员仅重试自己的记录
-	isAdmin := isAdminUser(ctx)
-	if !isAdmin {
-		own := records[:0]
-		for _, r := range records {
-			if r.OwnerId != nil && *r.OwnerId == userID {
-				own = append(own, r)
-			}
+	// 仅重试自己的记录
+	own := records[:0]
+	for _, r := range records {
+		if r.OwnerId != nil && *r.OwnerId == userID {
+			own = append(own, r)
 		}
-		records = own
 	}
+	records = own
 
 	if len(records) == 0 {
 		return nil

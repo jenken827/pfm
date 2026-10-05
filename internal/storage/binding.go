@@ -15,7 +15,7 @@ import (
 
 // ResolveProviderIds 解析「folderID 目录下的文件应落盘到哪些存储提供者」。
 //
-// 规则（见《设计方案.md》7. 存储提供者绑定策略）：
+// 规则（见 DESIGN.md「存储提供者绑定策略」）：
 //  1. ownerID 必须已由管理员在 UserSpace 中配置（AssignRootDir 分配容量 + provider），
 //     其 bound_provider_ids 即「用户分配集」assigned；未配置返回 error；
 //  2. 从 folderID 沿祖先链向上取最近一个显式绑定的目录 bound

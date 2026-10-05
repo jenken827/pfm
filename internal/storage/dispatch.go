@@ -367,11 +367,17 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 			llog.L().Errorf("update upload record status to failed skipped: record id is nil")
 		}
 
-		// 部分失败但已有 provider 成功时，内容已安全落库：立即回收 staging 临时文件。
-		// 全部失败时 temp 是内容的唯一副本，保留供排查/重试，由兜底 janitor 超龄回收。
-		if ur.FileHash != nil && hasCompletedLocation(*ur.FileHash) {
-			cleanupUploadTemp(ur)
-		}
+		// 只要有 provider 失败，就保留 staging 临时文件：重试要重新走
+		// Dispatch → uploadFromTempFile → 读 ur.TempPath（或按 hash 在 owner
+		// 隔离层/内容寻址层兜底查找），删掉后重试必然报 "temp file not found"。
+		//
+		// 历史实现在"已有任一 provider 成功"时就删（理由是内容已安全落库），
+		// 结果部分失败的上传记录永远无法重试——2026-10-03 的 139 授权事故里，
+		// 用户修好授权后点重试，就是被这条清理挡住而失败的。
+		//
+		// 代价是失败记录的临时文件会多留一段时间；由兜底 janitor 回收：
+		// FAILED 不是进行中状态，不受 hasActiveUploadRecord 保护，超过 7 天
+		// 即被删除（见 temp_cleanup.go）。重试成功走 completeUpload 立即清理。
 	} else {
 		completeUpload(ur)
 	}
@@ -398,20 +404,6 @@ func cleanupUploadTemp(ur *native.UploadRecordORM) {
 	if err := utils.CleanupFileTempDir(*ur.FileHash); err != nil {
 		llog.L().Warnf("cleanup file temp dir failed: %v", err)
 	}
-}
-
-// hasCompletedLocation 检查该 hash 是否已有完成的存储位置
-func hasCompletedLocation(fileHash string) bool {
-	locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
-	if err != nil {
-		return false
-	}
-	for _, loc := range locations {
-		if loc.Status != nil && *loc.Status == int32(native.LocationStatus_PCOMPLETED) {
-			return true
-		}
-	}
-	return false
 }
 
 // uploadToProvider 上传到单个提供者

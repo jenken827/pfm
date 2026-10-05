@@ -14,7 +14,7 @@ import (
 // StartTempCleanup 启动定期清理过期 temp 文件的 goroutine
 // 每小时检查一次，删除超过 7 天且没有进行中（PENDING/UPLOADING）upload_record 的 temp 目录。
 // 终态（COMPLETED/FAILED）record 不再保护 temp：COMPLETED 由 dispatch 成功即删；
-// FAILED（全部 provider 上传失败，temp 为内容唯一副本）保留 7 天供排查/重试后回收。
+// FAILED（任一 provider 上传失败，temp 是重试唯一可读源）保留 7 天供排查/重试后回收。
 func StartTempCleanup() {
 	go func() {
 		// 启动后延迟 5 分钟再执行第一次清理，避免与 resumeDispatch 竞争
