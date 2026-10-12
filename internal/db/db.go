@@ -2,19 +2,36 @@ package db
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"path"
+	"time"
 
+	"github.com/glebarez/sqlite"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"github.com/glebarez/sqlite"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 var db *gorm.DB
+
+// gormLogger 走 stderr 且不带 ANSI 颜色
+//
+// GORM 默认 logger 写 stdout 且带颜色：会污染 CLI 的 --json 输出（慢 SQL 警告直接插进 JSON），
+// 日志文件里也只剩一堆转义码。
+func gormLogger() logger.Interface {
+	return logger.New(log.New(os.Stderr, "", log.LstdFlags), logger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: false,
+		Colorful:                  false,
+	})
+}
 
 // Init 初始化数据库
 func Init() {
@@ -24,6 +41,7 @@ func Init() {
 		NamingStrategy: schema.NamingStrategy{
 			TablePrefix: config.GetConfig().DB.TablePrefix,
 		},
+		Logger: gormLogger(),
 	}
 	var err error
 

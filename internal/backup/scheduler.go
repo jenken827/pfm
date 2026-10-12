@@ -10,16 +10,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+	"github.com/robfig/cron/v3"
+	ignore "github.com/sabhiram/go-gitignore"
+	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/fileutil"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
-	"github.com/fsnotify/fsnotify"
-	"github.com/robfig/cron/v3"
-	ignore "github.com/sabhiram/go-gitignore"
-	"gorm.io/gorm"
 	"lukechampine.com/blake3"
 )
 
@@ -400,8 +400,8 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		OverwriteId:       utils.StringPtr(""), // 空字符串表示不覆盖
 		Status:            utils.EnumPtr(native.LocationStatus_PPENDING),
 		TaskStatus:        utils.EnumPtr(native.UploadStatus_PENDING),
-		TargetProviderIds: &targetProviderIds,                              // 目标目录绑定解析出的 provider
-		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP),     // 自动备份任务
+		TargetProviderIds: &targetProviderIds,                          // 目标目录绑定解析出的 provider
+		TaskType:          utils.EnumPtr(native.UploadTaskType_BACKUP), // 自动备份任务
 	}
 
 	if err := db.GetDB().Create(uploadRecord).Error; err != nil {

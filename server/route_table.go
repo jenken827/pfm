@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"google.golang.org/protobuf/types/known/emptypb"
 	"jenken827.com/jenken827/pfm/api"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // 本文件是 REST 路由表：显式维护「HTTP 方法 + 路径 → api 层方法」的映射。
@@ -71,6 +71,7 @@ func registerFileRoutes(mux *http.ServeMux) {
 	Register(mux, http.MethodPost, "/api/file/by-type", fileServer.GetFilesByType)
 	Register(mux, http.MethodPost, "/api/file/transfer-config", fileServer.GetTransferConfig)
 	Register(mux, http.MethodPost, "/api/file/photo-date-config", fileServer.GetPhotoDateConfig)
+	Register(mux, http.MethodPost, "/api/file/direct-link", fileServer.GetFileDirectLink)
 	// 相册备份目录辅助（原为手写裸 HTTP，已纳入统一分发器）
 	Register(mux, http.MethodPost, "/api/file/get-or-create-subfolder", fileServer.GetOrCreateSubfolder)
 	Register(mux, http.MethodPost, "/api/file/ensure-dir-path", fileServer.EnsureDirPath)

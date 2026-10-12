@@ -2,8 +2,10 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // ⚠️ 这里**故意不写** id("kotlin-android")：android.builtInKotlin=false 时
+    // Flutter Gradle 插件会自己给本项目应用 KGP，手写反而会触发 Flutter 的
+    // "applies the Kotlin Gradle Plugin" 警告（见 AGENTS.md §5）。
+    // The Flutter Gradle Plugin must be applied after the Android Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -24,13 +26,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     defaultConfig {
         applicationId = "com.shifangyuan.pfm"
-        minSdk = 24
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -63,6 +61,14 @@ dependencies {
     // 录音目录属 media_rw 组、本应用不在该组，路径与 MediaStore 都拿不到，
     // 必须经 SAF 授权的 content:// 逐文件读取
     implementation("androidx.documentfile:documentfile:1.0.1")
+}
+
+// jvmTarget 必须显式钉在 17，和上面的 compileOptions 对齐（否则 javac / kotlinc 目标不一致会报
+// "Inconsistent JVM Target Compatibility"）。AGP 9 已废 android {} 里的 kotlinOptions，改在最外层写。
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }
 
 flutter {

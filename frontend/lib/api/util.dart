@@ -20,7 +20,9 @@ T extractRespData<T extends GeneratedMessage>(
   T message,
 ) {
   final br = BaseResp();
-  getLogger().debug('extractRespData: $jsonData');
+  // 只记业务码与文案，**不记整个 jsonData**：响应体里可能有凭证
+  // （典型：/api/file/direct-link 的直链 URL），而 debug 级日志会写进本地日志文件。
+  getLogger().debug('extractRespData: code=${jsonData['code']}');
   br.mergeFromProto3Json(jsonData, typeRegistry: TypeRegistry([message]));
 
   if (br.code != RespCode.SUCCESS) {

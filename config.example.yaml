@@ -48,6 +48,8 @@ aria2:
 sign_token: replace-with-a-stable-secret
 auth:
   local:
+    # 必须改成稳定且足够随机的字符串（示例值不可用于生产）。
+    # 更换后此前签发的 JWT 全部失效，所有用户需重新登录。
     jwt_secret: "replace-with-a-stable-secret"
     token_ttl_hours: 720
 
@@ -74,3 +76,16 @@ photo_date:
   ts_min_year: 2000
   # 时间戳防误判：年份上界偏移（默认 1，即允许到当前年份+1）
   ts_max_year_offset: 1
+
+# 直链下载：让客户端绕开服务端中转，直接向存储提供者取字节（见 DESIGN.md §17）。
+# 只有「单分片 + 未加密 + 驱动实现直链」的文件才会下发直链，其余一律走代理下载，
+# 因此保持默认（开启）不会改变任何不满足条件文件的下载行为。
+transfer:
+  direct_link:
+    # 是否启用，默认 true；设为 false = 完全停用直链（所有下载都走服务端代理）
+    enabled: true
+    # 允许直链的存储提供者类型白名单（如 BAIDU_NETDISK / PAN123 / ALIYUNDRIVE_OPEN /
+    # YUN139 / CLOUD189_PC）；留空 = 所有实现了直链的驱动
+    providers: []
+    # 自动选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
+    prefer_directable_provider: false

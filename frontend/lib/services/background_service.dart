@@ -339,6 +339,8 @@ class BackgroundService {
         storage: _transferStorage,
         baseUrl: ls.downloadBaseUrl,
         token: ls.token!,
+        // 阶段 2：直链需要走 REST 接口取链，取不到会自动回退代理下载（行为不变）
+        repository: FmRepository(),
       );
     } catch (e, s) {
       _logger.error('Download failed: $taskId', e, s);

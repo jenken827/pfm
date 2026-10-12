@@ -6,10 +6,10 @@ import (
 	"path"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/config"
 )
 
 var logger *logrus.Logger

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"gorm.io/gorm"
+	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // GetUserByUsername 按用户名查询本地认证用户

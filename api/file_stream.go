@@ -82,9 +82,26 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	streamResponse(w, r, result, "inline")
 }
 
+// applyQueryToken 把 ?token=<JWT> 查询参数提升为 Authorization 头。
+//
+// 浏览器直接发起的请求（`<a href>` 下载、iframe / WebView 预览）无法自定义请求头，
+// 只能用查询参数传 token；仅当查询串带了非空 token 时才覆盖请求头。
+// 注意：token 出现在 URL 里会进浏览器历史与 Referer，只用于这些"无法带 header"的场景。
+func applyQueryToken(r *http.Request) {
+	if token := r.URL.Query().Get("token"); token != "" {
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
 // DownloadFileHandler 文件下载HTTP handler（强制下载，支持断点续传）
+//
+// 支持两种鉴权方式：Authorization 头，或 ?token=<JWT> 查询参数。
+// 后者是给浏览器直接下载用的：`<a href>` 无法带自定义请求头，而内嵌 Web UI
+// （server/webui.go）与 Flyfish Viewer 都是这么下载的。日志只记录 r.URL.Path，
+// 查询串里的 token 不会落盘（见 server/middleware/log.go）。
 func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. 验证认证
+	// 1. 验证认证（支持 header 和 query 参数）
+	applyQueryToken(r)
 	claims, err := middleware.AuthHTTPMiddleware(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -164,7 +181,8 @@ func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string, size 
 
 // streamFileHistory 流式传输文件历史版本
 func streamFileHistory(w http.ResponseWriter, r *http.Request, isPreview bool) {
-	// 1. 验证认证
+	// 1. 验证认证（支持 header 和 query 参数，后者供浏览器直接下载）
+	applyQueryToken(r)
 	claims, err := middleware.AuthHTTPMiddleware(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -389,11 +407,7 @@ func httpStatusFromError(err error) int {
 // 支持两种鉴权方式：Authorization header 或 token query 参数
 func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	// 1. 验证认证（支持 header 和 query 参数）
-	token := r.URL.Query().Get("token")
-	if token != "" {
-		// 通过 query 参数传 token（用于浏览器直接访问）
-		r.Header.Set("Authorization", "Bearer "+token)
-	}
+	applyQueryToken(r)
 	claims, err := middleware.AuthHTTPMiddleware(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)

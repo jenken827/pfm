@@ -20,6 +20,7 @@ import '../router/router.dart';
 import '../services/local_storage.dart';
 import '../services/background_service.dart';
 import '../services/logger.dart';
+import 'auth_interceptor.dart';
 import 'util.dart';
 
 /// API 响应结果
@@ -55,8 +56,25 @@ class FmRepository {
     return inst;
   }
 
-  /// 处理 Token 失效
+  /// 登录态失效处理中（防止并发请求各自清理一次、跳转多次）
+  bool _handlingTokenInvalid = false;
+
+  /// 并发请求几乎同时发现登录态失效时，这段时间窗内只处理第一次
+  static const Duration _tokenInvalidGuardWindow = Duration(seconds: 3);
+
+  /// 处理 Token 失效：清登录信息 → 停后台传输 → 回登录页。
+  ///
+  /// HTTP 401（拦截器识别）与业务码 `TOKEN_INVALID`（`TokenInvalidException`）
+  /// 最终都走这里，两条路径可能在同一批并发请求里同时命中。
   Future<void> _handleTokenInvalid() async {
+    if (_handlingTokenInvalid) return;
+    _handlingTokenInvalid = true;
+    unawaited(
+      Future<void>.delayed(
+        _tokenInvalidGuardWindow,
+        () => _handlingTokenInvalid = false,
+      ),
+    );
     _logger.error(
       'Token invalid, clearing login info and redirecting to login',
     );
@@ -89,32 +107,13 @@ class FmRepository {
       ),
     );
 
-    // 添加拦截器
-    final authInterceptor = InterceptorsWrapper(
-      onRequest: (options, handler) {
-        // 动态获取认证 Token，确保登录后能使用最新 token
-        final ls = GetIt.I.get<LocalStorage>();
-        final token = ls.token;
-        if (token?.accessToken != null) {
-          options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
-        }
-        _logger.debug('API Request: ${options.method} ${options.path}');
-        return handler.next(options);
-      },
-      onResponse: (response, handler) {
-        _logger.debug(
-          'API Response: ${response.statusCode} ${response.requestOptions.path}',
-        );
-        return handler.next(response);
-      },
-      onError: (error, handler) {
-        _logger.error(
-          'API Error: ${error.message} ${error.requestOptions.path}\n'
-          'Status: ${error.response?.statusCode}\n'
-          'Response: ${error.response?.data}',
-        );
-        return handler.next(error);
-      },
+    // 添加拦截器：401（token 过期 / 缺失，见 server/middleware_rest.go）与
+    // HTTP 200 的业务码 TOKEN_INVALID 统一收敛到 _handleTokenInvalid
+    final authInterceptor = buildAuthInterceptor(
+      tokenProvider: () => GetIt.I.get<LocalStorage>().token?.accessToken,
+      logDebug: (message) => _logger.debug(message),
+      logError: (message) => _logger.error(message),
+      onUnauthorized: () => unawaited(_handleTokenInvalid()),
     );
     _dio.interceptors.add(authInterceptor);
     _uploadDio.interceptors.add(authInterceptor);
@@ -155,7 +154,10 @@ class FmRepository {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final respData = extractRespData<PhotoDateConfig>(data, PhotoDateConfig());
+      final respData = extractRespData<PhotoDateConfig>(
+        data,
+        PhotoDateConfig(),
+      );
       // 缓存 JSON 字符串，相册备份无网络时仍可用最近一次的服务端规则
       final ls = GetIt.I.get<LocalStorage>();
       await ls.savePhotoDateConfigJson(respData);
@@ -238,26 +240,12 @@ class FmRepository {
       ),
     );
 
-    final authInterceptor = InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (token?.accessToken != null) {
-          options.headers['Authorization'] = 'Bearer ${token!.accessToken}';
-        }
-        _logger.debug('API Request: ${options.method} ${options.path}');
-        return handler.next(options);
-      },
-      onResponse: (response, handler) {
-        _logger.debug(
-          'API Response: ${response.statusCode} ${response.requestOptions.path}',
-        );
-        return handler.next(response);
-      },
-      onError: (error, handler) {
-        _logger.error(
-          'API Error: ${error.message} ${error.requestOptions.path}',
-        );
-        return handler.next(error);
-      },
+    // 后台 isolate 内没有 GetIt 与路由，无法清理登录态 / 跳转，
+    // 故不传 onUnauthorized，只把 401 作为错误交给调用方
+    final authInterceptor = buildAuthInterceptor(
+      tokenProvider: () => token?.accessToken,
+      logDebug: (message) => _logger.debug(message),
+      logError: (message) => _logger.error(message),
     );
     _dio.interceptors.add(authInterceptor);
     _uploadDio.interceptors.add(authInterceptor);
@@ -895,8 +883,7 @@ class FmRepository {
     String? newName,
   }) async {
     try {
-      final req = RestoreFileHistoryReq()
-        ..historyId = Int64(historyId);
+      final req = RestoreFileHistoryReq()..historyId = Int64(historyId);
       if (newName != null && newName.trim().isNotEmpty) {
         req.newName = newName.trim();
       }
@@ -935,8 +922,7 @@ class FmRepository {
     String? fileName,
   }) async {
     try {
-      final req = CreateOfflineDownloadReq()
-        ..url = url.trim();
+      final req = CreateOfflineDownloadReq()..url = url.trim();
       if (parentId != null && parentId.isNotEmpty) {
         req.parentId = parentId;
       }
@@ -1584,6 +1570,47 @@ class FmRepository {
     }
   }
 
+  /// 获取文件直链（阶段 2：客户端直连存储提供者）
+  ///
+  /// 成功时返回提供者签发的临时下载地址，以及**客户端必须原样携带**的请求头
+  /// （如百度要求 `User-Agent: pan.baidu.com`）；不满足直链条件（多分片 / 已加密 /
+  /// 驱动不支持 / 服务端未启用 / 白名单外）时返回 `success: false`，调用方应静默
+  /// 回退到代理下载（`fallback_url`）。
+  ///
+  /// ⚠ 直链是临时凭证：**不得写入任何日志、不得落库、不得上报**。
+  Future<ApiResult<DirectLinkFileRespData>> getFileDirectLink({
+    required String fileId,
+    int? providerId,
+  }) async {
+    try {
+      final req = DirectLinkFileReq(fileId: fileId);
+      if (providerId != null) {
+        req.providerId = providerId;
+      }
+
+      final response = await _dio.post(
+        '$_baseUrl/api/file/direct-link',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<DirectLinkFileRespData>(
+        data,
+        DirectLinkFileRespData(),
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('获取文件直链失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('获取文件直链失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
   /// 重试上传记录
   Future<ApiResult<void>> retryUploadRecord(int id) async {
     try {
@@ -2154,18 +2181,12 @@ class FmRepository {
     }
   }
 
-
-
-
   // ==================== UserSpace Service ====================
 
   /// 获取当前用户的空间信息
   Future<ApiResult<GetUserSpaceResp>> getUserSpace() async {
     try {
-      final response = await _dio.post(
-        '$_baseUrl/api/space/get',
-        data: {},
-      );
+      final response = await _dio.post('$_baseUrl/api/space/get', data: {});
 
       final data = response.data as Map<String, dynamic>;
       final respData = extractRespData<GetUserSpaceResp>(

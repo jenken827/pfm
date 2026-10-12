@@ -7,16 +7,16 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"github.com/google/uuid"
-	"github.com/spf13/cobra"
-	"golang.org/x/term"
-	"gorm.io/gorm"
 )
 
 // userCmd 本地认证用户管理（auth.mode=local 时使用）

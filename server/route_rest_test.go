@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
+	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // 测试注册表：直接注册假业务函数，不触碰 service/db 层。

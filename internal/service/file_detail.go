@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // GetFileDetail 获取文件详情
@@ -153,14 +153,43 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 	}
 
 	var result []*native.ProviderLocationInfo
+	// 实例名/类型批量取一次（避免逐 provider 查库）
+	//
+	// 注意不能用 st.GetName()：各驱动的 GetName() 返回的是**驱动类型名**
+	// （LocalDriver 返回 "LOCAL"、Telegram 返回 "TELEGRAM"…），同类型多实例
+	// 无法区分；实例名在 storage_providers.name。provider 行已被删除（位置行还在）
+	// 时回退到驱动类型名。
+	ids := make([]uint32, 0, len(groupMap))
+	for id := range groupMap {
+		ids = append(ids, id)
+	}
+	nameByID := make(map[uint32]string, len(ids))
+	typeByID := make(map[uint32]native.StorageProviderType, len(ids))
+	if providers, err := db.GetStorageProvidersByIDs(ids); err == nil {
+		for _, p := range providers {
+			if p == nil || p.Id == nil {
+				continue
+			}
+			if p.Name != nil && *p.Name != "" {
+				nameByID[*p.Id] = *p.Name
+			}
+			if p.ProviderType != nil {
+				typeByID[*p.Id] = native.StorageProviderType(*p.ProviderType)
+			}
+		}
+	}
+
 	for _, group := range groupMap {
-		// 获取提供者信息
 		st := storage.GetStorage(group.providerID)
-		providerName := ""
-		var providerType native.StorageProviderType
+		providerName := nameByID[group.providerID]
+		providerType, hasType := typeByID[group.providerID]
 		if st != nil {
-			providerName = st.GetName()
-			providerType = st.GetType()
+			if providerName == "" {
+				providerName = st.GetName()
+			}
+			if !hasType {
+				providerType = st.GetType()
+			}
 		}
 
 		isChunked := group.chunkTotal > 1

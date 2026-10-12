@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // ===== 测试基建（真实 SQLite，见 internal/dbtest）=====

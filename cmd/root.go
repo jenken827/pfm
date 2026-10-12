@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"jenken827.com/jenken827/pfm/globals"
 	"github.com/spf13/cobra"
+	"jenken827.com/jenken827/pfm/globals"
 )
 
 // rootCmd 根命令
@@ -23,6 +23,7 @@ var rootCmd = &cobra.Command{
   dedup-name        删除子树下同名 "(N)" 后缀重复文件（内容核验，EXIF 差异也能识别）
   cleanup-orphan-locations 回收无引用的孤儿 file_locations（调提供者删物理副本+删库行）
   cleanup-baidu-storage-orphans 扫描并回收百度网盘上无数据库记录的文件（逆向孤儿）
+  direct-link       取文件在存储提供者上的下载直链（打表/验证用，不经过服务端中转）
   decrypt           按 file_locations id 解密本地加密文件
   version           显示版本信息`,
 	// 无子命令时显示帮助

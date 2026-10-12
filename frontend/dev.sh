@@ -493,6 +493,11 @@ build_android_apk() {
     
     # 查找所有生成的APK文件（split-per-abi 会生成多个）
     local APK_DIR="build/app/outputs/flutter-apk"
+    # 交付包再拷一份到仓库根的 release/（交付命名与位置规则见全局 AGENTS.md）：
+    # build/ 下次构建就被覆盖、当不了"这一版"；release/ 已在 .gitignore 里，**不要** git add。
+    local REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local RELEASE_DIR="$REPO_ROOT/release"
+    mkdir -p "$RELEASE_DIR"
     local found=0
     
     for apk in "$APK_DIR"/app-*-release.apk; do
@@ -503,13 +508,14 @@ build_android_apk() {
         local basename=$(basename "$apk")
         local abi=$(echo "$basename" | sed -E 's/app-(.+)-release\.apk/\1/')
         
-        # 构建新文件名
+        # 构建新文件名：<项目名>_<版本号>_<构建日期YYYYMMDD>-<短commit>_<平台/ABI>.apk
         local new_name="${APP_NAME}_${VERSION}_${BUILD_NUMBER}_${abi}.apk"
         local new_path="$APK_DIR/$new_name"
         
         cp "$apk" "$new_path"
+        cp "$new_path" "$RELEASE_DIR/$new_name"
         
-        if [[ -f "$new_path" ]]; then
+        if [[ -f "$RELEASE_DIR/$new_name" ]]; then
             echo "✅ $new_name ($(du -h "$new_path" | cut -f1))"
         fi
     done
@@ -521,7 +527,8 @@ build_android_apk() {
         exit 1
     fi
     
-    echo "📁 文件位置: $APK_DIR"
+    echo "📁 构建产物: $APK_DIR"
+    echo "📦 交付包:   $RELEASE_DIR"
 }
 
 # 构建 Android App Bundle

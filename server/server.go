@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/cors"
+	"golang.org/x/net/http2"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/server/middleware"
-	"github.com/rs/cors"
-	"golang.org/x/net/http2"
 )
 
 // Run 启动服务

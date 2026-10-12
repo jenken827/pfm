@@ -24,6 +24,8 @@ func route(mux *http.ServeMux) {
 	fileViewerRoute(mux)
 	fileStreamRoute(mux)
 	publicDownloadRoute(mux)
+	// 极简 Web UI（登录 + 浏览 + 下载），注册为 "/" 兜底；更具体的路径优先
+	webUIRoute(mux)
 
 	// --- REST 业务路由（需鉴权）---
 	authMux := http.NewServeMux()
@@ -60,6 +62,9 @@ func fileStreamRoute(mux *http.ServeMux) {
 
 	// 文件下载（强制下载）
 	mux.HandleFunc("/api/file/stream/download", api.DownloadFileHandler)
+
+	// 直链下载：302 到提供者直链；不可直链时 302 回代理下载（给浏览器/第三方下载器用）
+	mux.HandleFunc("/api/file/stream/direct", api.DirectLinkRedirectHandler)
 
 	// 文件历史版本预览
 	mux.HandleFunc("/api/file/history/preview", api.PreviewFileHistoryHandler)

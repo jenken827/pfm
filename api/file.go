@@ -368,3 +368,12 @@ func (s *FileServer) EnsureDirPath(ctx context.Context, req *native.EnsureDirPat
 	}
 	return response.SuccessResp(resp)
 }
+
+// GetFileDirectLink 获取文件直链（满足条件时客户端可绕开服务端中转直连提供者）
+func (s *FileServer) GetFileDirectLink(ctx context.Context, req *native.DirectLinkFileReq) (*native.BaseResp, error) {
+	data, mErr := service.GetFileDirectLink(ctx, req)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}

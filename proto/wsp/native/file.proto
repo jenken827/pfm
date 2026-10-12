@@ -756,6 +756,40 @@ message PhotoDateConfig {
 // 获取照片日期解析配置请求
 message GetPhotoDateConfigReq {}
 
+// 获取文件直链请求
+//
+// 直链是存储提供者签发的、自带时效与鉴权的下载地址：满足条件（单分片、未加密、
+// 驱动支持直链）时客户端可绕开服务端中转直接下载。不满足条件时返回
+// RespCode.DIRECT_LINK_UNAVAILABLE，客户端应改用 fallback_url 走代理下载。
+message DirectLinkFileReq {
+  // 文件 ID
+  optional string file_id = 1 [(buf.validate.field).required = true];
+  // 指定存储提供者；不传则由服务端按现有优先级选源
+  optional uint32 provider_id = 2;
+}
+
+// 获取文件直链响应数据
+message DirectLinkFileRespData {
+  // 提供者直链（临时凭证：不要落库、不要写日志、不要上报）
+  optional string url = 1;
+  // 客户端必须原样携带的请求头（如 User-Agent）；空表示 URL 自包含鉴权
+  map<string, string> headers = 2;
+  // 链接过期时间（驱动声明；可能为空表示未知）
+  optional google.protobuf.Timestamp expires_at = 3;
+  // 实际选中的存储提供者
+  optional uint32 provider_id = 4;
+  // 存储提供者类型
+  optional StorageProviderType provider_type = 5;
+  // 逻辑文件名（客户端落盘用；直链本身给不出这个名字）
+  optional string file_name = 6;
+  // 文件大小（字节）
+  optional uint64 file_size = 7;
+  // 提供者是否按 Range 下发（驱动声明；客户端仍应实测）
+  optional bool supports_range = 8;
+  // 回退地址（相对路径，直链不可用时改走服务端中转）
+  optional string fallback_url = 9;
+}
+
 // 文件服务
 // 路由不再由 proto 注解声明，统一在 server/route_rest.go 中显式维护
 service FileService {
@@ -839,4 +873,7 @@ service FileService {
 
   // 获取照片日期解析配置（相册备份按年/月归档用）
   rpc GetPhotoDateConfig(GetPhotoDateConfigReq) returns (BaseResp);
+
+  // 获取文件直链（满足条件时客户端可绕开服务端中转直连提供者）
+  rpc GetFileDirectLink(DirectLinkFileReq) returns (BaseResp);
 }

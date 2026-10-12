@@ -5,9 +5,10 @@
 set -e
 
 # 读取 Telegram Bot Token
-ENV_FILE="<env 文件>"
+# 调用方提供 env 文件路径（内含 TELEGRAM_BOT_TOKEN=...）；不给默认值，避免把本机路径写进仓库
+ENV_FILE="${TELEGRAM_ENV_FILE:?请设置 TELEGRAM_ENV_FILE 指向含 TELEGRAM_BOT_TOKEN 的 env 文件}"
 if [ ! -f "$ENV_FILE" ]; then
-    echo "❌ 找不到 .env 文件: $ENV_FILE"
+    echo "❌ 找不到 env 文件: $ENV_FILE"
     exit 1
 fi
 
@@ -18,15 +19,16 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
-# 获取 chat_id
-CHAT_ID="${TELEGRAM_ALLOWED_USERS:-}"
+# 获取 chat_id（目标会话；由调用方通过环境变量给出，脚本不留默认值）
+CHAT_ID="${TELEGRAM_CHAT_ID:?请设置 TELEGRAM_CHAT_ID（数字型目标会话 ID）}"
 
 # 获取 APK 文件路径
 if [ -n "$1" ]; then
     APK_PATH="$1"
 else
-    # 自动查找最新的 arm64 APK
-    APK_PATH=$(ls -t <repo: pfm>/frontend/build/app/outputs/flutter-apk/*arm64*.apk 2>/dev/null | head -1)
+    # 自动查找本仓库最新的 arm64 APK
+    REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+    APK_PATH=$(ls -t "$REPO_DIR"/frontend/build/app/outputs/flutter-apk/*arm64*.apk 2>/dev/null | head -1)
 fi
 
 if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
@@ -40,8 +42,9 @@ FILESIZE=$(du -h "$APK_PATH" | cut -f1)
 
 echo "📦 发送 APK: $FILENAME ($FILESIZE)"
 
-# 使用本地 Bot API 服务器（无 50MB 限制）
-RESPONSE=$(curl -s -X POST "http://127.0.0.1:12311/bot${TOKEN}/sendDocument" \
+# Bot API 服务地址（默认官方 API；自建 local Bot API server 用 TELEGRAM_BOT_API 覆盖）
+BOT_API="${TELEGRAM_BOT_API:-https://api.telegram.org}"
+RESPONSE=$(curl -s -X POST "${BOT_API}/bot${TOKEN}/sendDocument" \
     -F "chat_id=${CHAT_ID}" \
     -F "document=@${APK_PATH}" \
     -F "caption=${FILENAME}")

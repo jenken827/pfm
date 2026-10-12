@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
 	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器（dedup-name 回收远程副本需要）
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
-	"github.com/spf13/cobra"
 )
 
 // dedupCmd 去重：子树下同 hash 文件保留名称最短的

@@ -5,12 +5,12 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/cobra"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
-	"github.com/spf13/cobra"
 )
 
 // decryptCmd 按 file_locations id 解密本地加密文件

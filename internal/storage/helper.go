@@ -168,19 +168,19 @@ func DownloadAndMergeFile(
 // 提供者选择相关方法
 // ========================================
 
-// SelectBestSourceProvider 选择最优的源提供者（按存储提供者Order排序）
-// 返回提供者ID和对应的分片Location列表
-func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*native.FileLocationORM, error) {
+// OrderedCompleteProviders 按 Order 升序（值越小优先级越高）返回"完整副本且存储实例可用"的提供者 ID
+//
+// 这是选源的**唯一排序口径**：SelectBestSourceProvider 与直链的"优先挑可直链提供者"
+// 都走这里，避免两处各写一份排序导致行为漂移。
+func OrderedCompleteProviders(locations []*native.FileLocationORM) ([]uint32, error) {
 	completeProviders, err := GetCompleteProviders(locations)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
-
 	if len(completeProviders) == 0 {
-		return 0, nil, fmt.Errorf("no complete provider found")
+		return nil, fmt.Errorf("no complete provider found")
 	}
 
-	// 按 Order 升序排序（Order 值越小优先级越高）
 	type providerOrder struct {
 		providerID uint32
 		order      uint32
@@ -191,23 +191,36 @@ func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*n
 		if st == nil {
 			continue
 		}
-		pcfg := st.GetProviderConfig()
 		order := uint32(0)
-		if pcfg != nil {
+		if pcfg := st.GetProviderConfig(); pcfg != nil {
 			order = pcfg.SortOrder
 		}
 		sorted = append(sorted, providerOrder{providerID: pid, order: order})
 	}
-
 	if len(sorted) == 0 {
-		return 0, nil, fmt.Errorf("no available provider")
+		return nil, fmt.Errorf("no available provider")
 	}
 
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].order < sorted[j].order
 	})
 
-	bestProviderID := sorted[0].providerID
+	ordered := make([]uint32, 0, len(sorted))
+	for _, item := range sorted {
+		ordered = append(ordered, item.providerID)
+	}
+	return ordered, nil
+}
+
+// SelectBestSourceProvider 选择最优的源提供者（按存储提供者Order排序）
+// 返回提供者ID和对应的分片Location列表
+func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*native.FileLocationORM, error) {
+	ordered, err := OrderedCompleteProviders(locations)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	bestProviderID := ordered[0]
 	providerLocations, err := GetCompleteProviderLocations(locations, bestProviderID)
 	if err != nil {
 		return 0, nil, err

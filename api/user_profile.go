@@ -8,13 +8,13 @@ import (
 	"os"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/middleware"
 	"jenken827.com/jenken827/pfm/server/response"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // maxAvatarUploadBytes 单个头像上传的请求体上限（含 multipart 开销）。

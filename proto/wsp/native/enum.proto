@@ -138,6 +138,8 @@ enum RespCode {
   DB_ERROR = 8;
   RATE_LIMIT_EXCEEDED = 9;
   PARTIAL_UPLOAD_ERROR = 10;
+  // 直链不可用（多分片 / 已加密 / 驱动不支持 / 提供者未启用），客户端应回退代理下载
+  DIRECT_LINK_UNAVAILABLE = 11;
 }
 
 // CacheStatus

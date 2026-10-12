@@ -75,6 +75,22 @@ type UploadConfig struct {
 type TransferConfig struct {
 	// 传输服务地址，为空时使用主服务地址
 	ServerURL string `json:"server_url" yaml:"server_url"`
+	// 直链下载配置（客户端绕开服务端中转，见 DESIGN.md §17）
+	DirectLink DirectLinkConfig `json:"direct_link" yaml:"direct_link"`
+}
+
+// DirectLinkConfig 直链下载配置
+//
+// 只有"单分片 + 未加密 + 驱动实现 DirectLinker"的文件才会下发直链，其余一律走代理；
+// 因此开启本项不会改变任何不满足条件文件的下载行为。
+type DirectLinkConfig struct {
+	// 是否启用，默认 true（nil = 启用）
+	Enabled *bool `json:"enabled" yaml:"enabled"`
+	// 允许直链的存储提供者类型白名单（如 pan123 / aliyundrive_open / baidu_netdisk）；
+	// 留空 = 所有实现直链的驱动
+	Providers []string `json:"providers" yaml:"providers"`
+	// 选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
+	PreferDirectableProvider bool `json:"prefer_directable_provider" yaml:"prefer_directable_provider"`
 }
 
 // Schema http server config

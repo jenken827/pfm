@@ -16,10 +16,12 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.0+20260626
+version: 1.1.0+20261007
 
 environment:
-  sdk: ^3.10.4
+  # 统一 Flutter SDK 版本：所有 Flutter 项目共用同一个 SDK（当前 Flutter 3.47.6 /
+  # Dart 3.13.5）。
+  sdk: ^3.13.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -53,7 +55,9 @@ dependencies:
   jwt_decoder: ^2.0.1
   path: ^1.9.1
   webview_flutter: ^4.13.1
-  protobuf: ^6.0.0
+  # 生成代码用 protobuf 6.1 的 $_createMessage（protoc_plugin 25.1.0），
+  # 配 6.0.x 会编译不过，所以下限锁 6.1.0（见 AGENTS.md §5）。
+  protobuf: ^6.1.0
   equatable: ^2.0.8
   fixnum: ^1.1.1
   flutter_background_service: ^5.0.0

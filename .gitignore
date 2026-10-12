@@ -11,3 +11,6 @@ apk
 
 # puro/flutter 构建会污染 lockfile, 移出版本控制
 frontend/pubspec.lock
+
+# 交付安装包（APK 等）：不进版本控制，也不许 git add
+/release/

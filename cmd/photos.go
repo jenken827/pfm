@@ -3,12 +3,12 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
-	"github.com/spf13/cobra"
 )
 
 // migratePhotosCmd 修复旧数据：把子树下媒体文件（图片+视频）按文件名日期移到 年/月 目录

@@ -5,10 +5,10 @@ import (
 
 	"os"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/models"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
+	"jenken827.com/jenken827/pfm/globals"
+	"jenken827.com/jenken827/pfm/internal/models"
 )
 
 var cfg *models.Config
@@ -44,7 +44,8 @@ func initViper() {
 }
 
 func checkConfigFile() {
-	fmt.Printf("config path: %s\n", globals.ConfigPath)
+	// 走 stderr：stdout 留给命令的真实输出（CLI 的 --json 被这行污染过）
+	fmt.Fprintf(os.Stderr, "config path: %s\n", globals.ConfigPath)
 	stat, err := os.Stat(globals.ConfigPath)
 	if err != nil {
 		panic(fmt.Errorf("parse config file: %v err: %v", globals.ConfigPath, err))

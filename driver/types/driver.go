@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"io"
+	"time"
 
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
@@ -61,4 +62,27 @@ type PreDownloader interface {
 	// refs: 该文件在当前存储提供者的所有分片引用
 	// 返回第一个错误，如果没有错误返回 nil
 	PreDownload(ctx context.Context, refs []FileRef) error
+}
+
+// DirectLink 存储提供者签发的下载直链（客户端可绕开服务端直连）
+//
+// URL 自带时效与鉴权，等价于一份临时凭证：不要落库、不要写进日志。
+type DirectLink struct {
+	URL string
+	// Headers 客户端必须原样携带的请求头（如百度/天翼要求的 User-Agent）；
+	// 为空表示 URL 自包含鉴权、任何客户端都能直接用。
+	Headers map[string]string
+	// ExpiresAt 链接过期时间；零值表示驱动无法给出（按"尽快使用"处理）
+	ExpiresAt time.Time
+	// SupportsRange 驱动声明的 Range 支持情况——仅供参考，真实能力由
+	// `pfm direct-link --probe` 实测为准（部分提供者会忽略 Range 返回 200 全量）。
+	SupportsRange bool
+}
+
+// DirectLinker 直链能力（可选实现）
+//
+// 只对**单个物理对象**成立：调用方必须先确认该 provider 上只有一条完整位置行，
+// 且内容未加密（密文需要服务端持密钥解密），多分片无法用一个 URL 表达拼接。
+type DirectLinker interface {
+	DirectLink(ctx context.Context, ref FileRef) (*DirectLink, error)
 }

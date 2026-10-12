@@ -83,6 +83,8 @@ message User {
   optional string email = 7 [(gorm.field).tag = {default: "''", size: 128}];
   // 是否为管理员（替代原 admin_users 表）
   optional bool is_admin = 8 [(gorm.field).tag = {not_null: true, default: "false"}];
-  // 头像 URL（相对路径，形如 /api/user/avatar/<userID>?v=<ts>；空串表示未设置）
+  // 头像 URL（相对路径，形如 /api/user/avatar/{userID}?v={ts}；空串表示未设置）
+  // 注意：注释里不要写尖括号，protoc-gen-dart 会原样搬进 ///
+  // 文档注释，触发 unintended_html_in_doc_comment 导致 flutter analyze 非零。
   optional string avatar = 9 [(gorm.field).tag = {default: "''", size: 255}];
 }

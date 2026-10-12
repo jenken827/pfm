@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	_ "jenken827.com/jenken827/pfm/driver"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"github.com/spf13/cobra"
 )
 
 // cleanupBaiduStorageOrphansCmd 扫描百度网盘上"实际存在但 file_locations 表里无对应记录"的文件

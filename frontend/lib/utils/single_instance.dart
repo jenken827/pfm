@@ -49,26 +49,43 @@ List<int> findProcessesNamed(String exeName) {
     }
     final result = Process.runSync('ps', ['-eo', 'pid=,comm=']);
     if (result.exitCode != 0) return const [];
-    final pids = <int>[];
-    final target = exeName.toLowerCase();
-    for (final line in const LineSplitter().convert(result.stdout.toString())) {
-      // 输出形如 "  1234 pfm"
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final split = trimmed.indexOf(RegExp(r'\s'));
-      if (split <= 0) continue;
-      final pid = int.tryParse(trimmed.substring(0, split));
-      if (pid == null) continue;
-      final name = trimmed.substring(split + 1).trim();
-      // comm 可能被截断到 15 字符，故取 basename 后再比。
-      final base = name.split('/').last.toLowerCase();
-      if (base == target || target.startsWith(base)) pids.add(pid);
-    }
-    return pids;
+    return parsePsOutput(result.stdout.toString(), exeName);
   } catch (_) {
     // tasklist / ps 不可用 → 放行启动。
     return const [];
   }
+}
+
+/// 从 `ps -eo pid=,comm=` 的输出里挑出与 [exeName] 同名的 PID。
+///
+/// 抽成纯函数是为了能用**构造的**进程表钉住匹配规则：真实进程表随环境变化，
+/// 而这里要防的是「空串前缀恒真」「短名误命中」这类规则性缺陷
+/// （见 BUGS.md「单实例检查误判已有实例在跑」）。
+List<int> parsePsOutput(String output, String exeName) {
+  final pids = <int>[];
+  final target = exeName.toLowerCase();
+  for (final line in const LineSplitter().convert(output)) {
+    // 输出形如 "  1234 pfm"
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final split = trimmed.indexOf(RegExp(r'\s'));
+    if (split <= 0) continue;
+    final pid = int.tryParse(trimmed.substring(0, split));
+    if (pid == null) continue;
+    final name = trimmed.substring(split + 1).trim();
+    // comm 可能被截断到 15 字符（Linux TASK_COMM_LEN - 1），故取 basename 后再比。
+    final base = name.split('/').last.toLowerCase();
+    // ⚠️ 必须先排掉空串：comm 里可能带 '/'（实测内核线程 `nvidia-modeset/`），
+    // split 后取到最后一段是空串，而 `target.startsWith('')` **恒为真**，
+    // 于是这些线程会被当成同名进程，单实例检查误判「已有实例在跑」而拒绝启动。
+    if (base.isEmpty) continue;
+    // 只有 base 长到可能被截断（≥15）时才按前缀匹配；否则像 comm="1" 这种短名字
+    // 会命中任何以它开头的目标（例如目标 `1panel`），同样是误判。
+    if (base == target || (base.length >= 15 && target.startsWith(base))) {
+      pids.add(pid);
+    }
+  }
+  return pids;
 }
 
 /// 解析 `tasklist /FO CSV /NH` 的一行，返回 (镜像名, PID)。
@@ -100,11 +117,17 @@ List<int> findProcessesNamed(String exeName) {
   return (name.toLowerCase(), pid);
 }
 
+/// 进程表查询函数；测试可注入假数据，避免依赖真实进程表。
+typedef ProcessLister = List<int> Function(String exeName);
+
 /// 是否已有另一个实例在运行。
 ///
 /// 返回 true 时调用方应记录日志并退出。计数里包含本进程自身，
 /// 所以阈值是 2。
-bool hasOtherInstanceRunning([String? exeName]) {
+///
+/// [lister] 仅供测试注入：`flutter test` 默认**并发**执行测试文件，进程表里会
+/// 同时存在多个 `flutter_tester`，因此测试无法用真实进程表断言「只有本进程」。
+bool hasOtherInstanceRunning([String? exeName, ProcessLister? lister]) {
   final name = exeName ?? currentExeName;
-  return findProcessesNamed(name).length >= 2;
+  return (lister ?? findProcessesNamed)(name).length >= 2;
 }

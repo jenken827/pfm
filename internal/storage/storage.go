@@ -3,11 +3,11 @@ package storage
 import (
 	"fmt"
 
+	"golang.org/x/sync/syncmap"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"golang.org/x/sync/syncmap"
 )
 
 // storages 存储实例映射
@@ -15,6 +15,21 @@ var storages syncmap.Map
 
 // Init 初始化存储
 func Init() {
+	InitProviders()
+
+	// 启动时恢复未完成的上传任务
+	go resumeDispatch()
+
+	// 启动 temp 文件定期清理
+	StartTempCleanup()
+}
+
+// InitProviders 只按数据库中启用的 provider 创建驱动实例，**不启动**任何后台任务
+// （不恢复未完成上传、不清理临时文件）。
+//
+// 供只读型 CLI 使用（如 direct-link 直链打表）：短生命周期进程不应该触发上传恢复
+// 这类会改状态的后台流程。服务端仍走 Init()。
+func InitProviders() {
 	sps, err := db.GetEnabledProviders()
 	if err != nil {
 		llog.L().Errorf("get enabled storage provider failed, err: %v", err)
@@ -29,12 +44,6 @@ func Init() {
 		}
 		llog.L().Infof("storage provider initialized, id: %d, name: %s", *sp.Id, *sp.Name)
 	}
-
-	// 启动时恢复未完成的上传任务
-	go resumeDispatch()
-
-	// 启动 temp 文件定期清理
-	StartTempCleanup()
 }
 
 // GetStorages 获取存储实例

@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'dart:math';
 
 import 'package:http/http.dart' as http;
+import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/utils.dart';
@@ -15,11 +16,13 @@ import 'package:pfm/utils/utils.dart';
 /// - 多线程并发下载（默认 3 线程，通过 HTTP Range 实现）
 /// - 小文件单线程直接下载
 /// - Telegram 大文件预下载（202 响应处理）
+/// - 直链下载（给了 [repository] 且服务端允许时绕过服务端中转，失败静默回退代理）
 Future<void> downloadFile({
   required String taskId,
   required TransferStorage storage,
   required String baseUrl,
   required AuthToken token,
+  FmRepository? repository,
 }) async {
   final l = getLogger();
 
@@ -31,6 +34,9 @@ Future<void> downloadFile({
   }
 
   http.Client? client;
+
+  // 直链模式下记住 URL：异常文本里可能带 uri，落日志 / 落库前要抹掉（见 redactDirectLink）
+  String? directLinkUrl;
 
   try {
     // 构建下载 URL
@@ -55,21 +61,42 @@ Future<void> downloadFile({
     // 创建 HTTP 客户端
     client = http.Client();
 
-    // 预下载检查：Telegram 大文件场景下，后端可能返回 202 等待缓存
-    final preCheck = await _checkPreDownload(
+    // 阶段 2：先尝试直链（服务端只在「单分片 + 未加密 + 驱动支持 + 已启用」时发链）。
+    // 任何环节不满足都返回 null，下面完全按原有代理流程走。
+    var useDirectLink = false;
+    String effectiveUrl = downloadUrl;
+    Map<String, String> effectiveHeaders = headers;
+
+    final direct = await _resolveDirectLink(
+      repository: repository,
+      task: task,
       client: client,
-      downloadUrl: downloadUrl,
-      headers: headers,
     );
-    if (preCheck != null) {
-      l.info('Pre-download detected: ${preCheck.message}, task: ${task.id}');
-      await storage.updateDownloadTask(
-        task.id,
-        status: DownloadStatus.predownload,
-        errorMessage: preCheck.message,
-        providerId: preCheck.providerId,
+    if (direct != null) {
+      useDirectLink = true;
+      effectiveUrl = direct.url;
+      effectiveHeaders = direct.headers;
+      directLinkUrl = direct.url;
+    }
+
+    // 预下载检查：Telegram 大文件场景下，后端可能返回 202 等待缓存
+    // （202 是 pfm 代理侧的概念，走直链时不存在，必须跳过）
+    if (!useDirectLink) {
+      final preCheck = await _checkPreDownload(
+        client: client,
+        downloadUrl: downloadUrl,
+        headers: headers,
       );
-      return;
+      if (preCheck != null) {
+        l.info('Pre-download detected: ${preCheck.message}, task: ${task.id}');
+        await storage.updateDownloadTask(
+          task.id,
+          status: DownloadStatus.predownload,
+          errorMessage: preCheck.message,
+          providerId: preCheck.providerId,
+        );
+        return;
+      }
     }
 
     // 更新状态为下载中
@@ -86,8 +113,8 @@ Future<void> downloadFile({
       await _downloadSingleThread(
         task: task,
         storage: storage,
-        downloadUrl: downloadUrl,
-        headers: headers,
+        downloadUrl: effectiveUrl,
+        headers: effectiveHeaders,
         client: client,
       );
     } else {
@@ -95,25 +122,170 @@ Future<void> downloadFile({
       await _downloadMultiThread(
         task: task,
         storage: storage,
-        downloadUrl: downloadUrl,
-        headers: headers,
+        downloadUrl: effectiveUrl,
+        headers: effectiveHeaders,
         client: client,
+        // 分片失败只记日志：直链模式下同样要抹掉凭证
+        redactUrl: directLinkUrl,
+        // 直链模式：分片必须真按 Range 下发，否则整份 body 会被写到分片 offset（静默损坏）
+        requireRange: useDirectLink,
       );
     }
 
     l.info('Download completed for task: ${task.id}');
   } catch (e) {
-    l.error('Download failed: $e');
+    // 失败信息要落库（并对用户可见），直链模式下必须先把凭证从异常文本里抹掉
+    final message = redactDirectLink(e.toString(), directLinkUrl);
+    l.error('Download failed: $message');
     final tt = await storage.getDownloadTaskAsync(taskId);
     if (tt != null) {
       await storage.updateDownloadTask(
         taskId,
         status: DownloadStatus.failed,
-        errorMessage: e.toString(),
+        errorMessage: message,
       );
     }
   } finally {
     client?.close();
+  }
+}
+
+/// 把异常文本里的直链抹掉
+///
+/// `package:http` 的 `ClientException.toString()` 会拼出 `uri=<请求地址>`：直链模式下
+/// 一次连接中断就足以把整条临时凭证带进日志与下载记录的 errorMessage（后者还会上屏）。
+/// 代理路径（[directUrl] 为 null）原样返回，行为不变。
+String redactDirectLink(String text, String? directUrl) {
+  if (directUrl == null || directUrl.isEmpty) {
+    return text;
+  }
+  return text.replaceAll(directUrl, '<direct-link>');
+}
+
+/// 直链探测超时：提供者侧卡住必须快速回退，不能拖住整个下载任务
+const Duration directLinkProbeTimeout = Duration(seconds: 10);
+
+/// 是否尝试直链
+///
+/// [hasRepository] 为 false（调用方没传 repository，例如历史遗留调用）或历史版本下载
+/// （`fileId` 以 `history:` 开头，没有存储提供者位置信息）时，必须完全走原有代理路径。
+bool shouldTryDirectLink({
+  required String fileId,
+  required bool hasRepository,
+}) => hasRepository && !fileId.startsWith('history:');
+
+/// 直链探测是否通过
+///
+/// 只有 206 才证明提供者真的认 `Range`：直链后续要做多线程分片与断点续传。
+/// 200（忽略 Range，只能整文件重下）/ 403 / 404 / 410（签名过期或 IP 不符）等一律回退。
+bool isDirectLinkProbeUsable(int statusCode) => statusCode == 206;
+
+/// 直链探测结论
+///
+/// [reason] 只含状态码或异常类型，**绝不含 URL 与请求头**：直链是临时凭证，
+/// 不能进日志（与 `getFileDirectLink` 的约定一致）。
+class DirectLinkProbeResult {
+  final bool usable;
+  final int? statusCode;
+  final String reason;
+
+  const DirectLinkProbeResult({
+    required this.usable,
+    required this.reason,
+    this.statusCode,
+  });
+}
+
+/// 探测通过、可直接给下载线程使用的直链
+class _DirectLinkTarget {
+  final String url;
+  final Map<String, String> headers;
+
+  const _DirectLinkTarget({required this.url, required this.headers});
+}
+
+/// 用 `Range: bytes=0-0` 探测直链是否可用
+///
+/// 只带服务端声明的请求头（**不带 pfm 的 Authorization**：那是给中转服务端的，
+/// 带上反而可能让提供者鉴权失败）。
+///
+/// 拿到响应后**立刻取消 body 订阅**：提供者忽略 Range 返回 200 时若继续读，
+/// 等于把整份文件又下载一遍（直链大文件尤其致命）。
+Future<DirectLinkProbeResult> probeDirectLink({
+  required http.Client client,
+  required String url,
+  required Map<String, String> headers,
+  Duration timeout = directLinkProbeTimeout,
+}) async {
+  final request = http.Request('GET', Uri.parse(url));
+  request.headers.addAll({...headers, 'Range': 'bytes=0-0'});
+
+  try {
+    final response = await client.send(request).timeout(timeout);
+    final statusCode = response.statusCode;
+    // 不消费 body，直接掐断连接
+    await response.stream.listen((_) {}).cancel();
+
+    final usable = isDirectLinkProbeUsable(statusCode);
+    return DirectLinkProbeResult(
+      usable: usable,
+      statusCode: statusCode,
+      reason: 'HTTP $statusCode',
+    );
+  } catch (e) {
+    // 异常文本可能带 URL（package:http 的 ClientException.toString 会拼 uri=），
+    // 因此只记异常类型，不记内容
+    return DirectLinkProbeResult(
+      usable: false,
+      reason: 'probe ${e.runtimeType}',
+    );
+  }
+}
+
+/// 取回**探测通过**的直链；任何一步不满足都返回 null，调用方静默回退代理
+///
+/// 直链只是加速手段：这里不允许向调用方抛异常，不能让下载因为"优化"而失败。
+Future<_DirectLinkTarget?> _resolveDirectLink({
+  required FmRepository? repository,
+  required DownloadTaskRecord task,
+  required http.Client client,
+}) async {
+  final l = getLogger();
+  final repo = repository;
+  if (!shouldTryDirectLink(fileId: task.fileId, hasRepository: repo != null)) {
+    return null;
+  }
+
+  try {
+    final resp = await repo!.getFileDirectLink(
+      fileId: task.fileId,
+      providerId: task.providerId,
+    );
+    final data = resp.data;
+    if (!resp.success || data == null || data.url.isEmpty) {
+      l.info('直链不可用，回退代理: task=${task.id}');
+      return null;
+    }
+
+    final headers = Map<String, String>.from(data.headers);
+    final probe = await probeDirectLink(
+      client: client,
+      url: data.url,
+      headers: headers,
+    );
+    if (!probe.usable) {
+      l.info('直链不可用，回退代理: task=${task.id} (探测 ${probe.reason})');
+      return null;
+    }
+
+    l.info(
+      '直链可用: task=${task.id}, provider=${data.providerId}, '
+      'headers=${headers.length}',
+    );
+    return _DirectLinkTarget(url: data.url, headers: headers);
+  } catch (e) {
+    l.info('直链不可用，回退代理: task=${task.id} (${e.runtimeType})');
+    return null;
   }
 }
 
@@ -264,6 +436,8 @@ Future<void> _downloadMultiThread({
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
+  String? redactUrl,
+  bool requireRange = false,
 }) async {
   final file = io.File(task.savePath);
   if (!await file.exists()) {
@@ -325,6 +499,8 @@ Future<void> _downloadMultiThread({
           downloadUrl: downloadUrl,
           headers: headers,
           client: client,
+          redactUrl: redactUrl,
+          requireRange: requireRange,
           raf: raf,
           writeLock: writeLock,
           onProgress: (bytes) async {
@@ -395,6 +571,8 @@ Future<void> _downloadWorker({
   required String downloadUrl,
   required Map<String, String> headers,
   required http.Client client,
+  String? redactUrl,
+  bool requireRange = false,
   required io.RandomAccessFile raf,
   required _Lock writeLock,
   required Future<void> Function(int bytes) onProgress,
@@ -430,7 +608,13 @@ Future<void> _downloadWorker({
         headers: rangeHeaders,
       );
 
-      if (response.statusCode != 200 && response.statusCode != 206) {
+      if (requireRange) {
+        // 直链模式：探测只证明了 `bytes=0-0` 会返回 206，提供者仍可能对中间分片忽略 Range。
+        // 此时 200 带回的是**整份文件**，写到 offset 处会静默损坏文件 —— 宁可让该分片失败。
+        if (response.statusCode != 206) {
+          throw Exception('直链分片未按 Range 下发: HTTP ${response.statusCode}');
+        }
+      } else if (response.statusCode != 200 && response.statusCode != 206) {
         l.error('Worker $workerIndex: HTTP ${response.statusCode}');
         throw Exception('HTTP ${response.statusCode}');
       }
@@ -444,7 +628,10 @@ Future<void> _downloadWorker({
       });
       await onProgress(bodyBytes.length);
     } catch (e) {
-      l.error('Worker $workerIndex download error: $e');
+      l.error(
+        'Worker $workerIndex download error: '
+        '${redactDirectLink(e.toString(), redactUrl)}',
+      );
       // 本次分片失败，继续下一个
     }
 

@@ -20,7 +20,7 @@ show_help() {
 命令:
   build          编译 Go 服务器（自动注入版本号）
   run            编译并运行服务器
-  deploy         部署到 <服务目录: pfm>（编译 → mv 原子覆盖 → supervisorctl 重启 → 健康检查）
+  deploy         发布到目标目录（编译 + 调用 scripts/deploy.sh；需 PFM_* 环境变量）
   proto          生成 protobuf 代码（Go + Dart）
   proto-go       仅生成 Go protobuf 代码
   proto-dart     仅生成 Dart protobuf 代码
@@ -52,7 +52,7 @@ show_help() {
   $0 build -o /usr/local/bin/pfm  # 编译到指定路径
   $0 build --skip-tests           # 跳过测试缓存
   $0 run                          # 编译并运行
-  $0 deploy                       # 部署到 <服务目录: pfm>（唯一正确的部署方式）
+  $0 deploy                       # 发布到目标目录（需 PFM_* 环境变量，见 README §3）
   $0 dev                          # 开发模式运行（不编译）
   $0 proto                        # 生成所有 protobuf 代码
   $0 proto-go                     # 仅生成 Go protobuf 代码
@@ -186,15 +186,13 @@ cmd_run() {
     "$OUTPUT" server -d ./data
 }
 
-# 部署到 <服务目录: pfm>（编译 → mv 原子覆盖 → supervisorctl 重启 → 健康检查）
+# 发布：编译后调用 scripts/deploy.sh，把产物发布到目标目录并重启服务
 #
-# 只做"编译 + 部署"，不含 git 提交/推送；需要提交并推送时用 <服务目录: pfm>/deploy.sh。
-# 覆盖与重启的实际逻辑在 scripts/deploy.sh，两个禁止事项见该文件头部注释：
-#   1. 禁止用 cp 覆盖运行中的二进制（ETXTBSY / "Text file busy"），必须用 mv；
-#   2. 禁止 pkill/kill + nohup —— pfm 由 supervisord 托管（autorestart=true），
-#      必须用 supervisorctl restart pfm；且 `pfm -d data` 缺少 server 子命令。
+# 只做"编译 + 发布"，不含 git 提交/推送。
+# 目标目录 / 重启命令 / 健康检查地址由 PFM_* 环境变量传入（见 README §3 与 scripts/deploy.sh）。
+# **可选**：不用这个脚本、自己写一套发布流程也完全可以。
 cmd_deploy() {
-    echo "🚀 部署 PFM 到 <服务目录: pfm...>"
+    echo "🚀 发布 PFM..."
     cmd_build
     echo ""
     bash "$SCRIPT_DIR/scripts/deploy.sh"
