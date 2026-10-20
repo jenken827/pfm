@@ -110,17 +110,8 @@ Future<void> main() async {
       if (ls.isLoggedIn) {
         approuter.go(HomeRoute().location);
 
-        // 延迟触发相册自动备份（不阻塞启动）
-        if (Platform.isAndroid || Platform.isIOS) {
-          Future.delayed(const Duration(seconds: 3), () async {
-            try {
-              final albumBackup = await AlbumBackupService.instance();
-              await albumBackup.autoTrigger();
-            } catch (e) {
-              getLogger().warning('Album auto-trigger failed: $e');
-            }
-          });
-        }
+        // 延迟触发相册自动备份（不阻塞启动；仅移动端，内部自行判定）
+        Future.delayed(const Duration(seconds: 3), triggerAlbumAutoBackup);
       } else {
         approuter.go(LoginRoute().location);
       }

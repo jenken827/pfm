@@ -59,72 +59,103 @@ func (h *httpCaller) Close() (err error) {
 	return
 }
 
-func (h *httpCaller) setNotifier(ctx context.Context, u url.URL, notifier Notifier) (err error) {
+// setNotifier 建立 websocket 连接接收 aria2 通知，断线后自动重连。
+//
+// 不重连的后果：aria2 重启（或连接抖动）后通知通道永久失效，
+// 所有下载都会停在 PENDING、既不入库也不能重试，且只有 pfm 重启才能恢复。
+func (h *httpCaller) setNotifier(ctx context.Context, u url.URL, notifier Notifier) {
 	u.Scheme = "ws"
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return
-	}
 	h.wg.Add(1)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[ARIA2 PANIC] close conn: %v", r)
+				log.Printf("[ARIA2 PANIC] notifier loop: %v", r)
 			}
 		}()
 		defer h.wg.Done()
-		defer conn.Close()
-		<-ctx.Done()
-		conn.SetWriteDeadline(time.Now().Add(time.Second))
-		if err := conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-			log.Printf("sending websocket close message: %v", err)
-		}
-	}()
-	h.wg.Add(1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[ARIA2 PANIC] read message: %v", r)
-			}
-		}()
-		defer h.wg.Done()
-		var request websocketResponse
-		var err error
+
+		backoff := time.Second
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			if err = conn.ReadJSON(&request); err != nil {
-				select {
-				case <-ctx.Done():
+			if err := h.runNotifierOnce(ctx, u, notifier); err != nil {
+				if ctx.Err() != nil {
 					return
-				default:
 				}
-				log.Printf("conn.ReadJSON|err:%v", err.Error())
-				return
+				log.Printf("[ARIA2] notifier disconnected: %v, retry in %s", err, backoff)
 			}
-			switch request.Method {
-			case "aria2.onDownloadStart":
-				notifier.OnDownloadStart(request.Params)
-			case "aria2.onDownloadPause":
-				notifier.OnDownloadPause(request.Params)
-			case "aria2.onDownloadStop":
-				notifier.OnDownloadStop(request.Params)
-			case "aria2.onDownloadComplete":
-				notifier.OnDownloadComplete(request.Params)
-			case "aria2.onDownloadError":
-				notifier.OnDownloadError(request.Params)
-			case "aria2.onBtDownloadComplete":
-				notifier.OnBtDownloadComplete(request.Params)
-			default:
-				log.Printf("unexpected notification: %s", request.Method)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			// 指数退避，封顶 30s；连上又断说明服务在重启，退避能避免刷屏
+			if backoff < 30*time.Second {
+				backoff *= 2
 			}
 		}
 	}()
-	return
+}
+
+// runNotifierOnce 连接一次并读取通知，直到连接出错或 ctx 结束
+func (h *httpCaller) runNotifierOnce(ctx context.Context, u url.URL, notifier Notifier) error {
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[ARIA2 PANIC] read message: %v", r)
+		}
+	}()
+	defer conn.Close()
+
+	// ctx 结束时主动发关闭帧，并解除阻塞中的 ReadJSON
+	stopped := make(chan struct{})
+	defer close(stopped)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
+			if err := conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+				log.Printf("sending websocket close message: %v", err)
+			}
+			_ = conn.Close()
+		case <-stopped:
+		}
+	}()
+
+	for {
+		var request websocketResponse
+		if err := conn.ReadJSON(&request); err != nil {
+			return err
+		}
+		dispatchNotification(notifier, request)
+	}
+}
+
+// dispatchNotification 把 aria2 通知分发给 notifier
+func dispatchNotification(notifier Notifier, request websocketResponse) {
+	switch request.Method {
+	case "aria2.onDownloadStart":
+		notifier.OnDownloadStart(request.Params)
+	case "aria2.onDownloadPause":
+		notifier.OnDownloadPause(request.Params)
+	case "aria2.onDownloadStop":
+		notifier.OnDownloadStop(request.Params)
+	case "aria2.onDownloadComplete":
+		notifier.OnDownloadComplete(request.Params)
+	case "aria2.onDownloadError":
+		notifier.OnDownloadError(request.Params)
+	case "aria2.onBtDownloadComplete":
+		notifier.OnBtDownloadComplete(request.Params)
+	default:
+		log.Printf("unexpected notification: %s", request.Method)
+	}
 }
 
 func (h *httpCaller) Call(method string, params, reply any) (err error) {

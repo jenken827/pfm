@@ -462,7 +462,9 @@ class _HomeIndexPageState extends State<HomeIndexPage> {
     Map<String, dynamic> file,
     int fileType,
   ) async {
-    final fileJson = file['fileJson'] as Map<String, dynamic>?;
+    // Hive 解码后嵌套 map 是 Map<dynamic, dynamic>，硬 cast 会抛 TypeError
+    // （表现为「点了没反应」），统一走 asStringMap 归一化
+    final fileJson = asStringMap(file['fileJson']);
     if (fileJson != null) {
       try {
         final protoFile = File()..mergeFromProto3Json(fileJson);

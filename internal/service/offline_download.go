@@ -32,13 +32,25 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 		return nil, &models.Err{E: fmt.Errorf("下载 URL 不能为空"), C: native.RespCode_PARAMS_ERROR}
 	}
 	rawURL := strings.TrimSpace(*req.Url)
-	parsed, err := url.Parse(rawURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https" &&
-		parsed.Scheme != "ftp" && parsed.Scheme != "magnet" && parsed.Scheme != "ed2k") {
+	// ed2k 链接含 "|"（url.Parse 直接失败），且 aria2 本身不支持 eD2k：
+	// 单独给出明确提示，避免落到"不支持的 URL 协议"这种自相矛盾的报错
+	if strings.HasPrefix(strings.ToLower(rawURL), "ed2k:") {
 		return nil, &models.Err{
-			E: fmt.Errorf("不支持的 URL 协议（支持 http/https/ftp/magnet/ed2k）"),
+			E: fmt.Errorf("aria2 不支持 ed2k 协议，请改用 http/https/ftp/magnet 链接"),
 			C: native.RespCode_PARAMS_ERROR,
 		}
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https" &&
+		parsed.Scheme != "ftp" && parsed.Scheme != "magnet") {
+		return nil, &models.Err{
+			E: fmt.Errorf("不支持的 URL 协议（支持 http/https/ftp/magnet）"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
+	// SSRF 防护：拒绝内网 / 回环 / 链路本地 / 云元数据地址（可用 download.allow_private_host 放行）
+	if guardErr := validateOfflineDownloadURL(parsed); guardErr != nil {
+		return nil, &models.Err{E: guardErr, C: native.RespCode_PARAMS_ERROR}
 	}
 
 	userID := getCurrentUserIDFromCtx(ctx)
@@ -202,6 +214,12 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 		return nil, &models.Err{
 			E: fmt.Errorf("离线下载服务不可用或缺少 URL"),
 			C: native.RespCode_INTERNAL_ERROR,
+		}
+	}
+	// 重试也要过一遍校验：历史记录可能是在放开限制时创建的
+	if parsedURL, pErr := url.Parse(*dr.Url); pErr == nil {
+		if guardErr := validateOfflineDownloadURL(parsedURL); guardErr != nil {
+			return nil, &models.Err{E: guardErr, C: native.RespCode_PARAMS_ERROR}
 		}
 	}
 

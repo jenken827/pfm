@@ -8,7 +8,8 @@ import (
 
 func TestHTTPAll(t *testing.T) {
 	const targetURL = "https://nodejs.org/dist/index.json"
-	rpc, err := New(context.Background(), "http://localhost:6800/jsonrpc", "", time.Second, &DummyNotifier{})
+	endpoint, token := localAria2(t)
+	rpc, err := New(context.Background(), endpoint, token, time.Second, &DummyNotifier{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,8 @@ func TestHTTPAll(t *testing.T) {
 
 func TestWebsocketAll(t *testing.T) {
 	const targetURL = "https://nodejs.org/dist/index.json"
-	rpc, err := New(context.Background(), "ws://localhost:6800/jsonrpc", "", time.Second, &DummyNotifier{})
+	endpoint := localAria2Websocket(t)
+	rpc, err := New(context.Background(), endpoint, "", time.Second, &DummyNotifier{})
 	if err != nil {
 		t.Fatal(err)
 	}

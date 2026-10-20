@@ -103,6 +103,21 @@ class AlbumBackupResult {
   });
 }
 
+/// 判定「自动触发」是否具备条件：返回 null 表示可以触发，否则返回跳过原因。
+///
+/// 注意：[AlbumBackupConfig.backupAlbumIds] 为空**不是**「未配置」——设置页把
+/// 「全选相册」归一化为空列表，`_getPhotosToBackup` 也把空列表当作「备份全部相册」。
+/// 因此空列表必须允许自动触发（判据只认 enabled 与目标文件夹）。
+String? autoBackupSkipReason(
+  AlbumBackupConfig config, {
+  required bool isBackingUp,
+}) {
+  if (isBackingUp) return '备份正在进行中';
+  if (!config.enabled) return '自动备份未启用';
+  if (config.targetParentId.isEmpty) return '未选择目标文件夹';
+  return null;
+}
+
 /// 相册自动备份服务
 ///
 /// 功能：
@@ -198,9 +213,16 @@ class AlbumBackupService {
   AlbumBackupResult get result => _result;
 
   /// 检查并请求相册权限
-  Future<bool> requestPermission() async {
-    final permission = await PhotoManager.requestPermissionExtend();
-    if (permission.isAuth) {
+  ///
+  /// [silent] 为 true 时只查询当前授权状态，**不弹**系统授权框（自动触发用，
+  /// 避免冷启动就弹窗）；iOS「有限访问」也算有权限（能读到用户选中的资产）。
+  Future<bool> requestPermission({bool silent = false}) async {
+    final permission = silent
+        ? await PhotoManager.getPermissionState(
+            requestOption: const PermissionRequestOption(),
+          )
+        : await PhotoManager.requestPermissionExtend();
+    if (permission.hasAccess) {
       return true;
     }
 
@@ -248,13 +270,30 @@ class AlbumBackupService {
     return true;
   }
 
-  /// 自动触发备份（app 启动、回到前台时调用）
-  /// 检查配置条件后自动执行，不重复触发
+  /// 自动触发备份（app 启动、登录成功、回到前台时调用）
+  /// 检查配置条件后自动执行，不重复触发；**不弹**系统权限框
   Future<void> autoTrigger() async {
-    if (_isBackingUp) return;
-    if (!_config.enabled) return;
-    if (_config.targetParentId.isEmpty) return;
-    if (_config.backupAlbumIds.isEmpty) return;
+    final skipReason = autoBackupSkipReason(_config, isBackingUp: _isBackingUp);
+    if (skipReason != null) {
+      _logger.info('Album auto-trigger skipped: $skipReason');
+      // 已开启自动备份却因配置缺失跑不起来：把原因显示到设置页状态卡，
+      // 而不是静默什么都不做（否则表现为「开了自动备份但从不自动备份」）
+      if (_config.enabled && !_isBackingUp) {
+        _updateStatus(
+          status: AlbumBackupStatus.error,
+          errorMessage: skipReason,
+        );
+      }
+      return;
+    }
+
+    // 已经在 startBackup 里请求过一次权限，这里只做静默确认：
+    // 未授权则明确置状态，不打扰用户（设置页加载相册时已请求过权限）
+    final allowed = await requestPermission(silent: true);
+    if (!allowed) {
+      _logger.info('Album auto-trigger skipped: 相册权限未授予');
+      return;
+    }
 
     _logger.info('Album backup auto-triggered');
     await startBackup();
@@ -574,9 +613,19 @@ class AlbumBackupService {
     }
 
     final backedUpAssetIds = await _storage.getCompletedAlbumBackupAssetIds();
+    // 仍在队列里（上次会话没传完）的照片不再重复建任务：BackgroundService
+    // 启动时会把 PENDING 任务接着传完，重复建任务只会让同一张照片上传多次
+    final queuedAssetIds = await _storage.getQueuedAlbumBackupAssetIds();
+    if (queuedAssetIds.isNotEmpty) {
+      _logger.info('跳过 ${queuedAssetIds.length} 个仍在队列中的相册备份任务');
+    }
 
     final photosToBackup = allPhotos
-        .where((photo) => !backedUpAssetIds.contains(photo.id))
+        .where(
+          (photo) =>
+              !backedUpAssetIds.contains(photo.id) &&
+              !queuedAssetIds.contains(photo.id),
+        )
         .toList();
 
     return photosToBackup;
@@ -607,5 +656,22 @@ class AlbumBackupService {
   /// 清理资源
   void dispose() {
     _statusController.close();
+  }
+}
+
+/// 相册自动备份的统一触发入口：App 启动（登录后）、登录成功、回到前台。
+///
+/// 只在 Android / iOS 生效（桌面端没有相册备份页）；已经授权检测做到静默，
+/// 任何异常只写日志，绝不打断调用方流程。
+Future<void> triggerAlbumAutoBackup({Duration delay = Duration.zero}) async {
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+  if (delay > Duration.zero) {
+    await Future.delayed(delay);
+  }
+  try {
+    final albumBackup = await AlbumBackupService.instance();
+    await albumBackup.autoTrigger();
+  } catch (e) {
+    getLogger().warning('Album auto-trigger failed: $e');
   }
 }

@@ -2,6 +2,9 @@ package db
 
 import (
 	"context"
+	"errors"
+
+	"gorm.io/gorm"
 
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -23,6 +26,23 @@ func GetDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
 	var dr native.DownloadRecordORM
 	if err := GetDB().WithContext(ctx).Where("gid = ?", gid).First(&dr).Error; err != nil {
 		llog.L().Errorf("get download record by gid failed, gid: %s, err: %v", gid, err)
+		return nil, err
+	}
+	return &dr, nil
+}
+
+// FindDownloadRecordByGid 按 gid 查记录；查不到返回 (nil, nil) 且不打错误日志
+//
+// 仅供「顺手置状态」这类可忽略场景使用（如 aria2 通知了非 pfm 发起的任务）；
+// 正常业务流程仍用 GetDownloadRecordByGid（查不到要当异常处理）。
+func FindDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
+	ctx := context.Background()
+	var dr native.DownloadRecordORM
+	if err := GetDB().WithContext(ctx).Where("gid = ?", gid).First(&dr).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		llog.L().Errorf("find download record by gid failed, gid: %s, err: %v", gid, err)
 		return nil, err
 	}
 	return &dr, nil
@@ -66,6 +86,23 @@ func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*native.D
 		return nil, 0, err
 	}
 	return drs, total, nil
+}
+
+// ListUnfinishedDownloadRecords 列出未终态的下载记录（PENDING / DOWNLOADING）
+//
+// 用于启动时与 aria2 真实状态对齐（见 internal/download/reconcile.go）：
+// 完成通知只推给当时连着的客户端，停机期间完成或 aria2 重启换 gid 都会漏。
+func ListUnfinishedDownloadRecords() ([]*native.DownloadRecordORM, error) {
+	var drs []*native.DownloadRecordORM
+	if err := GetDB().
+		Where("state IN (?, ?)",
+			int32(native.DownloadRecordState_DOWNLOAD_PENDING),
+			int32(native.DownloadRecordState_DOWNLOADING)).
+		Find(&drs).Error; err != nil {
+		llog.L().Errorf("list unfinished download records failed: %v", err)
+		return nil, err
+	}
+	return drs, nil
 }
 
 // UpdateDownloadRecord 更新下载记录

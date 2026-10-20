@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"lukechampine.com/blake3"
 
@@ -23,6 +24,9 @@ import (
 	"jenken827.com/jenken827/pfm/utils"
 )
 
+// completeMu 串行化「完成处理」：完成通知与启动对齐（reconcile）可能同时进来
+var completeMu sync.Mutex
+
 // DNotifier 下载通知器
 type DNotifier struct {
 }
@@ -33,6 +37,24 @@ var _ = (aria2.Notifier)((*DNotifier)(nil))
 func (d *DNotifier) OnDownloadStart(events []aria2.Event) {
 	for _, e := range events {
 		llog.L().Infof("download started, gid: %s", e.Gid)
+		// 置「下载中」，否则列表在完成前一直显示「等待中」
+		markDownloadStarted(e.Gid)
+	}
+}
+
+// markDownloadStarted 置「下载中」；查不到记录（非 pfm 发起的 aria2 任务）静默跳过
+func markDownloadStarted(gid string) {
+	dr, err := db.FindDownloadRecordByGid(gid)
+	if err != nil || dr == nil {
+		return
+	}
+	state := int32(native.DownloadRecordState_DOWNLOADING)
+	if dr.State != nil && *dr.State == state {
+		return
+	}
+	dr.State = &state
+	if err := db.UpdateDownloadRecord(dr, []string{"state"}); err != nil {
+		llog.L().Errorf("update download record to downloading failed, gid: %s, err: %v", gid, err)
 	}
 }
 
@@ -50,6 +72,7 @@ func (d *DNotifier) OnDownloadStop(events []aria2.Event) {
 		// 更新下载记录状态
 		updateDownloadRecordState(e.Gid, native.DownloadRecordState_DOWNLOAD_FAILED, "download stopped by user")
 	}
+	reconcileDownloads()
 }
 
 // OnDownloadComplete will be sent when a download is complete. For BitTorrent downloads, this notification is sent when the download is complete and seeding is over.
@@ -69,6 +92,8 @@ func (d *DNotifier) OnDownloadError(events []aria2.Event) {
 		errMsg := getAria2ErrorMessage(e.Gid)
 		updateDownloadRecordState(e.Gid, native.DownloadRecordState_DOWNLOAD_FAILED, errMsg)
 	}
+	// gid 可能只是元数据那一环；真正的产物任务出错时只能靠对齐发现
+	reconcileDownloads()
 }
 
 // OnBtDownloadComplete will be sent when a torrent download is complete but seeding is still going on.
@@ -79,71 +104,36 @@ func (d *DNotifier) OnBtDownloadComplete(events []aria2.Event) {
 	}
 }
 
-// handleDownloadComplete 处理下载完成事件
-func handleDownloadComplete(gid string) {
-	// 根据gid获取下载记录
-	dr, err := db.GetDownloadRecordByGid(gid)
-	if err != nil {
-		llog.L().Errorf("get download record by gid failed, gid: %s, err: %v", gid, err)
-		return
-	}
+// handleDownloadComplete 处理下载完成事件。
+//
+// 不直接按 gid 导入：磁力 / .torrent 的 gid 可能只是「元数据 / 种子文件」那一环，
+// 真正的产物在 followedBy 派生出的任务里。统一交给 reconcileDownloads 用
+// infoHash + 任务形态解析产物（幂等：已是终态的记录不会再被处理）。
+func handleDownloadComplete(_ string) {
+	reconcileDownloads()
+}
 
-	// 获取aria2下载的文件信息
-	downloader := downloader.Aria2Downloader
-	if downloader == nil {
-		llog.L().Errorf("downloader not initialized")
-		updateDownloadRecordState(gid, native.DownloadRecordState_DOWNLOAD_FAILED, "downloader not initialized")
-		return
-	}
-
-	statusInfo, err := downloader.TellStatus(gid, "dir", "files", "totalLength")
-	if err != nil {
-		llog.L().Errorf("get aria2 status failed, gid: %s, err: %v", gid, err)
-		updateDownloadRecordState(gid, native.DownloadRecordState_DOWNLOAD_FAILED, err.Error())
-		return
-	}
-	files := statusInfo.Files
-	dir := statusInfo.Dir
-	totalLength := statusInfo.TotalLength
-
-	// 获取下载的文件路径
-	var filePath string
-	if len(files) > 0 {
-		filePath = filepath.Join(dir, files[0].Path)
-	}
-
-	// 更新下载记录
-	dr.FilePath = &filePath
+// markDownloadCompleted 落库完成信息（主文件路径 + 总大小），成功返回 nil
+func markDownloadCompleted(dr *native.DownloadRecordORM, gid, primaryPath, totalLength string) error {
+	dr.FilePath = &primaryPath
 	dr.State = (*int32)(native.DownloadRecordState_DOWNLOAD_COMPLETED.Enum())
-
-	// 解析文件大小
 	if totalLength != "" {
 		if size, err := strconv.ParseUint(totalLength, 10, 64); err == nil {
 			dr.FileSize = &size
 		}
 	}
-
 	if err := db.UpdateDownloadRecord(dr, []string{"file_path", "state", "file_size"}); err != nil {
 		llog.L().Errorf("update download record failed, gid: %s, err: %v", gid, err)
-		return
+		return err
 	}
-
-	llog.L().Infof("download record updated, gid: %s, file: %s, size: %s", gid, filePath, totalLength)
-
-	// URL 离线下载任务（任务14）：url 非空且无中转 upload_record → 入库
-	// 中转同步任务：provider→provider（有 upload_record_id）→ 原有恢复逻辑
-	if dr.Url != nil && *dr.Url != "" && (dr.UploadRecordId == nil || *dr.UploadRecordId == 0) {
-		importOfflineDownload(dr, filePath)
-		return
-	}
-
-	// 恢复同步任务：从下载的文件批量上传到目标提供者
-	resumeSyncFromDownload(dr, filePath)
+	return nil
 }
 
 // importOfflineDownload URL 离线下载完成后的入库链路（任务14）
 //
-// aria2 已把文件下载到 .offline/ 目录，这里：
+// aria2 已把文件下载到 .offline/ 目录，单文件直接入库；多文件种子
+// （magnet/BT）在目标目录下建一个以种子名命名的子目录，再按相对路径还原结构。
+// 每个文件的入库链路：
 //  1. 计算 blake3（增量，避免大文件整读内存）
 //  2. 把文件移入 staging 临时目录（TempDir/users/<owner>/<hash>/chunks/，供 Dispatch 上传，
 //     上传完成后由 completeUpload 清理——与普通上传生命周期一致）
@@ -153,80 +143,157 @@ func handleDownloadComplete(gid string) {
 //     storage.PreallocateFileLocations），消除「记录已指向新 hash、位置行未落库」窗口的读取硬 500
 //  6. 创建 File 记录（owner/parent 来自 DownloadRecord）
 //  7. 创建 UploadRecord → Dispatch
-func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath string) {
+func importOfflineDownload(dr *native.DownloadRecordORM, task aria2.StatusInfo, files []string) {
 	if dr.OwnerId == nil || *dr.OwnerId == "" || dr.ParentId == nil || *dr.ParentId == "" {
 		llog.L().Errorf("offline download record missing owner/parent, download_record_id: %v", dr.Id)
 		return
 	}
-	ownerID := *dr.OwnerId
-	parentID := *dr.ParentId
+	if len(files) == 0 {
+		markImportFailed(dr, fmt.Errorf("没有可导入的文件"))
+		return
+	}
+	if len(files) == 1 {
+		// 单文件：沿用 sourceName（URL 推断的名字通常比磁盘文件名更准确）
+		fileName := filepath.Base(files[0])
+		if dr.SourceName != nil {
+			if name := safeSegment(*dr.SourceName); name != "" {
+				fileName = name
+			}
+		}
+		if err := importOneFile(dr, files[0], *dr.ParentId, fileName); err != nil {
+			markImportFailed(dr, err)
+			return
+		}
+		markImportDone(dr)
+		return
+	}
+	importTorrentFiles(dr, task, files)
+}
 
-	// 1. 计算 hash（增量流式）
+// importTorrentFiles 多文件种子导入：目标目录下建种子名子目录，按相对路径逐级还原子目录
+func importTorrentFiles(dr *native.DownloadRecordORM, task aria2.StatusInfo, files []string) {
+	ownerID := *dr.OwnerId
+	rootName := torrentRootName(dr, task.BitTorrent.Info.Name, files, task.Dir)
+	rootID, err := ensureFolderPath(ownerID, *dr.ParentId, []string{rootName})
+	if err != nil {
+		markImportFailed(dr, fmt.Errorf("创建种子目录 %s 失败: %w", rootName, err))
+		return
+	}
+
+	imported := 0
+	var firstErr error
+	for _, filePath := range files {
+		if importErr := importTorrentEntry(dr, task.Dir, rootID, rootName, filePath); importErr != nil {
+			llog.L().Errorf("offline download import file failed, file: %s, err: %v", filePath, importErr)
+			if firstErr == nil {
+				firstErr = importErr
+			}
+			continue
+		}
+		imported++
+	}
+	llog.L().Infof("offline download torrent import done, record: %v, root: %s, total: %d, imported: %d",
+		dr.Id, rootName, len(files), imported)
+
+	switch {
+	case imported == 0:
+		markImportFailed(dr, fmt.Errorf("种子内 %d 个文件全部入库失败: %v", len(files), firstErr))
+	case imported < len(files):
+		markImportDone(dr)
+		llog.L().Warnf("offline download torrent partially imported, record: %v, failed: %d/%d, first error: %v",
+			dr.Id, len(files)-imported, len(files), firstErr)
+	default:
+		markImportDone(dr)
+	}
+	// 清理 aria2 留下的空目录（文件已 rename 进 staging，只剩目录骨架）
+	_ = os.RemoveAll(filepath.Join(task.Dir, rootName))
+}
+
+// importTorrentEntry 导入种子里的单个文件（自动建中间目录）
+func importTorrentEntry(dr *native.DownloadRecordORM, dir, rootID, rootName, filePath string) error {
+	segs := relativeSegments(dir, filePath)
+	if len(segs) > 1 && segs[0] == rootName {
+		segs = segs[1:]
+	}
+	fileName := filepath.Base(filePath)
+	if len(segs) > 0 {
+		fileName = segs[len(segs)-1]
+	}
+	parentID := rootID
+	if len(segs) > 1 {
+		var err error
+		parentID, err = ensureFolderPath(*dr.OwnerId, rootID, segs[:len(segs)-1])
+		if err != nil {
+			return fmt.Errorf("创建子目录失败: %w", err)
+		}
+	}
+	return importOneFile(dr, filePath, parentID, fileName)
+}
+
+// importOneFile 单个文件入库：hash → staging → 秒传 → File 记录 → UploadRecord → Dispatch
+func importOneFile(dr *native.DownloadRecordORM, downloadedFilePath, parentID, fileName string) error {
+	ownerID := *dr.OwnerId
+
+	fileInfo, err := os.Stat(downloadedFilePath)
+	if err != nil {
+		return fmt.Errorf("读取文件信息失败: %w", err)
+	}
+	fileSize := uint64(fileInfo.Size())
+	if fileSize == 0 {
+		// aria2 对空文件不会真正落盘验证，空文件入网盘没有意义，直接跳过
+		return fmt.Errorf("文件为空: %s", downloadedFilePath)
+	}
+
 	hash, err := computeBlake3(downloadedFilePath)
 	if err != nil {
-		llog.L().Errorf("offline download compute hash failed, file: %s, err: %v", downloadedFilePath, err)
-		updateDownloadRecordState(*dr.Gid, native.DownloadRecordState_DOWNLOAD_FAILED, "hash 计算失败: "+err.Error())
-		return
+		return fmt.Errorf("hash 计算失败: %w", err)
 	}
 	llog.L().Infof("offline download hash computed: %s, file: %s", hash, downloadedFilePath)
 
-	// 文件信息
-	fileInfo, err := os.Stat(downloadedFilePath)
+	stagingPath, err := moveToStaging(downloadedFilePath, hash, ownerID, fileName)
 	if err != nil {
-		llog.L().Errorf("offline download stat failed, file: %s, err: %v", downloadedFilePath, err)
-		return
-	}
-	fileSize := uint64(fileInfo.Size())
-	fileName := filepath.Base(downloadedFilePath)
-	if dr.SourceName != nil && *dr.SourceName != "" {
-		fileName = *dr.SourceName
+		return err
 	}
 
-	// 2. 移入 staging（owner 隔离：TempDir/users/<ownerID>/<hash>/chunks/）：
-	//    与普通上传分片目录同布局，避免多用户并发下载同一内容互相覆盖；
-	//    Dispatch 上传完成后清理，进行中 janitor 不回收
+	// 秒传：目标目录已存在同名同 hash → 无需上传
+	if existing, qErr := db.GetFileByParentAndName(parentID, fileName, ownerID); qErr == nil &&
+		existing != nil && existing.Hash != nil && *existing.Hash == hash {
+		llog.L().Infof("offline download: same content exists in target dir, skip upload: %s", fileName)
+		_ = os.Remove(stagingPath)
+		return nil
+	}
+	return createFileAndDispatch(ownerID, parentID, fileName, hash, fileSize, stagingPath)
+}
+
+// moveToStaging 把下载文件移入 staging（owner 隔离，与普通上传共用生命周期）
+func moveToStaging(downloadedFilePath, hash, ownerID, fileName string) (string, error) {
 	stagingDir := utils.GetChunkTempDir(hash, ownerID)
 	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
-		llog.L().Errorf("offline download create staging dir failed: %v", err)
-		return
+		return "", fmt.Errorf("创建 staging 目录失败: %w", err)
 	}
 	stagingPath := filepath.Join(stagingDir, utils.MergedFileName(fileName))
 	if err := os.Rename(downloadedFilePath, stagingPath); err != nil {
 		// Windows/跨盘等 rename 失败场景退化为复制
 		if cErr := copyFile(downloadedFilePath, stagingPath); cErr != nil {
-			llog.L().Errorf("offline download move to staging failed: %v / %v", err, cErr)
-			return
+			return "", fmt.Errorf("移动到 staging 失败: %v / %v", err, cErr)
 		}
 		_ = os.Remove(downloadedFilePath)
 	}
+	return stagingPath, nil
+}
 
-	// 3. 检查目标目录同名同 hash（秒传：内容已在该目录 → 无需上传）
-	if existing, qErr := db.GetFileByParentAndName(parentID, fileName, ownerID); qErr == nil &&
-		existing != nil && existing.Hash != nil && *existing.Hash == hash {
-		llog.L().Infof("offline download: same content exists in target dir, skip upload: %s", fileName)
-		_ = os.Remove(stagingPath)
-		updateDownloadRecordState(*dr.Gid, native.DownloadRecordState_DOWNLOAD_COMPLETED, "")
-		return
-	}
-
-	// 4. 创建 File 记录
-	fileType, mime := fileutil.GetFileType(stagingPath, fileName)
-	// 4. 绑定 providers（必须先取：位置行预建与 UploadRecord 都要用，
-	//    且取不到时直接返回，避免留下「有文件记录但没有分发」的孤儿）
-	// 目标目录绑定的存储提供者（目录绑定 → 祖先继承 → 用户分配集）
+// createFileAndDispatch 建 File 记录 + UploadRecord，交给 Dispatch 分发
+func createFileAndDispatch(ownerID, parentID, fileName, hash string, fileSize uint64, stagingPath string) error {
 	providerIds, pErr := storage.ResolveProviderIds(ownerID, parentID)
 	if pErr != nil || len(providerIds) == 0 {
-		llog.L().Errorf("offline download: resolve providers failed for owner %s, dir %s, err: %v", ownerID, parentID, pErr)
 		_ = os.Remove(stagingPath)
-		return
+		return fmt.Errorf("解析目标目录存储提供者失败: %v", pErr)
 	}
 
-	// 5. 位置行不变式：落库（文件记录指向新 hash）之前先预建位置行，
-	//    否则从落库到异步分发首次上传成功之间的读取会命中
-	//    len(locations)==0 硬 500（详见 storage.PreallocateFileLocations）
+	// 位置行不变式：落库前先预建位置行（见 storage.PreallocateFileLocations）
 	storage.PreallocateFileLocations(context.Background(), hash, providerIds)
 
-	// 6. 创建 File 记录
+	fileType, mime := fileutil.GetFileType(stagingPath, fileName)
 	isReady := false
 	newFile := &native.FileORM{
 		Name:     &fileName,
@@ -239,15 +306,13 @@ func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath stri
 		OwnerId:  &ownerID,
 	}
 	if err := db.CreateFile(newFile); err != nil {
-		llog.L().Errorf("offline download create file record failed: %v", err)
-		return
+		_ = os.Remove(stagingPath)
+		return fmt.Errorf("创建文件记录失败: %w", err)
 	}
 	llog.L().Infof("offline download file record created, id: %s, name: %s", *newFile.Id, fileName)
 
-	// 7. 创建 UploadRecord → Dispatch
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
-
 	uploadRecord := &native.UploadRecordORM{
 		FileHash:          &hash,
 		FileName:          &fileName,
@@ -262,11 +327,32 @@ func importOfflineDownload(dr *native.DownloadRecordORM, downloadedFilePath stri
 		OwnerId:           &ownerID,
 	}
 	if err := db.GetDB().Create(uploadRecord).Error; err != nil {
-		llog.L().Errorf("offline download create upload record failed: %v", err)
-		return
+		return fmt.Errorf("创建上传记录失败: %w", err)
 	}
 	llog.L().Infof("offline download dispatching, file: %s, hash: %s, providers: %s", fileName, hash, targetProviderIds)
 	go storage.Dispatch(context.Background(), uploadRecord)
+	return nil
+}
+
+// markImportDone 入库成功 → 记录置完成（按记录更新，元数据 gid 换过也不影响）
+func markImportDone(dr *native.DownloadRecordORM) {
+	state := int32(native.DownloadRecordState_DOWNLOAD_COMPLETED)
+	dr.State = &state
+	if err := db.UpdateDownloadRecord(dr, []string{"state"}); err != nil {
+		llog.L().Errorf("offline download mark completed failed, record: %v, err: %v", dr.Id, err)
+	}
+}
+
+// markImportFailed 入库失败 → 记录置失败并写入可读原因（前端可据此提示，也可重试）
+func markImportFailed(dr *native.DownloadRecordORM, err error) {
+	llog.L().Errorf("offline download import failed, record: %v, err: %v", dr.Id, err)
+	msg := err.Error()
+	state := int32(native.DownloadRecordState_DOWNLOAD_FAILED)
+	dr.State = &state
+	dr.ErrorMessage = &msg
+	if uErr := db.UpdateDownloadRecord(dr, []string{"state", "error_message"}); uErr != nil {
+		llog.L().Errorf("offline download mark failed error, record: %v, err: %v", dr.Id, uErr)
+	}
 }
 
 // computeBlake3 增量计算文件 blake3（大文件安全）
@@ -466,9 +552,15 @@ func getAria2ErrorMessage(gid string) string {
 		return "downloader not initialized"
 	}
 
-	_, err := downloader.TellStatus(gid, "errorMessage", "errorCode")
+	info, err := downloader.TellStatus(gid, "errorMessage", "errorCode")
 	if err != nil {
 		return err.Error()
+	}
+	if info.ErrorMessage != "" {
+		return info.ErrorMessage
+	}
+	if info.ErrorCode != "" && info.ErrorCode != "0" {
+		return "aria2 error code: " + info.ErrorCode
 	}
 	return "unknown error"
 }

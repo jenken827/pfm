@@ -42,19 +42,9 @@ class _AppState extends State<App> with WindowListener, WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // app 回到前台时触发相册自动备份
-    if (state == AppLifecycleState.resumed &&
-        (Platform.isAndroid || Platform.isIOS)) {
-      _triggerAlbumBackup();
-    }
-  }
-
-  void _triggerAlbumBackup() async {
-    try {
-      final albumBackup = await AlbumBackupService.instance();
-      await albumBackup.autoTrigger();
-    } catch (e) {
-      getLogger().warning('Album auto-trigger on resume failed: $e');
+    // app 回到前台时触发相册自动备份（仅移动端，helper 内部判定平台）
+    if (state == AppLifecycleState.resumed) {
+      triggerAlbumAutoBackup();
     }
   }
 

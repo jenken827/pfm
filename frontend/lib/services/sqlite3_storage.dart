@@ -127,7 +127,12 @@ class Sqlite3Storage {
     }
     // v3：下载任务新增 content_uri（已发布到公共「下载」后的 MediaStore uri）
     if (oldVersion < 3) {
-      await _addColumnIfMissing(db, downloadTaskTableName, 'content_uri', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        downloadTaskTableName,
+        'content_uri',
+        'TEXT',
+      );
     }
   }
 
@@ -477,6 +482,34 @@ class Sqlite3Storage {
 
   /// 相册备份配置 ID 常量
   static const String albumBackupConfigId = 'album_backup';
+
+  /// 获取仍在上传队列里的相册备份 asset ID 集合
+  /// （PENDING / HASHING / UPLOADING / PAUSED 视为「尚未终态」）
+  ///
+  /// 相册备份任务的 `tags` 就是 asset ID（不含 `|`，见
+  /// `BackgroundService._parseBackupTag`）；其它备份类型是
+  /// `configId|relativePath`，不参与相册增量判定。
+  Future<Set<String>> getQueuedAlbumBackupAssetIds() async {
+    final maps = await _database!.query(
+      uploadTaskTableName,
+      columns: ['tags'],
+      where:
+          'status IN (?, ?, ?, ?) AND tags IS NOT NULL '
+          "AND tags != ? AND tags NOT LIKE ?",
+      whereArgs: [
+        UploadStatus.PENDING.value,
+        UploadStatus.HASHING.value,
+        UploadStatus.UPLOADING.value,
+        UploadStatus.PAUSED.value,
+        '',
+        '%|%',
+      ],
+    );
+    return maps
+        .map((m) => m['tags'] as String)
+        .where((tag) => tag.isNotEmpty)
+        .toSet();
+  }
 
   // 恢复任务
   Future<List<String>> resumeUploadTasks(String? taskId) async {

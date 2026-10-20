@@ -8,7 +8,8 @@ import (
 
 func TestWebsocketCaller(t *testing.T) {
 	time.Sleep(time.Second)
-	c, err := newWebsocketCaller(context.Background(), "ws://localhost:6800/jsonrpc", time.Second, &DummyNotifier{})
+	endpoint := localAria2Websocket(t)
+	c, err := newWebsocketCaller(context.Background(), endpoint, time.Second, &DummyNotifier{})
 	if err != nil {
 		t.Fatal(err.Error())
 	}

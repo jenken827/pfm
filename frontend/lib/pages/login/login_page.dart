@@ -62,6 +62,9 @@ class _LoginPageState extends State<LoginPage> {
       // 异步获取传输服务配置（非阻塞）
       FmRepository().fetchTransferConfig();
 
+      // 登录成功后补一次相册自动备份（登录前冷启动不触发，仅移动端生效）
+      triggerAlbumAutoBackup();
+
       if (mounted) {
         _navigateToHome();
       }

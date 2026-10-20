@@ -20,6 +20,16 @@ type Config struct {
 	Transfer TransferConfig `json:"transfer" yaml:"transfer"`
 	// 照片日期解析配置（相册备份按"年/月"归档；不配置时使用内置默认规则）
 	PhotoDate PhotoDateConfig `json:"photo_date" yaml:"photo_date"`
+	// 离线下载配置（aria2 目标地址校验）
+	Download DownloadConfig `json:"download" yaml:"download"`
+}
+
+// DownloadConfig 离线下载配置
+type DownloadConfig struct {
+	// AllowPrivateHost 允许离线下载指向内网 / 回环 / 链路本地地址的 URL。
+	// 默认 false：离线下载由服务端发起请求，公网部署时必须拦这些目标（SSRF）。
+	// 自建 / 纯内网部署且确实要"把内网文件拉到网盘"时才开。
+	AllowPrivateHost bool `json:"allow_private_host" yaml:"allow_private_host"`
 }
 
 // PhotoDateFilenameRule 照片日期文件名解析规则（单条）

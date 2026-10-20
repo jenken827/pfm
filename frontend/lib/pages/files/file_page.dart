@@ -269,20 +269,6 @@ class _FileViewState extends State<_FileView> {
             onSelected: (value) => _handleMenuAction(context, value, state),
             itemBuilder: (context) => [
               PopupMenuItem(
-                value: 'offline_download',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.link,
-                      size: 18,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: PfmSpacing.md),
-                    Text(al.file_offlineDownload),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
                 value: 'trash',
                 child: Row(
                   children: [
@@ -821,9 +807,6 @@ class _FileViewState extends State<_FileView> {
       case 'view':
         bloc.add(FileViewModeEvent(!state.isGridView));
         break;
-      case 'offline_download':
-        _showOfflineDownloadDialog(context, state);
-        break;
       case 'trash':
         context.push(const TrashRoute().location);
         break;
@@ -1171,6 +1154,19 @@ class _FileViewState extends State<_FileView> {
               onTap: () {
                 Navigator.pop(ctx);
                 _pickAndUploadFolder(context);
+              },
+            ),
+            // 服务器代下：与上面的"本地内容"区分开
+            const Divider(height: 1),
+            PfmDialogs.menuItem(
+              icon: Icons.cloud_download_outlined,
+              title: al.file_offlineDownload,
+              onTap: () {
+                Navigator.pop(ctx);
+                _showOfflineDownloadDialog(
+                  context,
+                  context.read<FileBloc>().state,
+                );
               },
             ),
             const SizedBox(height: PfmSpacing.md),

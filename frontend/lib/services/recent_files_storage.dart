@@ -2,6 +2,17 @@ import 'package:hive_ce/hive.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:get_it/get_it.dart';
 
+/// 把 Hive 读出来的嵌套 map 归一化成 `Map<String, dynamic>`
+///
+/// Hive 解码后**嵌套** map 的运行时类型是 `Map<dynamic, dynamic>`
+/// （见 hive_ce `binary_reader_impl.readMap`，写进去时是 `Map<String, dynamic>`
+/// 也救不回来），直接 `as Map<String, dynamic>` 会抛 TypeError。
+/// 判空/取值一律走这里，别在调用点硬 cast。
+Map<String, dynamic>? asStringMap(Object? value) {
+  if (value is! Map) return null;
+  return value.map((key, v) => MapEntry(key.toString(), v));
+}
+
 /// 本地最近浏览记录存储（per-user，基于 Hive）
 ///
 /// 每个用户独立的浏览历史，退出登录时自动隔离。
