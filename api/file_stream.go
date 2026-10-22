@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/llog"
@@ -289,8 +291,10 @@ func streamRangeResponse(w http.ResponseWriter, r *http.Request, result *service
 	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, result.FileSize))
 	w.WriteHeader(http.StatusPartialContent) // 206
 
-	// 传输指定范围的数据
-	_, err = io.CopyN(w, result.Reader, end-start+1)
+	// 传输指定范围的数据（pacedWriter 记录发送节奏，用来区分"服务端慢"和"客户端不收"）
+	pace := newPacedWriter(w, result.FileName, end-start+1)
+	defer pace.stop()
+	_, err = io.CopyN(pace, result.Reader, end-start+1)
 	if err != nil && err != io.EOF {
 		llog.L().Errorf("stream range failed: %v", err)
 		return
@@ -315,14 +319,101 @@ func streamFullResponse(w http.ResponseWriter, r *http.Request, result *service.
 	}
 	w.WriteHeader(http.StatusOK) // 200
 
-	// 流式传输文件内容
-	written, err := io.Copy(w, result.Reader)
+	// 流式传输文件内容（pacedWriter 记录发送节奏，见 pacedWriter 注释）
+	pace := newPacedWriter(w, result.FileName, result.FileSize)
+	defer pace.stop()
+	written, err := io.Copy(pace, result.Reader)
 	if err != nil {
 		llog.L().Errorf("stream file failed: %v", err)
 		return
 	}
 
 	llog.L().Infof("file stream completed: %s, %d bytes sent, disposition: %s", result.FileName, written, disposition)
+}
+
+// pacedWriter 给流式响应加"发送节奏"日志。
+//
+// 排查「视频卡顿」时最容易搞混的两件事：服务端发得慢，还是客户端收得慢?
+// io.Copy 的写操作会被 TCP 反压住 —— 客户端不往下读，这里的 Write 就阻塞。
+// 所以每 5 秒打一行「已发字节 / 耗时 / 这 5 秒的速率」（写不动时速率会掉到 0）：
+//   - 速率长期只有 0.1~0.5MB/s 且耗时与客户端播放时长相当 ⇒ 链路/客户端瓶颈；
+//   - 几十毫秒发完几 MB ⇒ 服务端与被测机之间的缓冲就够了，卡顿在客户端那侧；
+//   - 中途速率掉到 0 好几秒 ⇒ 客户端在停顿（解码/缓冲/切网）。
+//
+// 注意：内核 socket 缓冲会"吸收"前几 MB，所以服务端写快 ≠ 客户端收到得快，
+// 结论要结合客户端侧上报的「已缓冲秒数」一起看。
+type pacedWriter struct {
+	w        io.Writer
+	name     string
+	expected int64
+
+	start  time.Time
+	mu     sync.Mutex
+	total  int64
+	last   int64
+	lastAt time.Time
+	done   chan struct{}
+	once   sync.Once
+}
+
+// 每隔这么久打一行节奏日志（写不动也会打，用来发现停顿）
+const pacedInterval = 5 * time.Second
+
+// 少于这么多字节的响应（Range 探测、缩略图式的 0-0 试探）不打日志，避免刷屏
+const pacedMinReportBytes = 256 << 10
+
+func newPacedWriter(w io.Writer, name string, expected int64) *pacedWriter {
+	now := time.Now()
+	p := &pacedWriter{w: w, name: name, expected: expected, start: now, lastAt: now, done: make(chan struct{})}
+	utils.Go(p.loop)
+	return p
+}
+
+// stop 结束节奏日志（handler 返回时调用），并把收尾统计打一行
+func (p *pacedWriter) stop() {
+	p.once.Do(func() {
+		close(p.done)
+		p.report(time.Now())
+	})
+}
+
+func (p *pacedWriter) loop() {
+	ticker := time.NewTicker(pacedInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.done:
+			return
+		case now := <-ticker.C:
+			p.report(now)
+		}
+	}
+}
+
+func (p *pacedWriter) Write(b []byte) (int, error) {
+	n, err := p.w.Write(b)
+	p.mu.Lock()
+	p.total += int64(n)
+	p.mu.Unlock()
+	return n, err
+}
+
+func (p *pacedWriter) report(now time.Time) {
+	p.mu.Lock()
+	total, last := p.total, p.last
+	window := now.Sub(p.lastAt)
+	p.last, p.lastAt = total, now
+	p.mu.Unlock()
+
+	if total < pacedMinReportBytes {
+		return
+	}
+	rate := float64(total-last) / window.Seconds() / (1024 * 1024)
+	llog.L().Infof(
+		"stream pacing: %s, total %d/%d bytes, elapsed %s, last %s: %d bytes %.2f MB/s",
+		p.name, total, p.expected, now.Sub(p.start).Round(time.Millisecond),
+		window.Round(time.Millisecond), total-last, rate,
+	)
 }
 
 // contentDisposition 组装 RFC 6266 的 Content-Disposition。

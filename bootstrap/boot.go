@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"path/filepath"
+
+	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/backup"
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -10,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
+	"jenken827.com/jenken827/pfm/internal/transcode"
 )
 
 // Init 初始化
@@ -23,6 +27,11 @@ func Init() {
 
 	// 缩略图尺寸（配置 thumbnail.small / thumbnail.large，非法值回落默认 200/400）
 	thumbnail.Configure(config.GetConfig().Thumbnail.Small, config.GetConfig().Thumbnail.Large)
+
+	// 视频转码（配置 transcode）：宿主没有 ffmpeg 时自动禁用，
+	// 缓存落在数据目录下的 transcodes/，与缩略图同级。
+	transcodeCfg := config.GetConfig().Transcode
+	transcode.Init(transcode.ConfigFromModel(transcodeCfg), filepath.Join(globals.DataDir, "transcodes"))
 
 	// 认证初始化：本地认证（users 表 + HS256 JWT），密钥缺失时自动生成
 	if err := auth.InitLocalAuth(); err != nil {

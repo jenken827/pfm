@@ -1,6 +1,8 @@
 export 'app_theme.dart';
 export 'local_storage.dart';
 export 'logger.dart';
+export 'local_media_server.dart';
+export 'media_prefetch.dart';
 export 'background_service.dart';
 export 'transfer_storage.dart';
 export 'foreground_service.dart';

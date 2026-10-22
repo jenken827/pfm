@@ -150,6 +150,17 @@ export function thumbPreviewUrl(fileId, t, size = 'large') {
   return `/api/file/stream/preview?${q.toString()}`;
 }
 
+/**
+ * 视频「流畅播放」地址：服务端把高码率视频转成低码率副本。
+ *
+ * 就绪时按 Range 返回 MP4（<video> 可拖进度）；还在转时回 202 +
+ * {state, progress}，调用方每 3 秒轮询同一个地址。
+ */
+export function transcodeUrl(fileId, t) {
+  const q = new URLSearchParams({ file_id: fileId, ticket: t });
+  return `/api/file/stream/transcode?${q.toString()}`;
+}
+
 /** 直链 302（Location 里自带票据）：给浏览器/第三方下载器用 */
 export function directUrl(fileId, t, providerId) {
   const q = new URLSearchParams({ file_id: fileId, ticket: t });

@@ -64,6 +64,9 @@ func fileStreamRoute(mux *http.ServeMux) {
 	// 文件下载（强制下载）
 	mux.HandleFunc("/api/file/stream/download", api.DownloadFileHandler)
 
+	// 视频低码率转码（「流畅播放」）：就绪按 Range 返回 MP4，未就绪回 202 + 进度
+	mux.HandleFunc("/api/file/stream/transcode", api.TranscodeFileHandler)
+
 	// 直链下载：302 到提供者直链；不可直链时 302 回代理下载（给浏览器/第三方下载器用）
 	mux.HandleFunc("/api/file/stream/direct", api.DirectLinkRedirectHandler)
 

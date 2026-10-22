@@ -245,6 +245,42 @@
     "preview_audioPlay": "音频播放",
     "preview_openExternalPlayer": "使用外部播放器打开",
     "preview_audioPlayHint": "音频播放功能开发中，暂可使用外部播放器打开",
+    "preview_smoothPlay": "流畅播放（低码率）",
+    "preview_smoothPlaying": "流畅播放中，点击切回原文件",
+    "preview_smoothTranscoding": "转码中 {percent}%",
+    "@preview_smoothTranscoding": {
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "preview_smoothUnavailable": "服务端未启用视频转码",
+    "preview_smoothFailed": "切换低码率失败，请稍后再试",
+    "preview_smoothNetwork": "网络异常，暂时拿不到转码状态",
+    "preview_smoothTimeout": "转码超时，请稍后再试",
+    "preview_playbackStalls": "卡顿 {count} 次 · 已缓冲 {seconds}s",
+    "@preview_playbackStalls": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "preview_buffering": "本地缓冲 {percent}% · 实测 {speed}",
+    "@preview_buffering": {
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "speed": {
+                "type": "String"
+            }
+        }
+    },
     "preview_resetZoom": "重置缩放",
     "preview_unsupportedType": "暂不支持此文件类型预览",
     "preview_downloadFile": "下载文件",

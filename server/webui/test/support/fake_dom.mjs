@@ -189,6 +189,11 @@ export class FakeElement extends FakeNode {
     this.dispatchEvent(new FakeEvent('click'));
   }
 
+  // 媒体元素的最小 API：视图里 <video> 会调 load/play/pause
+  load() {}
+  play() { this.paused = false; return Promise.resolve(); }
+  pause() { this.paused = true; }
+
   focus() { FakeElement.activeElement = this; }
   blur() { if (FakeElement.activeElement === this) FakeElement.activeElement = null; }
   select() {}

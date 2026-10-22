@@ -113,6 +113,19 @@ func defaultConfig() *models.Config {
 			Small: models.DefaultThumbnailSmallSize,
 			Large: models.DefaultThumbnailLargeSize,
 		},
+
+		// 视频转码：720p / 1500kbps 足够在 2~4Mbps 的链路上流畅播放；
+		// 宿主没有 ffmpeg 时启动阶段会自动禁用。
+		Transcode: models.TranscodeConfig{
+			Enabled:     true,
+			FfmpegPath:  "ffmpeg",
+			FfprobePath: "ffprobe",
+			MaxHeight:   720,
+			VideoKbps:   1500,
+			AudioKbps:   96,
+			Preset:      "veryfast",
+			MaxJobs:     1,
+		},
 	}
 
 }

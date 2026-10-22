@@ -224,6 +224,10 @@ export function install(routes = {}, { token = 'test-token', user = { name: '测
         headers: { get: () => null },
       };
     }
+    // 支持 Range 的媒体桩：$ranged 给出总长度，按请求头切出对应字节（预取用）
+    if (entry && entry.$ranged) {
+      return rangedResponse(entry.$ranged.total, init.headers);
+    }
     if (entry && entry.$error) {
       const { status = 200, code, message, body } = entry.$error;
       const payload = body || { code, message };
@@ -236,6 +240,37 @@ export function install(routes = {}, { token = 'test-token', user = { name: '测
   session.load();
 
   return env;
+}
+
+/**
+ * 造一个支持 Range 的 206 响应：给预取用的假媒体。
+ * 字节内容按位置填充（同偏移取模），足够断言「拿到的长度与偏移正确」。
+ */
+function rangedResponse(total, headers = {}) {
+  const raw = headers.Range || headers.range || 'bytes=0-0';
+  const match = /bytes=(\d+)-(\d*)/.exec(String(raw));
+  const start = match ? Number(match[1]) : 0;
+  const asked = match && match[2] ? Number(match[2]) : total - 1;
+  const end = Math.min(asked, total - 1);
+  const bytes = new Uint8Array(Math.max(0, end - start + 1));
+  for (let i = 0; i < bytes.length; i += 1) bytes[i] = (start + i) % 251;
+  return {
+    status: 206,
+    ok: true,
+    json: async () => { throw new Error('不是 JSON'); },
+    text: async () => '',
+    arrayBuffer: async () => bytes.buffer,
+    blob: async () => ({
+      size: bytes.length,
+      type: 'video/mp4',
+      arrayBuffer: async () => bytes.buffer,
+    }),
+    headers: {
+      get: (name) => (String(name).toLowerCase() === 'content-range'
+        ? `bytes ${start}-${end}/${total}`
+        : null),
+    },
+  };
 }
 
 function response(status, payload) {

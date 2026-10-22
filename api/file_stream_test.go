@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -172,5 +175,57 @@ func TestRespondPreDownload(t *testing.T) {
 	}
 	if body["status"] != "pre_download" {
 		t.Errorf("expected status=pre_download, got %v", body["status"])
+	}
+}
+
+// pacedWriter：累计写入字节，stop 可重复调用（handler 结束与 defer 都可能触发）
+func TestPacedWriterCountsAndStops(t *testing.T) {
+	var buf bytes.Buffer
+	pace := newPacedWriter(&buf, "a.mp4", 10)
+	defer pace.stop()
+
+	if _, err := pace.Write([]byte("hello")); err != nil {
+		t.Fatalf("write 失败：%v", err)
+	}
+	if got := buf.String(); got != "hello" {
+		t.Fatalf("应透传到下层 writer，实际 %q", got)
+	}
+	pace.mu.Lock()
+	total := pace.total
+	pace.mu.Unlock()
+	if total != 5 {
+		t.Fatalf("应累计 5 字节，实际 %d", total)
+	}
+
+	// 幂等：重复 stop 不应 panic（close 一个已关闭的 channel 会 panic）
+	pace.stop()
+	pace.stop()
+}
+
+// download=1 时转码文件走附件下载（客户端用它测链路速率）
+func TestServeTranscodedFileDisposition(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.mp4")
+	if err := os.WriteFile(path, []byte("fake-mp4"), 0o600); err != nil {
+		t.Fatalf("准备文件失败：%v", err)
+	}
+
+	for _, tc := range []struct {
+		url  string
+		want string
+	}{
+		{"http://example.com/api/file/stream/transcode?download=1", "attachment"},
+		{"http://example.com/api/file/stream/transcode", "inline"},
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+		serveTranscodedFile(rec, req, path, "视频.mp4", req.URL.Query().Get("download") == "1")
+		got := rec.Header().Get("Content-Disposition")
+		if !strings.HasPrefix(got, tc.want) {
+			t.Fatalf("%s 期望 disposition=%s，实际 %q", tc.url, tc.want, got)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "video/mp4" {
+			t.Fatalf("Content-Type 应为 video/mp4，实际 %q", ct)
+		}
 	}
 }

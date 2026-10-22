@@ -91,6 +91,20 @@ photo_date:
   # 时间戳防误判：年份上界偏移（默认 1，即允许到当前年份+1）
   ts_max_year_offset: 1
 
+# 视频「流畅播放」（低码率转码，见 DESIGN.md §9.1.2）。
+# 手机 1080p 视频常在 15~30Mbps，在 1~3Mbps 的公网 / 组网链路上播放必然卡顿；开启后 Web
+# 预览页会多一个「卡顿？切低码率播放」入口，服务端按需转 720p 副本并缓存在 data/transcodes/。
+# 宿主没有 ffmpeg 时该功能自动禁用（其它接口不受影响）。
+transcode:
+  enabled: true # 总开关
+  ffmpeg_path: ffmpeg # 走 PATH，也可以写绝对路径
+  ffprobe_path: ffprobe # 用于读时长算进度；缺失时进度退化为 0
+  max_height: 720 # 目标长边上限（不放大源）
+  video_kbps: 1500 # 视频码率上限，配合 crf 做 capped CRF
+  audio_kbps: 96 # 音频码率（AAC）
+  preset: veryfast # x264 preset：ultrafast/superfast/veryfast/faster/fast/medium/slow
+  max_jobs: 1 # 同时转码任务数，避免吃满 CPU
+
 # 直链下载：让客户端绕开服务端中转，直接向存储提供者取字节（见 DESIGN.md §17）。
 # 只有「单分片 + 未加密 + 驱动实现直链」的文件才会下发直链，其余一律走代理下载，
 # 因此保持默认（开启）不会改变任何不满足条件文件的下载行为。

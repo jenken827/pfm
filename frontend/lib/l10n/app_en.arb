@@ -171,6 +171,42 @@
     "preview_audioPlay": "Audio playback",
     "preview_openExternalPlayer": "Open in external player",
     "preview_audioPlayHint": "Audio playback is under development, please use an external player",
+    "preview_smoothPlay": "Smooth playback (low bitrate)",
+    "preview_smoothPlaying": "Smooth playback on, tap for original",
+    "preview_smoothTranscoding": "Transcoding {percent}%",
+    "@preview_smoothTranscoding": {
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "preview_smoothUnavailable": "Video transcoding is not enabled on the server",
+    "preview_smoothFailed": "Failed to switch to low bitrate, please retry later",
+    "preview_smoothNetwork": "Network error, transcode status unavailable",
+    "preview_smoothTimeout": "Transcoding timed out, please retry later",
+    "preview_playbackStalls": "{count} stalls · {seconds}s buffered",
+    "@preview_playbackStalls": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "preview_buffering": "Buffering {percent}% · {speed}",
+    "@preview_buffering": {
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "speed": {
+                "type": "String"
+            }
+        }
+    },
     "preview_resetZoom": "Reset zoom",
     "preview_unsupportedType": "Preview not supported for this file type",
     "preview_downloadFile": "Download file",

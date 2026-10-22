@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,6 +7,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/router/files_route.dart';
@@ -16,6 +19,28 @@ import 'package:pfm/utils/file_utils.dart';
 import 'package:pfm/widgets/zoomable_image_view.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pfm/l10n/app_localizations.dart';
+import 'package:pfm/services/video_transcode.dart';
+
+/// 预取状态快照（百分比 / 聚合速率 / 是否已下完）
+class _PrefetchStats {
+  const _PrefetchStats({
+    required this.progress,
+    required this.bytesPerSecond,
+    required this.complete,
+  });
+
+  final double progress;
+  final double bytesPerSecond;
+  final bool complete;
+}
+
+/// 把字节速率格式化成人类可读字符串
+String _formatRate(double bytesPerSecond) {
+  if (bytesPerSecond <= 0) return '-';
+  final mb = bytesPerSecond / (1024 * 1024);
+  if (mb >= 1) return '${mb.toStringAsFixed(1)}MB/s';
+  return '${(bytesPerSecond / 1024).toStringAsFixed(0)}KB/s';
+}
 
 /// 预览页面参数
 class PreviewArgs {
@@ -65,6 +90,26 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   bool _isVideoInitialized = false;
   double _playbackRate = 1.0; // 播放速率
 
+  // 视频「流畅播放」：服务端按需转 720p 低码率副本，弱网下改播它
+  final FmRepository _repository = FmRepository();
+  bool _smoothMode = false; // 当前播的是低码率版本
+  bool _smoothBusy = false; // 正在探测 / 等转码
+  int _smoothProgress = 0; // 转码进度 0-100
+
+  // 并行预取 + 本地播放：把「网络」与「播放」解耦，卡顿不再取决于链路抖动
+  MediaPrefetcher? _prefetcher;
+  LocalMediaServer? _localServer;
+  Timer? _prefetchTicker;
+  final ValueNotifier<_PrefetchStats?> _prefetchStats = ValueNotifier(null);
+
+  // 播放诊断：卡顿次数 / 已缓冲时长（排查"网络供不上"还是"解不动"）
+  StreamSubscription<bool>? _bufferingSub;
+  StreamSubscription<Duration>? _bufferSub;
+  final ValueNotifier<(int, int)> _playbackStats = ValueNotifier((0, 0));
+  int _stallCount = 0;
+  int _bufferAheadSeconds = 0;
+  bool _stallOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -82,28 +127,234 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   @override
   void dispose() {
     _pageController.dispose();
+    _bufferingSub?.cancel();
+    _bufferSub?.cancel();
+    _playbackStats.dispose();
+    _prefetchStats.dispose();
+    unawaited(_stopPrefetch());
     // VideoController 不需要显式释放，只需释放 Player
     _videoPlayer?.dispose();
     super.dispose();
   }
 
-  /// 初始化视频播放器
+  /// 初始化视频播放器：优先「并行预取 + 本地播放」，预取不可用时回退直连
   Future<void> _initializeVideoPlayer() async {
-    final previewUrl = _buildPreviewUrl(_currentFile.id);
-    final headers = _getAuthHeaders();
-
-    // 创建播放器
     _videoPlayer = Player();
     _videoController = VideoController(_videoPlayer!);
-
-    // 设置播放器
-    await _videoPlayer!.open(Media(previewUrl, httpHeaders: headers));
-
     if (mounted) {
-      setState(() {
-        _isVideoInitialized = true;
-      });
+      setState(() => _isVideoInitialized = true);
+      _watchPlaybackHealth(_videoPlayer!);
     }
+    await _openVideo();
+  }
+
+  /// 打开当前视频（原文件 / 低码率版本），保留播放进度
+  ///
+  /// 数据面：URL 先用 [MediaPrefetcher] 多连接并行拉到本地缓存，播放器只读
+  /// `127.0.0.1` 上的 [LocalMediaServer]；预取失败（服务器不支持 Range 等）时
+  /// 自动回退成直连，行为与改造前一致。
+  Future<void> _openVideo({Duration? position, bool? wasPlaying}) async {
+    final player = _videoPlayer;
+    if (player == null) return;
+    final at = position ?? player.state.position;
+    final playing = wasPlaying ?? player.state.playing;
+
+    String url;
+    if (_smoothMode) {
+      final smoothUrl = await _buildSmoothUrl(_currentFile.id);
+      if (!mounted) return;
+      if (smoothUrl == null) {
+        _showSnack(AppLocalizations.of(context).preview_smoothFailed);
+        return;
+      }
+      url = smoothUrl;
+    } else {
+      url = _buildPreviewUrl(_currentFile.id);
+    }
+
+    final localUrl = await _startPrefetch(url: url);
+    if (!mounted) return;
+    final media = localUrl == null
+        ? Media(url, httpHeaders: _getAuthHeaders())
+        : Media(localUrl);
+    await player.open(media);
+    if (at > Duration.zero) {
+      await player.seek(at);
+    }
+    if (!playing) {
+      await player.pause();
+    }
+  }
+
+  /// 启动预取与本地服务，返回播放器可用的本地 URL；失败返回 null（调用方回退直连）
+  Future<String?> _startPrefetch({required String url}) async {
+    await _stopPrefetch();
+    final cacheKey = '${_currentFile.id.replaceAll(':', '_')}'
+        '${_smoothMode ? '_smooth' : '_orig'}';
+    try {
+      final dir = await getTemporaryDirectory();
+      final prefetcher = await MediaPrefetcher.open(
+        url: url,
+        cachePath: '${dir.path}/video_cache/$cacheKey.mp4',
+      );
+      final server = await LocalMediaServer.start(prefetcher);
+      if (!mounted) {
+        await server.close();
+        await prefetcher.dispose();
+        return null;
+      }
+      _prefetcher = prefetcher;
+      _localServer = server;
+      _prefetchStats.value = _PrefetchStats(
+        progress: prefetcher.progress,
+        bytesPerSecond: prefetcher.bytesPerSecond,
+        complete: prefetcher.isComplete,
+      );
+      _prefetchTicker?.cancel();
+      _prefetchTicker = Timer.periodic(
+        const Duration(milliseconds: 700),
+        (_) => _refreshPrefetch(),
+      );
+      return server.url;
+    } catch (e) {
+      getLogger().warning('视频预取不可用，回退直连: $e');
+      return null;
+    }
+  }
+
+  void _refreshPrefetch() {
+    final prefetcher = _prefetcher;
+    if (!mounted || prefetcher == null) return;
+    if (prefetcher.isComplete) {
+      _prefetchTicker?.cancel();
+      _prefetchTicker = null;
+    }
+    _prefetchStats.value = _PrefetchStats(
+      progress: prefetcher.progress,
+      bytesPerSecond: prefetcher.bytesPerSecond,
+      complete: prefetcher.isComplete,
+    );
+  }
+
+  /// 停掉预取与本地服务（缓存文件保留，下次命中）
+  Future<void> _stopPrefetch() async {
+    _prefetchTicker?.cancel();
+    _prefetchTicker = null;
+    final server = _localServer;
+    final prefetcher = _prefetcher;
+    _localServer = null;
+    _prefetcher = null;
+    if (mounted) {
+      _prefetchStats.value = null;
+    }
+    if (server != null) await server.close();
+    if (prefetcher != null) await prefetcher.dispose();
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 订阅缓冲状态：统计卡顿次数与已缓冲时长，并写进日志。
+  ///
+  /// 排查卡顿时先看这两个数：缓冲长期接近 0 且 `卡顿` 不断增加 ⇒ 带宽 / 链路；
+  /// 已缓冲十几秒还卡 ⇒ 客户端解码或渲染跟不上。数字同时显示在播放器下面。
+  void _watchPlaybackHealth(Player player) {
+    _bufferingSub = player.stream.buffering.listen((buffering) {
+      if (!mounted) return;
+      getLogger().debug(
+        '视频缓冲状态: buffering=$buffering, 缓冲=${player.state.buffer.inSeconds}s, '
+        '位置=${player.state.position.inSeconds}s, 流畅模式=$_smoothMode',
+      );
+      if (buffering && !_stallOpen) {
+        _stallOpen = true;
+      } else if (!buffering && _stallOpen) {
+        _stallOpen = false;
+        _stallCount += 1;
+        _playbackStats.value = (_stallCount, _bufferAheadSeconds);
+      }
+    });
+    _bufferSub = player.stream.buffer.listen((buffer) {
+      if (!mounted) return;
+      final seconds = buffer.inSeconds;
+      if (seconds == _bufferAheadSeconds) return;
+      _bufferAheadSeconds = seconds;
+      _playbackStats.value = (_stallCount, seconds);
+    });
+  }
+
+  /// 切换「流畅播放」/ 原文件
+  Future<void> _toggleSmoothMode() async {
+    if (_smoothBusy) return;
+    if (_smoothMode) {
+      setState(() => _smoothMode = false);
+      await _openVideo();
+      return;
+    }
+
+    setState(() {
+      _smoothBusy = true;
+      _smoothProgress = 0;
+    });
+    final url = await _buildSmoothUrl(_currentFile.id);
+    if (!mounted) return;
+    if (url == null) {
+      setState(() => _smoothBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).preview_smoothFailed)),
+      );
+      return;
+    }
+
+    // 第一次点会触发服务端转码（202 + 进度），转好（200/206）再换源
+    final result = await pollTranscode(
+      probe: () => _repository.probeTranscode(url),
+      isCancelled: () => !mounted,
+      onUpdate: (update) {
+        if (mounted && update.state != TranscodeState.ready) {
+          setState(() => _smoothProgress = update.progress);
+        }
+      },
+    );
+    if (!mounted) return;
+    setState(() => _smoothBusy = false);
+    if (result.state == TranscodeState.ready) {
+      setState(() => _smoothMode = true);
+      await _openVideo();
+      return;
+    }
+    _showSmoothError(result);
+  }
+
+  /// 转码接口地址（带 12 小时下载票，票据不进日志）
+  Future<String?> _buildSmoothUrl(String fileId) async {
+    final result = await _repository.createPreviewTicket(
+      fileId: fileId,
+      purpose: TicketPurpose.DOWNLOAD,
+    );
+    final ticket = result.data?.ticket;
+    if (!result.success || ticket == null || ticket.isEmpty) {
+      return null;
+    }
+    final baseUrl = GetIt.I.get<LocalStorage>().downloadBaseUrl;
+    return '$baseUrl/api/file/stream/transcode'
+        '?file_id=$fileId&ticket=${Uri.encodeQueryComponent(ticket)}';
+  }
+
+  /// 切换失败时把原因告诉用户
+  void _showSmoothError(TranscodeProbeResult result) {
+    if (!mounted) return;
+    final al = AppLocalizations.of(context);
+    final message = switch (result.state) {
+      TranscodeState.disabled => al.preview_smoothUnavailable,
+      TranscodeState.networkError => al.preview_smoothNetwork,
+      TranscodeState.timeout => al.preview_smoothTimeout,
+      TranscodeState.cancelled => null,
+      _ => al.preview_smoothFailed,
+    };
+    if (message == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   bool get _hasMultipleImages => _images != null && _images!.length > 1;
@@ -404,11 +655,13 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
         ),
-        // 视频控制栏
+        // 视频控制栏（用 Wrap：窄屏放不下时换行，别把「流畅播放」挤到屏幕外）
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
             children: [
               IconButton(
                 icon: const Icon(Icons.replay_10),
@@ -461,8 +714,57 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
                   const PopupMenuItem(value: 2.0, child: Text('2.0x')),
                 ],
               ),
+              const SizedBox(width: 8),
+              // 流畅播放：弱网下切到服务端转好的低码率副本
+              IconButton(
+                tooltip: _smoothMode
+                    ? al.preview_smoothPlaying
+                    : al.preview_smoothPlay,
+                icon: Icon(_smoothMode ? Icons.speed : Icons.speed_outlined),
+                onPressed: _smoothBusy ? null : _toggleSmoothMode,
+              ),
             ],
           ),
+        ),
+        if (_smoothBusy)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              al.preview_smoothTranscoding(_smoothProgress),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        // 预取进度：本地缓存还在拉时显示百分比与实测聚合速率
+        ValueListenableBuilder<_PrefetchStats?>(
+          valueListenable: _prefetchStats,
+          builder: (context, stats, _) {
+            if (stats == null || stats.complete) return const SizedBox.shrink();
+            final percent = (stats.progress * 100).clamp(0, 100).round();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                al.preview_buffering(percent, _formatRate(stats.bytesPerSecond)),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            );
+          },
+        ),
+        // 卡顿诊断：次数 + 已缓冲秒数（用来区分"网络供不上"和"解不动"）
+        ValueListenableBuilder<(int, int)>(
+          valueListenable: _playbackStats,
+          builder: (context, stats, _) {
+            if (stats.$1 <= 0) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                al.preview_playbackStalls(stats.$1, stats.$2),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            );
+          },
         ),
       ],
     );

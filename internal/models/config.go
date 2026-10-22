@@ -26,6 +26,33 @@ type Config struct {
 	RateLimit RateLimitConfig `json:"ratelimit" yaml:"ratelimit"`
 	// 缩略图尺寸（网格 / 预览两档，见 internal/thumbnail）
 	Thumbnail ThumbnailConfig `json:"thumbnail" yaml:"thumbnail"`
+	// 视频转码（低码率「流畅播放」，见 internal/transcode）
+	Transcode TranscodeConfig `json:"transcode" yaml:"transcode"`
+}
+
+// TranscodeConfig 视频转码配置（低码率「流畅播放」）
+//
+// 高码率视频（如手机 1080p 20Mbps）在带宽受限的链路上（公网 / VPN 组网）没法实时播放，
+// 服务端用 ffmpeg 按需转出一份低码率 MP4 缓存到本地，客户端改播这份副本。
+//
+// 宿主没有 ffmpeg 时该功能自动禁用（不影响其他接口）。
+type TranscodeConfig struct {
+	// Enabled 是否启用（默认 true；ffmpeg 缺失时自动禁用）
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// FfmpegPath ffmpeg 可执行文件（默认 ffmpeg，走 PATH）
+	FfmpegPath string `json:"ffmpeg_path" yaml:"ffmpeg_path"`
+	// FfprobePath ffprobe 可执行文件（默认 ffprobe，用于读时长算进度）
+	FfprobePath string `json:"ffprobe_path" yaml:"ffprobe_path"`
+	// MaxHeight 目标分辨率上限（短边不动，长边按比例缩到不超过它；默认 720）
+	MaxHeight int `json:"max_height" yaml:"max_height"`
+	// VideoKbps 目标视频码率上限（kbps，默认 1500）
+	VideoKbps int `json:"video_kbps" yaml:"video_kbps"`
+	// AudioKbps 目标音频码率（kbps，默认 96）
+	AudioKbps int `json:"audio_kbps" yaml:"audio_kbps"`
+	// Preset x264 preset（默认 veryfast；越慢画质越好越吃 CPU）
+	Preset string `json:"preset" yaml:"preset"`
+	// MaxJobs 同时转码任务数（默认 1，避免吃满 CPU）
+	MaxJobs int `json:"max_jobs" yaml:"max_jobs"`
 }
 
 // 缩略图默认边长（像素）。放在 models 里是为了让 config 与 thumbnail 都能引用，

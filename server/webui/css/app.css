@@ -465,6 +465,7 @@ button.row-menu:hover { background: var(--bg-soft); color: var(--text); }
 .media-center { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; padding: 20px; }
 .media-center video { max-width: 100%; max-height: calc(100vh - 220px); background: #000; border-radius: 8px; }
 .media-center audio { width: min(560px, 100%); }
+.media-hint { display: flex; align-items: center; gap: 10px; }
 .spinner {
   width: 22px; height: 22px; border-radius: 50%;
   border: 2.5px solid var(--line); border-top-color: var(--accent);
