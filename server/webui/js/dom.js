@@ -80,19 +80,17 @@ export function errorState(text, onRetry) {
       h('button', { class: 'sm', text: '重试', onclick: onRetry })) : null);
 }
 
-let toastHost = null;
-
 /** 底部提示条；kind: '' | 'ok' | 'err' */
 export function toast(message, kind = '') {
-  if (!toastHost) {
-    toastHost = $('#toasts');
-    if (!toastHost) {
-      toastHost = h('div', { id: 'toasts' });
-      document.body.appendChild(toastHost);
-    }
+  // 每次都重新找 #toasts，不做模块级缓存：缓存的节点可能已被替换（骨架重建、换文档），
+  // 那样提示会写进一个已经不在文档里的容器，用户什么都看不到。
+  let host = $('#toasts');
+  if (!host) {
+    host = h('div', { id: 'toasts' });
+    document.body.appendChild(host);
   }
   const node = h('div', { class: `toast ${kind}`.trim(), text: message });
-  toastHost.appendChild(node);
+  host.appendChild(node);
   setTimeout(() => {
     node.style.transition = 'opacity .2s';
     node.style.opacity = '0';

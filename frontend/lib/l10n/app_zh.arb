@@ -390,6 +390,8 @@
     "flyfish_willOpenInBrowser": "将在浏览器中打开预览",
     "flyfish_loadingDocument": "正在加载文档...",
     "flyfish_ticketFailed": "获取预览链接失败，请重试",
+    "flyfish_preparingCloud": "正在从云端缓存文件...",
+    "flyfish_prepareTimeout": "文件还在云端缓存，请稍后重试",
     "flyfish_openBrowserFailed": "无法打开浏览器",
     "folderPicker_root": "根目录",
     "folderPicker_selectTarget": "选择目标文件夹",

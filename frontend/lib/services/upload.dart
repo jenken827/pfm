@@ -1,15 +1,11 @@
 import 'dart:async';
 import 'dart:io' as io;
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:pfm/api/api.dart';
 import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
+import 'package:pfm/services/file_hasher.dart';
 import 'package:pfm/services/services.dart';
-
-// 直接导入 blake3_dart 内部类以支持增量哈希
-// ignore: implementation_imports
-import 'package:blake3_dart/src/blake3_compact.dart';
 
 /// 带重试的异步操作执行器
 /// 对网络超时等瞬时错误进行指数退避重试
@@ -456,29 +452,38 @@ Future<void> uploadFile({
 }
 
 /// 计算文件 Hash（使用 Blake3）
+///
+/// 全文哈希在 worker isolate 里算（见 `DESIGN.md` §14.12）：纯 Dart 的实现
+/// 约 40MB/s，放在主 isolate 上算会让上传进度与页面一起卡住。进度按 10%
+/// 折线记 debug 日志，便于对照「哈希耗时 vs 上传耗时」。
 Future<String> _computeFileHash(String filePath) async {
-  final file = io.File(filePath);
-  final hasher = HashContext.unkeyed();
+  final l = getLogger();
+  final startAt = DateTime.now().millisecondsSinceEpoch;
+  l.debug('start hashing file $startAt: $filePath');
 
-  getLogger().debug(
-    'start hashing file ${DateTime.now().millisecondsSinceEpoch}',
-  );
-  await for (final chunk in file.openRead()) {
-    hasher.update(Uint8List.fromList(chunk));
-  }
-  getLogger().debug(
-    'end hashing file ${DateTime.now().millisecondsSinceEpoch}',
+  var lastDecile = -1;
+  final hex = await FileHasher.hashFile(
+    filePath,
+    onProgress: (hashed, total) {
+      if (total <= 0) {
+        return;
+      }
+      final decile = hashed * 10 ~/ total;
+      if (decile == lastDecile) {
+        return;
+      }
+      lastDecile = decile;
+      l.debug('[Upload] hashing $filePath: ${decile * 10}% ($hashed/$total)');
+    },
   );
 
-  final output = Uint8List(32);
-  hasher.finalize(output);
-  return output.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  final endAt = DateTime.now().millisecondsSinceEpoch;
+  l.debug('end hashing file $endAt (${endAt - startAt}ms): $filePath');
+  return hex;
 }
 
-/// 计算数据的 Blake3 哈希
-String _computeBlake3Hash(List<int> data) {
-  return blake3Hex(Uint8List.fromList(data));
-}
+/// 计算数据的 Blake3 哈希（分片 2MiB 级别，交给 worker isolate 往返不划算）
+String _computeBlake3Hash(List<int> data) => FileHasher.hashBytes(data);
 
 /// 格式化文件大小
 String _formatSize(int bytes) {

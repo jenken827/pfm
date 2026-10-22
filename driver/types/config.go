@@ -1,6 +1,8 @@
 package types
 
 import (
+	"sort"
+
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -38,6 +40,12 @@ func GetAllDriverMetadata() []*native.StorageProviderTypeInfo {
 	for _, registry := range driverRegistries {
 		metadatas = append(metadatas, registry.metadata)
 	}
+	// driverRegistries 是 map，遍历顺序每次都不一样。这个列表直接喂给前端"新增存储源"
+	// 的类型下拉框，顺序乱跳会让用户每次看到的第一项都不同（也让人以为列表在变），
+	// 故按枚举值排序，保持与 enum.proto 的声明顺序一致。
+	sort.Slice(metadatas, func(i, j int) bool {
+		return metadatas[i].GetType() < metadatas[j].GetType()
+	})
 	return metadatas
 }
 

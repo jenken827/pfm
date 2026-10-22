@@ -305,6 +305,9 @@ func getUploadContext(ur *native.UploadRecordORM) (fileName, parentID string, fi
 // CAS：仅当文件当前 version 仍等于本次上传创建时的版本（ur.Version）才标记——
 // 若期间同名文件已被更新的 PUT 接管（version 已递增），本次分发属于旧内容，
 // 不能把新内容误标为就绪。
+//
+// 注意 ur.Version 必须是**本次上传**发号得到的版本：复用旧 upload record 时若
+// 不刷新版本号，CAS 会静默命中 0 行，文件永远停在"未就绪"（见 BUGS.md）。
 func markFileReadyIfVersionMatches(ctx context.Context, ur *native.UploadRecordORM) {
 	if ur.ParentId == nil || *ur.ParentId == "" || ur.FileName == nil || *ur.FileName == "" {
 		return
@@ -313,9 +316,17 @@ func markFileReadyIfVersionMatches(ctx context.Context, ur *native.UploadRecordO
 	if ur.Version != nil {
 		urVersion = *ur.Version
 	}
-	if err := db.UpdateFileIsReady(*ur.ParentId, *ur.FileName, "", urVersion); err != nil {
+	affected, err := db.UpdateFileIsReady(*ur.ParentId, *ur.FileName, "", urVersion)
+	if err != nil {
 		llog.C(ctx).Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s",
 			err, *ur.ParentId, *ur.FileName)
+		return
+	}
+	if affected == 0 {
+		// 版本对不上（上传记录的 version 落后于文件记录）或文件已被移动 / 改名。
+		// 这里必须告警：内容其实已经写完，但前端会一直显示"未就绪"。
+		llog.C(ctx).Warnf("file ready flag not applied (no row matched): parent_id: %s, file_name: %s, version: %d",
+			*ur.ParentId, *ur.FileName, urVersion)
 		return
 	}
 	llog.C(ctx).Infof("file marked as ready, parent_id: %s, file_name: %s, version: %d",

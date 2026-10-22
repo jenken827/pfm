@@ -24,12 +24,14 @@ show_help() {
   proto          生成 protobuf 代码（Go + Dart）
   proto-go       仅生成 Go protobuf 代码
   proto-dart     仅生成 Dart protobuf 代码
-  test           运行所有测试
+  test           运行所有测试（Go）
+  test-web       运行 Web UI 测试（node:test，假 DOM，无需浏览器）
   test-cover     运行测试并生成覆盖率报告
   tidy           执行 go mod tidy
   lint           运行 golangci-lint 代码检查
   clean          清理构建产物
   flutter        执行 Flutter 开发任务（见 flutter help）
+  native         构建 BLAKE3 原生库（可选加速；host / android / android-multi / clean）
   flutter-clean  清理 Flutter 构建缓存
   help           显示此帮助信息
 
@@ -57,7 +59,8 @@ show_help() {
   $0 proto                        # 生成所有 protobuf 代码
   $0 proto-go                     # 仅生成 Go protobuf 代码
   $0 proto-dart                   # 仅生成 Dart protobuf 代码
-  $0 test                         # 运行测试
+  $0 test                         # 运行测试（Go）
+  $0 test-web                     # 运行 Web UI 测试（node:test）
   $0 test -v                      # 详细输出
   $0 test -run TestInitUpload     # 运行特定测试
   $0 test-cover                   # 运行测试并生成覆盖率报告
@@ -283,6 +286,17 @@ cmd_test() {
     echo "✅ 测试完成！"
 }
 
+# 运行 Web UI 测试（server/webui/test/）
+#
+# 用 node:test + 自带的假 DOM（test/support/），不装 npm 依赖、不启浏览器：
+# 视图模块在假 document / 假 fetch 上渲染，断言页面上用户看得见的文案。
+cmd_test_web() {
+    echo "🧪 运行 Web UI 测试..."
+    check_command "node"
+    node --test "$@" "${SCRIPT_DIR}"/server/webui/test/*.test.mjs
+    echo "✅ Web UI 测试完成！"
+}
+
 # 运行测试并生成覆盖率报告
 cmd_test_cover() {
     local -a TEST_ARGS=()
@@ -381,6 +395,17 @@ cmd_flutter_clean() {
     echo "✅ Flutter 缓存清理完成！"
 }
 
+# 构建 BLAKE3 原生库（Dart FFI 加速，见 DESIGN.md §14.12.4）。
+# 可选步骤：缺 Rust / NDK 时只影响哈希吞吐，App 会退回纯 Dart。
+cmd_native() {
+    cd "$SCRIPT_DIR/frontend"
+    if [[ ! -f "native/build_native.sh" ]]; then
+        echo "❌ 错误: frontend/native/build_native.sh 不存在"
+        exit 1
+    fi
+    bash native/build_native.sh "$@"
+}
+
 # Flutter 开发任务
 cmd_flutter() {
     cd "$SCRIPT_DIR/frontend"
@@ -429,6 +454,9 @@ case "$ACTION" in
     test)
         cmd_test "$@"
         ;;
+    test-web)
+        cmd_test_web "$@"
+        ;;
     test-cover)
         cmd_test_cover "$@"
         ;;
@@ -446,6 +474,9 @@ case "$ACTION" in
         ;;
     flutter)
         cmd_flutter $FLUTTER_ARGS
+        ;;
+    native)
+        cmd_native "$@"
         ;;
     help|--help|-h)
         show_help

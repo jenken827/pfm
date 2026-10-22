@@ -225,6 +225,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		Name:             req.Name,
 		ParentId:         &parentID,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
+		IsReady:          utils.BoolPtr(true), // 目录没有内容要上传，永远是就绪的
 		EnableEncryption: enableEncryption,
 		MaxHistories:     maxHistories,
 		BoundProviderIds: &boundProviderIds,

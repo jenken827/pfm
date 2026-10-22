@@ -107,8 +107,8 @@ function metaCard(file, data, { onReload }) {
     dl.append(h('dt', { text: '哈希' }), dd);
   }
   metaRow(dl, '加密', file.enableEncryption ? '是' : '否');
-  // 0 / 空 = 不限制，直接说"不限"比显示 0 直观
-  metaRow(dl, '历史上限', file.maxHistories ? String(file.maxHistories) : '不限');
+  // 历史版本上限是**目录**级设置（见 settings.js / 客户端 FolderSettingsDialog），
+  // 目录详情会重定向到目录列表，这里不显示；文件上显示只会是 0，读起来像"不限制"，反而误导。
   // bound_provider_ids 是 JSON 数组字符串；空数组表示继承父目录的绑定
   if (file.type === 'FOLDER') {
     const ids = parseProviderIds(file.boundProviderIds);
@@ -145,7 +145,8 @@ async function renameFile(file, onReload) {
 
 async function moveFile(file, onReload) {
   const { pickFolder } = await import('../components/picker.js');
-  const target = await pickFolder({ title: '移动到' });
+  const picked = await pickFolder({ title: '移动到' });
+  const target = picked?.id || '';
   if (!target) return;
   try {
     await call('/api/file/move', { fileIds: [file.id], targetParentId: target });

@@ -1,9 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
-// ignore: implementation_imports
-import 'package:blake3_dart/src/blake3_compact.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:get_it/get_it.dart';
 import 'package:path/path.dart' as p;
@@ -15,6 +12,7 @@ import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/contact_merge.dart';
 import 'package:pfm/services/contact_restore.dart';
 import 'package:pfm/services/contact_undo_service.dart';
+import 'package:pfm/services/file_hasher.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -216,14 +214,7 @@ class ContactBackupService {
           .where((line) => !line.startsWith('REV:'))
           .join('\r\n');
       final contentForHash = '$kContactHashSchemeVersion\n$cleanedVCard';
-      final contentBytes = Uint8List.fromList(contentForHash.codeUnits);
-      final hasher = HashContext.unkeyed();
-      hasher.update(contentBytes);
-      final output = Uint8List(32);
-      hasher.finalize(output);
-      final hash = output
-          .map((b) => b.toRadixString(16).padLeft(2, '0'))
-          .join();
+      final hash = FileHasher.hashBytes(contentForHash.codeUnits);
       _logger.info('Exported contacts hash: $hash');
 
       // 对比 hash，如果相同则跳过上传
@@ -296,14 +287,8 @@ class ContactBackupService {
     final fileSize = await file.length();
     final content = await file.readAsBytes();
 
-    // 使用 Blake3 作为文件 hash（与上传服务一致）
-    final hasher = HashContext.unkeyed();
-    hasher.update(Uint8List.fromList(content));
-    final hashOutput = Uint8List(32);
-    hasher.finalize(hashOutput);
-    final fileHash = hashOutput
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
+    // 使用 Blake3 作为文件 hash（与上传服务一致；vCard 只有几百 KB，内存里算）
+    final fileHash = FileHasher.hashBytes(content);
 
     final task = UploadTaskRecord(
       id: const Uuid().v4(),

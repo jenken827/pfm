@@ -155,9 +155,32 @@ label.check { display: inline-flex; align-items: center; gap: 6px; cursor: point
   padding: 12px 10px;
   border-right: 1px solid var(--line);
   background: var(--bg-elev);
+  display: flex; flex-direction: column;
+  /* 视口高度 + 自己滚：否则页面比视口高时，侧边栏被拉长，贴底的容量条会跑到
+     首屏之外（要滚到页面最底部才看得见）。 */
+  position: sticky; top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
 }
-.nav-group + .nav-group { margin-top: 14px; }
-.nav-title { padding: 4px 10px; font-size: 12px; color: var(--muted); }
+
+/* 容量条贴底：滚动的导航在上面，容量始终可见 */
+/* 容量条贴底：sticky 而不是纯 margin-top:auto——导航项变多时侧边栏会滚，
+   只靠 auto 外边距它就被推到滚动区最末尾，首屏又看不见了。 */
+.space-box {
+  position: sticky; bottom: 0;
+  margin-top: auto; padding: 10px 10px 8px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 12px; color: var(--muted);
+}
+.space-line { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.space-bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.space-bar i { display: block; height: 100%; background: var(--accent, #3b82f6); border-radius: inherit; }
+.space-bar.full i { background: #d9534f; }
+/* 组间距 10px（不是 14px）：导航项一多，侧边栏在 820px 高的屏上就溢出一行，
+   得滚动才看得到最后一个入口。 */
+.nav-group + .nav-group { margin-top: 10px; }
+.nav-title { padding: 2px 10px 4px; font-size: 12px; color: var(--muted); }
 .nav-item {
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px;
@@ -220,6 +243,7 @@ table.files td.check, table.files th.check { width: 34px; padding-right: 0; }
 td.act a, td.act button { margin-left: 8px; }
 .linklike { color: var(--accent); cursor: pointer; margin-left: 8px; }
 .linklike:hover { text-decoration: underline; }
+.linklike.danger { color: var(--danger); }
 .badge {
   font-size: 11.5px; padding: 1px 6px; border-radius: 999px;
   background: var(--bg-soft); color: var(--muted); white-space: nowrap;
@@ -451,10 +475,21 @@ button.row-menu:hover { background: var(--bg-soft); color: var(--text); }
 /* 预览页沉浸模式：隐藏侧边栏（顶栏保留，方便退出登录 / 搜索） */
 body.immersive .sidebar { display: none; }
 
+/* 桌面侧边栏（≥861px）：导航项垂直留白收到 6px。四组入口（浏览 / 按类型 / 工具 / 管理）
+   共 15 项，8px 留白在 820px 高的视口里放不下，最后一项会被贴着底部的容量条挡住。
+   手机抽屉空间够且需要更大的触摸目标，仍用 8px。 */
+@media (min-width: 861px) {
+  .nav-item { padding: 6px 10px; }
+}
+
 /* ---------------------------------------------------------------- 响应式 */
 @media (max-width: 860px) {
   .sidebar { display: none; }
-  .sidebar.open { display: block; position: fixed; z-index: 40; top: 56px; bottom: 0; overflow: auto; box-shadow: var(--shadow); }
+  /* 抽屉：用 top/bottom 定高（height:auto 覆盖桌面端的 calc(100vh - 56px)），
+     否则某些移动端布局视口比可视区矮，抽屉会只到半屏 */
+  .sidebar.open { display: flex; position: fixed; z-index: 40; top: 56px; bottom: 0; height: auto; overflow: auto; box-shadow: var(--shadow); }
+  /* 抽屉比桌面窄但同样要放 15 个入口，组标题再收紧一点，最后一组才不会藏在容量条后面 */
+  .sidebar .nav-title { padding: 1px 10px 2px; }
   .main { padding: 12px 12px 28px; }
   table.files th.time, table.files td.time { display: none; }
   .searchbox { max-width: none; min-width: 0; }

@@ -10,7 +10,7 @@
 // （播放器会续传/拖动，10 分钟会中途失效），文本与缩略图用 10 分钟预览票。
 
 import {
-  call, ticket, rawPreviewUrl, previewPath, fetchBlob, downloadUrl,
+  call, ticket, rawPreviewUrl, thumbPreviewUrl, previewPath, fetchBlob, downloadUrl,
   PURPOSE_DOWNLOAD, buildDownloadUrl,
 } from '../api.js';
 import { h, toast, triggerDownload, setChildren } from '../dom.js';
@@ -49,14 +49,25 @@ export async function renderPreview(main, route) {
     return;
   }
 
+  // 图集翻页后"当前文件"会变：标题 / 详情 / 下载都要跟着走，否则在第 4 张上点
+  // 下载拿到的还是第 1 张。
+  let current = file;
+  const bar = buildBar(() => current, kind, route, alive);
+
   const stage = h('div', { class: 'preview-stage' });
-  const shell = h('div', { class: 'preview-shell' },
-    buildBar(file, kind, route, alive),
-    stage);
+  const shell = h('div', { class: 'preview-shell' }, bar, stage);
   setChildren(main, shell);
 
+  const onChange = (next) => {
+    current = next;
+    bar.sync();
+    // 不触发 hashchange（会重建整页），只让刷新 / 复制地址停留在当前这张
+    const query = route.query.get('from') ? `?from=${encodeURIComponent(route.query.get('from'))}` : '';
+    history.replaceState(null, '', `#/preview/${encodeURIComponent(next.id)}${query}`);
+  };
+
   try {
-    if (kind === 'image') await renderImage(stage, file, route, alive);
+    if (kind === 'image') await renderImage(stage, file, route, alive, onChange);
     else if (kind === 'media') await renderMedia(stage, file, alive);
     else if (kind === 'text') await renderText(stage, file, alive);
     else await renderDocument(stage, file, alive);
@@ -82,13 +93,18 @@ export async function renderPreview(main, route) {
   }, { once: true });
 }
 
-function buildBar(file, kind, route, alive) {
+/**
+ * 顶部信息条。`getFile` 每次取"当前正在看的文件"——图集翻页后标题 / 详情 / 下载
+ * 都要指向新的那张，调用方通过返回元素的 `sync()` 触发刷新。
+ */
+function buildBar(getFile, kind, route, alive) {
+  const file = getFile();
   const downloadBtn = h('button', {
     class: 'primary',
     text: '下载',
     onclick: async () => {
       try {
-        const url = await downloadUrl(file.id);
+        const url = await downloadUrl(getFile().id);
         if (alive()) triggerDownload(url);
       } catch (err) {
         toast(`下载失败：${err.message}`, 'err');
@@ -99,28 +115,72 @@ function buildBar(file, kind, route, alive) {
     ? `/files/${encodeURIComponent(route.query.get('from'))}`
     : `/files/${encodeURIComponent(file.parentId || store.rootId)}`;
 
-  return h('div', { class: 'preview-bar' },
+  const title = h('span', { class: 'title', text: file.name || '(未命名)', title: file.name || '' });
+  const meta = h('span', { class: 'muted small meta', text: `${iconFor(file)} ${typeText(file.type)} · ${fmtSize(file.size)}` });
+  const detail = h('a', {
+    class: 'muted small detail-link',
+    href: `#/detail/${encodeURIComponent(file.id)}`,
+    text: '详情',
+  });
+
+  const bar = h('div', { class: 'preview-bar' },
     h('button', { class: 'ghost', text: '← 返回', onclick: () => back(backTarget) }),
-    h('span', { class: 'title', text: file.name || '(未命名)', title: file.name || '' }),
-    h('span', { class: 'muted small meta', text: `${iconFor(file)} ${typeText(file.type)} · ${fmtSize(file.size)}` }),
+    title,
+    meta,
     h('div', { class: 'spacer' }),
     kind === 'text' ? h('span', { class: 'muted small tag', text: '文本' }) : null,
-    h('a', { class: 'muted small detail-link', href: `#/detail/${encodeURIComponent(file.id)}`, text: '详情' }),
+    detail,
     downloadBtn);
+
+  bar.sync = () => {
+    const f = getFile();
+    title.textContent = f.name || '(未命名)';
+    title.title = f.name || '';
+    meta.textContent = `${iconFor(f)} ${typeText(f.type)} · ${fmtSize(f.size)}`;
+    detail.href = `#/detail/${encodeURIComponent(f.id)}`;
+  };
+  return bar;
 }
 
 // ---------------------------------------------------------------- 图片
 
-async function renderImage(stage, file, route, alive) {
+async function renderImage(stage, file, route, alive, onChange) {
   const { ticket: t } = await ticket(file.id, PURPOSE_DOWNLOAD);
-  const src = rawPreviewUrl(file.id, file.name, t);
 
-  const img = h('img', { class: 'zoomable', src, alt: file.name || '' });
+  // 先显示缩略图（本地 400px JPEG，几乎立刻出图），要看细节再「查看原图」或放大。
+  // 原图可能是几 MB 的手机照片，一进预览就拉原图既慢又费流量。
+  let originalSrc = rawPreviewUrl(file.id, file.name, t);
+  let showingOriginal = false;
+
+  const img = h('img', { class: 'zoomable', src: thumbPreviewUrl(file.id, t, 'large'), alt: file.name || '' });
   const hint = h('div', { class: 'muted small', style: { position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)' }, text: '滚轮缩放 · 拖动平移 · 双击复位' });
-  setChildren(stage, img, hint);
+  const viewOriginal = h('button', {
+    class: 'ghost',
+    style: { position: 'absolute', bottom: '44px', left: '50%', transform: 'translateX(-50%)' },
+    text: '查看原图',
+    onclick: () => showOriginal(),
+  });
+  setChildren(stage, img, hint, viewOriginal);
   if (!alive()) return;
 
-  const zoom = attachZoom(img);
+  /** 换成原图（保留当前缩放状态：只是换 img.src，不动 transform） */
+  function showOriginal() {
+    if (showingOriginal) return;
+    showingOriginal = true;
+    viewOriginal.remove();
+    img.src = originalSrc;
+  }
+
+  /** 切到另一张：回到缩略图，重新给「查看原图」入口 */
+  function resetToThumb(src, original) {
+    showingOriginal = false;
+    originalSrc = original;
+    img.src = src;
+    if (!viewOriginal.parentNode) stage.append(viewOriginal);
+  }
+
+  // 放大即视为要看细节：自动升级成原图（缩略图放大只会糊）
+  const zoom = attachZoom(img, () => showOriginal());
 
   // 同目录图集：只在"从目录进来"时提供左右翻页
   const from = route.query.get('from');
@@ -149,9 +209,13 @@ async function renderImage(stage, file, route, alive) {
     try {
       const { ticket: nt } = await ticket(images[index].id, PURPOSE_DOWNLOAD);
       if (!alive()) return;
-      img.src = rawPreviewUrl(images[index].id, images[index].name, nt);
+      resetToThumb(
+        thumbPreviewUrl(images[index].id, nt, 'large'),
+        rawPreviewUrl(images[index].id, images[index].name, nt),
+      );
       zoom.reset();
       update();
+      if (onChange) onChange(images[index]);
     } catch (err) {
       toast(`切换失败：${err.message}`, 'err');
     }
@@ -173,8 +237,9 @@ async function renderImage(stage, file, route, alive) {
 }
 
 /** 缩放 / 平移：wheel 以光标为中心缩放，拖动平移，双击在 1x 与 2.5x 之间切换 */
-function attachZoom(img) {
+function attachZoom(img, onZoomIn) {
   const state = { scale: 1, x: 0, y: 0, dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 };
+  let zoomedIn = false;
 
   const apply = () => {
     const clamped = Math.min(Math.max(state.scale, 1), 8);
@@ -188,6 +253,11 @@ function attachZoom(img) {
       : `translate(${state.x}px, ${state.y}px) scale(${clamped})`;
     img.classList.toggle('zoomed', clamped > 1);
     img.style.cursor = clamped > 1 ? 'move' : 'grab';
+    // 第一次放大：缩略图放大只会糊，顺势换成原图
+    if (clamped > 1 && !zoomedIn && onZoomIn) {
+      zoomedIn = true;
+      onZoomIn();
+    }
   };
 
   img.addEventListener('wheel', (ev) => {
@@ -358,6 +428,25 @@ async function renderText(stage, file, alive) {
 async function renderDocument(stage, file, alive) {
   const { ticket: t } = await ticket(file.id, PURPOSE_DOWNLOAD);
   const url = rawPreviewUrl(file.id, file.name, t);
+
+  // Telegram 大文件首次访问返回 202「正在缓存」：Viewer（pdf.js / FlyFish）会把
+  // 202 的 JSON 当成坏文件直接报错。先探到 200/206 再挂 Viewer，并把等待原因写出来。
+  const status = h('div', { class: 'muted small', text: '正在准备…' });
+  setChildren(stage, h('div', { class: 'media-center' }, status));
+  const ready = await waitReady(url, status, alive, { tries: 60, interval: 1000 });
+  if (!alive()) return;
+  if (!ready) {
+    setChildren(stage, h('div', { class: 'viewer-hint' },
+      h('div', { class: 'muted', text: status.textContent || '文件仍在云端准备，稍后重新打开本页即可预览。' }),
+      h('div', { style: { marginTop: '14px' } },
+        h('button', {
+          class: 'primary',
+          text: `下载 ${file.name || '文件'}`,
+          onclick: () => triggerDownload(buildDownloadUrl(file.id, t)),
+        }))));
+    return;
+  }
+
   const result = await mountViewer(stage, file, url);
   if (!alive()) return;
   if (result) return;

@@ -26,6 +26,13 @@ function toDate(value) {
 const pad = (n) => (n < 10 ? `0${n}` : String(n));
 
 /** 'YYYY-MM-DD HH:mm'（本地时区） */
+// 和 fmtSize 一样，但 0 显示成 "0 B"：容量/用量列里 0 是"真的一点没占"，
+// 不是"大小未知"（fmtSize(0) 返回 '-'，那是给文件大小列用的）。
+export function fmtSize0(value) {
+  const n = Number(value) || 0;
+  return n > 0 ? fmtSize(n) : '0 B';
+}
+
 export function fmtTime(value) {
   const d = toDate(value);
   if (!d) return '-';
@@ -145,6 +152,34 @@ export function shareStatus(s) {
 
 export function downloadState(s) {
   return [DOWNLOAD_STATE[s] || '未知', s === 'DOWNLOAD_COMPLETED' ? 'ok' : s === 'DOWNLOAD_FAILED' ? 'bad' : ''];
+}
+
+const UPLOAD_STATE = {
+  UPLOAD_TASK_STATUS_UNSPECIFIED: '未知',
+  PENDING: '等待中',
+  HASHING: '校验中',
+  UPLOADING: '上传中',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  CANCELED: '已取消',
+  PAUSED: '已暂停',
+};
+
+/** 上传任务状态 → [文案, 样式修饰符] */
+export function uploadState(s) {
+  return [UPLOAD_STATE[s] || '未知', s === 'COMPLETED' ? 'ok' : s === 'FAILED' ? 'bad' : (s === 'CANCELED' || s === 'PAUSED') ? 'warn' : ''];
+}
+
+const TASK_TYPE = {
+  UPLOAD_TASK_TYPE_UNSPECIFIED: '上传',
+  UPLOAD: '上传',
+  SYNC: '同步',
+  BACKUP: '备份',
+};
+
+/** 任务类型 → 文案（服务端把上传 / 同步 / 目录备份记在同一张任务表里） */
+export function taskType(t) {
+  return TASK_TYPE[t] || '上传';
 }
 
 /** 文件名比较：数字感知，中文按拼音（localeCompare 的 zh 排序） */

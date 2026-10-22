@@ -1310,7 +1310,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
 	if req.UploadId != nil && *req.UploadId > 0 {
-		if err := reuseAndDispatchUpload(*req.UploadId, tempPath, *req.Name, *req.ParentId, overwriteID, &targetProviderIds); err != nil {
+		if err := reuseAndDispatchUpload(ctx, *req.UploadId, tempPath, *req.Name, *req.ParentId, overwriteID, *req.Size, &targetProviderIds); err != nil {
 			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 		}
 	} else {
@@ -1532,24 +1532,44 @@ func smallFileUploadToProviders(ctx context.Context, blake3Hash string, req *nat
 	return nil
 }
 
-// reuseAndDispatchUpload 复用 initUpload 已创建的 upload record 并触发后台存储上传
-func reuseAndDispatchUpload(uploadID uint32, tempPath, fileName, parentID, overwriteID string, targetProviderIds *string) error {
+// uploadRecordReuseUpdates 组装"复用旧上传记录"时要刷新的字段。
+//
+// version 必须用本次请求发号的值（传 0 表示无版本上下文，保持原值不动）：
+// 分发完成时 markFileReadyIfVersionMatches 拿它做 CAS，留着旧版本号会让
+// is_ready 永远标不上（见 BUGS.md「三个源都已完成却显示未就绪」）。
+func uploadRecordReuseUpdates(tempPath, fileName, parentID string, fileSize uint64, overwriteID string, version uint64, targetProviderIds *string) map[string]interface{} {
+	updates := map[string]interface{}{
+		"temp_path":           tempPath,
+		"file_name":           fileName,
+		"parent_id":           parentID,
+		"file_size":           fileSize,
+		"overwrite_id":        overwriteID,
+		"target_provider_ids": targetProviderIds,
+		"task_status":         int32(native.UploadStatus_PENDING),
+		"message":             "",
+	}
+	if version > 0 {
+		updates["version"] = version
+	}
+	return updates
+}
+
+// reuseAndDispatchUpload 复用 initUpload 已创建的 upload record 并触发后台存储上传。
+//
+// 复用的记录可能是上一次断点续传 / 失败重试留下的**旧记录**，它的文件名字、父目录、
+// 大小、尤其是 version 都是旧的。其中 version 必须刷新成本次请求发号得到的值：
+// 分发完成时 markFileReadyIfVersionMatches 用它做 CAS（WHERE version = ur.version），
+// 版本对不上就静默命中 0 行，文件会永远停在"未就绪"（位置行全部 PCOMPLETED 也一样）。
+func reuseAndDispatchUpload(ctx context.Context, uploadID uint32, tempPath, fileName, parentID, overwriteID string, fileSize uint64, targetProviderIds *string) error {
 	uploadRecord, _, err := db.GetUploadRecordByID(uploadID, false)
 	if err != nil {
 		llog.L().Errorf("get upload record by id failed: %v", err)
 		return err
 	}
 
-	// 更新 upload record：指向新的临时文件路径
-	updates := map[string]interface{}{
-		"temp_path":           tempPath,
-		"file_name":           fileName,
-		"parent_id":           parentID,
-		"overwrite_id":        overwriteID,
-		"target_provider_ids": targetProviderIds,
-		"task_status":         int32(native.UploadStatus_PENDING),
-		"message":             "",
-	}
+	// 更新 upload record：指向新的临时文件路径 + 本次请求的元信息与版本号
+	myVersion := getUploadVersion(ctx)
+	updates := uploadRecordReuseUpdates(tempPath, fileName, parentID, fileSize, overwriteID, myVersion, targetProviderIds)
 	if err := db.GetDB().Model(uploadRecord).Updates(updates).Error; err != nil {
 		llog.L().Errorf("update upload record failed: %v", err)
 		return err
@@ -1559,14 +1579,18 @@ func reuseAndDispatchUpload(uploadID uint32, tempPath, fileName, parentID, overw
 	uploadRecord.TempPath = &tempPath
 	uploadRecord.FileName = &fileName
 	uploadRecord.ParentId = &parentID
+	uploadRecord.FileSize = &fileSize
 	uploadRecord.OverwriteId = &overwriteID
 	uploadRecord.TargetProviderIds = targetProviderIds
 	uploadRecord.TaskStatus = utils.EnumPtr(native.UploadStatus_PENDING)
+	if myVersion > 0 {
+		uploadRecord.Version = &myVersion
+	}
 	msg := ""
 	uploadRecord.Message = &msg
 
-	llog.L().Infof("reuse upload record %d for small file: %s", uploadID, fileName)
-	go storage.Dispatch(context.Background(), uploadRecord)
+	llog.L().Infof("reuse upload record %d for small file: %s, version: %d", uploadID, fileName, myVersion)
+	utils.Go(func() { storage.Dispatch(context.Background(), uploadRecord) })
 	return nil
 }
 

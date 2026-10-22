@@ -457,6 +457,18 @@ ensure_sqlite3_libs() {
     fi
 }
 
+# 构建 BLAKE3 原生库（Android）。可选加速：缺 Rust / NDK 时只警告，
+# App 会退回纯 Dart 哈希，功能不受影响（见 DESIGN.md §14.12.4）。
+# 多 ABI 用 PFM_BLAKE3_ABIS 覆盖，例如 PFM_BLAKE3_ABIS="arm64-v8a armeabi-v7a"。
+ensure_blake3_native_android() {
+    if [ ! -f "native/build_native.sh" ]; then
+        return 0
+    fi
+    if ! bash native/build_native.sh android "${PFM_BLAKE3_ABIS:-arm64-v8a}"; then
+        echo "⚠️ 未生成原生 BLAKE3 库，本包使用纯 Dart 哈希（功能不受影响）"
+    fi
+}
+
 # 构建 Android APK
 build_android_apk() {
     local APP_NAME="$1"
@@ -465,6 +477,8 @@ build_android_apk() {
     
     echo "📦 构建 Android APK..."
     echo "版本信息: ${VERSION}_${BUILD_NUMBER}"
+
+    ensure_blake3_native_android
     
     # 确保 sqlite3 原生库已下载
     ensure_sqlite3_libs
@@ -542,6 +556,8 @@ build_android_appbundle() {
     
     echo "📦 构建 Android App Bundle..."
     echo "目标输出文件名: $OUTPUT_NAME"
+
+    ensure_blake3_native_android
     
     # 确保 sqlite3 原生库已下载
     ensure_sqlite3_libs
@@ -658,13 +674,25 @@ build_linux() {
     local BUILD_NUMBER="$3"
     
     echo "🐧 构建 Linux..."
-    
+
+    # 原生 BLAKE3（可选）：编出来就随包放进 lib/，编不出就退回纯 Dart
+    if [ -f "native/build_native.sh" ] && ! bash native/build_native.sh host; then
+        echo "⚠️ 未生成宿主原生 BLAKE3 库，使用纯 Dart 哈希（功能不受影响）"
+    fi
+
     # 执行构建
     puro flutter build linux --release --no-tree-shake-icons
-    
+
     if [[ -d "build/linux/x64/release/bundle" ]]; then
         echo "✅ Linux构建完成"
         echo "📁 输出目录: build/linux/x64/release/bundle"
+        # FFI 会先找可执行文件同级的 lib/（见 blake3_native.dart 的候选路径）
+        local host_lib
+        host_lib="$(ls -1 build/native/*/libpfm_blake3.so 2>/dev/null | head -1 || true)"
+        if [ -n "$host_lib" ] && [ -d "build/linux/x64/release/bundle/lib" ]; then
+            cp "$host_lib" "build/linux/x64/release/bundle/lib/"
+            echo "🔧 已放入原生 BLAKE3 库: $host_lib"
+        fi
     else
         echo "❌ Linux构建失败"
         exit 1

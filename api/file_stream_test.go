@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -142,5 +143,34 @@ func TestHTTPStatusFromError(t *testing.T) {
 		if got := httpStatusFromError(c.err); got != c.want {
 			t.Errorf("%s: httpStatusFromError = %d, want %d", c.name, got, c.want)
 		}
+	}
+}
+
+// Telegram 大文件预下载态：三个流式 handler 都必须回 202 + 状态 JSON，
+// 而不是拿 nil Reader 去 Close / Read（历史 bug：HTTP PANIC → 500，见 BUGS.md）。
+func TestRespondPreDownload(t *testing.T) {
+	rec := httptest.NewRecorder()
+	respondPreDownload(rec, map[string]any{
+		"status":  "pre_download",
+		"file_id": "f1",
+		"message": "Large file is being cached, please retry later",
+	})
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got == "" {
+		t.Error("202 应当带 Retry-After，客户端据此稍后重试")
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("expected JSON content type, got %q", ct)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["status"] != "pre_download" {
+		t.Errorf("expected status=pre_download, got %v", body["status"])
 	}
 }

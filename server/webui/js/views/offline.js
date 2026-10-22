@@ -7,7 +7,7 @@ import { call } from '../api.js';
 import { h, toast, confirmDialog, emptyState, errorState, setChildren } from '../dom.js';
 import { fmtSize, fmtTime, downloadState } from '../format.js';
 import { back } from '../router.js';
-import { ensureSpace, store } from '../store.js';
+import { ensureSpace, store, refreshSpace } from '../store.js';
 import { pickFolder } from '../components/picker.js';
 
 let renderToken = 0;
@@ -37,10 +37,12 @@ export async function renderOffline(main, route) {
           class: 'sm',
           text: '选择目录',
           onclick: async () => {
-            const id = await pickFolder({ title: '保存到', okText: '选这个目录' });
-            if (!id) return;
-            targetId = id;
-            targetLabel.textContent = id === store.rootId ? '根目录' : `目录 ${id.slice(0, 8)}…`;
+            const picked = await pickFolder({ title: '保存到', okText: '选这个目录' });
+            if (!picked) return;
+            targetId = picked.id;
+            targetLabel.textContent = picked.id === store.rootId
+              ? '根目录'
+              : (picked.name || '已选目录');
           },
         }))),
     h('button', {
@@ -79,6 +81,7 @@ export async function renderOffline(main, route) {
   let page = 1;
   const pageSize = 50;
   let timer = null;
+  const seenStates = new Map(); // 上一轮看到的状态，用来识别"刚完成"（容量要重算）
 
   async function load() {
     if (!alive()) return;
@@ -87,6 +90,10 @@ export async function renderOffline(main, route) {
       const data = await call('/api/download/offline/list', { page, pageSize });
       if (!alive()) return;
       const records = data.records || [];
+      // 有新任务完成 → 容量变了，刷一下侧边栏容量条
+      const justDone = records.some((r) => r.state === 'DOWNLOAD_COMPLETED' && seenStates.get(r.id) !== r.state);
+      records.forEach((r) => seenStates.set(r.id, r.state));
+      if (justDone) refreshSpace();
       render(records, data.total || records.length);
       // 有进行中的任务才继续轮询，避免空转
       const pending = records.some((r) => r.state === 'DOWNLOAD_PENDING' || r.state === 'DOWNLOADING');

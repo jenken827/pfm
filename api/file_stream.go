@@ -38,16 +38,10 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	original := r.URL.Query().Get("original") == "true"
 
-	// 3. 解析缩略图尺寸参数（默认 200）
-	thumbnailSize := thumbnail.ThumbnailSize{
-		Width:  thumbnail.ThumbnailSizeSmall,
-		Height: thumbnail.ThumbnailSizeSmall,
-	}
+	// 3. 解析缩略图尺寸参数（默认 small，边长由配置 thumbnail.small / large 决定）
+	thumbnailSize := thumbnail.SmallSize()
 	if sizeParam := r.URL.Query().Get("size"); sizeParam == "large" {
-		thumbnailSize = thumbnail.ThumbnailSize{
-			Width:  thumbnail.ThumbnailSizeLarge,
-			Height: thumbnail.ThumbnailSizeLarge,
-		}
+		thumbnailSize = thumbnail.LargeSize()
 	}
 
 	// 4. 如果不是请求原图，尝试返回缩略图
@@ -73,9 +67,7 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 6. 处理 Telegram 大文件预下载状态
 	if result.IsPreDownload {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(result.PreDownloadData)
+		respondPreDownload(w, result.PreDownloadData)
 		return
 	}
 	defer result.Reader.Close()
@@ -133,9 +125,7 @@ func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 3.2 处理 Telegram 大文件预下载状态
 	if result.IsPreDownload {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(result.PreDownloadData)
+		respondPreDownload(w, result.PreDownloadData)
 		return
 	}
 	defer result.Reader.Close()
@@ -495,8 +485,38 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	// 4.1 更新文件访问时间
 	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
-	defer result.Reader.Close()
+	// 4.2 处理 Telegram 大文件预下载状态
+	//
+	// 必须和 PreviewFileHandler / DownloadFileHandler 保持一致：此时 result.Reader
+	// 是 nil（service 只回状态，后台已异步预下载），继续往下走会在
+	// `defer result.Reader.Close()` / 首次 Read 时 nil pointer panic → HTTP 500。
+	if result.IsPreDownload {
+		respondPreDownload(w, result.PreDownloadData)
+		return
+	}
+
+	if result.Reader != nil {
+		defer result.Reader.Close()
+	}
 
 	// 5. 流式传输（inline，浏览器直接显示）
 	streamResponse(w, r, result, "inline")
+}
+
+// respondPreDownload 回 202 + 预下载状态，提示客户端稍后重试。
+//
+// Telegram 大文件（> telegram.LargeFileSizeThreshold）首次访问时尚未落到本地缓存，
+// 服务端不阻塞请求（bot-api 拉 30MB+ 可能几十秒），而是触发异步预下载并立即返回本响应。
+// 缓存完成后（cache_status=CACHED）同一个请求会正常流式返回。
+//
+// 三个流式 handler 都必须走这里，漏一个就是 nil Reader → HTTP PANIC（见 BUGS.md）。
+func respondPreDownload(w http.ResponseWriter, data map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", "5")
+	// 202 是临时状态，别让浏览器 / 代理缓存下来，否则缓存就绪后仍拿到「正在准备」
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusAccepted)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		llog.L().Errorf("write pre-download response failed: %v", err)
+	}
 }

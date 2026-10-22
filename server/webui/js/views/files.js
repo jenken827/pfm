@@ -12,7 +12,7 @@ import {
   fmtSize, fmtTime, iconFor, isDir, typeText, sortFiles,
 } from '../format.js';
 import { navigate } from '../router.js';
-import { ensureSpace, store, setView, setSort } from '../store.js';
+import { ensureSpace, store, setView, setSort, refreshSpace } from '../store.js';
 import { ThumbLoader } from '../thumbs.js';
 import { pickFolder } from '../components/picker.js';
 
@@ -491,7 +491,8 @@ export async function renderFiles(main, route) {
   }
 
   async function moveMany(ids) {
-    const target = await pickFolder({ title: `移动 ${ids.length} 项到` });
+    const picked = await pickFolder({ title: `移动 ${ids.length} 项到` });
+    const target = picked?.id || '';
     if (!target) return;
     try {
       const data = await call('/api/file/move', { fileIds: ids, targetParentId: target });
@@ -515,6 +516,7 @@ export async function renderFiles(main, route) {
       await call('/api/file/delete', { ids });
       toast('已移入回收站', 'ok');
       state.selected.clear();
+      refreshSpace();
       load(true);
     } catch (err) {
       toast(`删除失败：${err.message}`, 'err');

@@ -22,6 +22,50 @@ type Config struct {
 	PhotoDate PhotoDateConfig `json:"photo_date" yaml:"photo_date"`
 	// 离线下载配置（aria2 目标地址校验）
 	Download DownloadConfig `json:"download" yaml:"download"`
+	// 每 IP 限频配置（令牌桶；缩略图走独立配额，见 middleware/rate_limit.go）
+	RateLimit RateLimitConfig `json:"ratelimit" yaml:"ratelimit"`
+	// 缩略图尺寸（网格 / 预览两档，见 internal/thumbnail）
+	Thumbnail ThumbnailConfig `json:"thumbnail" yaml:"thumbnail"`
+}
+
+// 缩略图默认边长（像素）。放在 models 里是为了让 config 与 thumbnail 都能引用，
+// 又不产生 config -> thumbnail -> llog -> config 的循环依赖。
+const (
+	// DefaultThumbnailSmallSize 网格缩略图默认边长
+	DefaultThumbnailSmallSize = 200
+	// DefaultThumbnailLargeSize 全屏预览缩略图默认边长
+	DefaultThumbnailLargeSize = 400
+)
+
+// ThumbnailConfig 缩略图尺寸配置
+//
+// 两档缩略图，客户端用 `GET /api/file/stream/preview?size=small|large` 选择：
+//   - Small：网格视图用的边长（像素），默认 200；
+//   - Large：全屏预览用的边长（像素），默认 400。
+//
+// 对应缓存文件名为 {hash}_{边长}.jpg。改尺寸后旧尺寸的缓存文件仍在磁盘上，
+// 新尺寸会在首次请求时按需生成（serveThumbnail 触发生成）；<=0 回落默认值。
+type ThumbnailConfig struct {
+	Small int `json:"small" yaml:"small"`
+	Large int `json:"large" yaml:"large"`
+}
+
+// RateLimitConfig 每 IP 限频参数
+//
+// 三组令牌桶，各自独立计量：
+//   - endpoint：同一 IP + 同一 endpoint（路径）的请求，突发 Burst、每 RefillMS 补 1 个；
+//   - global：同一 IP 的全部请求（缩略图除外），防止换路径刷；
+//   - thumbnail：缩略图请求（/api/file/stream/preview 且非 original）单独计量，
+//     不与文档预览 / 下载抢额度——一个目录几百张图是正常用法，不应触发 429。
+//
+// 任一字段 <= 0 时使用内置默认值（见 internal/config.defaultConfig）。
+type RateLimitConfig struct {
+	EndpointBurst     int `json:"endpoint_burst" yaml:"endpoint_burst"`
+	EndpointRefillMS  int `json:"endpoint_refill_ms" yaml:"endpoint_refill_ms"`
+	GlobalBurst       int `json:"global_burst" yaml:"global_burst"`
+	GlobalRefillMS    int `json:"global_refill_ms" yaml:"global_refill_ms"`
+	ThumbnailBurst    int `json:"thumbnail_burst" yaml:"thumbnail_burst"`
+	ThumbnailRefillMS int `json:"thumbnail_refill_ms" yaml:"thumbnail_refill_ms"`
 }
 
 // DownloadConfig 离线下载配置

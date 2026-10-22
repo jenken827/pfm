@@ -14,6 +14,11 @@ const ROUTES = [
   { name: 'trash', re: /^\/trash$/, keys: [] },
   { name: 'shares', re: /^\/shares$/, keys: [] },
   { name: 'offline', re: /^\/offline$/, keys: [] },
+  { name: 'transfers', re: /^\/transfers$/, keys: [] },
+  { name: 'webdav', re: /^\/webdav$/, keys: [] },
+  { name: 'adminUsers', re: /^\/admin\/users$/, keys: [] },
+  { name: 'adminProviders', re: /^\/admin\/providers$/, keys: [] },
+  { name: 'adminBackup', re: /^\/admin\/backup$/, keys: [] },
   { name: 'settings', re: /^\/settings\/([^/]+)$/, keys: ['id'] },
   { name: 'login', re: /^\/login$/, keys: [] },
 ];

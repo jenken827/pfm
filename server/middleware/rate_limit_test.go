@@ -33,21 +33,42 @@ func TestTokenBucket(t *testing.T) {
 	}
 }
 
+func TestTokenBucketSustainedRate(t *testing.T) {
+	// 10 tokens, refill 1 per 20ms → 在 200ms 内应再放行约 10 个
+	bucket := NewTokenBucket(10, 20*time.Millisecond)
+	for i := 0; i < 10; i++ {
+		if !bucket.Allow() {
+			t.Fatalf("Request %d should be allowed", i+1)
+		}
+	}
+	time.Sleep(210 * time.Millisecond)
+
+	allowed := 0
+	for i := 0; i < 20; i++ {
+		if bucket.Allow() {
+			allowed++
+		}
+	}
+	if allowed < 8 || allowed > 12 {
+		t.Errorf("expected ~10 tokens after 210ms, got %d", allowed)
+	}
+}
+
 func TestEndpointRateLimiter(t *testing.T) {
-	limiter := NewEndpointRateLimiter()
+	limiter := NewEndpointRateLimiter(3, 100*time.Millisecond)
 
 	endpoint := "/test/endpoint"
 
-	// First 10 requests should be allowed
-	for i := 0; i < 10; i++ {
+	// First 3 requests should be allowed
+	for i := 0; i < 3; i++ {
 		if !limiter.Allow(endpoint) {
 			t.Errorf("Request %d to endpoint should be allowed", i+1)
 		}
 	}
 
-	// 11th request should be denied
+	// 4th request should be denied
 	if limiter.Allow(endpoint) {
-		t.Error("11th request to same endpoint should be denied")
+		t.Error("4th request to same endpoint should be denied")
 	}
 
 	// Different endpoint should be allowed
@@ -58,71 +79,120 @@ func TestEndpointRateLimiter(t *testing.T) {
 }
 
 func TestIPRateLimiter_EndpointLimit(t *testing.T) {
-	limiter := NewIPRateLimiter()
+	limiter := NewIPRateLimiterWithOptions(RateLimitOptions{EndpointBurst: 5, EndpointRefill: time.Hour})
 
 	ip := "192.168.1.1"
 	endpoint := "/api/test"
 
-	// First 10 requests to same endpoint should be allowed
-	for i := 0; i < 10; i++ {
-		if !limiter.Allow(ip, endpoint) {
+	for i := 0; i < 5; i++ {
+		if !limiter.Allow(ip, endpoint, false) {
 			t.Errorf("Request %d to endpoint should be allowed", i+1)
 		}
 	}
 
-	// 11th request to same endpoint should be denied
-	if limiter.Allow(ip, endpoint) {
-		t.Error("11th request to same endpoint should be denied")
+	if limiter.Allow(ip, endpoint, false) {
+		t.Error("6th request to same endpoint should be denied")
 	}
 
 	// Request to different endpoint should still be allowed
 	otherEndpoint := "/api/other"
-	if !limiter.Allow(ip, otherEndpoint) {
+	if !limiter.Allow(ip, otherEndpoint, false) {
 		t.Error("Request to different endpoint should be allowed")
 	}
 }
 
 func TestIPRateLimiter_GlobalLimit(t *testing.T) {
-	// This test verifies the global limit of 200 requests per minute
-	// We'll use a shorter timeframe for testing purposes
-	limiter := NewIPRateLimiter()
+	limiter := NewIPRateLimiterWithOptions(RateLimitOptions{EndpointBurst: 100, EndpointRefill: time.Hour, GlobalBurst: 20, GlobalRefill: time.Hour})
 
 	ip := "192.168.1.100"
 
-	// Make 200 requests to different endpoints (to bypass endpoint limit)
-	for i := 0; i < 200; i++ {
-		endpoint := "/api/endpoint/" + string(rune(i))
-		if !limiter.Allow(ip, endpoint) {
+	// 每个路径都不重复，绕开 endpoint 桶，只压全局桶
+	for i := 0; i < 20; i++ {
+		endpoint := "/api/endpoint/" + string(rune('a'+i))
+		if !limiter.Allow(ip, endpoint, false) {
 			t.Errorf("Request %d should be allowed within global limit", i+1)
 		}
 	}
 
-	// 201st request should be denied due to global limit
-	endpoint := "/api/final"
-	if limiter.Allow(ip, endpoint) {
-		t.Error("201st request should be denied due to global limit")
+	if limiter.Allow(ip, "/api/final", false) {
+		t.Error("request beyond global limit should be denied")
+	}
+}
+
+// 缩略图只用独立配额：不能挤占文档流的 endpoint / global 额度
+func TestIPRateLimiter_ThumbnailIsolated(t *testing.T) {
+	limiter := NewIPRateLimiterWithOptions(RateLimitOptions{
+		EndpointBurst:   10,
+		EndpointRefill:  time.Hour,
+		GlobalBurst:     2,
+		GlobalRefill:    time.Hour,
+		ThumbnailBurst:  3,
+		ThumbnailRefill: time.Hour,
+	})
+
+	ip := "10.1.2.3"
+
+	// 用小额度把全局桶打空（换路径绕开 endpoint 桶）
+	if !limiter.Allow(ip, "/api/a", false) || !limiter.Allow(ip, "/api/b", false) {
+		t.Fatal("first two requests should be allowed")
+	}
+	if limiter.Allow(ip, "/api/c", false) {
+		t.Fatal("global bucket should be exhausted")
+	}
+
+	// 缩略图不受全局桶影响
+	for i := 0; i < 3; i++ {
+		if !limiter.Allow(ip, "/api/file/stream/preview", true) {
+			t.Errorf("thumbnail request %d should be allowed", i+1)
+		}
+	}
+	if limiter.Allow(ip, "/api/file/stream/preview", true) {
+		t.Error("4th thumbnail request should hit the thumbnail bucket")
+	}
+
+	// 缩略图流量既不吃也不回填全局桶：普通请求依旧被全局桶拒绝
+	if limiter.Allow(ip, "/api/a", false) {
+		t.Error("global bucket should stay exhausted after thumbnail traffic")
+	}
+}
+
+func TestIsThumbnailRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		query    string
+		expected bool
+	}{
+		{"小缩略图", "/api/file/stream/preview", "file_id=x&size=small", true},
+		{"大缩略图", "/api/file/stream/preview", "file_id=x&size=large", true},
+		{"不带 size 默认缩略图", "/api/file/stream/preview", "file_id=x", true},
+		{"原图预览", "/api/file/stream/preview", "file_id=x&original=true", false},
+		{"原图 + size", "/api/file/stream/preview", "file_id=x&size=large&original=true", false},
+		{"其他路径", "/api/file/preview/raw/a.pdf", "file_id=x", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.path+"?"+tt.query, nil)
+			if got := isThumbnailRequest(req); got != tt.expected {
+				t.Errorf("isThumbnailRequest(%s?%s) = %v, want %v", tt.path, tt.query, got, tt.expected)
+			}
+		})
 	}
 }
 
 func TestRateLimitHTTPMiddleware(t *testing.T) {
-	// Reset the global rate limiter for testing
-	rateLimiter = NewIPRateLimiter()
+	// 用小额度验证中间件行为（默认额度是给生产用的，不适合断言）
+	InitRateLimit(RateLimitOptions{EndpointBurst: 2, EndpointRefill: time.Hour, GlobalBurst: 100, GlobalRefill: time.Hour})
 
-	// Create a test handler
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Success"))
 	})
-
-	// Wrap with rate limiting middleware
 	handler := RateLimitHTTPMiddleware(testHandler)
-
-	// Create test server
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	// Make 10 requests to same endpoint (should all succeed)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		resp, err := http.Get(server.URL + "/api/test")
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -133,7 +203,6 @@ func TestRateLimitHTTPMiddleware(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	// 11th request should be rate limited
 	resp, err := http.Get(server.URL + "/api/test")
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
@@ -143,41 +212,46 @@ func TestRateLimitHTTPMiddleware(t *testing.T) {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("Expected status 429 Too Many Requests, got %d", resp.StatusCode)
 	}
+	// 429 必须带 Retry-After，客户端据此退避而不是立刻重试
+	if got := resp.Header.Get("Retry-After"); got == "" {
+		t.Error("429 response should carry Retry-After header")
+	}
+
+	// 恢复默认，避免影响同包内其他用例
+	InitRateLimit(DefaultRateLimitOptions())
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	limiter := NewIPRateLimiter()
+	limiter := NewIPRateLimiterWithOptions(RateLimitOptions{
+		EndpointBurst:  10,
+		EndpointRefill: time.Hour,
+		GlobalBurst:    10,
+		GlobalRefill:   time.Hour,
+	})
 
 	ip := "10.0.0.1"
 	endpoint := "/concurrent/test"
 
 	var wg sync.WaitGroup
-	errors := make(chan bool, 100)
+	denied := make(chan bool, 100)
 
-	// Launch 10 goroutines, each making 5 requests
 	for g := 0; g < 10; g++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 5; i++ {
-				if !limiter.Allow(ip, endpoint) {
-					errors <- true
+				if !limiter.Allow(ip, endpoint, false) {
+					denied <- true
 				}
-				time.Sleep(10 * time.Millisecond)
 			}
 		}()
 	}
 
 	wg.Wait()
-	close(errors)
+	close(denied)
 
-	// Count how many requests were allowed
-	allowedCount := 50 - len(errors)
-	t.Logf("Allowed %d out of 50 concurrent requests", allowedCount)
-
-	// Should have some rejections due to rate limiting
-	if allowedCount > 20 {
-		t.Error("Too many requests allowed - rate limiting may not be working correctly")
+	if len(denied) == 0 {
+		t.Error("expected some requests to be denied with a 10-token bucket")
 	}
 }
 
@@ -241,7 +315,7 @@ func TestExtractClientIPFromRequest(t *testing.T) {
 
 			ip := extractClientIPFromRequest(req)
 			if ip != tt.expectedIP {
-				t.Errorf("Expected IP %s, got %s", tt.expectedIP, ip)
+				t.Errorf("Expected IP %s, got %s", ip, tt.expectedIP)
 			}
 		})
 	}

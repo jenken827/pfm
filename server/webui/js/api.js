@@ -26,10 +26,13 @@ const CODE_MESSAGE = {
 };
 
 export class ApiError extends Error {
-  constructor(message, code = '') {
+  constructor(message, code = '', rawMessage = '') {
     super(message);
     this.name = 'ApiError';
     this.code = code;
+    // 服务端原始 message。业务错误被 CODE_MESSAGE 统一成中文短语后，像
+    // "source path does not exist" 这种定位信息就丢了；需要细节的视图可以显式用它。
+    this.rawMessage = rawMessage || '';
   }
 }
 
@@ -69,7 +72,7 @@ export async function call(path, body = {}) {
   }
 
   if (!res.ok) {
-    throw new ApiError(json?.message || `请求失败（HTTP ${res.status}）`, json?.code || '');
+    throw new ApiError(json?.message || `请求失败（HTTP ${res.status}）`, json?.code || '', json?.message || '');
   }
   const code = json?.code;
   if (code === 'TOKEN_INVALID') {
@@ -77,7 +80,7 @@ export async function call(path, body = {}) {
     throw new ApiError(CODE_MESSAGE.TOKEN_INVALID, code);
   }
   if (code && code !== 'SUCCESS' && code !== 1) {
-    throw new ApiError(CODE_MESSAGE[code] || json?.message || `错误码 ${code}`, code);
+    throw new ApiError(CODE_MESSAGE[code] || json?.message || `错误码 ${code}`, code, json?.message || '');
   }
   return json?.data || {};
 }
@@ -134,6 +137,17 @@ export function rawPreviewUrl(fileId, fileName, t) {
   const name = encodeURIComponent(fileName || 'file');
   const q = new URLSearchParams({ file_id: fileId, ticket: t });
   return `/api/file/preview/raw/${name}?${q.toString()}`;
+}
+
+/**
+ * 缩略图地址（<img src> 用，票据走 query，见 server/middleware 的票据校验）。
+ *
+ * 原图动辄几 MB，而缩略图是本地磁盘上的 JPEG（200/400 px），首屏用它秒开；
+ * 用户要看细节时再换成 rawPreviewUrl 的原图。
+ */
+export function thumbPreviewUrl(fileId, t, size = 'large') {
+  const q = new URLSearchParams({ file_id: fileId, ticket: t, size });
+  return `/api/file/stream/preview?${q.toString()}`;
 }
 
 /** 直链 302（Location 里自带票据）：给浏览器/第三方下载器用 */

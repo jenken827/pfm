@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-// ignore: implementation_imports
-import 'package:blake3_dart/src/blake3_compact.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:pfm/models/models.dart';
 import 'package:pfm/proto/native/enum.pb.dart' hide BackupFileStatus;
 import 'package:pfm/services/device_backup_content.dart';
+import 'package:pfm/services/file_hasher.dart';
 import 'package:pfm/services/services.dart';
 import 'package:pfm/utils/platform.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -391,25 +389,15 @@ class DeviceBackupService {
     File file, {
     required String prefix,
     void Function(int done)? onProgress,
-  }) async {
-    final hasher = HashContext.unkeyed();
-    hasher.update(Uint8List.fromList(utf8.encode(prefix)));
-    var done = 0;
-    var sinceNotify = 0;
-    await for (final chunk in file.openRead()) {
-      // openRead 的块是 List<int>，blake3 要 Uint8List
-      hasher.update(Uint8List.fromList(chunk));
-      done += chunk.length;
-      sinceNotify += chunk.length;
-      // 进度回调节流：每 256KB 通知一次，避免高频 setState
-      if (onProgress != null && sinceNotify >= 256 * 1024) {
-        sinceNotify = 0;
-        onProgress(done);
-      }
-    }
-    final out = Uint8List(32);
-    hasher.finalize(out);
-    return out.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }) {
+    // 导出文件可达几十 MB，交给 worker isolate 算，主 isolate 只收进度
+    // （见 DESIGN.md §14.12）。prefix 语义不变：先喂 prefix 字节再喂文件字节，
+    // 摘要与改前 HashContext 逐块 update 完全一致。
+    return FileHasher.hashFile(
+      file.path,
+      prefix: prefix,
+      onProgress: onProgress == null ? null : (hashed, _) => onProgress(hashed),
+    );
   }
 
   /// 上传备份文件到服务器

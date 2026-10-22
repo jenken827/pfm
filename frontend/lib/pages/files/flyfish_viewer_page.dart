@@ -31,6 +31,7 @@ class FlyfishViewerPage extends StatefulWidget {
 class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
   WebViewController? _controller;
   bool _isLoading = true;
+  bool _preparing = false; // 正在等云端缓存就绪（Telegram 大文件 202）
   String? _error;
   late final String _baseUrl;
   late final FmRepository _repository;
@@ -54,6 +55,7 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
   Future<void> _loadViewer() async {
     setState(() {
       _isLoading = true;
+      _preparing = false;
       _error = null;
     });
 
@@ -88,11 +90,46 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
         '$_baseUrl/api/file/preview/raw/$fileName'
         '?file_id=${widget.file.id}'
         '&ticket=${Uri.encodeQueryComponent(ticket)}';
+
+    // Telegram 大文件（> 阈值）首次访问时服务端回 202「云端正在缓存」，阅读器
+    // 拿到 202 的 JSON 会当成坏文件。先探测到 200/206 再交给阅读器；
+    // 预下载在服务端异步进行，30MB 量级通常几秒到几十秒。
+    final ready = await _waitPreviewReady(fileUrl);
+    if (!mounted) return null;
+    if (!ready) {
+      setState(() {
+        _error = al.flyfish_prepareTimeout;
+        _isLoading = false;
+        _preparing = false;
+      });
+      return null;
+    }
+    setState(() => _preparing = false);
+
     final options = Uri.encodeComponent('{"toolbar":true}');
 
     return '$_baseUrl/file-viewer/index.html'
         '?url=${Uri.encodeComponent(fileUrl)}'
         '&options=$options';
+  }
+
+  /// 等文件在服务端就绪；返回 true 表示可以交给阅读器。
+  ///
+  /// 200 / 206 = 就绪；202 = 云端缓存中（继续等）；401/403/404 = 票据或文件有问题，
+  /// 不再等待；其它（网络抖动 / 0）继续重试。最多等约 60 秒。
+  Future<bool> _waitPreviewReady(String fileUrl) async {
+    for (var attempt = 0; attempt < 60; attempt++) {
+      if (!mounted) return false;
+      final status = await _repository.probePreviewReady(fileUrl);
+      if (!mounted) return false;
+      if (status == 200 || status == 206) return true;
+      if (status == 401 || status == 403 || status == 404) return false;
+      if (!_preparing) {
+        setState(() => _preparing = true);
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    return false;
   }
 
   WebViewController _createController() {
@@ -208,7 +245,11 @@ class _FlyfishViewerPageState extends State<FlyfishViewerPage> {
               children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
-                Text(al.flyfish_loadingDocument),
+                Text(
+                  _preparing
+                      ? al.flyfish_preparingCloud
+                      : al.flyfish_loadingDocument,
+                ),
               ],
             ),
           ),

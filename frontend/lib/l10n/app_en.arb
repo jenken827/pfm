@@ -274,6 +274,8 @@
     "flyfish_willOpenInBrowser": "Will open preview in browser",
     "flyfish_loadingDocument": "Loading document...",
     "flyfish_ticketFailed": "Failed to get preview link, please retry",
+    "flyfish_preparingCloud": "Caching file from cloud...",
+    "flyfish_prepareTimeout": "File is still being cached, please retry later",
     "flyfish_openBrowserFailed": "Cannot open the browser",
     "folderPicker_root": "Root",
     "folderPicker_selectTarget": "Select target folder",

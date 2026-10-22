@@ -605,7 +605,11 @@ func UpdateFileSimple(file *native.FileORM) error {
 // 通过parent_id和file_name定位文件，设置is_ready为true
 // version > 0 时仅当文件当前 version 等于该值才更新（CAS，防止旧分发把
 // 已被新 PUT 接管的新 hash 错误标记为就绪）
-func UpdateFileIsReady(parentID, fileName, ownerID string, version uint64) error {
+//
+// 返回受影响行数：0 行表示 CAS 没匹配上（版本已变 / 文件已被移动改名），
+// 调用方必须据此告警——这个更新失败是静默的，漏掉就会留下"位置行都完成了
+// 但 is_ready 还是 false"的脏数据。
+func UpdateFileIsReady(parentID, fileName, ownerID string, version uint64) (int64, error) {
 	ctx := context.Background()
 	isReady := true
 	q := gorm.G[*native.FileORM](db).
@@ -616,8 +620,8 @@ func UpdateFileIsReady(parentID, fileName, ownerID string, version uint64) error
 	if version > 0 {
 		q = q.Where("version = ?", version)
 	}
-	_, err := q.Update(ctx, "is_ready", isReady)
-	return err
+	matched, err := q.Update(ctx, "is_ready", isReady)
+	return int64(matched), err
 }
 
 // TakeoverFileVersion CAS 抢占文件版本号并更新内容字段（hash/size）。

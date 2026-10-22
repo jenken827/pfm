@@ -10,15 +10,20 @@ import (
 
 	"golang.org/x/image/draw"
 	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/models"
 )
 
 const (
-	// ThumbnailSizeSmall 小尺寸缩略图（网格视图）
-	ThumbnailSizeSmall = 200
-	// ThumbnailSizeLarge 大尺寸缩略图（预览）
-	ThumbnailSizeLarge = 400
+	// DefaultSmallSize 网格缩略图默认边长（像素），配置 thumbnail.small 覆盖
+	DefaultSmallSize = models.DefaultThumbnailSmallSize
+	// DefaultLargeSize 全屏预览缩略图默认边长（像素），配置 thumbnail.large 覆盖
+	DefaultLargeSize = models.DefaultThumbnailLargeSize
 	// DefaultQuality JPEG 质量
 	DefaultQuality = 75
+
+	// 边长允许范围：太小没意义，太大等于不做缩略图（还白占内存）
+	minThumbnailSize = 32
+	maxThumbnailSize = 4096
 )
 
 // ThumbnailSize 缩略图尺寸
@@ -27,10 +32,54 @@ type ThumbnailSize struct {
 	Height int
 }
 
-// 预定义的缩略图尺寸
-var ThumbnailSizes = []ThumbnailSize{
-	{Width: ThumbnailSizeSmall, Height: ThumbnailSizeSmall},
-	{Width: ThumbnailSizeLarge, Height: ThumbnailSizeLarge},
+// 当前生效的边长（启动时由 Configure 按配置写入）
+var (
+	smallSize = DefaultSmallSize
+	largeSize = DefaultLargeSize
+)
+
+// Configure 用配置覆盖两档缩略图边长。
+// 由 bootstrap.Init 在读到配置后调用一次；非法值（<=0 / 越界）回落默认值，
+// 且保证 small <= large（写反了自动纠正，缓存文件名按边长区分，不会串）。
+func Configure(small, large int) {
+	smallSize = normalizeThumbnailSize(small, DefaultSmallSize)
+	largeSize = normalizeThumbnailSize(large, DefaultLargeSize)
+	if smallSize > largeSize {
+		smallSize, largeSize = largeSize, smallSize
+	}
+	llog.L().Infof("thumbnail sizes: small=%d, large=%d", smallSize, largeSize)
+}
+
+// normalizeThumbnailSize 把配置值收敛到 [minThumbnailSize, maxThumbnailSize]
+func normalizeThumbnailSize(size, fallback int) int {
+	if size <= 0 {
+		size = fallback
+	}
+	if size < minThumbnailSize {
+		return minThumbnailSize
+	}
+	if size > maxThumbnailSize {
+		return maxThumbnailSize
+	}
+	return size
+}
+
+// SmallSize 网格视图用的缩略图尺寸
+func SmallSize() ThumbnailSize {
+	return ThumbnailSize{Width: smallSize, Height: smallSize}
+}
+
+// LargeSize 全屏预览用的缩略图尺寸
+func LargeSize() ThumbnailSize {
+	return ThumbnailSize{Width: largeSize, Height: largeSize}
+}
+
+// Sizes 当前生效的全部尺寸（小在前；两档配成相同值时只返回一个）
+func Sizes() []ThumbnailSize {
+	if smallSize == largeSize {
+		return []ThumbnailSize{SmallSize()}
+	}
+	return []ThumbnailSize{SmallSize(), LargeSize()}
 }
 
 // Generator 缩略图生成器
@@ -110,7 +159,7 @@ func (g *Generator) Generate(filePath string, fileHash string, size ThumbnailSiz
 func (g *Generator) GenerateAll(filePath string, fileHash string) (map[ThumbnailSize]string, error) {
 	result := make(map[ThumbnailSize]string)
 
-	for _, size := range ThumbnailSizes {
+	for _, size := range Sizes() {
 		path, err := g.Generate(filePath, fileHash, size)
 		if err != nil {
 			return result, err
@@ -168,10 +217,15 @@ func (g *Generator) DeleteThumbnail(fileHash string, size ThumbnailSize) error {
 	return nil
 }
 
-// DeleteAllThumbnails 删除所有尺寸的缩略图缓存
+// DeleteAllThumbnails 删除该 hash 的所有尺寸缩略图缓存。
+// 用 {hash}_*.jpg 通配而不是遍历当前配置的尺寸：改过尺寸后旧尺寸文件也要一起清掉。
 func (g *Generator) DeleteAllThumbnails(fileHash string) error {
-	for _, size := range ThumbnailSizes {
-		if err := g.DeleteThumbnail(fileHash, size); err != nil {
+	matches, err := filepath.Glob(filepath.Join(g.cacheDir, fileHash+"_*.jpg"))
+	if err != nil {
+		return err
+	}
+	for _, path := range matches {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}

@@ -37,6 +37,17 @@ class ApiResult<T> {
 class FmRepository {
   late final Dio _dio;
   late final Dio _uploadDio; // 上传专用 Dio，超时时间更长
+
+  /// 预览就绪探测专用 Dio（不带鉴权拦截器，见 probePreviewReady）
+  Dio? _probeDioClient;
+  Dio get _probeDio => _probeDioClient ??= Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      validateStatus: (status) => status != null && status < 500,
+    ),
+  );
+
   Talker get _logger => getLogger();
 
   String? _baseUrl;
@@ -1650,6 +1661,37 @@ class FmRepository {
     } catch (e) {
       _logger.error('创建预览票据失败: $e');
       return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 探测预览 URL 是否已就绪（阅读器加载前调用）
+  ///
+  /// Telegram 大文件首次访问时服务端返回 **202**「云端正在缓存」（后台已触发
+  /// 预下载），阅读器拿到 202 的 JSON 会当成坏文件。返回 HTTP 状态码，
+  /// 200 / 206 表示可以交给阅读器；网络异常返回 0。
+  ///
+  /// 用独立的 Dio：探测的是带单文件票据的裸 URL，走主 `_dio` 会经过鉴权拦截器，
+  /// 一次探测 4xx 就可能把用户踢回登录页，代价不对等。
+  Future<int> probePreviewReady(String url) async {
+    try {
+      final resp = await _probeDio.get<ResponseBody>(
+        url,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: {'Range': 'bytes=0-0'},
+        ),
+      );
+      // 只关心状态码：拿到响应头就断开。若服务端不支持 Range（返回 200 全量），
+      // 用 bytes 类型会把 30MB+ 整个读进内存，这里立刻取消订阅。
+      final body = resp.data;
+      if (body != null) {
+        final sub = body.stream.listen((_) {}, cancelOnError: true);
+        await sub.cancel();
+      }
+      return resp.statusCode ?? 0;
+    } catch (e) {
+      _logger.debug('预览就绪探测失败: $e');
+      return 0;
     }
   }
 

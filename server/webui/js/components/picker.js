@@ -13,11 +13,13 @@ import { h, openModal } from '../dom.js';
  * @param {string} opts.title 弹层标题
  * @param {Set<string>} [opts.exclude] 不可选的 id（如正在移动的目录自身）
  * @param {string} [opts.okText]
- * @returns {Promise<string|null>} 选中的 folderId（取消为 null）
+ * @returns {Promise<{id: string, name: string}|null>} 选中的目录（取消为 null）；
+ *   带上 name 是为了让调用方显示"文档/2026"这类可读名字，而不是一串 id。
  */
 export function pickFolder({ title = '选择目标文件夹', exclude, okText = '移到这里' } = {}) {
   return new Promise((resolve) => {
     let selected = '';
+    let selectedName = '';
     let done = false;
     const tree = h('div', { class: 'picker' });
     const status = h('div', { class: 'hint' });
@@ -32,7 +34,7 @@ export function pickFolder({ title = '选择目标文件夹', exclude, okText = 
 
     const confirm = () => {
       if (!selected) return;
-      finish(selected);
+      finish({ id: selected, name: selectedName });
     };
     footerOk.addEventListener('click', confirm);
 
@@ -46,9 +48,10 @@ export function pickFolder({ title = '选择目标文件夹', exclude, okText = 
       onClose: () => finish(null),
     });
 
-    const select = (id, node) => {
+    const select = (id, node, name = '') => {
       if (exclude?.has(id)) return;
       selected = id;
+      selectedName = name;
       tree.querySelectorAll('.node.on').forEach((n) => n.classList.remove('on'));
       node.classList.add('on');
       footerOk.disabled = false;
@@ -67,7 +70,7 @@ export function pickFolder({ title = '选择目标文件夹', exclude, okText = 
 
       row.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        select(folder.id, row);
+        select(folder.id, row, folder.name || '');
         if (children.childElementCount) {
           const opened = !children.hidden;
           children.hidden = opened;
@@ -98,7 +101,7 @@ export function pickFolder({ title = '选择目标文件夹', exclude, okText = 
         const space = await ensureSpace();
         const rootRow = makeNode({ id: space.rootFileId, name: '根目录' }, 0);
         tree.appendChild(rootRow);
-        select(space.rootFileId, rootRow);
+        select(space.rootFileId, rootRow, '根目录');
       } catch (err) {
         tree.appendChild(h('div', { class: 'empty', text: `加载失败：${err.message}` }));
       }

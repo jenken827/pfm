@@ -4,6 +4,7 @@
 // 大目录树上容易点错，客户端也没把它放在首屏。
 
 import { call } from '../api.js';
+import { refreshSpace } from '../store.js';
 import { h, toast, confirmDialog, emptyState, errorState, setChildren } from '../dom.js';
 import { fmtSize, fmtTime, iconFor, isDir } from '../format.js';
 import { back } from '../router.js';
@@ -72,6 +73,7 @@ async function restore(file, reload) {
   try {
     await call('/api/file/trash/restore', { ids: [file.id] });
     toast('已恢复', 'ok');
+    refreshSpace();
     reload();
   } catch (err) {
     toast(`恢复失败：${err.message}`, 'err');
@@ -87,6 +89,7 @@ async function removeForever(file, reload) {
   try {
     await call('/api/file/trash/delete-permanently', { ids: [file.id] });
     toast('已彻底删除', 'ok');
+    refreshSpace();
     reload();
   } catch (err) {
     toast(`删除失败：${err.message}`, 'err');
@@ -102,6 +105,7 @@ async function emptyTrash(reload) {
   try {
     await call('/api/file/trash/empty', {});
     toast('回收站已清空', 'ok');
+    refreshSpace();
     reload();
   } catch (err) {
     toast(`清空失败：${err.message}`, 'err');

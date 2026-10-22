@@ -94,6 +94,25 @@ func defaultConfig() *models.Config {
 				TokenTTLHours: 720,
 			},
 		},
+
+		// 每 IP 限频默认值：宁可放宽，也不能让正常的网格缩略图 / 阅读器 Range 请求吃 429。
+		//   endpoint ：突发 120、持续 100 rps（同一路径）
+		//   global   ：突发 600、持续 100 rps（同一 IP 全部请求，缩略图除外）
+		//   thumbnail：突发 300、持续 200 rps（一个目录几百张图一次性加载）
+		RateLimit: models.RateLimitConfig{
+			EndpointBurst:     120,
+			EndpointRefillMS:  10,
+			GlobalBurst:       600,
+			GlobalRefillMS:    10,
+			ThumbnailBurst:    300,
+			ThumbnailRefillMS: 5,
+		},
+
+		// 缩略图两档边长（像素）：网格 200、全屏预览 400
+		Thumbnail: models.ThumbnailConfig{
+			Small: models.DefaultThumbnailSmallSize,
+			Large: models.DefaultThumbnailLargeSize,
+		},
 	}
 
 }

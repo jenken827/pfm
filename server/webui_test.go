@@ -276,3 +276,16 @@ func TestFileViewerV3Route(t *testing.T) {
 		t.Errorf("缺失资源 = %d, want 404", rec.Code)
 	}
 }
+
+// TestWebUIEmbedExcludesTests 防止 webui/test 被打进二进制。
+//
+// 测试用例与假 DOM 只服务于 `bash dev.sh test-web`，不该出现在发布产物里，
+// 也不该能从 /web/test/... 下载到。
+func TestWebUIEmbedExcludesTests(t *testing.T) {
+	if _, err := fs.Stat(webUIFS, "webui/test"); err == nil {
+		t.Fatal("webui/test 被 embed 进了二进制：go:embed 只应包含 index.html / css / js")
+	}
+	if _, err := fs.Stat(webUIFS, "webui/js/app.js"); err != nil {
+		t.Fatalf("webui/js/app.js 没被 embed：%v", err)
+	}
+}

@@ -132,6 +132,11 @@ func autoMigrate() error {
 		return err
 	}
 
+	// 修复 is_ready 脏数据（幂等）：目录一律就绪；内容其实已完整落盘的文件补标就绪
+	if err := RepairFileReadyFlags(); err != nil {
+		return err
+	}
+
 	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
 	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
 	if err := migrateFilesUniqueIndex(); err != nil {
@@ -217,4 +222,95 @@ func migrateFilesUniqueIndex() error {
 
 	llog.L().Info("migrated files unique index to partial index (WHERE deleted_at IS NULL)")
 	return nil
+}
+
+// RepairFileReadyFlags 修复 is_ready 脏数据（幂等）：
+//
+//  1. 目录没有内容要上传，一律视为就绪（CreateFolder 曾经漏写 IsReady）；
+//  2. 内容其实已经完整落在存储提供者里、但 is_ready 仍是 false 的文件补标就绪。
+//
+// 第 2 类的来历：复用旧 upload record 分发时曾没有刷新 version，分发完成后的
+// markFileReadyIfVersionMatches 用旧 version 做 CAS，静默命中 0 行，于是位置行
+// 全部 PCOMPLETED 而文件永远显示"未就绪"（见 BUGS.md）。
+//
+// 判定"完整"沿用 CheckProviderComplete 的口径：每个 provider 的分片行数等于
+// chunk_total，且状态都是 PCOMPLETED。
+func RepairFileReadyFlags() error {
+	folderRes := db.Model(&native.FileORM{}).
+		Where("is_ready = ? AND deleted_at IS NULL AND type = ?", false, int32(native.FileType_FOLDER)).
+		Update("is_ready", true)
+	if folderRes.Error != nil {
+		return fmt.Errorf("migrate folder is_ready failed: %w", folderRes.Error)
+	}
+	if folderRes.RowsAffected > 0 {
+		llog.L().Infof("migrated is_ready=true for %d folders", folderRes.RowsAffected)
+	}
+
+	var files []native.FileORM
+	if err := db.Model(&native.FileORM{}).
+		Select("id", "hash").
+		Where("is_ready = ? AND deleted_at IS NULL AND type <> ? AND hash IS NOT NULL AND hash <> ''",
+			false, int32(native.FileType_FOLDER)).
+		Find(&files).Error; err != nil {
+		return fmt.Errorf("query not-ready files failed: %w", err)
+	}
+
+	var fixedIDs []string
+	for i := range files {
+		if files[i].Hash == nil || files[i].Id == nil {
+			continue
+		}
+		complete, err := locationsCompleteForHash(*files[i].Hash)
+		if err != nil {
+			return err
+		}
+		if complete {
+			fixedIDs = append(fixedIDs, *files[i].Id)
+		}
+	}
+	if len(fixedIDs) == 0 {
+		return nil
+	}
+	if err := db.Model(&native.FileORM{}).Where("id IN ?", fixedIDs).Update("is_ready", true).Error; err != nil {
+		return fmt.Errorf("repair file is_ready failed: %w", err)
+	}
+	llog.L().Infof("migrated is_ready=true for %d files whose locations are all completed", len(fixedIDs))
+	return nil
+}
+
+// locationsCompleteForHash 判断某个 hash 的内容是否在所有 provider 上都已完整落盘。
+// 没有任何位置行（还在上传 / 上传失败）视为不完整。
+func locationsCompleteForHash(hash string) (bool, error) {
+	locationList, err := GetFileLocationsByBlake3Hash(hash)
+	if err != nil {
+		return false, fmt.Errorf("query file locations failed: %w", err)
+	}
+	if len(locationList) == 0 {
+		return false, nil
+	}
+
+	type progress struct{ chunks, expected int }
+	byProvider := make(map[uint32]progress, 4)
+	for _, loc := range locationList {
+		if loc.ProviderId == nil || loc.Status == nil ||
+			*loc.Status != int32(native.LocationStatus_PCOMPLETED) {
+			return false, nil
+		}
+		p := byProvider[*loc.ProviderId]
+		p.chunks++
+		if loc.ChunkTotal != nil && int(*loc.ChunkTotal) > p.expected {
+			p.expected = int(*loc.ChunkTotal)
+		}
+		byProvider[*loc.ProviderId] = p
+	}
+	for _, p := range byProvider {
+		expected := p.expected
+		if expected <= 0 {
+			expected = 1
+		}
+		if p.chunks != expected {
+			return false, nil
+		}
+	}
+	return true, nil
 }

@@ -7,8 +7,9 @@
 import { session } from './session.js';
 import { h, $, toast, setChildren } from './dom.js';
 import { navigate, start, parse } from './router.js';
-import { ensureSpace, store } from './store.js';
+import { ensureSpace, refreshSpace, store } from './store.js';
 import { cycleTheme, themeIcon, themeLabel } from './theme.js';
+import { fmtSize, fmtSize0 } from './format.js';
 import { renderLogin } from './views/login.js';
 import { renderFiles } from './views/files.js';
 import { renderPreview } from './views/preview.js';
@@ -16,6 +17,11 @@ import { renderDetail } from './views/detail.js';
 import { renderTrash } from './views/trash.js';
 import { renderShares } from './views/shares.js';
 import { renderOffline } from './views/offline.js';
+import { renderTransfers } from './views/transfers.js';
+import { renderWebdav } from './views/webdav.js';
+import { renderAdminUsers } from './views/admin_users.js';
+import { renderAdminProviders } from './views/admin_providers.js';
+import { renderAdminBackup } from './views/admin_backup.js';
 import { renderSettings } from './views/settings.js';
 
 const VIEWS = {
@@ -28,6 +34,11 @@ const VIEWS = {
   trash: renderTrash,
   shares: renderShares,
   offline: renderOffline,
+  transfers: renderTransfers,
+  webdav: renderWebdav,
+  adminUsers: renderAdminUsers,
+  adminProviders: renderAdminProviders,
+  adminBackup: renderAdminBackup,
   settings: renderSettings,
 };
 
@@ -115,7 +126,46 @@ function buildShell() {
       h('div', { class: 'nav-title', text: '工具' }),
       navItem('#/trash', '🗑️', '回收站', 'trash'),
       navItem('#/shares', '🔗', '我的分享', 'shares'),
-      navItem('#/offline', '⬇️', '离线下载', 'offline')));
+      navItem('#/offline', '⬇️', '离线下载', 'offline'),
+      navItem('#/transfers', '🔁', '传输队列', 'transfers'),
+      navItem('#/webdav', '🔌', 'WebDAV 账号', 'webdav')));
+
+  // 管理组只对管理员显示（服务端也会再校验一次，这里纯属别让人点进去看 403）
+  const adminGroup = h('div', { class: 'nav-group', hidden: true },
+    h('div', { class: 'nav-title', text: '管理' }),
+    navItem('#/admin/users', '👥', '用户与配额', 'adminUsers'),
+    navItem('#/admin/providers', '🗄️', '存储源', 'adminProviders'),
+    navItem('#/admin/backup', '🧩', '备份任务', 'adminBackup'));
+  sidebar.appendChild(adminGroup);
+  app.adminNav = adminGroup;
+
+  // 容量条：和客户端"存储空间"同一个口径（quota 为 0 表示不限）
+  const spaceBox = h('div', { class: 'space-box', hidden: true });
+  sidebar.appendChild(spaceBox);
+  app.spaceBox = spaceBox;
+
+  const renderSpace = () => {
+    const space = store.space;
+    const quota = Number(space?.quotaBytes || 0);
+    const used = Number(space?.usedBytes || 0);
+    if (!space) {
+      spaceBox.hidden = true;
+      return;
+    }
+    spaceBox.hidden = false;
+    const ratio = quota > 0 ? Math.min(1, used / quota) : 0;
+    setChildren(spaceBox,
+      h('div', { class: 'space-line' },
+        h('span', { text: quota > 0 ? '已用' : '已用（不限）' }),
+        // fmtSize(0) 返回 '-'（表格里表示"未知"），但容量条里 0 就是真的一点没占，
+        // 显示成 "-" 会让人以为没加载出来
+        h('span', { class: 'muted', text: quota > 0 ? `${fmtSize0(used)} / ${fmtSize(quota)}` : fmtSize0(used) })),
+      quota > 0
+        ? h('div', { class: `space-bar${ratio >= 0.95 ? ' full' : ''}` }, h('i', { style: { width: `${(ratio * 100).toFixed(1)}%` } }))
+        : null);
+  };
+  app.renderSpace = renderSpace;
+  window.addEventListener('pfm:space', renderSpace);
 
   const main = h('main', { class: 'main' });
   const shell = h('div', { class: 'shell' }, sidebar, main);
@@ -124,6 +174,10 @@ function buildShell() {
   app.topbar = topbar;
   app.sidebar = sidebar;
   app.main = main;
+}
+
+function syncAdminNav() {
+  if (app.adminNav) app.adminNav.hidden = !session.user?.isAdmin;
 }
 
 function setActive(route) {
@@ -142,6 +196,8 @@ function showLogin() {
     wrap.hidden = true;
     app.topbar.hidden = false;
     app.sidebar.parentElement.hidden = false;
+    syncAdminNav();
+    refreshSpace();
     navigate('/files', { replace: true });
   });
   setChildren(app.main);
@@ -155,6 +211,7 @@ async function dispatch(route) {
   app.topbar.hidden = false;
   app.sidebar.parentElement.hidden = false;
   $('.login-wrap').hidden = true;
+  syncAdminNav();
   setActive(route);
 
   const view = VIEWS[route.name];
@@ -167,11 +224,23 @@ async function dispatch(route) {
   }
   try {
     await ensureSpace();
+    if (app.renderSpace) app.renderSpace();
     await view(app.main, route);
   } catch (err) {
+    // 账号还没有存储空间（根目录）时说人话，别让人对着"参数不正确"猜
+    if (err?.noSpace) {
+      setChildren(app.main, h('div', { class: 'empty' },
+        h('span', { class: 'big', text: '🗂️' }),
+        h('div', { text: '你的账号还没有分配存储空间（根目录）。' }),
+        h('div', { class: 'muted small', style: { marginTop: '6px' },
+          text: '请联系管理员在「管理 → 用户与配额」里为你分配根目录后再刷新。' }),
+        h('div', { style: { marginTop: '12px' } },
+          h('button', { text: '重试', onclick: () => dispatch(route) }))));
+      return;
+    }
     setChildren(app.main, h('div', { class: 'empty' },
       h('span', { class: 'big', text: '⚠️' }),
-      h('div', { class: 'error-text', text: err.message || String(err) }),
+      h('div', { class: 'error-text', text: err.rawMessage || err.message || String(err) }),
       h('div', { style: { marginTop: '12px' } },
         h('button', { text: '重试', onclick: () => dispatch(route) }))));
   }

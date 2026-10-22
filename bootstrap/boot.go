@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/internal/thumbnail"
 )
 
 // Init 初始化
@@ -19,6 +20,9 @@ func Init() {
 
 	// 初始化日志
 	llog.Init()
+
+	// 缩略图尺寸（配置 thumbnail.small / thumbnail.large，非法值回落默认 200/400）
+	thumbnail.Configure(config.GetConfig().Thumbnail.Small, config.GetConfig().Thumbnail.Large)
 
 	// 认证初始化：本地认证（users 表 + HS256 JWT），密钥缺失时自动生成
 	if err := auth.InitLocalAuth(); err != nil {

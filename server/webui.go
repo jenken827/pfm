@@ -13,7 +13,11 @@ import (
 // 拆成 index.html + css/ + js/ 多个文件，用原生 ES module 加载：不引入打包器
 // （构建链只有 go build），不开 CDN（离线 / 内网可用，也不泄露访问痕迹）。
 //
-//go:embed webui
+// 只嵌运行期真的会请求的三样：index.html + css/ + js/。
+// 不写 `//go:embed webui`——那会把 webui/test/（node:test 用例与假 DOM）也打进二进制，
+// 既让产物变大，又能从 /web/test/ 直接下载到测试文件。
+//
+//go:embed webui/index.html webui/css webui/js
 var webUIFS embed.FS
 
 // webUICSP 页面内容安全策略。

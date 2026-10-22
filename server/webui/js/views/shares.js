@@ -29,6 +29,9 @@ export async function renderShares(main, route) {
   let items = [];
 
   async function load(more = false) {
+    // 刷新（more=false）必须从 0 重新拉：沿用上一页的 offset 会请求到越过末尾的
+    // 区间，接口正常返回空列表 —— 现象就是"编辑完一条分享，列表整页空了"。
+    if (!more) offset = 0;
     try {
       const data = await call('/api/file/share/list', { offset, pageSize: PAGE_SIZE });
       if (!alive()) return;
@@ -101,10 +104,11 @@ export async function renderShares(main, route) {
       h('option', { value: '604800', text: '7 天' }),
       h('option', { value: '2592000', text: '30 天' }),
       h('option', { value: 'never', text: '永久有效' }));
+    // 预填当前值（0 = 不限，与客户端一致）：留空表示"保持原值"，0 才是取消限制
     const maxAccess = h('input', {
       type: 'text',
-      value: item.maxAccessCount ? String(item.maxAccessCount) : '',
-      placeholder: '留空表示不限',
+      value: String(item.maxAccessCount || 0),
+      placeholder: '0 表示不限',
     });
 
     let done = false;
@@ -126,10 +130,20 @@ export async function renderShares(main, route) {
           class: 'primary',
           text: '保存',
           onclick: async (ev) => {
+            let maxCount;
+            if (maxAccess.value.trim()) {
+              maxCount = Number(maxAccess.value.trim());
+              if (!Number.isInteger(maxCount) || maxCount < 0) {
+                toast('最多访问次数要填不小于 0 的整数（0 表示不限）');
+                return;
+              }
+            }
+
             const body = { shareCode: item.shareCode };
             if (expire.value === 'never') body.neverExpire = true;
             else if (expire.value !== 'keep') body.expireSeconds = Number(expire.value);
-            if (maxAccess.value.trim()) body.maxAccessCount = Number(maxAccess.value.trim());
+            // 留空 = 不改这一项；填 0 = 取消次数限制（服务端把显式 0 当"不限"）
+            if (maxCount !== undefined) body.maxAccessCount = maxCount;
             body.remark = remark.value.trim();
             ev.target.disabled = true;
             try {
@@ -158,7 +172,6 @@ export async function renderShares(main, route) {
     try {
       await call('/api/file/share/cancel', { shareCode: item.shareCode });
       toast('已取消', 'ok');
-      offset = 0;
       await load(false);
     } catch (err) {
       toast(`取消失败：${err.message}`, 'err');

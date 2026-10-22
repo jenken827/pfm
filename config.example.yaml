@@ -53,6 +53,20 @@ auth:
     jwt_secret: "replace-with-a-stable-secret"
     token_ttl_hours: 720
 
+# 每 IP 限频（令牌桶，按客户端 IP 独立计量）。不配置即用下列默认值；
+# 任一字段 <= 0 也回落默认值。缩略图走独立配额：一个目录几百张图一次性加载
+# 属于正常用法，不应触发 429，也不该挤占文档预览 / 下载的额度。
+ratelimit:
+  # 同 IP + 同一路径：突发次数、每多少毫秒补 1 个令牌（10ms ≈ 100 次/秒）
+  endpoint_burst: 120
+  endpoint_refill_ms: 10
+  # 同 IP 全部请求（缩略图除外）
+  global_burst: 600
+  global_refill_ms: 10
+  # 缩略图（/api/file/stream/preview 且非 original=true）
+  thumbnail_burst: 300
+  thumbnail_refill_ms: 5
+
 # 照片日期解析配置（相册备份按"年/月"归档 + migrate-photos CLI 共用）。
 # 不配置时使用内置默认规则（见 README「照片日期解析规则」），规则为"整体替换"语义：
 # 一旦配置 filename_rules，默认表不再生效，请完整列出所有期望的前缀规则。
@@ -89,3 +103,10 @@ transfer:
     providers: []
     # 自动选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
     prefer_directable_provider: false
+
+# 缩略图尺寸（像素）。客户端用 GET /api/file/stream/preview?size=small|large 选档，
+# 缓存文件名为 {hash}_{边长}.jpg；改尺寸后旧缓存不删，新尺寸在首次请求时按需生成。
+# 不配即用默认值；<=0 回落默认，越界（<32 或 >4096）自动收敛。
+thumbnail:
+  small: 200 # 网格视图边长
+  large: 400 # 全屏预览边长

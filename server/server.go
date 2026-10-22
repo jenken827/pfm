@@ -45,6 +45,18 @@ func Run() {
 	// 将 CORS 中间件包装到处理器上
 	handlerWithCors := c.Handler(mux)
 
+	// 限频参数来自配置（ratelimit 段，未配置的字段用内置默认值）。
+	// 缩略图走独立配额，见 middleware.isThumbnailRequest。
+	rl := config.GetConfig().RateLimit
+	middleware.InitRateLimit(middleware.RateLimitOptions{
+		EndpointBurst:   rl.EndpointBurst,
+		EndpointRefill:  time.Duration(rl.EndpointRefillMS) * time.Millisecond,
+		GlobalBurst:     rl.GlobalBurst,
+		GlobalRefill:    time.Duration(rl.GlobalRefillMS) * time.Millisecond,
+		ThumbnailBurst:  rl.ThumbnailBurst,
+		ThumbnailRefill: time.Duration(rl.ThumbnailRefillMS) * time.Millisecond,
+	})
+
 	// Apply rate limiting middleware
 	handlerWithRateLimit := middleware.RateLimitHTTPMiddleware(handlerWithCors)
 

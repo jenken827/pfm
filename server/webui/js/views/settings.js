@@ -4,7 +4,8 @@
 //   1. 名称必填；
 //   2. 存储源预选顺序 = 目录自身绑定 → 父目录绑定 → 全部可用；
 //   3. 可用存储源非空时至少要选一个；
-//   4. 历史上限留空 = 不修改，填了必须是 >= 0 的整数。
+//   4. 历史上限留空 = 不修改这一项（请求里不带该字段），填了必须是 >= 0 的整数；
+//      **0 表示不保留历史版本**（与客户端同一语义），不是"不限制"。
 //
 // ⚠ 加密开关只影响**之后**写入这个目录的文件；已经存在的文件按上传时的设置读，
 // 所以这里给一句提示，避免用户以为打开开关就能给老文件加密。
@@ -61,7 +62,7 @@ export async function renderSettings(main, route) {
   const maxHist = h('input', {
     type: 'text',
     value: folder.maxHistories ? String(folder.maxHistories) : '',
-    placeholder: '例如 10（留空表示不限制）',
+    placeholder: '例如 10（留空表示不修改）',
   });
 
   const providerBoxes = providers.map((p) => {
@@ -93,20 +94,23 @@ export async function renderSettings(main, route) {
       if (maxHist.value.trim()) {
         maxHistories = Number(maxHist.value.trim());
         if (!Number.isInteger(maxHistories) || maxHistories < 0) {
-          toast('历史上限必须是不小于 0 的整数');
+          toast('历史版本上限必须是不小于 0 的整数');
           return;
         }
       }
 
       ev.target.disabled = true;
       try {
-        await call('/api/file/update-dir', {
+        const body = {
           id: folderId,
           name,
           enableEncryption: encrypt.checked,
-          maxHistories: maxHistories ?? 0,
           providerIds: ids,
-        });
+        };
+        // 留空 = 不改这一项：带上 0 会被服务端理解成"不保留历史版本"，
+        // 下次覆盖同名文件就把旧版本全清了（客户端也是留空不发该字段）。
+        if (maxHistories !== undefined) body.maxHistories = maxHistories;
+        await call('/api/file/update-dir', body);
         toast('设置已保存', 'ok');
         navigate(`/files/${encodeURIComponent(folderId)}`);
       } catch (err) {
@@ -134,5 +138,5 @@ export async function renderSettings(main, route) {
       h('div', { class: 'field' },
         h('label', { text: '历史版本上限' }),
         maxHist,
-        h('div', { class: 'hint', text: '保留多少个历史版本，超出后自动淘汰最旧的；留空或 0 表示不限制。' })))));
+        h('div', { class: 'hint', text: '覆盖同名文件时保留多少个旧版本，超出后淘汰最旧的；填 0 表示不保留历史版本，留空则不改动这一项。' })))));
 }

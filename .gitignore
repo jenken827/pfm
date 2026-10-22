@@ -14,3 +14,7 @@ frontend/pubspec.lock
 
 # 交付安装包（APK 等）：不进版本控制，也不许 git add
 /release/
+
+# BLAKE3 原生库（Dart FFI 加速）的构建产物：机器相关，不入版本控制
+frontend/native/blake3_ffi/target/
+frontend/android/app/src/main/jniLibs/
