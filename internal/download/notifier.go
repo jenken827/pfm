@@ -9,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	"lukechampine.com/blake3"
 
 	"jenken827.com/jenken827/pfm/driver/types"
@@ -255,14 +257,48 @@ func importOneFile(dr *native.DownloadRecordORM, downloadedFilePath, parentID, f
 		return err
 	}
 
-	// 秒传：目标目录已存在同名同 hash → 无需上传
-	if existing, qErr := db.GetFileByParentAndName(parentID, fileName, ownerID); qErr == nil &&
-		existing != nil && existing.Hash != nil && *existing.Hash == hash {
-		llog.L().Infof("offline download: same content exists in target dir, skip upload: %s", fileName)
+	// 目标目录里的同名文件：同内容 → 秒传跳过；不同内容 → 自动改名，不覆盖用户已有文件
+	finalName, duplicate := resolveImportName(ownerID, parentID, fileName, hash)
+	if duplicate {
+		llog.L().Infof("offline download: same content exists in target dir, skip upload: %s", finalName)
 		_ = os.Remove(stagingPath)
 		return nil
 	}
+	if finalName != fileName {
+		llog.L().Infof("offline download: name conflict in target dir, renamed %s -> %s", fileName, finalName)
+		fileName = finalName
+	}
 	return createFileAndDispatch(ownerID, parentID, fileName, hash, fileSize, stagingPath)
+}
+
+// resolveImportName 决定导入到目标目录时用哪个文件名。
+//
+// 依次比较 原名、`原名 (1).扩展名`、`原名 (2).扩展名`…：
+//   - 找到不存在的名字 → 用它；
+//   - 找到同名且同 hash 的文件 → duplicate=true，调用方跳过上传（秒传）。
+//
+// 之所以连候选名字也要比 hash：同一个 URL 反复下载（或失败重试）不该堆出
+// `clip (1).mp4`、`clip (2).mp4` 一串内容相同的副本。
+func resolveImportName(ownerID, parentID, name, hash string) (string, bool) {
+	ext := filepath.Ext(name)
+	baseName := strings.TrimSuffix(name, ext)
+	candidate := name
+	for i := 0; i <= 999; i++ {
+		if i > 0 {
+			candidate = fmt.Sprintf("%s (%d)%s", baseName, i, ext)
+		}
+		existing, err := db.FindFileByParentAndName(parentID, candidate, ownerID)
+		if err != nil {
+			return candidate, false // 查询失败就交给唯一索引兜底并报错
+		}
+		if existing == nil {
+			return candidate, false
+		}
+		if existing.Hash != nil && *existing.Hash == hash {
+			return candidate, true
+		}
+	}
+	return fmt.Sprintf("%s_%s%s", baseName, uuid.New().String()[:8], ext), false
 }
 
 // moveToStaging 把下载文件移入 staging（owner 隔离，与普通上传共用生命周期）

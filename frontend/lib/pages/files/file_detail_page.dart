@@ -8,6 +8,7 @@ import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
+import 'package:pfm/pages/files/preview_router.dart';
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/services/logger.dart';
@@ -781,13 +782,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
 
   // ==================== 工具方法 ====================
 
-  bool _isPreviewable() {
-    final type = widget.file.type;
-    return type == FileType.IMAGE ||
-        type == FileType.VIDEO ||
-        type == FileType.AUDIO ||
-        type == FileType.DOCUMENT;
-  }
+  bool _isPreviewable() => hasPreviewPage(widget.file);
 
   /// 判断历史版本是否可预览
   bool _isHistoryPreviewable(FileHistory h) {

@@ -12,9 +12,8 @@ import 'package:pfm/l10n/app_localizations.dart';
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart' as pbenum;
 import 'package:pfm/router/files_route.dart';
-import 'package:pfm/pages/files/file_detail_page.dart';
 import 'package:pfm/pages/files/file_preview_page.dart';
-import 'package:pfm/pages/files/flyfish_viewer_page.dart';
+import 'package:pfm/pages/files/preview_router.dart';
 import 'package:pfm/pages/files/folder_picker_page.dart';
 import 'package:pfm/services/local_storage.dart';
 import 'package:pfm/services/recent_files_storage.dart';
@@ -766,11 +765,11 @@ class _FileViewState extends State<_FileView> {
         } else if (file.type == pbenum.FileType.VIDEO ||
             file.type == pbenum.FileType.AUDIO) {
           context.push(FilePreviewRoute().location, extra: file);
-        } else if (file.type == pbenum.FileType.DOCUMENT ||
-            file.type == pbenum.FileType.ARCHIVE) {
+        } else if (hasPreviewPage(file)) {
+          // Office / 压缩包 → Flyfish Viewer，纯文本 → Dart 文本预览
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => FlyfishViewerPage(file: file)),
+            MaterialPageRoute(builder: (_) => buildPreviewPage(file)),
           );
         } else {
           context.push(FileDetailRoute().location, extra: file);
@@ -2066,26 +2065,16 @@ class _FileSearchDelegate extends SearchDelegate<File?> {
 
     _FileViewState._recordFileAccess(file);
 
-    final Widget page;
-    if (file.type == pbenum.FileType.IMAGE) {
-      final images = _bloc.state.files
-          .where((f) => f.type == pbenum.FileType.IMAGE)
-          .toList();
-      final index = images.indexWhere((f) => f.id == file.id);
-      page = FilePreviewPage(
-        file: file,
-        images: images,
-        initialIndex: index >= 0 ? index : 0,
-      );
-    } else if (file.type == pbenum.FileType.VIDEO ||
-        file.type == pbenum.FileType.AUDIO) {
-      page = FilePreviewPage(file: file);
-    } else if (file.type == pbenum.FileType.DOCUMENT ||
-        file.type == pbenum.FileType.ARCHIVE) {
-      page = FlyfishViewerPage(file: file);
-    } else {
-      page = FileDetailPage(file: file);
-    }
+    // 与文件列表点击走同一套分流（图片带图集、文本进 Dart 预览、Office 进 viewer）
+    final images = _bloc.state.files
+        .where((f) => f.type == pbenum.FileType.IMAGE)
+        .toList();
+    final index = images.indexWhere((f) => f.id == file.id);
+    final page = buildPreviewPage(
+      file,
+      images: images,
+      initialIndex: index >= 0 ? index : 0,
+    );
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 

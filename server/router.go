@@ -22,6 +22,7 @@ func route(mux *http.ServeMux) {
 	userAvatarRoute(mux)
 	webdavRoute(mux)
 	fileViewerRoute(mux)
+	fileViewerV3Route(mux)
 	fileStreamRoute(mux)
 	publicDownloadRoute(mux)
 	// 极简 Web UI（登录 + 浏览 + 下载），注册为 "/" 兜底；更具体的路径优先
@@ -72,10 +73,10 @@ func fileStreamRoute(mux *http.ServeMux) {
 	// 文件历史版本下载
 	mux.HandleFunc("/api/file/history/download", api.DownloadFileHistoryHandler)
 
-	// 原始文件预览（用于 Flyfish Viewer）
+	// 原始文件预览（用于 Flyfish Viewer 与网页预览）
 	// 支持两种路径：
-	//   /api/file/preview/raw?file_id=xxx&token=yyy
-	//   /api/file/preview/raw/filename.pdf?file_id=xxx&token=yyy（带文件名，便于 viewer 识别格式）
+	//   /api/file/preview/raw?file_id=xxx&ticket=yyy
+	//   /api/file/preview/raw/filename.pdf?file_id=xxx&ticket=yyy（带文件名，便于 viewer 识别格式）
 	mux.HandleFunc("/api/file/preview/raw", api.RawFilePreviewHandler)
 	mux.HandleFunc("/api/file/preview/raw/", api.RawFilePreviewHandler)
 }
@@ -86,10 +87,38 @@ func publicDownloadRoute(mux *http.ServeMux) {
 }
 
 // fileViewerRoute Flyfish Viewer 静态文件路由
+//
+// 预览页地址里带着 `?url=...&ticket=...`（见 api.RawFilePreviewHandler），
+// 必须禁止浏览器把它通过 Referer 带给后续子资源请求与第三方：
+// 同源子资源默认会带上完整 URL（含查询串），反代访问日志里就会留下凭证。
 func fileViewerRoute(mux *http.ServeMux) {
 	viewerDir := "file-viewer"
 	fs := http.FileServer(http.Dir(viewerDir))
-	mux.Handle("/file-viewer/", http.StripPrefix("/file-viewer/", fs))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		fs.ServeHTTP(w, r)
+	})
+	mux.Handle("/file-viewer/", http.StripPrefix("/file-viewer/", handler))
+}
+
+// fileViewerV3Route 新版 Flyfish Viewer（v3，IIFE 包）静态资源路由
+//
+// 与 v1 的 /file-viewer/ 并存、互不影响：App 仍走 v1 的 index.html，Web UI 优先在
+// 页面内 inline mount v3（Shadow DOM 隔离，能拿到主题、工具栏与全格式渲染器），
+// 只有这里 404（部署未放置 v3 资源）时才回退到 v1 iframe，再退到直接下载。
+//
+// 目录由部署方放置，不进仓库（完整分发包 ~139MB，renderers / wasm / vendor 都是
+// 按需懒加载，只有实际预览对应格式时才产生这部分流量）。
+func fileViewerV3Route(mux *http.ServeMux) {
+	viewerDir := "file-viewer-v3"
+	fs := http.FileServer(http.Dir(viewerDir))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		// 资源按格式分目录、文件名带版本，可短期缓存
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		fs.ServeHTTP(w, r)
+	})
+	mux.Handle("/file-viewer-v3/", http.StripPrefix("/file-viewer-v3/", handler))
 }
 
 // webdavRoute WebDAV 服务路由

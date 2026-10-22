@@ -17,6 +17,9 @@ import (
 	"jenken827.com/jenken827/pfm/utils"
 )
 
+// dispatchingRecords 正在分发的上传记录 id（同一条记录并发重复 Dispatch 的去重表）
+var dispatchingRecords sync.Map // map[uint32]struct{}
+
 // Dispatch 分发处理（文件上传完成后调用）
 // 支持两种场景：
 // 1. 普通上传：有临时文件，从临时文件上传
@@ -31,6 +34,17 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 			llog.C(ctx).Errorf("Dispatch panicked, file_hash: %s, recover: %v", fileHash, r)
 		}
 	}()
+
+	// 同一条上传记录只允许一个分发在跑：客户端重复投递 / 重试 / 复用 init 记录
+	// 都可能对同一条记录连发两次 Dispatch，两边并发上传会重复计容量、互相
+	// 覆盖位置行状态，先到者完成后的 temp 清理还会让后到者撞 temp file not found。
+	if ur.Id != nil {
+		if _, loaded := dispatchingRecords.LoadOrStore(*ur.Id, struct{}{}); loaded {
+			llog.C(ctx).Infof("dispatch already running, skip duplicate: %d", *ur.Id)
+			return
+		}
+		defer dispatchingRecords.Delete(*ur.Id)
+	}
 
 	// 1. 根据 task_type 判断任务类型
 	isSyncTask := ur.TaskType != nil && *ur.TaskType == int32(native.UploadTaskType_SYNC)
@@ -129,9 +143,13 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 		}
 	}
 
-	// 4. 如果所有提供者都已有文件，直接完成
+	// 4. 如果所有提供者都已有文件，直接完成。
+	// 注意：此时并没有真正上传，但文件记录仍必须标为就绪——同一份内容以不同文件名
+	// 再上传一次（或离线下载改名入库）时，内容早就在 provider 里，若不补标，
+	// 新记录会永远停在"未就绪"（前端显示未就绪、无法预览）。
 	if len(needUploadProviders) == 0 {
 		llog.C(ctx).Infof("file already exists in all target providers, hash: %s", *ur.FileHash)
+		markFileReadyIfVersionMatches(ctx, ur)
 		completeUpload(ur)
 		return
 	}
@@ -282,6 +300,28 @@ func getUploadContext(ur *native.UploadRecordORM) (fileName, parentID string, fi
 	return
 }
 
+// markFileReadyIfVersionMatches 把上传记录对应的文件记录标为就绪。
+//
+// CAS：仅当文件当前 version 仍等于本次上传创建时的版本（ur.Version）才标记——
+// 若期间同名文件已被更新的 PUT 接管（version 已递增），本次分发属于旧内容，
+// 不能把新内容误标为就绪。
+func markFileReadyIfVersionMatches(ctx context.Context, ur *native.UploadRecordORM) {
+	if ur.ParentId == nil || *ur.ParentId == "" || ur.FileName == nil || *ur.FileName == "" {
+		return
+	}
+	urVersion := uint64(0)
+	if ur.Version != nil {
+		urVersion = *ur.Version
+	}
+	if err := db.UpdateFileIsReady(*ur.ParentId, *ur.FileName, "", urVersion); err != nil {
+		llog.C(ctx).Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s",
+			err, *ur.ParentId, *ur.FileName)
+		return
+	}
+	llog.C(ctx).Infof("file marked as ready, parent_id: %s, file_name: %s, version: %d",
+		*ur.ParentId, *ur.FileName, urVersion)
+}
+
 // uploadToProviderAsync 异步上传到单个提供者，返回是否失败和错误信息
 
 // uploadToProviderAsync 异步上传到单个提供者，返回是否失败和错误信息
@@ -311,6 +351,9 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 
 	if *fl.Status == int32(native.LocationStatus_PCOMPLETED) {
 		llog.C(ctx).Infof("file already exists in provider %d", tid)
+		// 内容已在 provider 里，但文件记录本身可能还是未就绪（同内容换了文件名的情况），
+		// 这里补标——否则该记录永远显示"未就绪"，前端无法预览 / 下载。
+		markFileReadyIfVersionMatches(ctx, ur)
 		return false, ""
 	}
 
@@ -320,21 +363,8 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 		return true, ""
 	}
 
-	// 上传成功，立即更新文件状态为就绪。
-	// CAS：仅当文件当前 version 仍等于本次上传创建时的版本（ur.Version）才标记
-	// is_ready——若期间同名文件已被更新的 PUT 接管（version 已递增），本次分发
-	// 属于旧内容，不能把新内容误标为就绪。
-	if parentID != "" && fileName != "" {
-		urVersion := uint64(0)
-		if ur.Version != nil {
-			urVersion = *ur.Version
-		}
-		if updateErr := db.UpdateFileIsReady(parentID, fileName, "", urVersion); updateErr != nil {
-			llog.C(ctx).Errorf("update file is_ready failed: %v, parent_id: %s, file_name: %s", updateErr, parentID, fileName)
-		} else {
-			llog.C(ctx).Infof("file marked as ready, parent_id: %s, file_name: %s, provider: %d, version: %d", parentID, fileName, tid, urVersion)
-		}
-	}
+	// 上传成功，立即更新文件状态为就绪
+	markFileReadyIfVersionMatches(ctx, ur)
 	return false, ""
 }
 
@@ -390,8 +420,20 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 //   - 内容寻址层 TempDir/<hash>/                  （旧布局 / 兼容残留）
 //
 // 同一 hash 归不同 owner 的分片互不影响，隔离层只删本 owner 的 hash 目录。
+//
+// 临时文件按 hash 共享：同一条内容可能还有别的在途上传记录（PENDING/UPLOADING）
+// 正等着它分发，此时保留，等最后一条记录完成时再清理（兜底由 temp janitor 回收）。
 func cleanupUploadTemp(ur *native.UploadRecordORM) {
 	if ur.FileHash == nil || *ur.FileHash == "" {
+		return
+	}
+	others, err := db.CountActiveUploadRecordsByHash(*ur.FileHash)
+	if err != nil {
+		llog.L().Warnf("check active uploads before temp cleanup failed: %v, hash: %s", err, *ur.FileHash)
+		return
+	}
+	if others > 0 {
+		llog.L().Infof("keep temp files, %d active upload(s) still use hash: %s", others, *ur.FileHash)
 		return
 	}
 	ownerID := ""

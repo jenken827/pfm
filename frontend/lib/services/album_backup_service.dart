@@ -152,12 +152,25 @@ class AlbumBackupService {
   AlbumBackupService._(this._storage) : _logger = getLogger();
 
   /// 获取单例实例
-  static Future<AlbumBackupService> instance() async {
-    if (_instance != null) return _instance!;
+  ///
+  /// 必须缓存 Future 而不是实例：初始化中间有 await，启动（延迟触发）、
+  /// 回到前台（resumed）、登录成功三个入口可能同时进来，只判 `_instance != null`
+  /// 会各自建一个实例，各自的 `_isBackingUp` 互不可见 → 两次扫描并发跑 →
+  /// 同一张照片各建一条上传任务 → 并发上传同一文件。
+  static Future<AlbumBackupService>? _initFuture;
+
+  static Future<AlbumBackupService> instance() {
+    final ready = _instance;
+    if (ready != null) return Future.value(ready);
+    return _initFuture ??= _create();
+  }
+
+  static Future<AlbumBackupService> _create() async {
     final storage = await Sqlite3Storage.instance();
-    _instance = AlbumBackupService._(storage);
-    await _instance!._loadConfig();
-    return _instance!;
+    final service = AlbumBackupService._(storage);
+    await service._loadConfig();
+    _instance = service;
+    return service;
   }
 
   /// 加载备份配置
@@ -569,10 +582,13 @@ class AlbumBackupService {
     // 确定要查询的相册
     List<AssetPathEntity> albums;
     if (_config.backupAlbumIds.isEmpty) {
-      // 备份所有相册
+      // 备份所有相册：用 onlyAll（等价于「全部照片」）而不是 hasAll。
+      // hasAll 返回的是 [All, …各相册]，逐个相册取一次会把同一张照片重复收集
+      // （All 一次 + 它所属相册一次），同一文件被建两条任务后并发上传，
+      // 服务端会撞同名唯一索引/互删临时文件。
       albums = await PhotoManager.getAssetPathList(
         type: _config.backupVideos ? RequestType.common : RequestType.image,
-        hasAll: true,
+        onlyAll: true,
         filterOption: filterOption,
       );
     } else {
@@ -594,13 +610,20 @@ class AlbumBackupService {
     if (albums.isEmpty) return [];
 
     // 获取所有照片
+    // 同一张照片可能同时属于多个选中相册，按 asset id 去重，
+    // 避免为同一文件建多条上传任务（并发上传同一目标文件）。
     final allPhotos = <AssetEntity>[];
+    final seenAssetIds = <String>{};
     for (final album in albums) {
       final photos = await album.getAssetListRange(
         start: 0,
         end: await album.assetCountAsync,
       );
-      allPhotos.addAll(photos);
+      for (final photo in photos) {
+        if (seenAssetIds.add(photo.id)) {
+          allPhotos.add(photo);
+        }
+      }
     }
 
     // 从 backup_file_records 表获取已备份的 asset ID（不受 upload_tasks 清理影响）

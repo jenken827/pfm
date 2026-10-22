@@ -790,6 +790,27 @@ message DirectLinkFileRespData {
   optional string fallback_url = 9;
 }
 
+// 创建预览票据请求
+//
+// 预览票据是**单文件、短期**的签名凭证（默认 10 分钟），用于浏览器 / WebView
+// 这类无法自定义请求头的场景：Flyfish Viewer 只能把凭证写在 URL 查询串里，
+// 用 access token 会长期有效且能读该用户全部文件，票据则到期即失效且只对该
+// 文件有效。签发要求调用方是文件所有者，票据绑定 file_id + user_id。
+message CreatePreviewTicketReq {
+  // 文件 ID
+  optional string file_id = 1 [(buf.validate.field).required = true];
+  // 用途：决定有效期（预览 10 分钟 / 下载 12 小时）；不传等价于 PREVIEW
+  optional TicketPurpose purpose = 2;
+}
+
+// 创建预览票据响应数据
+message CreatePreviewTicketRespData {
+  // 票据（临时凭证：只在本次预览的 URL 里使用，不要落库、不要写日志）
+  optional string ticket = 1;
+  // 票据过期时间
+  optional google.protobuf.Timestamp expires_at = 2;
+}
+
 // 文件服务
 // 路由不再由 proto 注解声明，统一在 server/route_rest.go 中显式维护
 service FileService {
@@ -876,4 +897,7 @@ service FileService {
 
   // 获取文件直链（满足条件时客户端可绕开服务端中转直连提供者）
   rpc GetFileDirectLink(DirectLinkFileReq) returns (BaseResp);
+
+  // 创建单文件短期预览票据（替代把 access token 写进预览 URL）
+  rpc CreatePreviewTicket(CreatePreviewTicketReq) returns (BaseResp);
 }

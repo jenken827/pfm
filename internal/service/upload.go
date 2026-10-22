@@ -479,9 +479,7 @@ func handleOverwriteFile(
 		// 新上传：创建新的文件记录（记录当前版本号）
 		fileRecord.Version = &myVersion
 		if err := db.CreateFile(fileRecord); err != nil {
-			if cleanupPath != "" {
-				os.Remove(cleanupPath)
-			}
+			cleanupUploadTempIfOrphan(cleanupPath, strPtrVal(fileRecord.Hash))
 			llog.C(ctx).Errorf("create file record failed: %v", err)
 			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 		}
@@ -494,9 +492,7 @@ func handleOverwriteFile(
 	fileRecord.Id = &overwriteID
 	oldFile, err := db.GetFileByID(overwriteID)
 	if err != nil && err != gorm.ErrRecordNotFound {
-		if cleanupPath != "" {
-			os.Remove(cleanupPath)
-		}
+		cleanupUploadTempIfOrphan(cleanupPath, strPtrVal(fileRecord.Hash))
 		llog.C(ctx).Errorf("get old file record failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
@@ -518,9 +514,7 @@ func handleOverwriteFile(
 		// cleanupOldHistories 按 max_histories 裁剪后做引用检查决定。
 		taken, uErr := db.UpdateFileWithHistoryCAS(ctx, fileRecord, oldFile, myVersion)
 		if uErr != nil {
-			if cleanupPath != "" {
-				os.Remove(cleanupPath)
-			}
+			cleanupUploadTempIfOrphan(cleanupPath, strPtrVal(fileRecord.Hash))
 			llog.C(ctx).Errorf("update file with history failed: %v", uErr)
 			return nil, &models.Err{E: uErr, C: native.RespCode_DB_ERROR}
 		}
@@ -549,15 +543,46 @@ func handleOverwriteFile(
 	// 旧文件不存在（可能被删除了），创建新记录
 	fileRecord.Version = &myVersion
 	if err := db.CreateFile(fileRecord); err != nil {
-		if cleanupPath != "" {
-			os.Remove(cleanupPath)
-		}
+		cleanupUploadTempIfOrphan(cleanupPath, strPtrVal(fileRecord.Hash))
 		llog.C(ctx).Errorf("create file record failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 	llog.C(ctx).Warnf("overwrite file not found, created new record, id: %s, version: %d", *fileRecord.Id, myVersion)
 	markUploadedFile()
 	return fileRecord, nil
+}
+
+// cleanupUploadTempIfOrphan 清理本次上传的临时文件，但同 hash 还有别的在途
+// 上传（PENDING/UPLOADING）时保留。
+//
+// 临时文件按内容寻址共享：小文件落 TempDir/<hash>/<name>，同一内容被并发上传
+// （客户端重复投递、WebDAV PUT 与 App 同时写同一文件）时两个请求用的是同一份
+// 文件。此前错误分支无条件删掉它，等于把另一路上传正等着分发的源文件删了，
+// 对方随后在 Dispatch 里报 temp file not found 并整单判失败。
+// 查不到在途记录时保守保留，交给 temp janitor 按超龄回收。
+func cleanupUploadTempIfOrphan(cleanupPath, fileHash string) {
+	if cleanupPath == "" {
+		return
+	}
+	if otherActiveUploadsForHash(fileHash) {
+		llog.L().Infof("keep shared temp file, other active upload(s) still use hash: %s", fileHash)
+		return
+	}
+	os.Remove(cleanupPath)
+}
+
+// otherActiveUploadsForHash 是否还有在途（PENDING/UPLOADING）上传记录在用这个 hash
+// 的临时文件。查询失败按"有"处理（保守保留），交给 temp janitor 兜底回收。
+func otherActiveUploadsForHash(fileHash string) bool {
+	if fileHash == "" {
+		return false
+	}
+	active, err := db.CountActiveUploadRecordsByHash(fileHash)
+	if err != nil {
+		llog.L().Warnf("check active uploads failed: %v, hash: %s", err, fileHash)
+		return true
+	}
+	return active > 0
 }
 
 // derefVersion 安全解引用版本号指针（nil 视为 0）
@@ -970,6 +995,13 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 	uploadDone.MarkDone(*uploadRecord.Id)
 	llog.C(ctx).Infof("start processing complete upload: %d", *uploadRecord.Id)
 
+	// 同一目标文件串行化：合并后的临时文件路径按 hash+owner 共享，并发合并会
+	// 互相截断/交错；且同一目标文件的两条记录会互相撞唯一索引并在错误清理时
+	// 删掉对方要分发的源文件。后台协程持锁，不阻塞 HTTP 请求。
+	unlock := lockUploadTarget(strPtrVal(uploadRecord.OwnerId),
+		strPtrVal(uploadRecord.ParentId), strPtrVal(uploadRecord.FileName))
+	defer unlock()
+
 	// 1. 合并所有分片到 owner 隔离目录
 	// 注意：合并输出也必须按 owner 隔离。若写内容寻址层 TempDir/<hash>/<name>，
 	// 同一 hash 的两个用户并发上传时两次 os.Create + 写入会交错，产出损坏文件。
@@ -1116,7 +1148,13 @@ func markUploadFailedSync(ur *native.UploadRecordORM, reason string) {
 }
 
 // cleanupChunks 清理分片临时文件
+// 分片目录按 (owner, hash) 共享：同 hash 还有别的在途上传时保留，
+// 否则会删掉对方正在合并的源分片（同上一条 temp file not found 事故）。
 func cleanupChunks(ur *native.UploadRecordORM) {
+	if otherActiveUploadsForHash(strPtrVal(ur.FileHash)) {
+		llog.L().Infof("keep chunk temp dir, other active upload(s) still use hash: %s", strPtrVal(ur.FileHash))
+		return
+	}
 	if err := os.RemoveAll(utils.GetChunkTempDir(*ur.FileHash, strPtrVal(ur.OwnerId))); err != nil {
 		llog.L().Warnf("remove chunks failed: %v", err)
 	}
@@ -1161,13 +1199,16 @@ func CancelUpload(ctx context.Context, req *native.CancelUploadReq) *models.Err 
 		return &models.Err{E: fmt.Errorf("permission denied: not owner of upload record"), C: native.RespCode_PERMISSION_DENIED}
 	}
 
-	// 清理临时文件
-	os.RemoveAll(path.Dir(*uploadRecord.TempPath))
-
-	// 删除数据库记录
+	// 删除数据库记录后再清理临时文件：记录本身此时还是 PENDING/UPLOADING，
+	// 先删记录才能用引用检查区分「是否还有别的在途上传共用这个 hash 的临时文
+	// 件」——按 hash 共享的目录不能因为取消了一条就整目录删掉。
 	if err := db.ClearUploadRecords(uploadID); err != nil {
 		llog.C(ctx).Errorf("delete upload record failed: %v", err)
 		return &models.Err{E: err, C: native.RespCode_DB_ERROR}
+	}
+
+	if uploadRecord.TempPath != nil && *uploadRecord.TempPath != "" && !otherActiveUploadsForHash(strPtrVal(uploadRecord.FileHash)) {
+		os.RemoveAll(path.Dir(*uploadRecord.TempPath))
 	}
 
 	return nil
@@ -1194,6 +1235,11 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 
 	blake3Hash := *req.Hash
 	llog.C(ctx).Infof("small file upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+
+	// 同一目标文件串行化：并发上传同一文件时，后到者必须能看到前者刚建的记录，
+	// 走「同名同 hash → 秒传」直接返回，而不是各自建记录、互相删临时文件。
+	unlock := lockUploadTarget(getCurrentUserIDFromCtx(ctx), *req.ParentId, *req.Name)
+	defer unlock()
 
 	// 验证父文件夹
 	_, mErr := validateAndGetParent(*req.ParentId)
@@ -1306,6 +1352,10 @@ func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempP
 
 	blake3Hash := *req.Hash
 	llog.C(ctx).Infof("webdav upload started: name=%s, size=%d, hash=%s", *req.Name, *req.Size, blake3Hash)
+
+	// 与 UploadSmall 同一把串行化锁：WebDAV PUT 与 App 上传可能同时写同一目标文件
+	unlock := lockUploadTarget(getCurrentUserIDFromCtx(ctx), *req.ParentId, *req.Name)
+	defer unlock()
 
 	// 按目标目录的绑定解析落盘存储提供者（目录绑定 → 祖先继承 → 用户分配集）
 	providerIds, mErr := resolveProviderIdsForFolder(ctx, *req.ParentId)

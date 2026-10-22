@@ -11,6 +11,7 @@ import '../proto/native/auth.pb.dart';
 import '../proto/native/backup.pb.dart';
 import '../proto/native/download.pb.dart';
 import '../proto/native/enum.pbenum.dart';
+import '../proto/native/enum.pb.dart';
 import '../proto/native/file.pb.dart';
 import '../proto/native/permission.pb.dart';
 import '../proto/native/provider.pb.dart';
@@ -1607,6 +1608,107 @@ class FmRepository {
       return ApiResult(success: false, message: _handleDioError(e));
     } catch (e) {
       _logger.error('获取文件直链失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 创建单文件短期票据（替代把 access token 拼进预览 URL）
+  ///
+  /// 票据绑定 file_id + 当前用户，仅供只能把凭证写进 URL 查询串的场景使用：
+  /// - 不传 purpose（默认预览）：10 分钟有效，用于文本/图片这类一次性拉取；
+  /// - `TicketPurpose.DOWNLOAD`：12 小时有效，用于阅读器（会持续发 Range 请求）
+  ///   与下载（断点续传/暂停恢复会重新校验）。
+  /// 票据是临时凭证：不要写日志、不要落库。
+  Future<ApiResult<CreatePreviewTicketRespData>> createPreviewTicket({
+    required String fileId,
+    TicketPurpose? purpose,
+  }) async {
+    try {
+      final req = CreatePreviewTicketReq(fileId: fileId);
+      if (purpose != null) req.purpose = purpose;
+      final response = await _dio.post(
+        '$_baseUrl/api/file/preview-ticket',
+        data: req.toProto3Json(),
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final respData = extractRespData<CreatePreviewTicketRespData>(
+        data,
+        CreatePreviewTicketRespData(),
+      );
+      // 票据原文不进日志，只记长度与过期时间
+      _logger.debug(
+        '预览票据已签发, expires_at=${respData.hasExpiresAt() ? respData.expiresAt.toDateTime() : 'unknown'}',
+      );
+      return ApiResult(success: true, data: respData);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('创建预览票据失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('创建预览票据失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 读取文件原始字节（文本预览用）
+  ///
+  /// 走单文件短期票据，URL 里不出现 access token；大文件由调用方自行限制长度。
+  Future<ApiResult<List<int>>> fetchPreviewBytes({
+    required String fileId,
+    required String fileName,
+  }) async {
+    final ticketResp = await createPreviewTicket(fileId: fileId);
+    final ticket = ticketResp.data?.ticket;
+    if (!ticketResp.success || ticket == null || ticket.isEmpty) {
+      return ApiResult(
+        success: false,
+        message: ticketResp.message ?? '获取预览凭证失败',
+      );
+    }
+
+    final url =
+        '$_baseUrl/api/file/preview/raw/${Uri.encodeComponent(fileName)}'
+        '?file_id=${Uri.encodeQueryComponent(fileId)}'
+        '&ticket=${Uri.encodeQueryComponent(ticket)}';
+    try {
+      final response = await _dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return ApiResult(success: true, data: response.data ?? const <int>[]);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('读取文件内容失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('读取文件内容失败: $e');
+      return ApiResult(success: false, message: e.toString());
+    }
+  }
+
+  /// 读取历史版本的原始字节（文本预览用；历史版本走独立接口）
+  Future<ApiResult<List<int>>> fetchHistoryPreviewBytes({
+    required int historyId,
+  }) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        '$_baseUrl/api/file/history/preview?id=$historyId',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return ApiResult(success: true, data: response.data ?? const <int>[]);
+    } on TokenInvalidException {
+      await _handleTokenInvalid();
+      return ApiResult(success: false, message: '登录已过期，请重新登录');
+    } on DioException catch (e) {
+      _logger.error('读取历史版本内容失败: ${e.message}');
+      return ApiResult(success: false, message: _handleDioError(e));
+    } catch (e) {
+      _logger.error('读取历史版本内容失败: $e');
       return ApiResult(success: false, message: e.toString());
     }
   }

@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
@@ -19,8 +21,8 @@ import (
 // PreviewFileHandler 文件预览HTTP handler
 // 默认返回缩略图（如果存在），添加 ?original=true 参数预览原图
 func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. 验证认证
-	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	// 1. 验证认证（票据或请求头）
+	claims, err := authenticateFileRequest(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -82,27 +84,27 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	streamResponse(w, r, result, "inline")
 }
 
-// applyQueryToken 把 ?token=<JWT> 查询参数提升为 Authorization 头。
+// authenticateFileRequest 文件流的两种凭证，票据优先：
+//  1. `?ticket=<单文件票据>`：浏览器 / WebView / 浏览器下载器用（带不了请求头），
+//     单文件、短期、不暴露 access token；
+//  2. `Authorization: Bearer <JWT>`：App 与其他能带请求头的调用方。
 //
-// 浏览器直接发起的请求（`<a href>` 下载、iframe / WebView 预览）无法自定义请求头，
-// 只能用查询参数传 token；仅当查询串带了非空 token 时才覆盖请求头。
-// 注意：token 出现在 URL 里会进浏览器历史与 Referer，只用于这些"无法带 header"的场景。
-func applyQueryToken(r *http.Request) {
-	if token := r.URL.Query().Get("token"); token != "" {
-		r.Header.Set("Authorization", "Bearer "+token)
+// **不再支持 `?token=<JWT>`**：access token 是账户级、长期有效的凭证，写进 URL 会
+// 留在浏览器历史、下载历史与 Referer 里，泄露一次等于交出全部文件读权限。
+func authenticateFileRequest(w http.ResponseWriter, r *http.Request) (*auth.Claims, error) {
+	if r.URL.Query().Get("ticket") != "" {
+		return middleware.AuthPreviewTicketHTTP(w, r)
 	}
+	return middleware.AuthHTTPMiddleware(w, r)
 }
 
 // DownloadFileHandler 文件下载HTTP handler（强制下载，支持断点续传）
 //
-// 支持两种鉴权方式：Authorization 头，或 ?token=<JWT> 查询参数。
-// 后者是给浏览器直接下载用的：`<a href>` 无法带自定义请求头，而内嵌 Web UI
-// （server/webui.go）与 Flyfish Viewer 都是这么下载的。日志只记录 r.URL.Path，
-// 查询串里的 token 不会落盘（见 server/middleware/log.go）。
+// 鉴权见 authenticateFileRequest：浏览器下载用 ?ticket=（12 小时下载票，覆盖
+// 暂停 / 断网续传），App 用 Authorization 头。日志只记录 r.URL.Path，票据不落盘。
 func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. 验证认证（支持 header 和 query 参数）
-	applyQueryToken(r)
-	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	// 1. 验证认证（票据或请求头）
+	claims, err := authenticateFileRequest(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -180,10 +182,12 @@ func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string, size 
 }
 
 // streamFileHistory 流式传输文件历史版本
+//
+// 票据场景下 claims.PreviewFileID 是票据绑定的文件，必须与历史版本的宿主文件一致
+// （由 service.GetFileHistoryStream 校验），否则一张 A 文件的票能读全部历史版本。
 func streamFileHistory(w http.ResponseWriter, r *http.Request, isPreview bool) {
-	// 1. 验证认证（支持 header 和 query 参数，后者供浏览器直接下载）
-	applyQueryToken(r)
-	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	// 1. 验证认证（票据或请求头）
+	claims, err := authenticateFileRequest(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -209,8 +213,8 @@ func streamFileHistory(w http.ResponseWriter, r *http.Request, isPreview bool) {
 		return
 	}
 
-	// 3. 获取文件历史流
-	result, err := service.GetFileHistoryStream(ctx, id, isPreview)
+	// 3. 获取文件历史流（票据必须绑定该历史版本的宿主文件）
+	result, err := service.GetFileHistoryStream(ctx, id, isPreview, claims.PreviewFileID)
 	if err != nil {
 		llog.L().Errorf("get file history stream failed: %v", err)
 		http.Error(w, err.Error(), httpStatusFromError(err))
@@ -290,7 +294,7 @@ func streamRangeResponse(w http.ResponseWriter, r *http.Request, result *service
 	}
 
 	// 设置响应头（206 Partial Content）
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, result.FileName))
+	w.Header().Set("Content-Disposition", contentDisposition(disposition, result.FileName))
 	w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
 	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, result.FileSize))
 	w.WriteHeader(http.StatusPartialContent) // 206
@@ -315,7 +319,7 @@ func streamFullResponse(w http.ResponseWriter, r *http.Request, result *service.
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, result.FileName))
+	w.Header().Set("Content-Disposition", contentDisposition(disposition, result.FileName))
 	if result.FileSize > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(result.FileSize, 10))
 	}
@@ -329,6 +333,48 @@ func streamFullResponse(w http.ResponseWriter, r *http.Request, result *service.
 	}
 
 	llog.L().Infof("file stream completed: %s, %d bytes sent, disposition: %s", result.FileName, written, disposition)
+}
+
+// contentDisposition 组装 RFC 6266 的 Content-Disposition。
+//
+// 只写 `filename="原始名"` 时中文名在部分浏览器 / 代理下会乱码（header 按
+// latin-1 解释）：这里同时给 ASCII 回退名和 RFC 5987 的 `filename*=UTF-8”…`，
+// 现代浏览器优先后者，老客户端退回前者。
+func contentDisposition(disposition, fileName string) string {
+	return fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`,
+		disposition, asciiFallbackName(fileName), rfc5987Escape(fileName))
+}
+
+// asciiFallbackName 把非 ASCII / 控制字符 / 引号替换成 '_'（老客户端只看 filename）
+func asciiFallbackName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+			b.WriteByte('_')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return "unnamed"
+	}
+	return b.String()
+}
+
+// rfc5987Escape 按 RFC 5987 的 attr-char 集合做百分号编码（UTF-8 字节）
+func rfc5987Escape(s string) string {
+	const attrChar = "!#$&+-.^_`|~"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			strings.IndexByte(attrChar, c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
 }
 
 // parseProviderID 解析 provider_id 参数
@@ -391,6 +437,11 @@ func parseRangeHeader(rangeHeader string, fileSize int64) (start, end int64, err
 func httpStatusFromError(err error) int {
 	errMsg := err.Error()
 	switch {
+	// 鉴权类拒绝：票据绑定的文件与请求不符、非所有者 —— 403，不能报成服务器故障
+	case errors.Is(err, service.ErrTicketFileMismatch):
+		return http.StatusForbidden
+	case strings.Contains(errMsg, "permission denied"):
+		return http.StatusForbidden
 	case strings.Contains(errMsg, "not found"):
 		return http.StatusNotFound
 	case strings.Contains(errMsg, "no available provider"):
@@ -402,13 +453,12 @@ func httpStatusFromError(err error) int {
 	}
 }
 
-// RawFilePreviewHandler 原始文件预览（用于 Flyfish Viewer）
+// RawFilePreviewHandler 原始文件预览（用于 Flyfish Viewer 与网页预览）
 // 返回完整文件二进制，带鉴权，支持 CORS
-// 支持两种鉴权方式：Authorization header 或 token query 参数
+// 鉴权：?ticket=（单文件票据）或 Authorization header，见 authenticateFileRequest
 func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. 验证认证（支持 header 和 query 参数）
-	applyQueryToken(r)
-	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	// 1. 验证认证
+	claims, err := authenticateFileRequest(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -427,6 +477,8 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	// 响应不允许进浏览器缓存：请求 URL 里带着预览票据，缓存下来等于延长凭证寿命
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
 		return

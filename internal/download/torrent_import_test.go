@@ -10,25 +10,89 @@ import (
 	"jenken827.com/jenken827/pfm/utils"
 )
 
-// 只导入被选中、非元数据伪文件、且已下完的文件
-func TestImportableFilePaths(t *testing.T) {
+// 只导入被选中、非元数据伪文件、且已按种子长度完整落盘的文件
+func TestImportableFilesFilters(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, n int) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, make([]byte, n), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	write("Torrent/a.mkv", 100)
+	write("Torrent/b.srt", 10)
+	write("Torrent/skip.txt", 10)
+	write("Torrent/partial.bin", 7)
+
 	files := []aria2.FileInfo{
 		{Path: "Torrent/a.mkv", Selected: "true", Length: "100", CompletedLength: "100"},
 		{Path: "Torrent/b.srt", Selected: "true", Length: "10", CompletedLength: "10"},
-		{Path: "Torrent/skip.txt", Selected: "false", Length: "10", CompletedLength: "0"},     // 未选中
-		{Path: "Torrent/partial.bin", Selected: "true", Length: "10", CompletedLength: "7"},   // 没下完
-		{Path: "[METADATA]data.bin", Selected: "true", Length: "328", CompletedLength: "328"}, // 元数据伪文件
+		{Path: "Torrent/skip.txt", Selected: "false", Length: "10", CompletedLength: "0"},   // 未选中
+		{Path: "Torrent/partial.bin", Selected: "true", Length: "10", CompletedLength: "7"}, // 没下完（磁盘只有 7 字节）
+		{Path: "[METADATA]data.bin", Selected: "true", Length: "328"},                       // 元数据伪文件
 		{Path: "", Selected: "true"}, // 空路径
 	}
-	got := importableFilePaths(files)
-	want := []string{"Torrent/a.mkv", "Torrent/b.srt"}
+	got := importableFiles(dir, files)
+	want := []string{filepath.Join(dir, "Torrent/a.mkv"), filepath.Join(dir, "Torrent/b.srt")}
 	if len(got) != len(want) {
-		t.Fatalf("importableFilePaths = %v, want %v", got, want)
+		t.Fatalf("importableFiles = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Errorf("importableFilePaths[%d] = %s, want %s", i, got[i], want[i])
+			t.Errorf("importableFiles[%d] = %s, want %s", i, got[i], want[i])
 		}
+	}
+}
+
+// aria2 的 files[].path 是绝对路径（dir + 相对路径）：不能直接再和 dir 拼
+//
+// 回归背景：旧实现无条件 filepath.Join(dir, f.Path)，对绝对路径会拼成
+// dir/dir/... 的形式，stat 必然失败 → 每次导入都报「没有可导入的文件」。
+func TestImportableFilesAcceptsAbsolutePaths(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Torrent", "a.bin")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("abcd"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	files := []aria2.FileInfo{
+		{Path: path, Selected: "true", Length: "4", CompletedLength: "0"},
+		{Path: filepath.Join(dir, "Torrent", "gone.bin"), Selected: "true", Length: "4", CompletedLength: "0"},
+	}
+	got := importableFiles(dir, files)
+	if len(got) != 1 || got[0] != path {
+		t.Fatalf("importableFiles = %v, want [%s]", got, path)
+	}
+}
+
+// 任务已完成后 aria2 逐文件 completedLength 恒为 0：不能因此丢掉已下好的文件
+//
+// 回归背景：BT 任务进入终态（stopped/complete）后 aria2 不再保留分片位图，
+// files[].completedLength 全部回报 0（任务级总量仍然正确）。按它判断会得到
+// 「aria2 已完成但没有可导入的文件」，且记录被判失败后 reconcile 不再扫，
+// 只能整单重下。
+func TestImportableFilesAcceptsZeroCompletedLength(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.bin"), make([]byte, 4), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.bin"), []byte("ab"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	files := []aria2.FileInfo{
+		{Path: "a.bin", Selected: "true", Length: "4", CompletedLength: "0"},
+		{Path: "b.bin", Selected: "true", Length: "2", CompletedLength: "0"},
+		{Path: "c.bin", Selected: "false", Length: "9", CompletedLength: "0"},
+	}
+	got := importableFiles(dir, files)
+	if len(got) != 2 || got[0] != filepath.Join(dir, "a.bin") || got[1] != filepath.Join(dir, "b.bin") {
+		t.Fatalf("importableFiles = %v, want 2 files", got)
 	}
 }
 

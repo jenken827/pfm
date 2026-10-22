@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -621,28 +619,10 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 }
 
 // resolveNameConflict 检查目标目录中是否有同名文件，有则自动重命名
-// 返回新名称（冲突时），无冲突返回空字符串
+// 返回新名称（冲突时），无冲突返回空字符串。实现收敛在 db.ResolveNameConflict，
+// 离线下载导入等后台路径共用同一套命名规则。
 func resolveNameConflict(parentID, name, ownerID string) string {
-	existing, err := db.FindFileByParentAndName(parentID, name, ownerID)
-	if err != nil || existing == nil {
-		return "" // 无冲突
-	}
-
-	// 解析文件名和扩展名
-	ext := filepath.Ext(name)
-	baseName := strings.TrimSuffix(name, ext)
-
-	// 尝试 "name (1).ext", "name (2).ext", ...
-	for i := 1; i <= 999; i++ {
-		newName := fmt.Sprintf("%s (%d)%s", baseName, i, ext)
-		conflict, err := db.FindFileByParentAndName(parentID, newName, ownerID)
-		if err != nil || conflict == nil {
-			return newName
-		}
-	}
-
-	// 极端情况：999 都冲突，用 UUID 后缀
-	return fmt.Sprintf("%s_%s%s", baseName, uuid.New().String()[:8], ext)
+	return db.ResolveNameConflict(parentID, name, ownerID)
 }
 
 // batchDeleteFromProvider 从单个存储提供者批量删除文件位置

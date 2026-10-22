@@ -81,10 +81,28 @@ class ClientBackupService {
     await storage.deleteBackupRecordsByConfig(configId);
   }
 
+  /// 正在执行的配置 id：同一配置不允许并发扫描。
+  /// 两次扫描都读不到对方刚写的 backup_file_records，会给同一文件各建一条
+  /// 上传任务 → 同一目标文件并发上传（服务端会撞同名唯一索引/互删临时文件）。
+  final Set<String> _runningConfigs = {};
+
   /// 执行一次备份扫描并创建上传任务
   ///
   /// 返回 (扫描文件数, 需要备份文件数, 新建上传任务数)
   Future<(int, int, int)> executeBackup(String configId) async {
+    if (!_runningConfigs.add(configId)) {
+      getLogger().info('ClientBackup: $configId 正在执行，跳过重复触发');
+      return (0, 0, 0);
+    }
+    try {
+      return await _executeBackup(configId);
+    } finally {
+      _runningConfigs.remove(configId);
+    }
+  }
+
+  /// 单次备份扫描的实现（并发保护见 executeBackup）
+  Future<(int, int, int)> _executeBackup(String configId) async {
     final configs = getConfigs();
     final config = configs.firstWhere((c) => c.id == configId);
     if (!config.enabled) return (0, 0, 0);

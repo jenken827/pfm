@@ -377,3 +377,12 @@ func (s *FileServer) GetFileDirectLink(ctx context.Context, req *native.DirectLi
 	}
 	return response.SuccessResp(data)
 }
+
+// CreatePreviewTicket 签发单文件短期预览票据（替代把 access token 写进预览 URL）
+func (s *FileServer) CreatePreviewTicket(ctx context.Context, req *native.CreatePreviewTicketReq) (*native.BaseResp, error) {
+	data, mErr := service.CreatePreviewTicket(ctx, req)
+	if mErr != nil {
+		return response.ErrResp(mErr)
+	}
+	return response.SuccessResp(data)
+}

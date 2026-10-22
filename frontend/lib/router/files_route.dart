@@ -33,17 +33,17 @@ class FilePreviewRoute extends GoRouteData with $FilePreviewRoute {
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    // 支持 PreviewArgs（带图片列表）或单 File 对象
+    // 支持 PreviewArgs（带图片列表）或单 File 对象；具体用哪个页面由
+    // buildPreviewPage 统一决定（图片/音视频、文本、Office 分流）
     final extra = state.extra;
     if (extra is PreviewArgs) {
-      return FilePreviewPage(
-        file: extra.file,
+      return buildPreviewPage(
+        extra.file,
         images: extra.images,
         initialIndex: extra.initialIndex,
       );
     }
-    final file = extra! as File;
-    return FilePreviewPage(file: file);
+    return buildPreviewPage(extra! as File);
   }
 }
 

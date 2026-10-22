@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -238,8 +239,15 @@ func waitForReadyProvider(ctx context.Context, fileHash string) error {
 	}
 }
 
+// ErrTicketFileMismatch 票据绑定的文件与历史版本的宿主文件不一致。
+// 这是鉴权层面的拒绝（HTTP 层映射 403），不是服务器故障——别让它变成 500。
+var ErrTicketFileMismatch = errors.New("ticket does not match history file")
+
 // GetFileHistoryStream 获取文件历史版本流
-func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool) (*FileStreamResult, error) {
+//
+// expectFileID 非空时来自单文件票据（claims.PreviewFileID）：历史版本必须属于该文件，
+// 否则一张 A 文件的下载票可以读该用户全部文件的历史版本，票据就退化成账户级读权限。
+func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool, expectFileID string) (*FileStreamResult, error) {
 	// 1. 获取历史记录
 	history, err := db.GetFileHistoryByID(historyID)
 	if err != nil {
@@ -249,6 +257,11 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool)
 	// 归属校验：历史版本归属其宿主文件，仅文件所有者可取流（管理员不可越权）
 	if history.FileId == nil || !CheckOwnership(ctx, *history.FileId) {
 		return nil, fmt.Errorf("permission denied: not owner of file history")
+	}
+
+	// 票据的宿主校验：票据绑定的文件必须就是这个历史版本的宿主文件
+	if expectFileID != "" && *history.FileId != expectFileID {
+		return nil, ErrTicketFileMismatch
 	}
 
 	if history.Hash == nil || *history.Hash == "" {

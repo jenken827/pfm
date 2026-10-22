@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.3+20261020
+version: 1.2.0+20261021
 
 environment:
   # 统一 Flutter SDK 版本：所有 Flutter 项目共用同一个 SDK（当前 Flutter 3.47.6 /
@@ -83,6 +83,9 @@ dependencies:
   open_file: ^3.5.11
   share_plus: ^12.0.2
   exif: ^3.3.0
+  # 纯 Dart 的 Markdown 解析（只解析成 AST，渲染由 widgets/markdown_view.dart 做）：
+  # 文本/代码类文件走 Dart 原生预览，Markdown 需要结构化渲染而不是纯文本。
+  markdown: ^7.3.1
 
 dev_dependencies:
   flutter_test:

@@ -178,6 +178,57 @@ func TestReconcileWaitsForTorrentProduct(t *testing.T) {
 	}
 }
 
+// 任务已完成后逐文件 completedLength 恒为 0：已下好的文件仍要入库
+//
+// 回归背景（真实事故）：aria2 把 BT 任务转入终态后不再保留分片位图，
+// files[].completedLength 全部回报 0（任务级 completedLength 正确）。
+// 旧逻辑按逐文件长度判断"是否下完"，于是把已下好的文件全部跳过，
+// 记录被判「aria2 已完成但没有可导入的文件」，且 FAILED 不再被 reconcile 扫描，
+// 已完成的任务只能整单重下。
+func TestReconcileImportsCompletedTorrentWithZeroPerFileLength(t *testing.T) {
+	ownerID, rootID := newImportTestUser(t)
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "FC2PPV-1", "keep.mp4"), "video")
+	mustWriteFile(t, filepath.Join(dir, "FC2PPV-1", "info.txt"), "info")
+
+	btGid := "bt-" + uuid.New().String()
+	dr := newOfflineRecord(t, ownerID, rootID, btGid,
+		"magnet:?xt=urn:btih:"+importTestInfoHash)
+
+	// 终态任务：任务级 10/10 完成，但逐文件 completedLength 全是 0
+	productTask := `{"gid":"` + btGid + `","status":"complete","infoHash":"` + importTestInfoHash + `","dir":"` + dir + `",
+		"totalLength":"10","completedLength":"10","bittorrent":{"info":{"name":"FC2PPV-1"}},
+		"files":[
+			{"path":"FC2PPV-1/keep.mp4","length":"5","completedLength":"0","selected":"true"},
+			{"path":"FC2PPV-1/info.txt","length":"4","completedLength":"0","selected":"true"},
+			{"path":"FC2PPV-1/skip.mp4","length":"5","completedLength":"0","selected":"false"}
+		]}`
+
+	reconcileOneRecord(dr, snapshotFromJSON(t, productTask))
+
+	reloaded, err := db.GetDownloadRecordByID(*dr.Id)
+	if err != nil {
+		t.Fatalf("reload record: %v", err)
+	}
+	if got := native.DownloadRecordState(*reloaded.State); got != native.DownloadRecordState_DOWNLOAD_COMPLETED {
+		t.Fatalf("record state = %v, want COMPLETED（err: %s）", got, derefString(reloaded.ErrorMessage))
+	}
+
+	root, err := db.FindFileByParentAndName(rootID, "FC2PPV-1", ownerID)
+	if err != nil || root == nil || root.Id == nil {
+		t.Fatalf("种子目录未创建: %v", err)
+	}
+	if f, _ := db.FindFileByParentAndName(*root.Id, "keep.mp4", ownerID); f == nil {
+		t.Error("keep.mp4 未入库")
+	}
+	if f, _ := db.FindFileByParentAndName(*root.Id, "info.txt", ownerID); f == nil {
+		t.Error("info.txt 未入库")
+	}
+	if f, _ := db.FindFileByParentAndName(*root.Id, "skip.mp4", ownerID); f != nil {
+		t.Error("未选中的 skip.mp4 不应入库")
+	}
+}
+
 // 产物的文件全部未选中 → 没有可导入的文件，判失败并给出原因
 func TestReconcileFailsWhenNothingSelected(t *testing.T) {
 	ownerID, rootID := newImportTestUser(t)
@@ -258,5 +309,61 @@ func TestReconcileRecoversTorrentByStoredInfoHash(t *testing.T) {
 	}
 	if got := derefString(final.Gid); got != newBtGid {
 		t.Fatalf("record gid = %q, want %q", got, newBtGid)
+	}
+}
+
+// TestResolveImportName 离线导入的落名规则：同名同内容视为已存在（秒传跳过），
+// 同名不同内容自动改名，不覆盖用户已有文件、也不重复堆副本。
+func TestResolveImportName(t *testing.T) {
+	ownerID, rootID := newImportTestUser(t)
+
+	// 空目录：用原名
+	if name, dup := resolveImportName(ownerID, rootID, "clip.mp4", "hash-a"); name != "clip.mp4" || dup {
+		t.Fatalf("空目录应为 clip.mp4/false, got %q/%v", name, dup)
+	}
+
+	// 目录里已有 clip.mp4（hash-a）：同内容 → 跳过
+	if err := db.CreateFile(&native.FileORM{
+		Id:       utils.StringPtr(uuid.New().String()),
+		Name:     utils.StringPtr("clip.mp4"),
+		ParentId: utils.StringPtr(rootID),
+		OwnerId:  utils.StringPtr(ownerID),
+		Type:     utils.EnumPtr(native.FileType_VIDEO),
+		Hash:     utils.StringPtr("hash-a"),
+		Size:     utils.Uint64Ptr(1),
+		IsReady:  utils.BoolPtr(true),
+	}); err != nil {
+		t.Fatalf("create existing file: %v", err)
+	}
+	if name, dup := resolveImportName(ownerID, rootID, "clip.mp4", "hash-a"); name != "clip.mp4" || !dup {
+		t.Fatalf("同名同内容应跳过, got %q/%v", name, dup)
+	}
+
+	// 同名不同内容 → clip (1).mp4
+	name, dup := resolveImportName(ownerID, rootID, "clip.mp4", "hash-b")
+	if name != "clip (1).mp4" || dup {
+		t.Fatalf("同名不同内容应改名为 clip (1).mp4, got %q/%v", name, dup)
+	}
+
+	// 再下一个不同内容 → clip (2).mp4
+	if err := db.CreateFile(&native.FileORM{
+		Id:       utils.StringPtr(uuid.New().String()),
+		Name:     utils.StringPtr("clip (1).mp4"),
+		ParentId: utils.StringPtr(rootID),
+		OwnerId:  utils.StringPtr(ownerID),
+		Type:     utils.EnumPtr(native.FileType_VIDEO),
+		Hash:     utils.StringPtr("hash-b"),
+		Size:     utils.Uint64Ptr(1),
+		IsReady:  utils.BoolPtr(true),
+	}); err != nil {
+		t.Fatalf("create existing file 2: %v", err)
+	}
+	if name, dup := resolveImportName(ownerID, rootID, "clip.mp4", "hash-c"); name != "clip (2).mp4" || dup {
+		t.Fatalf("应为 clip (2).mp4, got %q/%v", name, dup)
+	}
+
+	// 重复下载同一份内容（与 clip (1).mp4 同 hash）→ 秒传跳过，不再堆副本
+	if name, dup := resolveImportName(ownerID, rootID, "clip.mp4", "hash-b"); name != "clip (1).mp4" || !dup {
+		t.Fatalf("同内容重下应秒传跳过到 clip (1).mp4, got %q/%v", name, dup)
 	}
 }

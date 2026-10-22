@@ -20,48 +20,55 @@ import (
 // 这里在目标目录下建一个以种子名命名的子目录，再按相对路径逐级还原。
 // ============================================================
 
-// importableFilePaths 从 aria2 的文件列表挑出真正要入库的文件（纯筛选，返回相对路径）：
+// importableFiles 在下载根目录下把可入库文件拼成绝对路径：
 //   - 未选中的跳过（用户在 AriaNg 里取消勾选的文件不下、也不入库）
 //   - 元数据伪文件跳过（[METADATA]xxx 只存在于内存）
-//   - 没下完的跳过（piece 边界上的半成品不能入库）
-func importableFilePaths(files []aria2.FileInfo) []string {
+//   - 没真正落盘 / 落盘长度不对的跳过（piece 边界上的半成品不能入库）
+//
+// 完成判据只看磁盘上的实际大小，**不看** aria2 的 files[].completedLength：
+// BT 任务一旦进入终态（stopped/complete），aria2 不再保留分片位图，逐文件的
+// completedLength 全部回报 0（任务级的 completedLength 总量仍然正确）。按它判断
+// 会把已经下好的文件当成半成品全部跳掉，用户侧表现为「aria2 已完成但没有可导入
+// 的文件」，而且记录被标失败后 reconcile 不再扫，任务无法自愈。
+func importableFiles(dir string, files []aria2.FileInfo) []string {
 	paths := make([]string, 0, len(files))
 	for _, f := range files {
 		if f.Selected == "false" || f.Path == "" || isMetadataPath(f.Path) {
 			continue
 		}
-		if !fileFullyDownloaded(f) {
-			continue
-		}
-		paths = append(paths, f.Path)
-	}
-	return paths
-}
-
-// fileFullyDownloaded 该文件是否已完整下载（长度字段缺失时按已下完处理）
-func fileFullyDownloaded(f aria2.FileInfo) bool {
-	length, err1 := parseSize(f.Length)
-	done, err2 := parseSize(f.CompletedLength)
-	if err1 != nil || err2 != nil {
-		return true
-	}
-	return done >= length
-}
-
-// importableFiles 在下载根目录下把可入库文件拼成绝对路径，并跳过磁盘上不存在的
-func importableFiles(dir string, files []aria2.FileInfo) []string {
-	relatives := importableFilePaths(files)
-	paths := make([]string, 0, len(relatives))
-	for _, rel := range relatives {
-		path := filepath.Join(dir, rel)
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() {
-			// 空文件 / 未真正落盘：aria2 对空文件不做验证，入网盘没有意义
+		path := resolveTaskPath(dir, f.Path)
+		if !fileOnDiskComplete(path, f.Length) {
 			continue
 		}
 		paths = append(paths, path)
 	}
 	return paths
+}
+
+// resolveTaskPath 把 aria2 的 files[].path 还原成本地绝对路径。
+//
+// aria2 RPC 返回的 path 已经是「下载目录 + 相对路径」的绝对路径，直接
+// filepath.Join(dir, path) 会拼成 dir/dir/相对路径，stat 必然失败 —— 表现为
+// 每次导入都「没有可导入的文件」。相对路径写法（测试 / 老版本 aria2）也兼容。
+func resolveTaskPath(dir, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
+// fileOnDiskComplete 文件是否已按种子记录的长度完整落盘。
+// 长度字段缺失（元数据等）时按"落盘即算"处理。
+func fileOnDiskComplete(path, expectedLength string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	length, err := parseSize(expectedLength)
+	if err != nil {
+		return true
+	}
+	return uint64(info.Size()) == length
 }
 
 // torrentRootName 种子根目录名：优先用 aria2 的种子名，

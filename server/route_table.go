@@ -72,6 +72,7 @@ func registerFileRoutes(mux *http.ServeMux) {
 	Register(mux, http.MethodPost, "/api/file/transfer-config", fileServer.GetTransferConfig)
 	Register(mux, http.MethodPost, "/api/file/photo-date-config", fileServer.GetPhotoDateConfig)
 	Register(mux, http.MethodPost, "/api/file/direct-link", fileServer.GetFileDirectLink)
+	Register(mux, http.MethodPost, "/api/file/preview-ticket", fileServer.CreatePreviewTicket)
 	// 相册备份目录辅助（原为手写裸 HTTP，已纳入统一分发器）
 	Register(mux, http.MethodPost, "/api/file/get-or-create-subfolder", fileServer.GetOrCreateSubfolder)
 	Register(mux, http.MethodPost, "/api/file/ensure-dir-path", fileServer.EnsureDirPath)

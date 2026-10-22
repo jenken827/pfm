@@ -3,26 +3,25 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 
+	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/server/middleware"
 )
 
 // DirectLinkRedirectHandler 直链 302：让浏览器 / 第三方下载器不改一行代码就能直连提供者
 //
 // 满足直链条件（单分片 + 未加密 + 驱动支持）时 302 到提供者直链，否则 302 到服务端代理
-// 下载地址（保持 token，浏览器跟随即可下载）——所以本接口**永远不会因为不可直链而失败**。
+// 下载地址（凭票据，浏览器跟随即可下载）——所以本接口**永远不会因为不可直链而失败**。
 //
 // 代价：302 无法携带自定义请求头，个别提供者的直链需要特定 UA 时浏览器会 403；
 // 这种情况应改用 /api/file/stream/download（代理）。
 //
-// 鉴权与 DownloadFileHandler 一致：Authorization 头或 ?token=<JWT>（见 api.applyQueryToken）。
+// 鉴权：?ticket=（单文件票据）或 Authorization 头，见 authenticateFileRequest。
 func DirectLinkRedirectHandler(w http.ResponseWriter, r *http.Request) {
-	applyQueryToken(r)
-	claims, err := middleware.AuthHTTPMiddleware(w, r)
+	claims, err := authenticateFileRequest(w, r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -38,9 +37,14 @@ func DirectLinkRedirectHandler(w http.ResponseWriter, r *http.Request) {
 	directURL, ok := resolveDirectLinkURL(r, fileID, providerID)
 	if !ok {
 		// 不可直链：退回代理下载（同一次请求内跟随，浏览器体验一致）
+		target, err := proxyDownloadURL(r, fileID, providerID, claims)
+		if err != nil {
+			http.Error(w, "prepare download failed", http.StatusInternalServerError)
+			return
+		}
 		llog.L().Infof("direct link unavailable, redirect to proxy, user: %s, file_id: %s",
 			claims.User.Name, fileID)
-		http.Redirect(w, r, proxyDownloadURL(r, fileID, providerID), http.StatusFound)
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 	// ⚠ 直链是临时凭证，日志里只记"发了直链"，不记 URL
@@ -65,31 +69,29 @@ func resolveDirectLinkURL(r *http.Request, fileID string, providerID *uint32) (s
 	return resp.GetUrl(), true
 }
 
-// proxyDownloadURL 组装代理下载地址（相对路径），并把 token 带过去
+// proxyDownloadURL 组装代理下载地址（相对路径），并把凭证带过去。
 //
-// 调用方可能用 Authorization 头鉴权，而 302 之后浏览器不会再带这个头，
-// 所以这里把原始 token 也写进查询串（浏览器下载本来就走 ?token=）。
-func proxyDownloadURL(r *http.Request, fileID string, providerID *uint32) string {
-	url := fmt.Sprintf("/api/file/stream/download?file_id=%s", fileID)
-	if providerID != nil {
-		url += fmt.Sprintf("&provider_id=%d", *providerID)
+// 302 之后浏览器不会再带 Authorization 头，所以 Location 里必须自带凭证：
+//   - 请求本来就带票据（网页里的下载按钮 / 直链入口）→ 原样透传；
+//   - 请求用 Authorization 头（App 等）→ 现签一张下载票据（12 小时，可续传）。
+func proxyDownloadURL(r *http.Request, fileID string, providerID *uint32, claims *auth.Claims) (string, error) {
+	ticket := r.URL.Query().Get("ticket")
+	if ticket == "" {
+		signed, err := service.SignDownloadTicket(fileID, claims.User.Id)
+		if err != nil {
+			llog.L().Errorf("sign download ticket failed: %v", err)
+			return "", err
+		}
+		ticket = signed
 	}
-	if token := requestToken(r); token != "" {
-		url += "&token=" + token
-	}
-	return url
-}
 
-// requestToken 从查询串或 Authorization 头里取原始 JWT
-func requestToken(r *http.Request) string {
-	if token := r.URL.Query().Get("token"); token != "" {
-		return token
+	query := url.Values{}
+	query.Set("file_id", fileID)
+	query.Set("ticket", ticket)
+	if providerID != nil {
+		query.Set("provider_id", fmt.Sprintf("%d", *providerID))
 	}
-	auth := r.Header.Get("Authorization")
-	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
-		return after
-	}
-	return ""
+	return "/api/file/stream/download?" + query.Encode(), nil
 }
 
 // valueOrZero 取指针值，nil 返回 0（仅用于日志）

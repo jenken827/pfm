@@ -245,8 +245,26 @@
     "preview_audioPlay": "音频播放",
     "preview_openExternalPlayer": "使用外部播放器打开",
     "preview_audioPlayHint": "音频播放功能开发中，暂可使用外部播放器打开",
+    "preview_resetZoom": "重置缩放",
     "preview_unsupportedType": "暂不支持此文件类型预览",
     "preview_downloadFile": "下载文件",
+    "textPreview_empty": "文件内容为空",
+    "textPreview_loadFailed": "加载文件内容失败",
+    "textPreview_truncated": "文件较大，仅显示前 {limit}",
+    "@textPreview_truncated": {
+        "placeholders": {
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "textPreview_nonUtf8": "文件可能不是 UTF-8 编码，部分字符会显示为乱码",
+    "textPreview_copy": "复制全部",
+    "textPreview_copied": "已复制到剪贴板",
+    "textPreview_wrap": "自动换行",
+    "textPreview_showSource": "查看源码",
+    "textPreview_showRendered": "查看渲染效果",
+    "textPreview_openLinkFailed": "无法打开链接",
     "preview_downloadQueued": "已添加到下载队列: {fileName}",
     "@preview_downloadQueued": {
         "placeholders": {
@@ -371,6 +389,8 @@
     "flyfish_openPreview": "打开预览",
     "flyfish_willOpenInBrowser": "将在浏览器中打开预览",
     "flyfish_loadingDocument": "正在加载文档...",
+    "flyfish_ticketFailed": "获取预览链接失败，请重试",
+    "flyfish_openBrowserFailed": "无法打开浏览器",
     "folderPicker_root": "根目录",
     "folderPicker_selectTarget": "选择目标文件夹",
     "folderPicker_goBack": "返回上级",

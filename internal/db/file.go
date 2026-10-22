@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -140,6 +141,29 @@ func FindFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, e
 		return nil, nil
 	}
 	return files[0], nil
+}
+
+// ResolveNameConflict 目标目录里已有同名文件时给出不冲突的名字，返回空串表示原名可用。
+//
+// 判定依据是 (owner_id, name, parent_id) 上的**部分**唯一索引（WHERE deleted_at IS NULL，
+// 见 db.Init），所以回收站里的同名文件不算冲突，这里也走默认作用域查询。
+// 命名规则与客户端一致：`原名 (1).扩展名`、`原名 (2).扩展名`…；999 个都冲突时用随机后缀兜底。
+func ResolveNameConflict(parentID, name, ownerID string) string {
+	existing, err := FindFileByParentAndName(parentID, name, ownerID)
+	if err != nil || existing == nil {
+		return "" // 无冲突（查询失败也放行，交给唯一索引兜底并报错）
+	}
+
+	ext := filepath.Ext(name)
+	baseName := strings.TrimSuffix(name, ext)
+	for i := 1; i <= 999; i++ {
+		candidate := fmt.Sprintf("%s (%d)%s", baseName, i, ext)
+		conflict, qErr := FindFileByParentAndName(parentID, candidate, ownerID)
+		if qErr != nil || conflict == nil {
+			return candidate
+		}
+	}
+	return fmt.Sprintf("%s_%s%s", baseName, uuid.New().String()[:8], ext)
 }
 
 // GetFileNamesInParent 获取指定父目录下当前用户的「文件名 -> file」映射（单条 SQL）

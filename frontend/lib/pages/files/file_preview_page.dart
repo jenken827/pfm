@@ -9,11 +9,11 @@ import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/router/files_route.dart';
 import 'package:pfm/services/services.dart';
-import 'package:pfm/widgets/document_preview_widget.dart';
 import 'package:pfm/blocs/transfer_bloc/transfer_bloc.dart';
 import 'package:pfm/api/fm_repository.dart';
 import 'package:pfm/utils/download_dir.dart';
 import 'package:pfm/utils/file_utils.dart';
+import 'package:pfm/widgets/zoomable_image_view.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pfm/l10n/app_localizations.dart';
 
@@ -55,11 +55,9 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   int _currentPage = 0;
   bool _showOriginal = false; // 是否显示原图
 
-  final TransformationController _transformController =
-      TransformationController();
-
-  /// 是否已放大（超过默认缩放比例）
-  bool get _isZoomed => _transformController.value.getMaxScaleOnAxis() > 1.05;
+  /// 当前图片是否处于放大状态；放大时禁用 PageView 翻页，
+  /// 否则单指拖动会先被 PageView 抢走，变成翻页而不是移动图片
+  bool _isZoomed = false;
 
   // 视频播放器
   Player? _videoPlayer;
@@ -84,7 +82,6 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   @override
   void dispose() {
     _pageController.dispose();
-    _transformController.dispose();
     // VideoController 不需要显式释放，只需释放 Player
     _videoPlayer?.dispose();
     super.dispose();
@@ -172,6 +169,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
               onPressed: () {
                 setState(() {
                   _showOriginal = !_showOriginal;
+                  _isZoomed = false; // 换图后缩放归位，翻页立刻可用
                 });
               },
             ),
@@ -226,9 +224,6 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         return _buildVideoPreview(context);
       case FileType.AUDIO:
         return _buildAudioPreview(context);
-      case FileType.DOCUMENT:
-        getLogger().debug("preview document");
-        return _buildDocumentPreview(context);
       default:
         return _buildUnsupportedPreview(context);
     }
@@ -248,6 +243,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         PageView.builder(
           controller: _pageController,
           itemCount: _images!.length,
+          // 放大时禁掉翻页：平移手势必须完整留给图片
           physics: _isZoomed
               ? const NeverScrollableScrollPhysics()
               : const PageScrollPhysics(),
@@ -255,12 +251,16 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             setState(() {
               _currentPage = index;
               _currentFile = _images![index];
+              _isZoomed = false;
             });
-            // 切换页面时重置缩放
-            _transformController.value = Matrix4.identity();
           },
           itemBuilder: (context, index) {
-            return _buildSingleImageView(context, _images![index], headers);
+            return _buildSingleImageView(
+              context,
+              _images![index],
+              headers,
+              active: index == _currentPage,
+            );
           },
         ),
         // 左箭头（非第一张时显示）
@@ -322,42 +322,45 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
   Widget _buildSingleImageView(
     BuildContext context,
     File file,
-    Map<String, String> headers,
-  ) {
+    Map<String, String> headers, {
+    bool active = true,
+  }) {
     final al = AppLocalizations.of(context);
     final previewUrl = _buildPreviewUrl(file.id, original: _showOriginal);
     return Stack(
       children: [
         SizedBox.expand(
-          child: InteractiveViewer(
-            transformationController: _transformController,
-            minScale: 0.5,
-            maxScale: 4.0,
-            scaleEnabled: true,
-            child: Center(
-              child: Image.network(
-                previewUrl,
-                headers: headers,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                          : null,
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildErrorWidget(
-                    context,
-                    al.preview_imageLoadFailed,
-                    error,
-                  );
-                },
-              ),
+          child: ZoomableImageView(
+            // 换图后重建，缩放状态天然归位
+            key: ValueKey('${file.id}_$_showOriginal'),
+            isActive: active,
+            resetTooltip: al.preview_resetZoom,
+            onZoomChanged: (zoomed) {
+              if (!mounted || zoomed == _isZoomed) return;
+              setState(() => _isZoomed = zoomed);
+            },
+            child: Image.network(
+              previewUrl,
+              headers: headers,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return _buildErrorWidget(
+                  context,
+                  al.preview_imageLoadFailed,
+                  error,
+                );
+              },
             ),
           ),
         ),
@@ -377,51 +380,7 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
             ),
           ),
         ),
-        // 缩放控制按钮 - 底部居中（仅放大后显示重置按钮）
-        if (_isZoomed)
-          Positioned(
-            bottom: 32,
-            left: 0,
-            right: 0,
-            child: Center(child: _buildZoomControls()),
-          ),
       ],
-    );
-  }
-
-  /// 构建缩放重置按钮
-  Widget _buildZoomControls() {
-    final scale = _transformController.value.getMaxScaleOnAxis();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${scale.toStringAsFixed(1)}x',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.fit_screen, color: Colors.white, size: 20),
-            tooltip: '重置缩放',
-            onPressed: () {
-              setState(() {
-                _transformController.value = Matrix4.identity();
-              });
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -589,11 +548,6 @@ class _FilePreviewPageState extends State<FilePreviewPage> {
         ],
       ),
     );
-  }
-
-  Widget _buildDocumentPreview(BuildContext context) {
-    final previewUrl = _buildPreviewUrl(_currentFile.id);
-    return DocumentPreviewWidget(file: _currentFile, previewUrl: previewUrl);
   }
 
   Widget _buildUnsupportedPreview(BuildContext context) {

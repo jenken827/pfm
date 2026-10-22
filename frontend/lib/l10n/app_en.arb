@@ -171,8 +171,26 @@
     "preview_audioPlay": "Audio playback",
     "preview_openExternalPlayer": "Open in external player",
     "preview_audioPlayHint": "Audio playback is under development, please use an external player",
+    "preview_resetZoom": "Reset zoom",
     "preview_unsupportedType": "Preview not supported for this file type",
     "preview_downloadFile": "Download file",
+    "textPreview_empty": "This file is empty",
+    "textPreview_loadFailed": "Failed to load file content",
+    "textPreview_truncated": "Large file, showing the first {limit} only",
+    "@textPreview_truncated": {
+        "placeholders": {
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "textPreview_nonUtf8": "This file may not be UTF-8 encoded; some characters may look garbled",
+    "textPreview_copy": "Copy all",
+    "textPreview_copied": "Copied to clipboard",
+    "textPreview_wrap": "Word wrap",
+    "textPreview_showSource": "Show source",
+    "textPreview_showRendered": "Show rendered",
+    "textPreview_openLinkFailed": "Cannot open the link",
     "preview_downloadQueued": "Added to download queue: {fileName}",
     "preview_downloadFailed": "Download failed",
     "preview_cannotOpenPlayer": "Cannot open external player",
@@ -255,6 +273,8 @@
     "flyfish_openPreview": "Open preview",
     "flyfish_willOpenInBrowser": "Will open preview in browser",
     "flyfish_loadingDocument": "Loading document...",
+    "flyfish_ticketFailed": "Failed to get preview link, please retry",
+    "flyfish_openBrowserFailed": "Cannot open the browser",
     "folderPicker_root": "Root",
     "folderPicker_selectTarget": "Select target folder",
     "folderPicker_goBack": "Go back",
