@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -200,32 +198,4 @@ func TestPacedWriterCountsAndStops(t *testing.T) {
 	// 幂等：重复 stop 不应 panic（close 一个已关闭的 channel 会 panic）
 	pace.stop()
 	pace.stop()
-}
-
-// download=1 时转码文件走附件下载（客户端用它测链路速率）
-func TestServeTranscodedFileDisposition(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "demo.mp4")
-	if err := os.WriteFile(path, []byte("fake-mp4"), 0o600); err != nil {
-		t.Fatalf("准备文件失败：%v", err)
-	}
-
-	for _, tc := range []struct {
-		url  string
-		want string
-	}{
-		{"http://example.com/api/file/stream/transcode?download=1", "attachment"},
-		{"http://example.com/api/file/stream/transcode", "inline"},
-	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tc.url, nil)
-		serveTranscodedFile(rec, req, path, "视频.mp4", req.URL.Query().Get("download") == "1")
-		got := rec.Header().Get("Content-Disposition")
-		if !strings.HasPrefix(got, tc.want) {
-			t.Fatalf("%s 期望 disposition=%s，实际 %q", tc.url, tc.want, got)
-		}
-		if ct := rec.Header().Get("Content-Type"); ct != "video/mp4" {
-			t.Fatalf("Content-Type 应为 video/mp4，实际 %q", ct)
-		}
-	}
 }

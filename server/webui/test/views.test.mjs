@@ -470,29 +470,6 @@ test('preview：图片先出缩略图，「查看原图」才拉原图', async (
   assert.doesNotMatch(env.text(), /查看原图/, '切到原图后按钮应消失');
 });
 
-test('preview：视频卡顿时可切低码率播放', async () => {
-  const { renderPreview } = await import('../js/views/preview.js');
-  const env = install({
-    '/api/file/info': FILE({ id: 'v-1', name: '录屏.mp4', type: 'VIDEO', mime: 'video/mp4' }),
-    '/api/file/preview-ticket': { ticket: 'v1.t.s', expiresAt: '2099-01-01T00:00:00Z' },
-    '/api/file/preview/raw/*': HTTP(206, {}),
-    // 已经转好：直接 206 换源
-    '/api/file/stream/transcode*': HTTP(206, {}),
-  });
-  await renderView(env, renderPreview, { name: 'preview', params: { id: 'v-1' } });
-
-  const before = env.find('video').src;
-  assert.match(before, /\/api\/file\/preview\/raw\//, '默认播原文件');
-
-  env.clickButton('卡顿？切低码率播放');
-  await env.settle();
-  const after = env.find('video').src;
-  assert.match(after, /\/api\/file\/stream\/transcode\?/);
-  assert.match(after, /ticket=v1\.t\.s/);
-  assert.doesNotMatch(after, /token=/);
-  assert.match(env.text(), /正在用低码率版本/);
-});
-
 test('preview：缓存后播放会把视频源换成 blob 并提示本机播放', async () => {
   const { renderPreview } = await import('../js/views/preview.js');
   const env = install({
@@ -528,53 +505,6 @@ test('preview：服务器不支持 Range 时缓存失败但保留直连播放', 
 
   assert.match(env.text(), /缓存失败/);
   assert.equal(env.find('video').src, before, '失败时不应改源');
-});
-
-test('preview：视频显示卡顿次数与已缓冲秒数', async () => {
-  const { renderPreview } = await import('../js/views/preview.js');
-  const env = install({
-    '/api/file/info': FILE({ id: 'v-3', name: '录屏.mp4', type: 'VIDEO', mime: 'video/mp4' }),
-    '/api/file/preview-ticket': { ticket: 'v1.t.s', expiresAt: '2099-01-01T00:00:00Z' },
-    '/api/file/preview/raw/*': HTTP(206, {}),
-  });
-  await renderView(env, renderPreview, { name: 'preview', params: { id: 'v-3' } });
-
-  const video = env.find('video');
-  // 一次 "waiting → playing" 算一次卡顿
-  video.dispatchEvent(new V.fakeDom.FakeEvent('waiting'));
-  video.dispatchEvent(new V.fakeDom.FakeEvent('playing'));
-  await env.settle();
-
-  const text = env.text();
-  assert.match(text, /卡顿 1 次/, '应统计到 1 次卡顿');
-  assert.match(text, /已缓冲 \d+\.\ds/, '应显示已缓冲秒数');
-});
-
-test('preview：转码中显示进度，失败给出原因', async () => {
-  const { renderPreview } = await import('../js/views/preview.js');
-  let hits = 0;
-  const env = install({
-    '/api/file/info': FILE({ id: 'v-2', name: '长视频.mp4', type: 'VIDEO', mime: 'video/mp4' }),
-    '/api/file/preview-ticket': { ticket: 'v1.t.s', expiresAt: '2099-01-01T00:00:00Z' },
-    '/api/file/preview/raw/*': HTTP(206, {}),
-    // 第一次转码中（40%），第二次失败（服务端没 ffmpeg）
-    '/api/file/stream/transcode*': () => {
-      hits += 1;
-      return hits === 1
-        ? HTTP(202, { state: 'running', progress: 40 })
-        : HTTP(501, { error: '转码未启用：服务端缺少 ffmpeg' });
-    },
-  });
-  await renderView(env, renderPreview, { name: 'preview', params: { id: 'v-2' } });
-
-  env.clickButton('卡顿？切低码率播放');
-  await env.settle();
-  assert.match(env.text(), /转码中 40%/, '应当显示转码进度');
-
-  // 轮询间隔 3 秒（服务端 Retry-After 也是 3）
-  await new Promise((r) => setTimeout(r, 3200));
-  await env.settle();
-  assert.match(env.text(), /缺少 ffmpeg/, '失败要把原因透给用户');
 });
 
 test('preview：Markdown 走文本预览并渲染标题', async () => {

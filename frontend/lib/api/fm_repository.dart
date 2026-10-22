@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
@@ -22,7 +21,6 @@ import '../router/router.dart';
 import '../services/background_service.dart';
 import '../services/local_storage.dart';
 import '../services/logger.dart';
-import '../services/video_transcode.dart';
 import 'auth_interceptor.dart';
 import 'util.dart';
 
@@ -1694,66 +1692,6 @@ class FmRepository {
     } catch (e) {
       _logger.debug('预览就绪探测失败: $e');
       return 0;
-    }
-  }
-
-  /// 探测视频低码率转码状态（App 端「流畅播放」用）
-  ///
-  /// [url] 必须是服务端转码接口的完整地址（带单文件票据、10/12 小时），
-  /// 不带 access token——探测走 `_probeDio`（无鉴权拦截器），避免 4xx 把用户踢回登录页。
-  ///
-  /// 202 时读 body 里的 `progress`；200/206 表示可以交给播放器。网络异常返回
-  /// `TranscodeState.networkError`（statusCode = 0）。
-  Future<TranscodeProbeResult> probeTranscode(String url) async {
-    try {
-      final resp = await _probeDio.get<ResponseBody>(
-        url,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: {'Range': 'bytes=0-0'},
-        ),
-      );
-      final status = resp.statusCode ?? 0;
-      final body = resp.data;
-      Map<String, dynamic>? json;
-      if (body != null) {
-        if (status == 202) {
-          json = await _readSmallJson(body.stream);
-        } else {
-          // 只关心状态码：立刻断开，别把 MP4 读进内存
-          final sub = body.stream.listen((_) {}, cancelOnError: true);
-          await sub.cancel();
-        }
-      }
-      return TranscodeProbeResult.fromResponse(status, json);
-    } on DioException catch (e) {
-      // _probeDio 的 validateStatus 只收 <500，501（服务端没装 ffmpeg）会走异常分支，
-      // 这里把状态码取回来，别把「功能未启用」报成「网络异常」。
-      final code = e.response?.statusCode;
-      _logger.debug('转码状态探测失败: ${e.message}, statusCode=$code');
-      if (code != null && code >= 400) {
-        return TranscodeProbeResult.fromResponse(code, null);
-      }
-      return const TranscodeProbeResult(state: TranscodeState.networkError);
-    } catch (e) {
-      _logger.debug('转码状态探测失败: $e');
-      return const TranscodeProbeResult(state: TranscodeState.networkError);
-    }
-  }
-
-  /// 读一小段 JSON body（202 的进度对象只有几十字节）
-  Future<Map<String, dynamic>?> _readSmallJson(Stream<List<int>> stream) async {
-    final bytes = <int>[];
-    try {
-      await for (final chunk in stream) {
-        bytes.addAll(chunk);
-        if (bytes.length >= 4096) break;
-      }
-      final decoded = jsonDecode(utf8.decode(bytes, allowMalformed: true));
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (e) {
-      _logger.debug('读取转码进度 body 失败: $e');
-      return null;
     }
   }
 

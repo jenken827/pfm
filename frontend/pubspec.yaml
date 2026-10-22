@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.2+20261022
+version: 1.2.3+20261022
 
 environment:
   # 统一 Flutter SDK 版本：所有 Flutter 项目共用同一个 SDK（当前 Flutter 3.47.6 /

@@ -11,7 +11,7 @@
 
 import {
   call, ticket, rawPreviewUrl, thumbPreviewUrl, previewPath, fetchBlob, downloadUrl,
-  PURPOSE_DOWNLOAD, buildDownloadUrl, transcodeUrl,
+  PURPOSE_DOWNLOAD, buildDownloadUrl,
 } from '../api.js';
 import { h, toast, triggerDownload, setChildren } from '../dom.js';
 import { prefetchMedia } from '../media_prefetch.js';
@@ -342,31 +342,22 @@ async function renderMedia(stage, file, alive) {
   box.prepend(el);
 
   // 高码率视频（手机 1080p 常在 15~30Mbps）在弱网 / 组网链路上没法实时播放。
-  // 服务端能按需转一份 720p 低码率副本，卡的时候切过去就行。
+  // 并行预取整份文件后本机播放：播放阶段完全不碰网络，链路抖动不再引起卡顿。
   if (file.type === 'VIDEO') {
     const hint = h('span', { class: 'muted small' });
-    const smooth = h('button', {
-      class: 'ghost',
-      text: '卡顿？切低码率播放',
-      onclick: () => switchToSmooth({ file, el, smooth, hint, alive }),
-    });
-    // 并行预取整份文件后本机播放：播放阶段完全不碰网络，链路抖动不再引起卡顿
     const cache = h('button', {
       class: 'ghost',
       text: '缓存后播放（弱网更稳）',
       onclick: () => playFromCache({ el, hint, button: cache, alive }),
     });
-    const stats = h('div', { class: 'muted small' });
-    box.append(h('div', { class: 'media-hint' }, smooth, cache, hint), stats);
-    trackPlayback(el, stats, alive);
+    box.append(h('div', { class: 'media-hint' }, cache, hint));
   }
 }
 
 /**
  * 并行拉取整份媒体到本地 Blob，再让 <video> 播它。
  *
- * 与「切低码率」互补：低码率降低每秒需要的字节数，缓存消除播放期间的网络依赖。
- * 缓存的是**当前正在播的地址**（原片或低码率版本），换码率后再点一次即可。
+ * 缓存的是**当前正在播的地址**；要换源就先换源、再点一次。
  * 必须等整份拉完才能起播，所以做成用户显式点的按钮，不做默认路径。
  */
 async function playFromCache({ el, hint, button, alive }) {
@@ -390,13 +381,7 @@ async function playFromCache({ el, hint, button, alive }) {
     if (!alive()) return;
     const at = el.currentTime || 0;
     const wasPlaying = !el.paused;
-    const objectUrl = URL.createObjectURL(blob);
-    el.src = objectUrl;
-    el.load();
-    el.addEventListener('loadedmetadata', () => {
-      if (at > 0) el.currentTime = at;
-      if (wasPlaying) el.play().catch(() => {});
-    }, { once: true });
+    swapMediaSource(el, URL.createObjectURL(blob), at, wasPlaying);
     const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
     hint.textContent = `已缓存 ${fmtSize(blob.size)}（${seconds}s），从本机播放，不再受网络影响`;
   } catch (error) {
@@ -412,105 +397,6 @@ function fmtRate(bytesPerSecond) {
   const mb = bytesPerSecond / (1024 * 1024);
   if (mb >= 1) return `${mb.toFixed(1)}MB/s`;
   return `${(bytesPerSecond / 1024).toFixed(0)}KB/s`;
-}
-
-/**
- * 播放诊断：给出「卡顿次数 / 累计停顿 / 已缓冲」。
- *
- * 排查视频卡顿时，光看服务端日志分不清「网络供不上」还是「客户端解不动」：
- *   - 缓冲一直是 0 秒、停顿次数不断增加 ⇒ 网络/带宽；
- *   - 缓冲有十几秒还停顿 ⇒ 客户端解码或渲染跟不上。
- * 数字直接显示在播放器下面，用户报数就能定位。
- */
-function trackPlayback(el, stats, alive) {
-  let stalls = 0;
-  let stallMs = 0;
-  let waitingAt = 0;
-  let reported = -1;
-
-  const render = () => {
-    if (!alive()) return;
-    const ahead = bufferedAhead(el);
-    const line = `卡顿 ${stalls} 次（累计 ${(stallMs / 1000).toFixed(1)}s）· 已缓冲 ${ahead.toFixed(1)}s`;
-    if (line !== reported) {
-      reported = line;
-      stats.textContent = line;
-    }
-  };
-
-  el.addEventListener('waiting', () => {
-    if (waitingAt) return;
-    waitingAt = Date.now();
-  });
-  el.addEventListener('playing', () => {
-    if (!waitingAt) return;
-    stallMs += Date.now() - waitingAt;
-    waitingAt = 0;
-    stalls += 1;
-    render();
-  });
-  el.addEventListener('timeupdate', render);
-  render();
-}
-
-/** 当前播放位置之后已缓冲的秒数 */
-function bufferedAhead(el) {
-  const ranges = el.buffered;
-  const at = el.currentTime || 0;
-  if (!ranges || typeof ranges.length !== 'number') return 0;
-  for (let i = 0; i < ranges.length; i += 1) {
-    if (ranges.start(i) <= at && at <= ranges.end(i)) {
-      return Math.max(0, ranges.end(i) - at);
-    }
-  }
-  return 0;
-}
-
-/**
- * 切到服务端转好的低码率版本。
- *
- * 第一次点会触发转码（202 + 进度），转完（200/206）再换 <video> 的 src；
- * 换源时保留播放位置与播放状态，避免从头开始。
- */
-async function switchToSmooth({ file, el, smooth, hint, alive }) {
-  const { ticket: t } = await ticket(file.id, PURPOSE_DOWNLOAD);
-  const url = transcodeUrl(file.id, t);
-  const at = el.currentTime || 0;
-  const wasPlaying = !el.paused;
-
-  smooth.disabled = true;
-  for (let i = 0; i < 400; i += 1) {
-    if (!alive()) return;
-    let res;
-    try {
-      res = await fetch(url, { headers: { Range: 'bytes=0-0' }, cache: 'no-store' });
-    } catch {
-      hint.textContent = '网络中断，正在重试…';
-      await new Promise((r) => setTimeout(r, 3000));
-      continue;
-    }
-    res.body?.cancel?.();
-    if (res.status === 200 || res.status === 206) {
-      hint.textContent = '';
-      smooth.textContent = '正在用低码率版本';
-      swapMediaSource(el, url, at, wasPlaying);
-      return;
-    }
-    if (res.status === 202) {
-      let body = {};
-      try { body = await res.json(); } catch { /* 进度拿不到就只显示"转码中" */ }
-      hint.textContent = body.state === 'queued'
-        ? '排队等待转码…'
-        : `转码中 ${body.progress || 0}%（转好一次，之后秒开）`;
-      await new Promise((r) => setTimeout(r, 3000));
-      continue;
-    }
-    hint.textContent = (await readErrorMessage(res)) || `转码失败（HTTP ${res.status}）`;
-    smooth.disabled = false;
-    return;
-  }
-  hint.textContent = '转码超时，稍后再试';
-  smooth.disabled = false;
 }
 
 /** 换 <video> 的源并恢复播放位置 */
