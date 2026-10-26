@@ -19,7 +19,8 @@ class PhotoDateRuleTypes {
 /// 1. EXIF DateTimeOriginal（只读文件头，大小由配置 exifHeadReadLimit 决定，
 ///    默认 256KB，覆盖绝大多数 JPEG 的 EXIF 段）
 /// 2. 文件名规则（按配置 filenameRules 顺序逐条尝试，先命中先返回）
-/// 3. 媒体库时间（photo_manager 的 createDateTime）作为最终兜底
+/// 3. 媒体库时间（photo_manager 的 createDateTime；为 0 时视作未知）
+/// 4. 文件系统时间（mtime，其次 ctime）
 /// 全部失败返回 null，调用方走原有编号子目录逻辑
 ///
 /// 规则表来源：默认内置（与后端默认一致）；相册备份前会尝试拉取服务端
@@ -28,8 +29,7 @@ class PhotoDateResolver {
   /// EXIF 解析默认读取的文件头上限（EXIF APP1 段几乎总在文件头部）
   static const int defaultExifReadLimit = 256 * 1024;
 
-  /// 时间戳防误判默认阈值（与后端 defaultTsMinYear / defaultTsMaxYearOffset 一致）
-  static const int defaultTsMinYear = 2000;
+  /// 时间戳防误判默认阈值（与后端 defaultTsMaxYearOffset 一致）
   static const int defaultTsMaxYearOffset = 1;
 
   /// 内置默认配置（与后端 defaultPhotoDateRules 保持一致，变更需同步）
@@ -37,7 +37,6 @@ class PhotoDateResolver {
     return PhotoDateConfig(
       exifEnabled: true,
       exifHeadReadLimit: defaultExifReadLimit,
-      tsMinYear: defaultTsMinYear,
       tsMaxYearOffset: defaultTsMaxYearOffset,
       filenameRules: [
         // IMG_ / Screenshot_ / PANO_ / VID_ 前缀，"_" 分隔第二段为日期
@@ -64,7 +63,7 @@ class PhotoDateResolver {
     );
   }
 
-  /// 综合解析：EXIF → 文件名规则 → 媒体库时间
+  /// 综合解析：EXIF → 文件名规则 → 媒体库时间 → 文件系统 mtime / ctime
   /// [config] 为 null 时使用内置默认配置
   static Future<DateTime?> resolveFromFile(
     String filePath, {
@@ -80,8 +79,29 @@ class PhotoDateResolver {
     final fromName = parseFromFilename(p.basename(filePath), cfg);
     if (fromName != null) return fromName;
 
-    return mediaDate;
+    if (_isSet(mediaDate)) return mediaDate;
+
+    return resolveFromFileSystemTime(filePath);
   }
+
+  /// 文件系统时间兜底：mtime 优先，其次 ctime
+  ///
+  /// 媒体库 createDateTime 缺失时 photo_manager 返回 epoch 0（1970），
+  /// 此时用文件自身的修改 / 变更时间决定归档目录；文件不可读返回 null。
+  static Future<DateTime?> resolveFromFileSystemTime(String filePath) async {
+    try {
+      final stat = await io.File(filePath).stat();
+      if (_isSet(stat.modified)) return stat.modified;
+      if (_isSet(stat.changed)) return stat.changed;
+    } catch (_) {
+      // 路径不存在 / 无权限：保持 null，调用方回退编号子目录
+    }
+    return null;
+  }
+
+  /// epoch 0 代表"没有这个时间"（Unix 秒 0 / 毫秒 0 均按未知处理）
+  static bool _isSet(DateTime? dt) =>
+      dt != null && dt.millisecondsSinceEpoch > 0;
 
   /// 读取文件头 EXIF DateTimeOriginal
   static Future<DateTime?> readExifDate(
@@ -155,7 +175,6 @@ class PhotoDateResolver {
   ) {
     if (filename.isEmpty) return null;
 
-    final tsMinYear = cfg.tsMinYear > 0 ? cfg.tsMinYear : defaultTsMinYear;
     final tsMaxYearOffset = cfg.tsMaxYearOffset > 0
         ? cfg.tsMaxYearOffset
         : defaultTsMaxYearOffset;
@@ -168,9 +187,9 @@ class PhotoDateResolver {
       } else if (rule.type == PhotoDateRuleTypes.prefixCompactDate) {
         t = _parsePrefixCompactDate(filename, rule);
       } else if (rule.type == PhotoDateRuleTypes.prefixTimestamp) {
-        t = _parsePrefixTimestamp(filename, rule, tsMinYear, tsMaxYearOffset);
+        t = _parsePrefixTimestamp(filename, rule, tsMaxYearOffset);
       } else if (rule.type == PhotoDateRuleTypes.leadingTimestamp) {
-        t = _parseLeadingTimestamp(filename, tsMinYear, tsMaxYearOffset);
+        t = _parseLeadingTimestamp(filename, tsMaxYearOffset);
       } else {
         // 未知规则类型：跳过（后端同样行为，保证向前兼容新服务端配置）
         continue;
@@ -216,14 +235,12 @@ class PhotoDateResolver {
   static DateTime? _parsePrefixTimestamp(
     String filename,
     PhotoDateFilenameRule rule,
-    int tsMinYear,
     int tsMaxYearOffset,
   ) {
     for (final prefix in rule.prefixes) {
       if (!filename.startsWith(prefix)) continue;
       final t = _parseTimestampFromDigits(
         filename.substring(prefix.length),
-        tsMinYear,
         tsMaxYearOffset,
       );
       if (t != null) return t;
@@ -234,10 +251,9 @@ class PhotoDateResolver {
   /// 文件名开头连续数字，前 10 位为秒级时间戳
   static DateTime? _parseLeadingTimestamp(
     String filename,
-    int tsMinYear,
     int tsMaxYearOffset,
   ) {
-    return _parseTimestampFromDigits(filename, tsMinYear, tsMaxYearOffset);
+    return _parseTimestampFromDigits(filename, tsMaxYearOffset);
   }
 
   /// 解析日期字段：支持 YYYYMMDD 与 YYYY-MM-DD 两种格式
@@ -247,8 +263,7 @@ class PhotoDateResolver {
     final compact = _parseCompactDate(s);
     if (compact != null) return compact;
 
-    final dashed =
-        RegExp(r'(\d{4})-(\d{2})-(\d{2})').firstMatch(s.trim());
+    final dashed = RegExp(r'(\d{4})-(\d{2})-(\d{2})').firstMatch(s.trim());
     if (dashed != null) {
       return _safeDateTime(
         int.parse(dashed.group(1)!),
@@ -285,12 +300,8 @@ class PhotoDateResolver {
   /// 防误判校验：
   /// - 时间戳前两位必须 > 12（否则可能是其他数字编号，如 01xxx）
   /// - 且 <= 当前时间戳前两位（如当前为 17，则 18 开头不可能是时间戳）
-  /// - 解析后的年份必须在 tsMinYear ~ 当前年份+tsMaxYearOffset 之间
-  static DateTime? _parseTimestampFromDigits(
-    String s,
-    int tsMinYear,
-    int tsMaxYearOffset,
-  ) {
+  /// - 解析后的年份不设下界，只要求 <= 当前年份+tsMaxYearOffset
+  static DateTime? _parseTimestampFromDigits(String s, int tsMaxYearOffset) {
     final m = RegExp(r'^(\d+)').firstMatch(s);
     if (m == null) return null;
     final digits = m.group(1)!;
@@ -310,7 +321,7 @@ class PhotoDateResolver {
     final dt = DateTime.fromMillisecondsSinceEpoch(sec * 1000);
     final now = DateTime.now();
     final maxYear = now.year + tsMaxYearOffset;
-    if (dt.year < tsMinYear || dt.year > maxYear) return null;
+    if (dt.year > maxYear) return null;
     return dt;
   }
 

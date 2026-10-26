@@ -18,11 +18,9 @@ var rootCmd = &cobra.Command{
 子命令:
   server            启动服务器
   user              本地认证用户管理（auth.mode=local 时使用）
-  migrate-photos    修复旧数据：按文件名日期把图片/视频移到 年/月 目录
-  dedup-files       删除子树下的重复文件（同 hash 保留名称最短的）
-  dedup-name        删除子树下同名 "(N)" 后缀重复文件（内容核验，EXIF 差异也能识别）
+  dedup-files       子树去重：同 hash 合并 + 同名 (N) 后缀副本核验（保留更大的一方）
   cleanup-orphan-locations 回收无引用的孤儿 file_locations（调提供者删物理副本+删库行）
-  cleanup-baidu-storage-orphans 扫描并回收百度网盘上无数据库记录的文件（逆向孤儿）
+  cleanup-storage-orphans 扫描存储提供者远端、回收数据库无记录的孤儿文件（逆向孤儿，支持多提供者）
   direct-link       取文件在存储提供者上的下载直链（打表/验证用，不经过服务端中转）
   decrypt           按 file_locations id 解密本地加密文件
   version           显示版本信息`,

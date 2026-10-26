@@ -230,10 +230,11 @@ func truncateStr(s string, max int) string {
 }
 
 // ============================================================================
-// 文件名后缀副本去重（"xxx (1).jpg" vs "xxx.jpg"）
+// 文件名后缀副本去重（"xxx (1).jpg" vs "xxx.jpg"）—— dedup-files 的阶段 2
 // 背景：浏览器/IM 下载同名文件会自动追加 " (1)"，两次迁移/上传的同名照片
 // 内容像素一致但 EXIF 元数据不同（blake3 不同），按 hash 去重永远无法命中。
-// 本命令按 同目录同名配对 + 尺寸相同 + 内容核验 判定，核验通过才删除。
+// 规则：同目录同名配对后先比文件大小（大的一方优先保留，不因带后缀就直接删），
+// 再做内容核验，核验通过才删除。
 // ============================================================================
 
 // NameSuffixDedupResult 文件名后缀去重结果统计
@@ -243,6 +244,7 @@ type NameSuffixDedupResult struct {
 	Duplicates    int      // 核验为重复的候选文件数（同尺寸：hash 相同/像素一致/字节一致）
 	CompressedDup int      // 压缩衍生副本数（不同尺寸但画面一致，删小保大）
 	KeepSuffix    int      // 保留后缀副本（删除原文件）的组数
+	KeptLarger    int      // 其中因「文件更大」而保留后缀副本的组数
 	DiffSize      int      // 同名但尺寸不同且非衍生（需人工确认）
 	DiffContent   int      // 同尺寸但内容不同（需人工确认）
 	Skipped       int      // 无法核验（无本地副本/JPEG 结构异常/解码失败）
@@ -537,7 +539,7 @@ func formatSuffixEXIFNote(baseMeta, candMeta dupMeta) string {
 }
 
 // pickSuffixKeeper 从 原文件 + 核验通过的候选 中选出保留者：
-// 1. 压缩衍生对（尺寸不同）：保留文件更大的一方（原图质量高；被压缩的小图信息已丢失）
+// 1. 文件更大的一方优先（同名副本里更小的一方通常是压缩/重编码衍生，画质已损失）
 // 2. JPEG 且 EXIF 完整度不同 → 保留非零 tag 更多的一方（拍摄时间等信息更全）
 // 3. 否则保留无后缀的原名文件（名称干净）
 // 4. 再同 → 保留最早创建，再同 → 保留 id 较小
@@ -546,7 +548,7 @@ func pickSuffixKeeper(base *native.FileORM, baseMeta dupMeta, dupCands []*suffix
 	kMeta := baseMeta
 	for _, d := range dupCands {
 		c := d.cand
-		if betterSuffixKeeper(c, keeper, d.meta, kMeta, d.kind) {
+		if betterSuffixKeeper(c, keeper, d.meta, kMeta) {
 			keeper = c
 			kMeta = d.meta
 		}
@@ -554,14 +556,13 @@ func pickSuffixKeeper(base *native.FileORM, baseMeta dupMeta, dupCands []*suffix
 	return keeper
 }
 
-func betterSuffixKeeper(cand, cur *native.FileORM, cMeta, curMeta dupMeta, candKind string) bool {
-	// 1. 压缩衍生对：文件更大的一方是原图（保留画质与细节）
-	//    仅当比较双方中一方是 compressed-dup（即这对是尺寸不同的衍生关系）时生效；
-	//    双方都是 compressed-dup 时同样比大小。
-	if candKind == "compressed-dup" {
-		if uint64Val(cand.Size) != uint64Val(cur.Size) {
-			return uint64Val(cand.Size) > uint64Val(cur.Size)
-		}
+// betterSuffixKeeper 判断候选副本是否比当前保留者更该留下。
+// 第一条即「同名带 (N) 后缀的副本不能只凭名称删除」：先比文件字节大小，
+// 大的一方优先（更可能是原图，小的一方往往被压缩过、信息已丢）。
+func betterSuffixKeeper(cand, cur *native.FileORM, cMeta, curMeta dupMeta) bool {
+	// 1. 文件更大的一方优先（覆盖压缩衍生对与 EXIF 补齐导致的大小差异）
+	if uint64Val(cand.Size) != uint64Val(cur.Size) {
+		return uint64Val(cand.Size) > uint64Val(cur.Size)
 	}
 	// 2. JPEG：EXIF 完整度不同时保留非零 tag 更多的一方（另一方 tag 被清零/丢失）
 	if cMeta.jpeg && curMeta.jpeg && cMeta.exifNonZero != curMeta.exifNonZero {
@@ -593,11 +594,12 @@ type suffixGroupOutcome struct {
 }
 
 // classifySuffixCandidate 判定单个候选是否构成重复：
-// 尺寸不同→压缩衍生核验（图片可判衍生，删小保大；非图片/不相似→diff-size/diff-content）；
-// 同 hash→dup；同尺寸→读取本地内容核验（JPEG 像素/其他格式字节）
+// 尺寸不同→先比文件大小（大的一方优先保留），再做压缩衍生核验（图片可判衍生，
+// 删小保大；非图片/不相似→diff-size/diff-content）；同 hash→dup；
+// 同尺寸→读取本地内容核验（JPEG 像素/其他格式字节）
 func classifySuffixCandidate(c, base *native.FileORM, localID uint32) *suffixCandDecision {
 	if !sameSize(base, c) {
-		// 新场景：小图是大图压缩衍生而来（重编码/转格式），hash、文件大小都不同
+		// 小图是大图压缩衍生而来（重编码/转格式），hash、文件大小都不同，
 		// 但画面内容一致。解码双方做感知比对，确认衍生才删，删小保大。
 		candData, okC := readLocalPlainContent(strPtrVal(c.Hash), localID)
 		baseData, okB := readLocalPlainContent(strPtrVal(base.Hash), localID)
@@ -659,8 +661,11 @@ func processSuffixGroup(base *native.FileORM, cands []*native.FileORM, localID u
 		out.deleteHashes = append(out.deleteHashes, strPtrVal(d.cand.Hash))
 	}
 	if strPtrVal(base.Id) != strPtrVal(keeper.Id) {
-		// 保留后缀副本（EXIF 更完整），原文件删除，副本改回原名
+		// 保留后缀副本（文件更大或 EXIF 更完整），原文件删除，副本改回原名
 		r.KeepSuffix++
+		if uint64Val(keeper.Size) > uint64Val(base.Size) {
+			r.KeptLarger++
+		}
 		out.deleteIDs = append(out.deleteIDs, strPtrVal(base.Id))
 		out.deleteHashes = append(out.deleteHashes, strPtrVal(base.Hash))
 		out.renames = append(out.renames, suffixRenamePlan{id: strPtrVal(keeper.Id), newName: strPtrVal(base.Name)})
@@ -680,14 +685,14 @@ func executeSuffixDedup(deleteIDs []string, renames []suffixRenamePlan, deleteHa
 		return 0, fmt.Errorf("删除冗余文件失败: %w", err)
 	}
 	if err := db.DeleteFileHistoryByFileIDs(deleteIDs); err != nil {
-		llog.L().Warnf("dedup-name: 清理 file_histories 失败: %v", err)
+		llog.L().Warnf("dedup: 清理 file_histories 失败: %v", err)
 	}
 	// 清理孤儿上传任务（按 hash 删 upload_records + upload_chunk_records）
 	if len(deleteHashes) > 0 {
 		if n, err := cleanupUploadTasksByHashes(deleteHashes); err != nil {
-			llog.L().Warnf("dedup-name: 清理 upload_records 失败: %v", err)
+			llog.L().Warnf("dedup: 清理 upload_records 失败: %v", err)
 		} else if n > 0 {
-			llog.L().Infof("dedup-name: cleaned %d orphan upload records", n)
+			llog.L().Infof("dedup: cleaned %d orphan upload records", n)
 		}
 	}
 	if len(renames) > 0 {
@@ -703,7 +708,7 @@ func executeSuffixDedup(deleteIDs []string, renames []suffixRenamePlan, deleteHa
 	for _, hash := range deleteHashes {
 		got, err := ReclaimOrphanHashStorage(hash)
 		if err != nil {
-			llog.L().Warnf("dedup-name: 回收存储失败, hash: %s, err: %v", hash, err)
+			llog.L().Warnf("dedup: 回收存储失败, hash: %s, err: %v", hash, err)
 			continue
 		}
 		reclaimed += got
@@ -743,8 +748,9 @@ func cleanupUploadTasksByHashes(hashes []string) (int64, error) {
 }
 
 // DedupNameSuffixDuplicates 扫描 baseParentID 子树，按 同目录同名字 + "(N)" 后缀 配对，
-// 对尺寸相同的配对做内容核验（JPEG 比较像素数据/其他格式比较字节），
-// 确认实质重复后删除冗余记录；冗余记录 hash 无任何引用（含回收站软删、历史）时，
+// 先比文件大小（大的一方优先保留），再对尺寸相同的配对做内容核验
+// （JPEG 比较像素数据/其他格式比较字节），确认实质重复后删除冗余记录；
+// 冗余记录 hash 无任何引用（含回收站软删、历史）时，
 // 回收其在所有存储提供者上的物理副本与缩略图。dryRun=true 只预览不执行。
 func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDedupResult, error) {
 	ownerID, err := dedupBaseOwnerID(baseParentID)
@@ -796,7 +802,7 @@ func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDed
 			consumed += len(cands)
 			processed += len(cands)
 			if processed%200 == 0 {
-				llog.L().Infof("dedup-name: scanned %d/%d candidates", processed, totalSuffix)
+				llog.L().Infof("dedup: scanned %d/%d candidates", processed, totalSuffix)
 			}
 		}
 	}
@@ -814,7 +820,7 @@ func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDed
 	}
 	result.Reclaimed = reclaimed
 	result.Deleted = len(deleteIDs)
-	llog.L().Infof("dedup-name: deleted %d duplicate file records (%d groups), reclaimed %d bytes",
+	llog.L().Infof("dedup: deleted %d duplicate file records (%d groups), reclaimed %d bytes",
 		result.Deleted, result.Groups, result.Reclaimed)
 	return result, nil
 }
@@ -861,16 +867,32 @@ func formatSuffixGroupDetail(base *native.FileORM, keeper *native.FileORM, dupCa
 	if strPtrVal(keeper.Id) == strPtrVal(base.Id) {
 		delNames := make([]string, 0, len(dupCands))
 		for _, d := range dupCands {
-			delNames = append(delNames, truncateStr(strPtrVal(d.cand.Name), 30))
+			delNames = append(delNames, fmt.Sprintf("%s (%s)",
+				truncateStr(strPtrVal(d.cand.Name), 30), formatFileSize(uint64Val(d.cand.Size))))
 		}
-		return fmt.Sprintf("重复组: 保留 %q, 删除副本 %d 个: %s [核验: %s%s]",
-			truncateStr(strPtrVal(keeper.Name), 40), len(delNames),
-			strings.Join(delNames, ", "), verifyWay, exifNote)
+		return fmt.Sprintf("重复组: 保留 %q (%s), 删除副本 %d 个: %s [核验: %s%s]",
+			truncateStr(strPtrVal(keeper.Name), 40), formatFileSize(uint64Val(keeper.Size)),
+			len(delNames), strings.Join(delNames, ", "), verifyWay, exifNote)
 	}
-	// 保留带后缀的副本并改回原名（通常因副本 EXIF 更完整）
-	return fmt.Sprintf("重复组: 保留副本 %q 并改回原名 %q, 删除原文件 %q [核验: %s%s]",
-		truncateStr(strPtrVal(keeper.Name), 40), truncateStr(strPtrVal(base.Name), 40),
-		truncateStr(strPtrVal(base.Name), 40), verifyWay, exifNote)
+	// 保留带后缀的副本并改回原名（通常因副本文件更大或 EXIF 更完整）
+	return fmt.Sprintf("重复组: 保留副本 %q (%s) 并改回原名 %q, 删除原文件 %q (%s) [核验: %s%s]",
+		truncateStr(strPtrVal(keeper.Name), 40), formatFileSize(uint64Val(keeper.Size)),
+		truncateStr(strPtrVal(base.Name), 40),
+		truncateStr(strPtrVal(base.Name), 40), formatFileSize(uint64Val(base.Size)),
+		verifyWay, exifNote)
+}
+
+// formatFileSize 字节数转人类可读大小（明细里标注「保大」的依据）
+func formatFileSize(n uint64) string {
+	const mb, kb = 1024 * 1024, 1024
+	switch {
+	case n >= mb:
+		return fmt.Sprintf("%.1f MB", float64(n)/mb)
+	case n >= kb:
+		return fmt.Sprintf("%.0f KB", float64(n)/kb)
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 // reclaimDedupHashStorage 回收不再被任何记录引用的 hash 的全部物理数据：
@@ -928,19 +950,19 @@ func ReclaimOrphanHashStorage(hash string) (int64, error) {
 	for providerID, locs := range byProvider {
 		drv, err := storage.EnsureProvider(providerID)
 		if err != nil {
-			llog.L().Warnf("dedup-name: provider %d 驱动不可用，副本保留待重试, hash: %s, err: %v", providerID, hash, err)
+			llog.L().Warnf("dedup: provider %d 驱动不可用，副本保留待重试, hash: %s, err: %v", providerID, hash, err)
 			continue
 		}
 		if _, ok := drv.(types.BatchDeleter); !ok {
-			llog.L().Warnf("dedup-name: provider %d 不支持批量删除，副本保留, hash: %s", providerID, hash)
+			llog.L().Warnf("dedup: provider %d 不支持批量删除，副本保留, hash: %s", providerID, hash)
 			continue
 		}
 		deletedIDs, failedIDs, deletedSize := batchDeleteFromProvider(ctx, providerID, locs)
 		if len(failedIDs) > 0 {
 			if err := db.UpdateFileLocationStatus(failedIDs, int32(native.LocationStatus_PDELETED_FAILED)); err != nil {
-				llog.L().Warnf("dedup-name: 标记 DELETED_FAILED 失败: %v", err)
+				llog.L().Warnf("dedup: 标记 DELETED_FAILED 失败: %v", err)
 			} else {
-				llog.L().Warnf("dedup-name: %d 个副本删除失败, 已标记 DELETED_FAILED, provider: %d, hash: %s", len(failedIDs), providerID, hash)
+				llog.L().Warnf("dedup: %d 个副本删除失败, 已标记 DELETED_FAILED, provider: %d, hash: %s", len(failedIDs), providerID, hash)
 			}
 		}
 		if len(deletedIDs) > 0 {
@@ -950,14 +972,14 @@ func ReclaimOrphanHashStorage(hash string) (int64, error) {
 		}
 		if deletedSize > 0 {
 			if err := db.DecrementUsedCapacity(providerID, deletedSize); err != nil {
-				llog.L().Warnf("dedup-name: 扣减容量失败, provider: %d, err: %v", providerID, err)
+				llog.L().Warnf("dedup: 扣减容量失败, provider: %d, err: %v", providerID, err)
 			}
 			reclaimed += int64(deletedSize)
 		}
 	}
 	// 缩略图按 hash 命名，hash 已无任何引用可安全删除
 	if err := thumbnail.NewGenerator(filepath.Join(globals.DataDir, "thumbnails")).DeleteAllThumbnails(hash); err != nil {
-		llog.L().Warnf("dedup-name: 删除缩略图失败, hash: %s, err: %v", hash, err)
+		llog.L().Warnf("dedup: 删除缩略图失败, hash: %s, err: %v", hash, err)
 	}
 	return reclaimed, nil
 }

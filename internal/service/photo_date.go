@@ -26,15 +26,13 @@ const (
 // 默认规则常量
 const (
 	defaultExifHeadReadLimit = 262144 // 256KB，EXIF APP1 段几乎总在文件头部
-	defaultTsMinYear         = 2000
-	defaultTsMaxYearOffset   = 1 // 允许解析到当前年份 + 1（时区差异留余量）
+	defaultTsMaxYearOffset   = 1      // 允许解析到当前年份 + 1（时区差异留余量）
 )
 
 // photoDateOptions 一次解析使用的规则与阈值（两端默认保持一致，
 // 服务端可通过 config.photo_date 覆盖后经 GetPhotoDateConfig 下发）
 type photoDateOptions struct {
 	filenameRules   []*native.PhotoDateFilenameRule
-	tsMinYear       int
 	tsMaxYearOffset int
 }
 
@@ -67,7 +65,6 @@ func ptrU32(v uint32) *uint32 { return &v }
 func defaultPhotoDateOptions() photoDateOptions {
 	return photoDateOptions{
 		filenameRules:   defaultPhotoDateRules,
-		tsMinYear:       defaultTsMinYear,
 		tsMaxYearOffset: defaultTsMaxYearOffset,
 	}
 }
@@ -87,9 +84,6 @@ func photoDateOptionsFromConfig(cfg models.PhotoDateConfig) photoDateOptions {
 		}
 		opts.filenameRules = rules
 	}
-	if cfg.TsMinYear != 0 {
-		opts.tsMinYear = int(cfg.TsMinYear)
-	}
 	if cfg.TsMaxYearOffset != 0 {
 		opts.tsMaxYearOffset = int(cfg.TsMaxYearOffset)
 	}
@@ -105,8 +99,8 @@ func photoDateOptionsFromConfig(cfg models.PhotoDateConfig) photoDateOptions {
 //     / microMsg.1713701399029.jpg : 去前缀后取前 10 位时间戳
 //   - 1784212534296.png : 开头连续数字的前 10 位为秒级时间戳
 //
-// 时间戳防误判：前两位必须 > 12 且 <= 当前时间戳前两位；解析年份 2000 ~ 当前年份+1。
-// 无法解析返回 nil。
+// 时间戳防误判：前两位必须 > 12 且 <= 当前时间戳前两位；年份不设下界，只要求
+// <= 当前年份+1。无法解析返回 nil。
 func ParsePhotoDateFromFilename(filename string) *time.Time {
 	return parseFilenameWithOptions(filename, defaultPhotoDateOptions())
 }
@@ -231,7 +225,7 @@ func parseTimestampFromDigits(s string) *time.Time {
 }
 
 // parseTimestampFromDigitsOpts 校验：
-// 前两位 > 12 且 <= 当前时间戳前两位；年份 tsMinYear ~ 当前年份+tsMaxYearOffset
+// 前两位 > 12 且 <= 当前时间戳前两位；年份不设下界，只要求 <= 当前年份+tsMaxYearOffset
 func parseTimestampFromDigitsOpts(s string, opts photoDateOptions) *time.Time {
 	m := leadingDigitsRe.FindStringSubmatch(s)
 	if m == nil || len(m[1]) < 10 {
@@ -253,7 +247,7 @@ func parseTimestampFromDigitsOpts(s string, opts photoDateOptions) *time.Time {
 	}
 	dt := time.Unix(sec, 0)
 	maxYear := now.Year() + opts.tsMaxYearOffset
-	if dt.Year() < opts.tsMinYear || dt.Year() > maxYear {
+	if dt.Year() > maxYear {
 		return nil
 	}
 	return &dt
@@ -280,7 +274,6 @@ func GetPhotoDateConfig() *native.PhotoDateConfig {
 		ExifEnabled:       &exifEnabled,
 		ExifHeadReadLimit: &headLimit,
 		FilenameRules:     opts.filenameRules,
-		TsMinYear:         ptrU32(uint32(opts.tsMinYear)),
 		TsMaxYearOffset:   ptrU32(uint32(opts.tsMaxYearOffset)),
 	}
 }

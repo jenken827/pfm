@@ -431,9 +431,10 @@ class AlbumBackupService {
           final now = DateTime.now();
 
           // 解析拍摄时间，按"年/月"目录归档：
-          // EXIF DateTimeOriginal → 文件名规则 → 媒体库时间兜底
+          // EXIF DateTimeOriginal → 文件名规则 → 媒体库时间 →
+          // 文件系统 mtime / ctime（全部失配才回退编号子目录）
           // 规则表来自服务端 GetPhotoDateConfig（缓存/内置默认兜底），
-          // 与后端 migrate-photos 的 config.photo_date 保持一致
+          // 与后端 config.photo_date 保持一致
           var taskParentId = targetFolderId;
           final taken = await PhotoDateResolver.resolveFromFile(
             filePath,

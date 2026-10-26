@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -101,7 +102,11 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 	return db.Transaction(fc)
 }
 
-// 迁移数据库
+// 迁移数据库（AutoMigrate + 模型 tag 无法表达的索引不变式）
+//
+// 历史数据回填已全部在这台部署上执行完并清理（task_status 回填、file_shares.owner_id
+// 回填、is_ready 脏数据修复）。新增需要回填的字段时，按同样的方式写幂等迁移函数挂到
+// 这里，确认线上执行完后再删。
 func autoMigrate() error {
 	if err := db.AutoMigrate(
 		&native.FileORM{},
@@ -122,195 +127,64 @@ func autoMigrate() error {
 		return err
 	}
 
-	// 回填 upload_records 的 task_status（从旧 status 迁移，幂等）
-	if err := migrateUploadTaskStatus(); err != nil {
-		return err
-	}
-
-	// 回填 file_shares 的 owner_id（分享归属 = 对应文件的所有者，幂等）
-	if err := migrateFileShareOwner(); err != nil {
-		return err
-	}
-
-	// 修复 is_ready 脏数据（幂等）：目录一律就绪；内容其实已完整落盘的文件补标就绪
-	if err := RepairFileReadyFlags(); err != nil {
-		return err
-	}
-
-	// 修复 files 表唯一索引：将普通 unique index 改为 partial unique index
-	// 这样软删除的记录不参与唯一约束，同目录下可以创建与回收站文件同名的新文件
-	if err := migrateFilesUniqueIndex(); err != nil {
-		return err
-	}
-
-	// 上传记录唯一索引：file_hash 全局唯一 → 复合 (file_hash, owner_id)
-	// 旧约束会让不同用户上传同一 hash 时互相撞约束/篡改记录
-	return migrateUploadRecordUniqueIndex()
+	return ensureSchemaIndexes()
 }
 
-// migrateUploadRecordUniqueIndex 将 upload_records 的唯一索引从
-// 全局 file_hash 改为复合 (file_hash, owner_id)。
+// ensureSchemaIndexes 保证两个「模型 tag 无法完整表达」的索引存在（全新库、老库都要）。
 //
-// 背景：旧布局 file_hash 全局唯一，用户 B 上传与 A 相同 hash 的文件时会命中
-// A 的记录并篡改其 file_name/parent_id（跨用户串台）。改为复合唯一后，同一
-// 用户同 hash 仍只有一条记录（保留秒传复用），不同用户互不干扰。
-//
-// AutoMigrate 只会新建复合索引，不会自动删除旧索引，必须显式 DROP。
-func migrateUploadRecordUniqueIndex() error {
-	// 旧全局唯一索引必须删除，否则仍然拦截跨用户同 hash 插入
+//   - files：partial unique index (owner_id, name, parent_id) WHERE deleted_at IS NULL。
+//     带 WHERE 条件的索引无法用 gorm tag 表达；缺了它全新库会失去「同目录同用户不许
+//     重名」的唯一约束（软删除的记录不参与），并发上传同名会写出重复记录。
+//   - upload_records：旧的全局唯一索引 idx_ur_fh（只看 file_hash）必须删除，否则不同
+//     用户上传同一 hash 会互相撞约束；复合唯一索引 idx_ur_fh_owner 由模型 tag 建。
+func ensureSchemaIndexes() error {
+	if err := ensureFilesUniqueIndex(); err != nil {
+		return err
+	}
 	if err := db.Exec(`DROP INDEX IF EXISTS idx_ur_fh`).Error; err != nil {
 		llog.L().Warnf("drop old index idx_ur_fh failed (may not exist): %v", err)
 	}
-
-	// 复合唯一索引（AutoMigrate 通常已按 tag 创建，这里兜底保证存在）
-	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ur_fh_owner ON upload_records (file_hash, owner_id)`).Error; err != nil {
-		return fmt.Errorf("create unique index idx_ur_fh_owner failed: %w", err)
-	}
-
-	llog.L().Info("migrated upload_records unique index to composite (file_hash, owner_id)")
 	return nil
 }
 
-// migrateFileShareOwner 为 file_shares 老数据回填 owner_id（分享归属 = 对应文件的所有者）
-// 幂等：仅回填 owner_id 为空（NULL 或空串）的记录；文件已不存在则保持空（列表不再展示该分享）
-func migrateFileShareOwner() error {
-	sql := `UPDATE file_shares SET owner_id = (
-		SELECT f.owner_id FROM files f WHERE f.id = file_shares.file_id AND f.deleted_at IS NULL
-	) WHERE (owner_id IS NULL OR owner_id = '') AND file_id IN (
-		SELECT f.id FROM files f WHERE f.deleted_at IS NULL
-	)`
-	if err := db.Exec(sql).Error; err != nil {
-		return fmt.Errorf("migrate file_shares owner_id failed: %w", err)
+// ensureFilesUniqueIndex 建 files 的 partial 唯一索引。
+//
+// 老库可能已有同名的「非 partial」索引：只有现有定义里没有 WHERE 时才重建，
+// 避免每次启动都重建索引（大库启动开销明显）。
+func ensureFilesUniqueIndex() error {
+	def, err := currentIndexDefinition("idx_f_npi")
+	if err != nil {
+		return fmt.Errorf("query index idx_f_npi failed: %w", err)
 	}
-	llog.L().Info("migrated file_shares owner_id from files.owner_id")
-	return nil
-}
-
-// migrateUploadTaskStatus 将 upload_records 的旧 status(LocationStatus) 回填到 task_status(UploadStatus)
-// 映射：PPENDING(1)->PENDING(1), PUPLOADING(2)->UPLOADING(3), PCOMPLETED(3)->COMPLETED(4), PFAILED(4)->FAILED(5)
-// 幂等：仅回填 task_status=0(UNSPECIFIED) 的记录，重复执行不覆盖已迁移的值
-func migrateUploadTaskStatus() error {
-	sql := `UPDATE upload_records SET task_status = CASE status
-		WHEN 1 THEN 1
-		WHEN 2 THEN 3
-		WHEN 3 THEN 4
-		WHEN 4 THEN 5
-		WHEN 5 THEN 5
-		ELSE 1
-	END WHERE task_status = 0`
-	if err := db.Exec(sql).Error; err != nil {
-		return fmt.Errorf("migrate upload task status failed: %w", err)
+	if strings.Contains(strings.ToUpper(def), "WHERE") {
+		return nil
 	}
-	llog.L().Info("migrated upload_records task_status from legacy status")
-	return nil
-}
-
-// migrateFilesUniqueIndex 将 files 表的 idx_f_npi 从普通唯一索引改为 partial 唯一索引
-// 唯一键为 (owner_id, name, parent_id)：同目录下同一用户不允许同名文件，
-// 不同用户在同一目录可以存在同名文件（目录权限模型已限制共享目录的写入者）
-func migrateFilesUniqueIndex() error {
-	// 删除旧的普通索引（如果存在）
-	// SQLite 不支持 DROP INDEX IF EXISTS 的 IF EXISTS 语法，先尝试删除
-	if err := db.Exec(`DROP INDEX IF EXISTS idx_f_npi`).Error; err != nil {
-		llog.L().Warnf("drop old index idx_f_npi failed (may not exist): %v", err)
+	if def != "" {
+		if err := db.Exec(`DROP INDEX IF EXISTS idx_f_npi`).Error; err != nil {
+			return fmt.Errorf("drop old index idx_f_npi failed: %w", err)
+		}
 	}
-
-	// 创建 partial unique index：只对未删除的记录生效
 	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_f_npi ON files (owner_id, name, parent_id) WHERE deleted_at IS NULL`).Error; err != nil {
 		return fmt.Errorf("create partial unique index idx_f_npi failed: %w", err)
 	}
-
-	llog.L().Info("migrated files unique index to partial index (WHERE deleted_at IS NULL)")
+	llog.L().Info("ensured partial unique index idx_f_npi on files")
 	return nil
 }
 
-// RepairFileReadyFlags 修复 is_ready 脏数据（幂等）：
-//
-//  1. 目录没有内容要上传，一律视为就绪（CreateFolder 曾经漏写 IsReady）；
-//  2. 内容其实已经完整落在存储提供者里、但 is_ready 仍是 false 的文件补标就绪。
-//
-// 第 2 类的来历：复用旧 upload record 分发时曾没有刷新 version，分发完成后的
-// markFileReadyIfVersionMatches 用旧 version 做 CAS，静默命中 0 行，于是位置行
-// 全部 PCOMPLETED 而文件永远显示"未就绪"（见 BUGS.md）。
-//
-// 判定"完整"沿用 CheckProviderComplete 的口径：每个 provider 的分片行数等于
-// chunk_total，且状态都是 PCOMPLETED。
-func RepairFileReadyFlags() error {
-	folderRes := db.Model(&native.FileORM{}).
-		Where("is_ready = ? AND deleted_at IS NULL AND type = ?", false, int32(native.FileType_FOLDER)).
-		Update("is_ready", true)
-	if folderRes.Error != nil {
-		return fmt.Errorf("migrate folder is_ready failed: %w", folderRes.Error)
+// currentIndexDefinition 返回索引定义（不存在返回空串）；只支持 postgres / sqlite3
+func currentIndexDefinition(indexName string) (string, error) {
+	var query string
+	switch config.GetConfig().DB.Type {
+	case "postgres":
+		query = `SELECT COALESCE((SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ?), '')`
+	case "sqlite3":
+		query = `SELECT COALESCE((SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?), '')`
+	default:
+		return "", nil
 	}
-	if folderRes.RowsAffected > 0 {
-		llog.L().Infof("migrated is_ready=true for %d folders", folderRes.RowsAffected)
+	var def string
+	if err := db.Raw(query, indexName).Row().Scan(&def); err != nil {
+		return "", err
 	}
-
-	var files []native.FileORM
-	if err := db.Model(&native.FileORM{}).
-		Select("id", "hash").
-		Where("is_ready = ? AND deleted_at IS NULL AND type <> ? AND hash IS NOT NULL AND hash <> ''",
-			false, int32(native.FileType_FOLDER)).
-		Find(&files).Error; err != nil {
-		return fmt.Errorf("query not-ready files failed: %w", err)
-	}
-
-	var fixedIDs []string
-	for i := range files {
-		if files[i].Hash == nil || files[i].Id == nil {
-			continue
-		}
-		complete, err := locationsCompleteForHash(*files[i].Hash)
-		if err != nil {
-			return err
-		}
-		if complete {
-			fixedIDs = append(fixedIDs, *files[i].Id)
-		}
-	}
-	if len(fixedIDs) == 0 {
-		return nil
-	}
-	if err := db.Model(&native.FileORM{}).Where("id IN ?", fixedIDs).Update("is_ready", true).Error; err != nil {
-		return fmt.Errorf("repair file is_ready failed: %w", err)
-	}
-	llog.L().Infof("migrated is_ready=true for %d files whose locations are all completed", len(fixedIDs))
-	return nil
-}
-
-// locationsCompleteForHash 判断某个 hash 的内容是否在所有 provider 上都已完整落盘。
-// 没有任何位置行（还在上传 / 上传失败）视为不完整。
-func locationsCompleteForHash(hash string) (bool, error) {
-	locationList, err := GetFileLocationsByBlake3Hash(hash)
-	if err != nil {
-		return false, fmt.Errorf("query file locations failed: %w", err)
-	}
-	if len(locationList) == 0 {
-		return false, nil
-	}
-
-	type progress struct{ chunks, expected int }
-	byProvider := make(map[uint32]progress, 4)
-	for _, loc := range locationList {
-		if loc.ProviderId == nil || loc.Status == nil ||
-			*loc.Status != int32(native.LocationStatus_PCOMPLETED) {
-			return false, nil
-		}
-		p := byProvider[*loc.ProviderId]
-		p.chunks++
-		if loc.ChunkTotal != nil && int(*loc.ChunkTotal) > p.expected {
-			p.expected = int(*loc.ChunkTotal)
-		}
-		byProvider[*loc.ProviderId] = p
-	}
-	for _, p := range byProvider {
-		expected := p.expected
-		if expected <= 0 {
-			expected = 1
-		}
-		if p.chunks != expected {
-			return false, nil
-		}
-	}
-	return true, nil
+	return def, nil
 }

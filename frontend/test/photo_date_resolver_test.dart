@@ -1,4 +1,7 @@
+import 'dart:io' as io;
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:pfm/proto/native/file.pb.dart';
 import 'package:pfm/services/photo_date_resolver.dart';
 
@@ -230,6 +233,96 @@ void main() {
       );
       expect(dt, isNotNull);
       expect(dt!.year, 2026);
+    });
+  });
+
+  group('PhotoDateResolver.resolveFromFile 兜底链路', () {
+    late io.Directory tmpDir;
+
+    setUp(() {
+      tmpDir = io.Directory.systemTemp.createTempSync('pfm_photo_date_');
+    });
+
+    tearDown(() {
+      if (tmpDir.existsSync()) tmpDir.deleteSync(recursive: true);
+    });
+
+    io.File createFile(String name, {DateTime? mtime}) {
+      final file = io.File(p.join(tmpDir.path, name))
+        ..writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xE0]);
+      if (mtime != null) file.setLastModifiedSync(mtime);
+      return file;
+    }
+
+    test('媒体库时间正常时直接使用，不读文件系统时间', () async {
+      final file = createFile('doc_0001.jpg', mtime: DateTime(2010, 1, 1));
+      final media = DateTime(2026, 3, 4, 5, 6, 7);
+      final dt = await PhotoDateResolver.resolveFromFile(
+        file.path,
+        mediaDate: media,
+      );
+      expect(dt, media);
+    });
+
+    test('媒体库时间为 epoch 0 时回退到文件 mtime', () async {
+      final file = createFile('doc_0002.jpg', mtime: DateTime(2019, 5, 6, 7, 8));
+      final dt = await PhotoDateResolver.resolveFromFile(
+        file.path,
+        mediaDate: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+      expect(dt, isNotNull);
+      expect(dt!.year, 2019);
+      expect(dt.month, 5);
+      expect(dt.day, 6);
+    });
+
+    test('文件名 / 媒体库都无时间且文件不存在时返回 null', () async {
+      final dt = await PhotoDateResolver.resolveFromFile(
+        p.join(tmpDir.path, 'missing.jpg'),
+        mediaDate: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+      expect(dt, isNull);
+    });
+
+    test('文件名命中时优先于 mtime 与媒体库时间', () async {
+      final file = createFile(
+        'Screenshot_2018-12-31-21-37-41_xxx.png',
+        mtime: DateTime(2020, 2, 2),
+      );
+      final dt = await PhotoDateResolver.resolveFromFile(
+        file.path,
+        mediaDate: DateTime(2026, 1, 1),
+      );
+      expect(dt, isNotNull);
+      expect(dt!.year, 2018);
+      expect(dt.month, 12);
+      expect(dt.day, 31);
+    });
+
+    test('老照片（2000 年前）不受年份下界限制', () async {
+      final file = createFile(
+        'IMG_19980812_101112.jpg',
+        mtime: DateTime(1998, 8, 12),
+      );
+      final dt = await PhotoDateResolver.resolveFromFile(
+        file.path,
+        mediaDate: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+      expect(dt, isNotNull);
+      expect(dt!.year, 1998);
+      expect(dt.month, 8);
+      expect(dt.day, 12);
+    });
+
+    test('resolveFromFileSystemTime 读 mtime，缺失文件返回 null', () async {
+      final mtime = DateTime(2021, 11, 12, 13, 14, 15);
+      final file = createFile('doc_0003.jpg', mtime: mtime);
+      final got = await PhotoDateResolver.resolveFromFileSystemTime(file.path);
+      expect(got, mtime);
+      final none = await PhotoDateResolver.resolveFromFileSystemTime(
+        p.join(tmpDir.path, 'nope.jpg'),
+      );
+      expect(none, isNull);
     });
   });
 }

@@ -745,12 +745,15 @@ message PhotoDateConfig {
   optional bool exif_enabled = 1;
   // EXIF 读取文件头上限（字节），默认 262144（256KB）
   optional uint32 exif_head_read_limit = 2;
-  // 文件名解析规则（顺序敏感，先命中先返回；全部未命中则走媒体库时间兜底）
+  // 文件名解析规则（顺序敏感，先命中先返回；全部未命中则依次走媒体库时间、
+  // 文件系统 mtime / ctime 兜底）
   repeated PhotoDateFilenameRule filename_rules = 3;
-  // 时间戳防误判：解析年份下界，默认 2000
-  optional uint32 ts_min_year = 4;
   // 时间戳防误判：允许的年份上界偏移（当前年份 + 偏移），默认 1
   optional uint32 ts_max_year_offset = 5;
+
+  // 历史字段：时间戳解析的年份下界（默认 2000），已移除该限制
+  reserved 4;
+  reserved "ts_min_year";
 }
 
 // 获取照片日期解析配置请求

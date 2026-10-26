@@ -305,3 +305,23 @@ func DeleteFileLocations(ids []uint64) error {
 	}
 	return nil
 }
+
+// GetFileLocationPathsByProvider 返回指定 provider 上所有位置行的去重 path。
+//
+// 供远端孤儿扫描使用：只要远端对象路径还在 file_locations 里（含分片/历史/待清理行），
+// 就认为它有数据库记录，绝不当成孤儿删除。path 的形态由各驱动决定，调用方按同一形态比对。
+func GetFileLocationPathsByProvider(providerID uint32) ([]string, error) {
+	if providerID == 0 {
+		return nil, nil
+	}
+	ctx := context.Background()
+	var paths []string
+	if err := GetDB().WithContext(ctx).
+		Model(&native.FileLocationORM{}).
+		Where("provider_id = ?", providerID).
+		Distinct("path").
+		Pluck("path", &paths).Error; err != nil {
+		return nil, err
+	}
+	return paths, nil
+}

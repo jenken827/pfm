@@ -73,3 +73,58 @@ func TestPickKeeper(t *testing.T) {
 		}
 	})
 }
+
+func TestBetterSuffixKeeper(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	mk := func(id, name string, size uint64, created time.Time) *native.FileORM {
+		return &native.FileORM{
+			Id:        idPtr(id),
+			Name:      namePtr(name),
+			Size:      &size,
+			CreatedAt: timePtr(created),
+		}
+	}
+
+	t.Run("后缀副本更大时保留后缀副本", func(t *testing.T) {
+		orig := mk("a", "IMG_1.jpg", 1<<20, base)
+		dup := mk("b", "IMG_1 (1).jpg", 3<<20, base.Add(time.Hour))
+		if !betterSuffixKeeper(dup, orig, dupMeta{}, dupMeta{}) {
+			t.Fatal("更小的原名文件不应无条件保留，应保留文件更大的后缀副本")
+		}
+	})
+
+	t.Run("原文件更大时保留原文件", func(t *testing.T) {
+		orig := mk("a", "IMG_1.jpg", 3<<20, base)
+		dup := mk("b", "IMG_1 (1).jpg", 1<<20, base.Add(time.Hour))
+		if betterSuffixKeeper(dup, orig, dupMeta{}, dupMeta{}) {
+			t.Fatal("后缀副本更小，应保留原文件")
+		}
+	})
+
+	t.Run("大小相同保留无后缀原名", func(t *testing.T) {
+		orig := mk("a", "IMG_1.jpg", 2<<20, base)
+		dup := mk("b", "IMG_1 (1).jpg", 2<<20, base)
+		if betterSuffixKeeper(dup, orig, dupMeta{}, dupMeta{}) {
+			t.Fatal("大小相同时应保留无后缀的原名文件")
+		}
+	})
+
+	t.Run("大小相同时保留 EXIF 更完整的一方", func(t *testing.T) {
+		orig := mk("a", "IMG_1.jpg", 2<<20, base)
+		dup := mk("b", "IMG_1 (1).jpg", 2<<20, base)
+		if !betterSuffixKeeper(dup, orig, dupMeta{jpeg: true, exifNonZero: 100}, dupMeta{jpeg: true, exifNonZero: 10}) {
+			t.Fatal("大小相同时应保留 EXIF 非零 tag 更多的一方")
+		}
+	})
+}
+
+func TestPickSuffixKeeperKeepsLarger(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	size := func(v uint64) *uint64 { return &v }
+	orig := &native.FileORM{Id: idPtr("a"), Name: namePtr("a.jpg"), Size: size(1024), CreatedAt: timePtr(base)}
+	cand := &native.FileORM{Id: idPtr("b"), Name: namePtr("a (1).jpg"), Size: size(4096), CreatedAt: timePtr(base)}
+	keeper := pickSuffixKeeper(orig, dupMeta{}, []*suffixCandDecision{{cand: cand, dup: true, kind: "compressed-dup"}})
+	if *keeper.Id != "b" {
+		t.Fatalf("want keeper b (larger compressed copy), got %s", *keeper.Id)
+	}
+}

@@ -97,8 +97,6 @@ type PhotoDateConfig struct {
 	ExifHeadReadLimit uint32 `json:"exif_head_read_limit" yaml:"exif_head_read_limit"`
 	// 文件名解析规则（顺序敏感，先命中先返回；留空使用内置默认规则）
 	FilenameRules []PhotoDateFilenameRule `json:"filename_rules" yaml:"filename_rules"`
-	// 时间戳防误判：解析年份下界，默认 2000
-	TsMinYear uint32 `json:"ts_min_year" yaml:"ts_min_year"`
 	// 时间戳防误判：允许的年份上界偏移（当前年份 + 偏移），默认 1
 	TsMaxYearOffset uint32 `json:"ts_max_year_offset" yaml:"ts_max_year_offset"`
 }

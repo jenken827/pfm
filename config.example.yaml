@@ -67,12 +67,12 @@ ratelimit:
   thumbnail_burst: 300
   thumbnail_refill_ms: 5
 
-# 照片日期解析配置（相册备份按"年/月"归档 + migrate-photos CLI 共用）。
+# 照片日期解析配置（相册备份按"年/月"归档使用）。
 # 不配置时使用内置默认规则（见 README「照片日期解析规则」），规则为"整体替换"语义：
 # 一旦配置 filename_rules，默认表不再生效，请完整列出所有期望的前缀规则。
 # 修改后无需重新部署前端：前端相册备份前会拉取本配置，失败回退内置默认。
 photo_date:
-  # EXIF DateTimeOriginal 是否启用（仅前端相册备份读取本地文件头，CLI 无本地文件）
+  # EXIF DateTimeOriginal 是否启用（仅前端相册备份读取本地文件头）
   exif_enabled: true
   # EXIF 读取文件头上限（字节），默认 262144（256KB）
   exif_head_read_limit: 262144
@@ -86,8 +86,6 @@ photo_date:
     - type: prefix_timestamp # 前缀后紧跟 10 位秒级时间戳
       prefixes: ["mmexport", "wx_camera_", "microMsg."]
     - type: leading_timestamp # 文件名开头连续数字，前 10 位为秒级时间戳
-  # 时间戳防误判：年份下界（默认 2000）
-  ts_min_year: 2000
   # 时间戳防误判：年份上界偏移（默认 1，即允许到当前年份+1）
   ts_max_year_offset: 1
 

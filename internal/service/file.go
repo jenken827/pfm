@@ -1030,7 +1030,7 @@ func RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) 
 		}
 	}
 
-	// 重名自动加后缀（与 photo_migrate / 移动冲突处理一致）
+	// 重名自动加后缀（与相册归档 / 移动冲突处理一致）
 	finalName := resolveNameConflict(parentID, newName, ownerID)
 	if finalName == "" {
 		finalName = newName
