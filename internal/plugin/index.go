@@ -15,10 +15,14 @@ import (
 
 // IndexEntry 官方索引里的一个插件包（一个版本 + 一个平台）
 type IndexEntry struct {
-	// Name 插件包名（如 pfm-baidu），安装时用 --name 指定
+	// Name 插件包名（如 pfm-plugin-driver-baidu），安装时用 pfm plugin install 指定
 	Name string `json:"name"`
-	// DriverID 该插件提供的驱动身份，必须与包内 plugin.json 一致
+	// Kind 插件类型（driver / …），必须与包内 plugin.json 一致
+	Kind string `json:"kind"`
+	// DriverID 该插件提供的驱动身份（kind=driver 时必填），必须与包内 plugin.json 一致
 	DriverID string `json:"driver_id"`
+	// DownloaderID 该插件提供的下载器身份（kind=downloader 时必填），必须与包内 plugin.json 一致
+	DownloaderID string `json:"downloader_id,omitempty"`
 	// Version 版本号（语义化版本，字符串比较不参与决策，只展示与去重）
 	Version string `json:"version"`
 	// ABIVersion 插件协议版本
@@ -40,6 +44,14 @@ type Index struct {
 	// Seq 单调递增序号：用来防回滚（拒绝比本地记录更旧的索引）
 	Seq     uint64       `json:"seq"`
 	Plugins []IndexEntry `json:"plugins"`
+}
+
+// ID 插件身份（按 kind 取 driver_id 或 downloader_id）
+func (e *IndexEntry) ID() string {
+	if e.Kind == KindDownloader {
+		return e.DownloaderID
+	}
+	return e.DriverID
 }
 
 // Entry 按插件名 + 版本挑一条；version 为空时取该名字下最高版本
@@ -114,6 +126,10 @@ func fetchIndex(ctx context.Context, client *http.Client, indexURL string,
 	if index.Seq == 0 {
 		return nil, nil, fmt.Errorf("索引缺少 seq（防回滚序号）")
 	}
+	// 这里**故意不校验条目的 kind 是否被本宿主支持**：索引是所有插件类型共用的，
+	// 老版本 pfm 遇到将来新增类型的条目应该「跳过」，而不是整份索引都不可用
+	// （否则发一个通知插件，就会让所有老客户端连驱动都装不了）。
+	// 类型是否被支持，在 Install 挑中具体条目时再判断。
 	return index, payload, nil
 }
 

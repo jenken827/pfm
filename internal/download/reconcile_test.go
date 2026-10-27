@@ -3,12 +3,12 @@ package download
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"jenken827.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -16,37 +16,37 @@ import (
 func TestClassifyTask(t *testing.T) {
 	cases := []struct {
 		name string
-		info aria2.StatusInfo
+		info downloader.Task
 		want taskRole
 	}{
 		{
 			name: "磁力元数据伪文件",
-			info: aria2.StatusInfo{Files: []aria2.FileInfo{{Path: "[METADATA]data.bin"}}},
+			info: downloader.Task{Files: []downloader.File{{Path: "[METADATA]data.bin"}}},
 			want: roleMetadata,
 		},
 		{
 			name: "种子文件下载阶段",
-			info: aria2.StatusInfo{Files: []aria2.FileInfo{{Path: "/d/test.torrent"}}},
+			info: downloader.Task{Files: []downloader.File{{Path: "/d/test.torrent"}}},
 			want: roleTorrent,
 		},
 		{
 			name: "派生了子任务的中间任务",
-			info: aria2.StatusInfo{
-				Files:      []aria2.FileInfo{{Path: "/d/a.iso"}},
+			info: downloader.Task{
+				Files:      []downloader.File{{Path: "/d/a.iso"}},
 				FollowedBy: []string{"child"},
 			},
 			want: roleMetadata,
 		},
 		{
 			name: "真正的产物任务",
-			info: aria2.StatusInfo{
-				Files: []aria2.FileInfo{{Path: "Torrent/a.mkv"}, {Path: "Torrent/b.srt"}},
+			info: downloader.Task{
+				Files: []downloader.File{{Path: "Torrent/a.mkv"}, {Path: "Torrent/b.srt"}},
 			},
 			want: roleFinal,
 		},
 		{
 			name: "空任务",
-			info: aria2.StatusInfo{},
+			info: downloader.Task{},
 			want: roleUnknown,
 		},
 	}
@@ -60,16 +60,16 @@ func TestClassifyTask(t *testing.T) {
 // BT 下完进入做种期时 status 仍是 active，必须靠长度判定完成
 func TestIsFinished(t *testing.T) {
 	cases := []struct {
-		info aria2.StatusInfo
+		info downloader.Task
 		want bool
 	}{
-		{aria2.StatusInfo{Status: "complete"}, true},
-		{aria2.StatusInfo{Status: "active", TotalLength: "100", CompletedLength: "100"}, true},
-		{aria2.StatusInfo{Status: "active", TotalLength: "100", CompletedLength: "99"}, false},
-		{aria2.StatusInfo{Status: "paused", TotalLength: "100", CompletedLength: "100"}, true},
-		{aria2.StatusInfo{Status: "paused"}, false},
-		{aria2.StatusInfo{Status: "error", TotalLength: "100", CompletedLength: "100"}, false},
-		{aria2.StatusInfo{Status: "removed"}, false},
+		{downloader.Task{Status: "complete"}, true},
+		{downloader.Task{Status: "active", TotalLength: "100", CompletedLength: "100"}, true},
+		{downloader.Task{Status: "active", TotalLength: "100", CompletedLength: "99"}, false},
+		{downloader.Task{Status: "paused", TotalLength: "100", CompletedLength: "100"}, true},
+		{downloader.Task{Status: "paused"}, false},
+		{downloader.Task{Status: "error", TotalLength: "100", CompletedLength: "100"}, false},
+		{downloader.Task{Status: "removed"}, false},
 	}
 	for _, c := range cases {
 		if got := isFinished(c.info); got != c.want {
@@ -106,12 +106,12 @@ func TestTorrentBaseName(t *testing.T) {
 // 磁力：记录里存的是元数据 gid，产物在 followedBy 派生出的 BT 任务里
 func TestTargetForMagnetPicksBTProduct(t *testing.T) {
 	const ih = "8fd37116e367f8e77fa20ff721a7f82b278cb23b"
-	snap := &taskSnapshot{tasks: []aria2.StatusInfo{
+	snap := &taskSnapshot{tasks: []downloader.Task{
 		{
 			Gid:        "meta-gid",
 			Status:     "complete",
 			InfoHash:   ih,
-			Files:      []aria2.FileInfo{{Path: "[METADATA]data.bin", Length: "328", Selected: "true"}},
+			Files:      []downloader.File{{Path: "[METADATA]data.bin", Length: "328", Selected: "true"}},
 			FollowedBy: []string{"bt-gid"},
 		},
 		{
@@ -120,7 +120,7 @@ func TestTargetForMagnetPicksBTProduct(t *testing.T) {
 			InfoHash:        ih,
 			TotalLength:     "200000",
 			CompletedLength: "200000",
-			Files:           []aria2.FileInfo{{Path: "data.bin", Length: "200000", CompletedLength: "200000", Selected: "true"}},
+			Files:           []downloader.File{{Path: "data.bin", Length: "200000", CompletedLength: "200000", Selected: "true"}},
 		},
 	}}
 	snap.index()
@@ -144,11 +144,11 @@ func TestTargetForMagnetPicksBTProduct(t *testing.T) {
 // 元数据还没派生 BT 任务时，只能返回中间任务（调用方据此继续等，不能导入）
 func TestTargetForMagnetBeforeBTExists(t *testing.T) {
 	const ih = "8fd37116e367f8e77fa20ff721a7f82b278cb23b"
-	snap := &taskSnapshot{tasks: []aria2.StatusInfo{{
+	snap := &taskSnapshot{tasks: []downloader.Task{{
 		Gid:      "meta-gid",
 		Status:   "complete",
 		InfoHash: ih,
-		Files:    []aria2.FileInfo{{Path: "[METADATA]data.bin"}},
+		Files:    []downloader.File{{Path: "[METADATA]data.bin"}},
 	}}}
 	snap.index()
 
@@ -167,12 +167,12 @@ func TestTargetForMagnetBeforeBTExists(t *testing.T) {
 
 // .torrent URL：先下种子文件，再派生 BT 任务
 func TestTargetForTorrentURLFollowsFollowedBy(t *testing.T) {
-	snap := &taskSnapshot{tasks: []aria2.StatusInfo{
+	snap := &taskSnapshot{tasks: []downloader.Task{
 		{
 			Gid:        "torrent-gid",
 			Status:     "complete",
 			Dir:        "/tmp/dl",
-			Files:      []aria2.FileInfo{{Path: "/tmp/dl/test.torrent", Length: "379", Selected: "true"}},
+			Files:      []downloader.File{{Path: "/tmp/dl/test.torrent", Length: "379", Selected: "true"}},
 			FollowedBy: []string{"bt-gid"},
 		},
 		{
@@ -181,7 +181,7 @@ func TestTargetForTorrentURLFollowsFollowedBy(t *testing.T) {
 			Dir:             "/tmp/dl",
 			TotalLength:     "200000",
 			CompletedLength: "200000",
-			Files:           []aria2.FileInfo{{Path: "/tmp/dl/data.bin", Length: "200000", CompletedLength: "200000", Selected: "true"}},
+			Files:           []downloader.File{{Path: "/tmp/dl/data.bin", Length: "200000", CompletedLength: "200000", Selected: "true"}},
 		},
 	}}
 	snap.index()
@@ -210,12 +210,12 @@ func TestTargetForTorrentURLByInfoHashWhenFollowedByLost(t *testing.T) {
 	sum := sha1.Sum([]byte(infoValue))
 	ih := hex.EncodeToString(sum[:])
 
-	snap := &taskSnapshot{tasks: []aria2.StatusInfo{
+	snap := &taskSnapshot{tasks: []downloader.Task{
 		{
 			Gid:    "torrent-gid",
 			Status: "complete",
 			Dir:    dir,
-			Files:  []aria2.FileInfo{{Path: "test.torrent", Length: "48", Selected: "true"}},
+			Files:  []downloader.File{{Path: "test.torrent", Length: "48", Selected: "true"}},
 		},
 		{
 			Gid:             "bt-gid",
@@ -224,7 +224,7 @@ func TestTargetForTorrentURLByInfoHashWhenFollowedByLost(t *testing.T) {
 			Dir:             dir,
 			TotalLength:     "100",
 			CompletedLength: "100",
-			Files:           []aria2.FileInfo{{Path: "test.bin", Length: "100", CompletedLength: "100", Selected: "true"}},
+			Files:           []downloader.File{{Path: "test.bin", Length: "100", CompletedLength: "100", Selected: "true"}},
 		},
 	}}
 	snap.index()
@@ -244,18 +244,18 @@ func TestTargetForTorrentURLByInfoHashWhenFollowedByLost(t *testing.T) {
 
 // gid 失效时按 URL 找回任务（http 直链场景）
 func TestTargetForByURLWhenGidGone(t *testing.T) {
-	snap := &taskSnapshot{tasks: []aria2.StatusInfo{{
+	snap := &taskSnapshot{tasks: []downloader.Task{{
 		Gid:             "new-gid",
 		Status:          "complete",
 		Dir:             "/tmp/dl",
 		TotalLength:     "10",
 		CompletedLength: "10",
-		Files: []aria2.FileInfo{{
+		Files: []downloader.File{{
 			Path:            "/tmp/dl/a.iso",
 			Length:          "10",
 			CompletedLength: "10",
 			Selected:        "true",
-			URIs:            []aria2.URIInfo{{URI: "http://example.com/a.iso"}},
+			URIs:            []downloader.URI{{URI: "http://example.com/a.iso"}},
 		}},
 	}}}
 	snap.index()

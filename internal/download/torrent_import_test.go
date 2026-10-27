@@ -1,11 +1,11 @@
 package download
 
 import (
+	"jenken827.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -28,7 +28,7 @@ func TestImportableFilesFilters(t *testing.T) {
 	write("Torrent/skip.txt", 10)
 	write("Torrent/partial.bin", 7)
 
-	files := []aria2.FileInfo{
+	files := []downloader.File{
 		{Path: "Torrent/a.mkv", Selected: "true", Length: "100", CompletedLength: "100"},
 		{Path: "Torrent/b.srt", Selected: "true", Length: "10", CompletedLength: "10"},
 		{Path: "Torrent/skip.txt", Selected: "false", Length: "10", CompletedLength: "0"},   // 未选中
@@ -61,7 +61,7 @@ func TestImportableFilesAcceptsAbsolutePaths(t *testing.T) {
 	if err := os.WriteFile(path, []byte("abcd"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	files := []aria2.FileInfo{
+	files := []downloader.File{
 		{Path: path, Selected: "true", Length: "4", CompletedLength: "0"},
 		{Path: filepath.Join(dir, "Torrent", "gone.bin"), Selected: "true", Length: "4", CompletedLength: "0"},
 	}
@@ -85,7 +85,7 @@ func TestImportableFilesAcceptsZeroCompletedLength(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "b.bin"), []byte("ab"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	files := []aria2.FileInfo{
+	files := []downloader.File{
 		{Path: "a.bin", Selected: "true", Length: "4", CompletedLength: "0"},
 		{Path: "b.bin", Selected: "true", Length: "2", CompletedLength: "0"},
 		{Path: "c.bin", Selected: "false", Length: "9", CompletedLength: "0"},
@@ -105,7 +105,7 @@ func TestImportableFilesSkipsMissing(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o750); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	files := []aria2.FileInfo{
+	files := []downloader.File{
 		{Path: "a.mkv", Selected: "true"},
 		{Path: "missing.bin", Selected: "true"},
 		{Path: "sub", Selected: "true"},

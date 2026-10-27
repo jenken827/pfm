@@ -32,7 +32,7 @@ var legacyProviderTypeNames = map[int64]string{
 //
 // 必须跑在 AutoMigrate 之前：模型已经是 string，GORM 对 int -> varchar 只会生成
 // 没有 USING 的 ALTER COLUMN，Postgres 会直接报错。幂等：列已是字符串/表不存在时
-// 直接返回。两个方言都在事务里做，中途失败回滚后可以重跑。
+// 直接返回。各方言都在事务里做，中途失败回滚后可以重跑。
 func migrateProviderTypeToString(gdb *gorm.DB) error {
 	columnType, exists, err := providerTypeColumnType(gdb)
 	if err != nil {
@@ -43,10 +43,14 @@ func migrateProviderTypeToString(gdb *gorm.DB) error {
 	}
 	llog.L().Infof("migrating storage_providers.provider_type from %s to varchar(32)", columnType)
 	if err := gdb.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
+		switch tx.Name() {
+		case "postgres":
 			return migrateProviderTypePostgres(tx)
+		case "mysql":
+			return migrateProviderTypeMySQL(tx)
+		default:
+			return migrateProviderTypeSQLite(tx)
 		}
-		return migrateProviderTypeSQLite(tx)
 	}); err != nil {
 		return fmt.Errorf("migrate storage_providers.provider_type failed: %w", err)
 	}
@@ -61,6 +65,10 @@ func providerTypeColumnType(gdb *gorm.DB) (string, bool, error) {
 	case "postgres":
 		err = gdb.Raw(`SELECT data_type FROM information_schema.columns
 			WHERE table_schema = current_schema() AND table_name = 'storage_providers'
+			AND column_name = 'provider_type'`).Row().Scan(&columnType)
+	case "mysql":
+		err = gdb.Raw(`SELECT data_type FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = 'storage_providers'
 			AND column_name = 'provider_type'`).Row().Scan(&columnType)
 	case "sqlite", "sqlite3":
 		err = gdb.Raw(`SELECT type FROM pragma_table_info('storage_providers') WHERE name = 'provider_type'`).
@@ -84,8 +92,11 @@ func isStringColumnType(columnType string) bool {
 }
 
 // providerTypeCaseSQL 生成枚举值 -> 驱动身份的 CASE 表达式（整型列直接比较）。
-// cast 是拼接未知值时所需的类型转换（Postgres 用 "::text"，SQLite 直接拼）。
-func providerTypeCaseSQL(cast string) string {
+//
+// unknownExpr 是未知值的落库表达式，各方言的字符串拼接写法不同：
+// Postgres 要先把整型转文本（"::text"），SQLite 直接用 "||"，而 MySQL 的 "||"
+// 默认是逻辑或，只能用 CONCAT。
+func providerTypeCaseSQL(unknownExpr string) string {
 	values := make([]int64, 0, len(legacyProviderTypeNames))
 	for value := range legacyProviderTypeNames {
 		values = append(values, value)
@@ -97,7 +108,7 @@ func providerTypeCaseSQL(cast string) string {
 	for _, value := range values {
 		fmt.Fprintf(&b, " WHEN %d THEN '%s'", value, legacyProviderTypeNames[value])
 	}
-	fmt.Fprintf(&b, " ELSE 'unknown_' || provider_type%s END", cast)
+	fmt.Fprintf(&b, " ELSE %s END", unknownExpr)
 	return b.String()
 }
 
@@ -105,15 +116,31 @@ func providerTypeCaseSQL(cast string) string {
 func migrateProviderTypePostgres(tx *gorm.DB) error {
 	sql := fmt.Sprintf(
 		"ALTER TABLE storage_providers ALTER COLUMN provider_type TYPE varchar(32) USING (%s)",
-		providerTypeCaseSQL("::text"))
+		providerTypeCaseSQL("'unknown_' || provider_type::text"))
 	return tx.Exec(sql).Error
+}
+
+// migrateProviderTypeMySQL 不支持在 ALTER 里做取值映射：先把整型列改成
+// varchar（数值原样转成字符串），再用 UPDATE 映射成驱动身份。
+func migrateProviderTypeMySQL(tx *gorm.DB) error {
+	steps := []string{
+		"ALTER TABLE storage_providers MODIFY COLUMN provider_type varchar(32) NOT NULL DEFAULT ''",
+		"UPDATE storage_providers SET provider_type = " +
+			providerTypeCaseSQL("CONCAT('unknown_', provider_type)"),
+	}
+	for _, sql := range steps {
+		if err := tx.Exec(sql).Error; err != nil {
+			return fmt.Errorf("%s failed: %w", sql, err)
+		}
+	}
+	return nil
 }
 
 // migrateProviderTypeSQLite 不支持 ALTER COLUMN，走「加列 - 回填 - 删列 - 改名」
 func migrateProviderTypeSQLite(tx *gorm.DB) error {
 	steps := []string{
 		"ALTER TABLE storage_providers ADD COLUMN provider_type_new varchar(32) NOT NULL DEFAULT ''",
-		"UPDATE storage_providers SET provider_type_new = " + providerTypeCaseSQL(""),
+		"UPDATE storage_providers SET provider_type_new = " + providerTypeCaseSQL("'unknown_' || provider_type"),
 		"ALTER TABLE storage_providers DROP COLUMN provider_type",
 		"ALTER TABLE storage_providers RENAME COLUMN provider_type_new TO provider_type",
 	}

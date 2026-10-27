@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"jenken827.com/jenken827/pfm/driver/types"
+	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -26,6 +27,11 @@ type Options struct {
 	HandshakeTimeout time.Duration
 	// ConfigureTimeout Configure 调用的等待上限（插件可能在这里做网络登录）
 	ConfigureTimeout time.Duration
+	// DownloaderID 只把这个 downloader_id 的 kind=downloader 插件登记成离线下载后端；
+	// 为空表示不启用离线下载（插件仍会加载，但不接管任务）
+	DownloaderID string
+	// DownloaderOptions 下发给下载器后端的配置（来自宿主 config.yaml 的 downloader.options）
+	DownloaderOptions map[string]string
 }
 
 // Manager 插件生命周期管理：扫描目录、拉起进程、注册驱动覆盖
@@ -33,6 +39,8 @@ type Manager struct {
 	opts    Options
 	host    *hostServer
 	plugins []*loadedPlugin
+	// backend 本管理器登记成离线下载后端的插件代理（没有则为 nil）
+	backend downloader.Backend
 }
 
 // loadedPlugin 一个已就绪的插件
@@ -46,6 +54,8 @@ type loadedPlugin struct {
 
 // LoadedPlugin 对外暴露的插件概况（供 pfm plugin list 展示）
 type LoadedPlugin struct {
+	Kind         string
+	ID           string
 	DriverID     string
 	Name         string
 	Version      string
@@ -106,13 +116,30 @@ func (m *Manager) Load(ctx context.Context) error {
 	return nil
 }
 
-// loadOne 拉起单个插件并注册驱动覆盖
+// loadOne 拉起单个插件，并按插件类型登记它的能力
 func (m *Manager) loadOne(ctx context.Context, dir string) error {
 	mf, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
-	proc, err := startProcess(mf.execPath(dir), mf.DriverID, m.opts.HandshakeTimeout)
+	expectABI, ok := ABI(mf.Kind)
+	if !ok {
+		return fmt.Errorf("未知插件类型 %q", mf.Kind)
+	}
+	switch mf.Kind {
+	case KindDriver:
+		return m.loadDriver(ctx, dir, mf, expectABI)
+	case KindDownloader:
+		return m.loadDownloader(ctx, dir, mf, expectABI)
+	default:
+		// 类型已登记但宿主还没有对应的加载分支：装上也不该被当成驱动用
+		return fmt.Errorf("插件类型 %q 尚未支持加载", mf.Kind)
+	}
+}
+
+// loadDriver 拉起驱动插件并注册驱动覆盖
+func (m *Manager) loadDriver(ctx context.Context, dir string, mf *manifest, expectABI uint32) error {
+	proc, err := startProcess(mf.execPath(dir), mf.DriverID, expectABI, m.opts.HandshakeTimeout)
 	if err != nil {
 		return err
 	}
@@ -184,11 +211,30 @@ func (m *Manager) configure(p *loadedPlugin, orm *entity.StorageProviderORM) (ty
 	return wrapCapabilities(core, resp.GetCapabilities()), nil
 }
 
+// DriverIDs 返回本管理器当前加载的驱动身份（去重、按加载顺序）。
+//
+// 热加载时用前后两次的差集判断：哪些插件被删掉（要撤销驱动覆盖）、
+// 哪些 provider 实例需要重建。
+func (m *Manager) DriverIDs() []string {
+	seen := make(map[string]struct{}, len(m.plugins))
+	ids := make([]string, 0, len(m.plugins))
+	for _, p := range m.plugins {
+		if _, ok := seen[p.driverID]; ok {
+			continue
+		}
+		seen[p.driverID] = struct{}{}
+		ids = append(ids, p.driverID)
+	}
+	return ids
+}
+
 // Plugins 返回已加载插件概况
 func (m *Manager) Plugins() []LoadedPlugin {
 	out := make([]LoadedPlugin, 0, len(m.plugins))
 	for _, p := range m.plugins {
 		out = append(out, LoadedPlugin{
+			Kind:         p.manifest.Kind,
+			ID:           p.manifest.ID(),
 			DriverID:     p.driverID,
 			Name:         p.manifest.Name,
 			Version:      p.manifest.Version,
@@ -200,8 +246,16 @@ func (m *Manager) Plugins() []LoadedPlugin {
 	return out
 }
 
+// Backend 本管理器登记的离线下载后端（没有则为 nil）
+func (m *Manager) Backend() downloader.Backend { return m.backend }
+
 // Close 结束全部插件进程并关闭反向服务
 func (m *Manager) Close() {
+	if m.backend != nil {
+		// 新管理器已经登记过新后端时这里是空操作（ClearBackend 只清自己）
+		downloader.ClearBackend(m.backend)
+		m.backend = nil
+	}
 	for _, p := range m.plugins {
 		p.proc.Close()
 	}

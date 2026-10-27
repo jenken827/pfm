@@ -14,9 +14,6 @@ import (
 	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
-// abiVersion 宿主支持的插件协议版本（与 plugin/sdk.AbiVersion、proto ABI_VERSION_1 对齐）
-const abiVersion = 1
-
 // handshakePrefix 插件启动后打印的握手前缀
 const handshakePrefix = "PFM-PLUGIN|"
 
@@ -28,8 +25,9 @@ type process struct {
 	pid  int
 }
 
-// startProcess 拉起插件、等待握手、建立 RPC 客户端
-func startProcess(execPath, driverID string, timeout time.Duration) (*process, error) {
+// startProcess 拉起插件、等待握手、建立 RPC 客户端。
+// expectABI 是该插件类型（kind）对应的协议版本，握手行里的版本必须与它一致。
+func startProcess(execPath, driverID string, expectABI uint32, timeout time.Duration) (*process, error) {
 	token, err := newToken()
 	if err != nil {
 		return nil, err
@@ -60,7 +58,7 @@ func startProcess(execPath, driverID string, timeout time.Duration) (*process, e
 			done <- handshakeResult{err: readErr}
 			return
 		}
-		addr, parseErr := parseHandshake(strings.TrimSpace(line))
+		addr, parseErr := parseHandshake(strings.TrimSpace(line), expectABI)
 		done <- handshakeResult{addr: addr, err: parseErr}
 	}()
 
@@ -79,8 +77,8 @@ func startProcess(execPath, driverID string, timeout time.Duration) (*process, e
 	}
 }
 
-// parseHandshake 解析 PFM-PLUGIN|1|127.0.0.1:port|pid
-func parseHandshake(line string) (string, error) {
+// parseHandshake 解析 PFM-PLUGIN|<abi>|127.0.0.1:port|pid
+func parseHandshake(line string, expectABI uint32) (string, error) {
 	if !strings.HasPrefix(line, handshakePrefix) {
 		return "", fmt.Errorf("非法的握手行 %q", line)
 	}
@@ -92,8 +90,8 @@ func parseHandshake(line string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("握手中的协议版本非法: %q", parts[0])
 	}
-	if version != abiVersion {
-		return "", fmt.Errorf("插件协议版本 %d 与宿主 %d 不兼容", version, abiVersion)
+	if uint32(version) != expectABI {
+		return "", fmt.Errorf("插件协议版本 %d 与宿主 %d 不兼容", version, expectABI)
 	}
 	if parts[1] == "" {
 		return "", fmt.Errorf("握手行缺少监听地址")

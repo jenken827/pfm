@@ -3,7 +3,7 @@
 // 用法（插件自己的 main，五行）：
 //
 //	import (
-//		_ "github.com/example/pfm-plugin-baidu/driver/baidu"
+//		_ "github.com/example/pfm-plugin-driver-baidu/driver/baidu"
 //		"jenken827.com/jenken827/pfm/plugin/sdk"
 //	)
 //
@@ -183,6 +183,13 @@ func (s *server) handlePunch(w http.ResponseWriter, r *http.Request) {
 
 // unary 统一处理 protojson 编解码与错误映射
 func (s *server) unary(w http.ResponseWriter, r *http.Request, req proto.Message,
+	call func() (proto.Message, error)) {
+	unary(w, r, req, call)
+}
+
+// unary 一元方法的公共流程（解析 protojson 请求 → 调实现 → 写响应 / 错误），
+// 与具体插件类型无关，驱动与下载器共用。
+func unary(w http.ResponseWriter, r *http.Request, req proto.Message,
 	call func() (proto.Message, error)) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD", "只接受 POST")

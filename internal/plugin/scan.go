@@ -12,11 +12,14 @@ import (
 
 // ManifestInfo 插件目录的静态概况（不拉起进程）
 type ManifestInfo struct {
-	DriverID   string `json:"driver_id"`
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	AbiVersion uint32 `json:"abi_version"`
-	Dir        string `json:"dir"`
+	Kind     string `json:"kind"`
+	DriverID string `json:"driver_id"`
+	// DownloaderID 下载器身份（kind=downloader 才有）
+	DownloaderID string `json:"downloader_id,omitempty"`
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	AbiVersion   uint32 `json:"abi_version"`
+	Dir          string `json:"dir"`
 	// Error 该插件目录的问题（清单缺失/非法/可执行文件不可用）
 	Error string `json:"error,omitempty"`
 }
@@ -64,7 +67,9 @@ func Scan(dir string) ([]ManifestInfo, error) {
 			infos = append(infos, info)
 			continue
 		}
+		info.Kind = mf.Kind
 		info.DriverID = mf.DriverID
+		info.DownloaderID = mf.DownloaderID
 		info.Name = mf.Name
 		info.Version = mf.Version
 		info.AbiVersion = mf.AbiVersion

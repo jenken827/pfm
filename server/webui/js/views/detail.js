@@ -198,7 +198,6 @@ function locationsCard(file, locations) {
     const done = loc.status === 'PCOMPLETED';
     const bits = [];
     if (loc.providerName) bits.push(loc.providerName);
-    if (loc.providerType) bits.push(loc.providerType);
     if (loc.size) bits.push(`存储大小 ${fmtSize(loc.size)}`);
     if (loc.encrypted) bits.push('已加密');
     if (loc.isChunked) bits.push(`分片 ×${loc.chunkTotal || '?'}`);
@@ -537,7 +536,7 @@ async function syncToProviders(file) {
     body: h('div', null,
       h('p', { class: 'muted small', text: '把该文件的字节再写一份到选中的存储源（不改变原位置）。' }),
       providers.map((p, i) => h('label', { class: 'rowitem', style: { cursor: 'pointer' } },
-        h('label', { class: 'check' }, boxes[i], h('span', { text: `#${p.id} ${p.name || ''}（${p.providerType || ''}）` }))))),
+        h('label', { class: 'check' }, boxes[i], h('span', { text: `#${p.id} ${p.name || ''}（${p.driverId || ''}）` }))))),
     footer: [
       h('button', { text: '取消', onclick: finish }),
       h('button', {

@@ -70,7 +70,7 @@ export async function renderSettings(main, route) {
     box.dataset.providerId = String(p.id);
     return h('label', { class: 'check rowitem', style: { cursor: 'pointer' } },
       box,
-      h('span', { class: 'grow', text: `#${p.id} ${p.name || ''}（${p.providerType || ''}）` }));
+      h('span', { class: 'grow', text: `#${p.id} ${p.name || ''}（${p.driverId || ''}）` }));
   });
 
   const save = h('button', {

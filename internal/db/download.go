@@ -34,7 +34,7 @@ func GetDownloadRecordByGid(gid string) (*entity.DownloadRecordORM, error) {
 
 // FindDownloadRecordByGid 按 gid 查记录；查不到返回 (nil, nil) 且不打错误日志
 //
-// 仅供「顺手置状态」这类可忽略场景使用（如 aria2 通知了非 pfm 发起的任务）；
+// 仅供「顺手置状态」这类可忽略场景使用（如 下载器通知了非 pfm 发起的任务）；
 // 正常业务流程仍用 GetDownloadRecordByGid（查不到要当异常处理）。
 func FindDownloadRecordByGid(gid string) (*entity.DownloadRecordORM, error) {
 	ctx := context.Background()
@@ -91,8 +91,8 @@ func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*entity.D
 
 // ListUnfinishedDownloadRecords 列出未终态的下载记录（PENDING / DOWNLOADING）
 //
-// 用于启动时与 aria2 真实状态对齐（见 internal/download/reconcile.go）：
-// 完成通知只推给当时连着的客户端，停机期间完成或 aria2 重启换 gid 都会漏。
+// 用于启动时与下载器真实状态对齐（见 internal/download/reconcile.go）：
+// 完成通知只推给当时连着的客户端，停机期间完成或 下载器重启换 gid 都会漏。
 func ListUnfinishedDownloadRecords() ([]*entity.DownloadRecordORM, error) {
 	var drs []*entity.DownloadRecordORM
 	if err := GetDB().

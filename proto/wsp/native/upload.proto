@@ -23,7 +23,9 @@ message UploadRecord {
   // blake3 hash
   // 唯一约束为复合 (file_hash, owner_id)：同一用户同 hash 只能有一条活跃
   // 上传记录（秒传复用），不同用户同 hash 互不干扰（并发上传隔离）
-  optional string file_hash = 4 [(sgorm.field).tag = {unique_index: "idx_ur_fh_owner,priority:1, length:10"}];
+  // size 明确成 64：MySQL 里不限长字符串会落成 longtext，只能建前缀唯一索引，
+  // 前缀唯一会按前 N 个字符误判重复
+  optional string file_hash = 4 [(sgorm.field).tag = {unique_index: "idx_ur_fh_owner,priority:1" size: 64}];
   optional string file_name = 5 [(sgorm.field).tag = {not_null: true}];
   // unit: byte
   optional uint64 file_size = 6 [(sgorm.field).tag = {not_null: true}];

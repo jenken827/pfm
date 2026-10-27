@@ -27,21 +27,37 @@ log:
   compress: false
 
 db:
+  # sqlite3（默认，纯 Go 实现，无需外部服务）/ postgres / mysql
   type: sqlite3
   addr: ""
+  # mysql 留空或 0 时连 127.0.0.1:3306；postgres 需显式填 5432
   port: 0
+  # sqlite3 是文件名（落在 DataDir 下）；postgres / mysql 是库名
   name: data.db
   user: ""
   password: ""
   table_prefix: ""
+  # 接 MySQL 时按上面几项填，例如：
+  # type: mysql
+  # addr: 127.0.0.1
+  # port: 3306
+  # name: pfm
+  # user: pfm
+  # password: "***"
 
 # 服务对外可访问地址，用于生成公开分享链接等场景
 server_url: http://127.0.0.1:10999
 
-aria2:
-  endpoint: http://127.0.0.1:6800/jsonrpc
-  token: ""
-  timeout: 30
+# 离线下载后端（kind=downloader 插件）。
+# 插件本身由下面的 plugin 段加载；这里只说用哪个后端、给它什么参数。
+# 留空 plugin 表示不启用离线下载（不再内置 aria2 客户端，见 README 的插件说明）。
+downloader:
+  plugin: aria2
+  options:
+    # aria2 的 RPC 地址与口令（插件侧解析，核心不关心具体后端）
+    endpoint: http://127.0.0.1:6800/jsonrpc
+    token: ""
+    timeout: "30"
 
 # 分享链接签名密钥。
 # 建议设置为稳定且足够随机的字符串，否则更换后旧分享链接会失效。
@@ -109,13 +125,17 @@ thumbnail:
   small: 200 # 网格视图边长
   large: 400 # 全屏预览边长
 
-# 插件驱动（见 DESIGN.md §11.4）。插件是**与宿主同权限的子进程**：能读 config.yaml（含全部
+# 驱动插件（见 DESIGN.md §11.4）。插件是**与宿主同权限的子进程**：能读 config.yaml（含全部
 # token）、能读写 data/，没有任何系统级沙箱。因此默认关闭，只放可信来源的二进制。
+# 当前插件类型只有 driver（存储驱动）；plugin.json 里的 kind 必填，将来加别的类型也不用改这里。
 plugin:
   enabled: false
   # 插件根目录（相对配置文件所在目录解析），每个子目录一个插件：
   #   plugins/<name>/plugin.json + 可执行文件
   dir: plugins
+  # 装 / 回滚 / 删插件后不用重启服务：`pfm plugin install` 会按配置文件同目录的
+  # pfm.pid 找到运行中的进程发 SIGHUP，服务重新扫描本目录并重建受影响的 provider。
+  # 手工触发等价于：kill -HUP <pid>  或  pfm plugin reload -c <配置文件>
   # 拉起插件后等待握手 / Configure 的超时（秒）
   handshake_timeout_seconds: 10
   configure_timeout_seconds: 30

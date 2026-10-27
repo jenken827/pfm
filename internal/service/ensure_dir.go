@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
@@ -118,9 +119,15 @@ func isSafeDirSegment(seg string) bool {
 	return true
 }
 
-// isUniqueViolation 判断错误是否为唯一键冲突（兼容 SQLite / PostgreSQL）
+// isUniqueViolation 判断错误是否为唯一键冲突（SQLite / PostgreSQL / MySQL）
+//
+// 优先用 gorm 的错误翻译（db.Init 里开了 TranslateError），文案匹配只作兜底。
 func isUniqueViolation(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
-		strings.Contains(msg, "duplicate key value violates unique constraint")
+		strings.Contains(msg, "duplicate key value violates unique constraint") ||
+		strings.Contains(msg, "Duplicate entry")
 }

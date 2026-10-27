@@ -75,10 +75,11 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 		parentID = rootID
 	}
 
-	// 3. 检查 aria2 是否可用
-	if downloader.Aria2Downloader == nil {
+	// 3. 检查离线下载后端是否可用（kind=downloader 插件是否已挂载）
+	backend := downloader.Current()
+	if backend == nil {
 		return nil, &models.Err{
-			E: fmt.Errorf("离线下载服务不可用（aria2 未初始化）"),
+			E: downloader.ErrUnavailable,
 			C: native.RespCode_INTERNAL_ERROR,
 		}
 	}
@@ -86,20 +87,17 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 	// 4. 推算文件名（URL path 最后一段，去 query）
 	sourceName := inferFileName(parsed, req.FileName)
 
-	// 5. 调 aria2.addUri，dir 指向 .offline/ 独立目录（避免与 .temp janitor 冲突）
+	// 5. 提交给下载器后端，dir 指向 .offline/ 独立目录（避免与 .temp janitor 冲突）
 	downloadDir := filepath.Join(globals.DataDir, ".offline")
 	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	gid, err := downloader.Aria2Downloader.AddURI(
-		[]string{rawURL},
-		map[string]any{"dir": downloadDir},
-	)
+	gid, err := backend.AddURI(ctx, []string{rawURL}, downloader.Options{Dir: downloadDir})
 	if err != nil {
-		llog.C(ctx).Errorf("aria2 addUri failed, url: %s, err: %v", rawURL, err)
+		llog.C(ctx).Errorf("添加离线下载任务失败, url: %s, err: %v", rawURL, err)
 		return nil, &models.Err{
-			E: fmt.Errorf("aria2 添加下载失败: %v", err),
+			E: fmt.Errorf("添加下载任务失败: %v", err),
 			C: native.RespCode_INTERNAL_ERROR,
 		}
 	}
@@ -120,8 +118,8 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 		SourceName:       &sourceName,
 	}
 	if err := db.CreateDownloadRecord(dr); err != nil {
-		// 记录失败则撤销 aria2 下载，避免孤儿任务
-		_, _ = downloader.Aria2Downloader.ForceRemove(gid)
+		// 记录失败则撤销下载器任务，避免孤儿任务
+		_ = backend.Remove(ctx, gid)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
@@ -165,7 +163,7 @@ func ListOfflineDownloads(ctx context.Context, req *native.ListOfflineDownloadsR
 	}, nil
 }
 
-// DeleteOfflineDownload 删除离线下载任务：停止 aria2 下载并移除记录
+// DeleteOfflineDownload 删除离线下载任务：停止下载器任务并移除记录
 // 已完成的下载仅删除记录，不影响已入库文件
 func DeleteOfflineDownload(ctx context.Context, req *native.DeleteOfflineDownloadReq) *models.Err {
 	dr, err := db.GetDownloadRecordByID(*req.Id)
@@ -178,11 +176,11 @@ func DeleteOfflineDownload(ctx context.Context, req *native.DeleteOfflineDownloa
 		return &models.Err{E: fmt.Errorf("无权删除该任务"), C: native.RespCode_PERMISSION_DENIED}
 	}
 
-	// 停止 aria2 下载（仅非终态）
+	// 停止下载器任务（仅非终态）
 	if dr.State != nil && *dr.State != int32(native.DownloadRecordState_DOWNLOAD_COMPLETED) &&
 		*dr.State != int32(native.DownloadRecordState_DOWNLOAD_FAILED) {
-		if downloader.Aria2Downloader != nil && dr.Gid != nil {
-			_, _ = downloader.Aria2Downloader.ForceRemove(*dr.Gid)
+		if backend := downloader.Current(); backend != nil && dr.Gid != nil {
+			_ = backend.Remove(ctx, *dr.Gid)
 		}
 	}
 
@@ -193,7 +191,7 @@ func DeleteOfflineDownload(ctx context.Context, req *native.DeleteOfflineDownloa
 }
 
 // RetryOfflineDownload 重试失败的离线下载任务
-// 复用原 URL 重新创建 aria2 任务并更新 gid
+// 复用原 URL 重新创建下载器任务并更新 gid
 func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadReq) (*native.CreateOfflineDownloadResp, *models.Err) {
 	dr, err := db.GetDownloadRecordByID(*req.Id)
 	if err != nil {
@@ -211,7 +209,8 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
-	if dr.Url == nil || downloader.Aria2Downloader == nil {
+	backend := downloader.Current()
+	if dr.Url == nil || backend == nil {
 		return nil, &models.Err{
 			E: fmt.Errorf("离线下载服务不可用或缺少 URL"),
 			C: native.RespCode_INTERNAL_ERROR,
@@ -227,13 +226,10 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 	downloadDir := filepath.Join(globals.DataDir, ".offline")
 	_ = os.MkdirAll(downloadDir, 0o755)
 
-	gid, aErr := downloader.Aria2Downloader.AddURI(
-		[]string{*dr.Url},
-		map[string]any{"dir": downloadDir},
-	)
+	gid, aErr := backend.AddURI(ctx, []string{*dr.Url}, downloader.Options{Dir: downloadDir})
 	if aErr != nil {
-		llog.C(ctx).Errorf("aria2 addUri retry failed, id: %d, err: %v", *req.Id, aErr)
-		return nil, &models.Err{E: fmt.Errorf("aria2 添加下载失败: %v", aErr), C: native.RespCode_INTERNAL_ERROR}
+		llog.C(ctx).Errorf("重试离线下载失败, id: %d, err: %v", *req.Id, aErr)
+		return nil, &models.Err{E: fmt.Errorf("添加下载任务失败: %v", aErr), C: native.RespCode_INTERNAL_ERROR}
 	}
 
 	// 更新记录：新 gid + 重置状态

@@ -27,7 +27,7 @@ const DEFAULT_ROUTES = {
   },
   '/api/space/my-providers': {
     providers: [{
-      id: 1, name: '本地', providerType: 'LOCAL', description: '', enabled: true,
+      id: 1, name: '本地', driverId: 'local', description: '', enabled: true,
       defaultBound: true, sortOrder: 0, totalCapacity: '0', usedCapacity: '1024',
       fileSizeLimit: '0', maxConcurrentUploads: 0, proxy: '',
     }],

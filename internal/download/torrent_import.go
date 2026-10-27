@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
+	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -31,7 +31,7 @@ import (
 // completedLength 全部回报 0（任务级的 completedLength 总量仍然正确）。按它判断
 // 会把已经下好的文件当成半成品全部跳掉，用户侧表现为「aria2 已完成但没有可导入
 // 的文件」，而且记录被标失败后 reconcile 不再扫，任务无法自愈。
-func importableFiles(dir string, files []aria2.FileInfo) []string {
+func importableFiles(dir string, files []downloader.File) []string {
 	paths := make([]string, 0, len(files))
 	for _, f := range files {
 		if f.Selected == "false" || f.Path == "" || isMetadataPath(f.Path) {
@@ -97,7 +97,7 @@ func torrentRootName(dr *entity.DownloadRecordORM, btName string, files []string
 
 // cleanupTorrentLeftover 清理 aria2 留下的种子文件（bt-save-metadata 会把
 // <infohash>.torrent 写进下载目录，它不在 files 列表里，不会被导入，只会越堆越多）
-func cleanupTorrentLeftover(task aria2.StatusInfo) {
+func cleanupTorrentLeftover(task downloader.Task) {
 	if task.InfoHash == "" || task.Dir == "" {
 		return
 	}

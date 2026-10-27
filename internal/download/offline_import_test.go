@@ -2,6 +2,7 @@ package download
 
 import (
 	"encoding/json"
+	"jenken827.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,6 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
@@ -81,12 +81,12 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 }
 
-// snapshotFromJSON 用 JSON 构造 aria2.StatusInfo（BitTorrent 是匿名结构体，只能反序列化）
+// snapshotFromJSON 用 JSON 构造 downloader.Task（BitTorrent 是匿名结构体，只能反序列化）
 func snapshotFromJSON(t *testing.T, raws ...string) *taskSnapshot {
 	t.Helper()
 	snap := &taskSnapshot{}
 	for _, raw := range raws {
-		var info aria2.StatusInfo
+		var info downloader.Task
 		if err := json.Unmarshal([]byte(raw), &info); err != nil {
 			t.Fatalf("unmarshal status: %v", err)
 		}

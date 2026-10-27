@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/http2"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
+	"jenken827.com/jenken827/pfm/internal/pidfile"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/server/middleware"
@@ -119,33 +120,62 @@ func Run() {
 	// 监听结束信号或启动错误
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// 插件热加载信号（SIGHUP）：重新扫描插件目录并重建受影响的 provider 实例
+	reload := make(chan os.Signal, 1)
+	if sigs := reloadSignals(); len(sigs) > 0 {
+		signal.Notify(reload, sigs...)
+	}
+
 	fmt.Printf("Started server on %s:%d\n", addr, port)
 
-	select {
-	case err := <-serverErr:
-		// 服务启动失败
-		llog.L().Errorf("Server failed to start: %v", err)
-		// 关闭所有存储驱动与插件进程
-		storage.CloseAll()
-		bootstrap.ClosePlugins()
-		os.Exit(1)
-	case <-quit:
-		// 收到结束信号
-		llog.L().Info("Shutting down server...")
+	// pid 文件：供 `pfm plugin install` / `pfm plugin reload` 找到本进程发 SIGHUP
+	if err := pidfile.Write(globals.ConfigPath, os.Getpid()); err != nil {
+		// 写不了只是热加载不方便，不该影响服务本身
+		llog.L().Warnf("写 pid 文件失败（插件热加载需要手工发信号）: %v", err)
+	}
 
-		// 创建超时上下文
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	for {
+		select {
+		case err := <-serverErr:
+			// 服务启动失败
+			llog.L().Errorf("Server failed to start: %v", err)
+			// 关闭所有存储驱动与插件进程
+			storage.CloseAll()
+			bootstrap.ClosePlugins()
+			if rmErr := pidfile.Remove(globals.ConfigPath); rmErr != nil {
+				llog.L().Warnf("删除 pid 文件失败: %v", rmErr)
+			}
+			os.Exit(1)
+		case <-reload:
+			// SIGHUP：重新加载插件（装完插件不用重启服务）
+			llog.L().Info("收到 SIGHUP，重新加载插件...")
+			if err := bootstrap.ReloadPlugins(); err != nil {
+				llog.L().Errorf("插件热加载失败: %v", err)
+			}
+		case <-quit:
+			// 收到结束信号
+			llog.L().Info("Shutting down server...")
 
-		// 优雅关闭 HTTP 服务
-		if err := s.Shutdown(ctx); err != nil {
-			llog.L().Errorf("Server shutdown error: %v", err)
+			// 创建超时上下文
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			// 优雅关闭 HTTP 服务
+			if err := s.Shutdown(ctx); err != nil {
+				llog.L().Errorf("Server shutdown error: %v", err)
+			}
+
+			// 关闭所有存储驱动与插件进程
+			storage.CloseAll()
+			bootstrap.ClosePlugins()
+
+			if err := pidfile.Remove(globals.ConfigPath); err != nil {
+				llog.L().Warnf("删除 pid 文件失败: %v", err)
+			}
+
+			llog.L().Info("Server exited")
+			return
 		}
-
-		// 关闭所有存储驱动与插件进程
-		storage.CloseAll()
-		bootstrap.ClosePlugins()
-
-		llog.L().Info("Server exited")
 	}
 }

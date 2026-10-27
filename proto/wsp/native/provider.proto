@@ -29,12 +29,14 @@ message StorageProvider {
     (buf.validate.field).required = true,
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 32,
-    (sgorm.field).tag = {not_null: true, column: "provider_type"}
+    // size 对齐校验上限与迁移目标（varchar(32)）：MySQL 里不限长字符串会落成 longtext
+    (sgorm.field).tag = {not_null: true, column: "provider_type", size: 32}
   ];
   // 实例名称
+  // size 明确成 191：MySQL 里不限长字符串会落成 longtext，建唯一索引会直接报错
   optional string name = 6 [
     (buf.validate.field).required = true,
-    (sgorm.field).tag = {not_null: true unique_index: "idx_sp_n"}
+    (sgorm.field).tag = {not_null: true, unique_index: "idx_sp_n", size: 191}
   ];
   // 实例描述
   optional string description = 7;

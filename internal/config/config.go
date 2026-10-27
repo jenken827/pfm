@@ -108,7 +108,7 @@ func defaultConfig() *models.Config {
 			ThumbnailRefillMS: 5,
 		},
 
-		// 插件驱动：默认关闭，插件目录相对于数据目录所在位置由用户指定
+		// 驱动插件：默认关闭，插件目录相对于数据目录所在位置由用户指定
 		Plugin: models.PluginConfig{
 			Enabled:                 false,
 			Dir:                     "plugins",

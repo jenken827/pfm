@@ -39,8 +39,10 @@ type Installer struct {
 
 // InstallResult 安装结果
 type InstallResult struct {
+	Kind            string
 	Name            string
 	DriverID        string
+	DownloaderID    string
 	Version         string
 	PreviousVersion string
 	Seq             uint64
@@ -78,6 +80,20 @@ func (i *Installer) Install(ctx context.Context, name, version string) (*Install
 	if err != nil {
 		return nil, err
 	}
+	// 类型与协议版本在下载之前就判断：装完才发现宿主用不了，等于白下几十 MB
+	abi, ok := ABI(entry.Kind)
+	if !ok {
+		return nil, fmt.Errorf("%s 是 %q 类型的插件，当前 pfm 不支持（支持的：%s），请升级 pfm",
+			entry.Name, entry.Kind, strings.Join(Kinds(), " / "))
+	}
+	if entry.ABIVersion != abi {
+		return nil, fmt.Errorf("%s@%s 的索引声明 abi_version=%d，%s 类型应为 %d",
+			entry.Name, entry.Version, entry.ABIVersion, entry.Kind, abi)
+	}
+	if entry.ID() == "" {
+		return nil, fmt.Errorf("%s@%s 的索引缺少 %s 类型的身份字段（driver_id / downloader_id）",
+			entry.Name, entry.Version, entry.Kind)
+	}
 	if !versionAtLeast(i.PfmVersion, entry.MinPfmVersion) {
 		return nil, fmt.Errorf("%s %s 需要 pfm >= %s（当前 %s）", entry.Name, entry.Version,
 			entry.MinPfmVersion, i.PfmVersion)
@@ -103,8 +119,12 @@ func (i *Installer) Install(ctx context.Context, name, version string) (*Install
 	if err != nil {
 		return nil, fmt.Errorf("插件包内容不合法: %w", err)
 	}
-	if mf.DriverID != entry.DriverID {
-		return nil, fmt.Errorf("包内 driver_id=%s 与索引声明的 %s 不一致", mf.DriverID, entry.DriverID)
+	if mf.Kind != entry.Kind {
+		return nil, fmt.Errorf("包内 kind=%s 与索引声明的 %s 不一致", mf.Kind, entry.Kind)
+	}
+	if mf.DriverID != entry.DriverID || mf.DownloaderID != entry.DownloaderID {
+		return nil, fmt.Errorf("包内身份（driver_id=%s downloader_id=%s）与索引声明的（%s / %s）不一致",
+			mf.DriverID, mf.DownloaderID, entry.DriverID, entry.DownloaderID)
 	}
 	treeDigest, err := hashTree(staging)
 	if err != nil {
@@ -112,11 +132,13 @@ func (i *Installer) Install(ctx context.Context, name, version string) (*Install
 	}
 
 	result := &InstallResult{
-		Name:     entry.Name,
-		DriverID: entry.DriverID,
-		Version:  entry.Version,
-		Seq:      index.Seq,
-		Dir:      filepath.Join(i.Dir, entry.Name),
+		Kind:         entry.Kind,
+		Name:         entry.Name,
+		DriverID:     entry.DriverID,
+		DownloaderID: entry.DownloaderID,
+		Version:      entry.Version,
+		Seq:          index.Seq,
+		Dir:          filepath.Join(i.Dir, entry.Name),
 	}
 	if previous, ok := state.Installed[entry.Name]; ok {
 		result.PreviousVersion = previous.Version
@@ -125,8 +147,10 @@ func (i *Installer) Install(ctx context.Context, name, version string) (*Install
 		return nil, err
 	}
 	state.Installed[entry.Name] = installedRecord{
+		Kind:            entry.Kind,
 		Name:            entry.Name,
 		DriverID:        entry.DriverID,
+		DownloaderID:    entry.DownloaderID,
 		Version:         entry.Version,
 		ABIVersion:      entry.ABIVersion,
 		SHA256:          entry.SHA256,
@@ -167,6 +191,7 @@ func (i *Installer) Rollback(name string) (*InstallResult, error) {
 		return nil, err
 	}
 	result := &InstallResult{
+		Kind:            record.Kind,
 		Name:            name,
 		DriverID:        record.DriverID,
 		Version:         record.PreviousVersion,
@@ -187,11 +212,13 @@ func (i *Installer) Rollback(name string) (*InstallResult, error) {
 
 // InstalledInfo 已安装插件的概况（CLI 展示用）
 type InstalledInfo struct {
-	Name     string
-	DriverID string
-	Version  string
-	Status   string
-	Detail   string
+	Kind         string
+	Name         string
+	DriverID     string
+	DownloaderID string
+	Version      string
+	Status       string
+	Detail       string
 }
 
 // InstalledPlugins 汇总安装记录与当前内容校验结果
@@ -210,7 +237,8 @@ func InstalledPlugins(dir string) ([]InstalledInfo, error) {
 	}
 	infos := make([]InstalledInfo, 0, len(state.Installed))
 	for name, record := range state.Installed {
-		item := InstalledInfo{Name: name, DriverID: record.DriverID, Version: record.Version}
+		item := InstalledInfo{Kind: record.Kind, Name: name, DriverID: record.DriverID,
+			DownloaderID: record.DownloaderID, Version: record.Version}
 		if checked, ok := statusByDriver[name]; ok {
 			item.Status = checked.Status
 			item.Detail = checked.Detail
@@ -223,11 +251,13 @@ func InstalledPlugins(dir string) ([]InstalledInfo, error) {
 
 // Integrity 一个插件的安装完整性
 type Integrity struct {
-	Name     string
-	Version  string
-	DriverID string
-	Status   string // ok / modified / missing / unmanaged
-	Detail   string
+	Kind         string
+	Name         string
+	Version      string
+	DriverID     string
+	DownloaderID string
+	Status       string // ok / modified / missing / unmanaged
+	Detail       string
 }
 
 // CheckInstalled 校验已安装插件的内容摘要（发现被改动 / 丢失）
@@ -244,7 +274,8 @@ func CheckInstalled(dir string) ([]Integrity, error) {
 	sort.Strings(names)
 	for _, name := range names {
 		record := state.Installed[name]
-		item := Integrity{Name: name, Version: record.Version, DriverID: record.DriverID}
+		item := Integrity{Kind: record.Kind, Name: name, Version: record.Version,
+			DriverID: record.DriverID, DownloaderID: record.DownloaderID}
 		target := filepath.Join(dir, name)
 		if _, statErr := os.Stat(target); statErr != nil {
 			item.Status = "missing"

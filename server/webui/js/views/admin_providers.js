@@ -53,7 +53,7 @@ export async function renderAdminProviders(main, route) {
     return;
   }
 
-  const typeName = (value) => types.find((t) => t.type === value)?.displayName || value || '-';
+  const typeName = (value) => types.find((t) => t.driverId === value)?.displayName || value || '-';
   const tableWrap = h('div');
 
   setChildren(body,
@@ -92,7 +92,7 @@ export async function renderAdminProviders(main, route) {
           h('span', { class: 'ico', text: '🗄️' }),
           h('span', { class: 'label', text: provider.name || `#${provider.id}` }),
           provider.defaultBound ? h('span', { class: 'status-chip', text: '默认绑定' }) : null),
-        h('div', { class: 'muted small', text: typeName(provider.providerType) })),
+        h('div', { class: 'muted small', text: typeName(provider.driverId) })),
       h('td', { text: total > 0 ? `${fmtSize0(used)} / ${fmtSize(total)}` : `${fmtSize0(used)} / 不限` }),
       h('td', null, h('span', {
         class: `status-chip ${provider.enabled ? 'ok' : 'warn'}`,
@@ -202,14 +202,14 @@ export async function renderAdminProviders(main, route) {
       return;
     }
     const typeSelect = h('select', null, types.map((t) =>
-      h('option', { value: t.type, text: t.displayName || t.type })));
+      h('option', { value: t.driverId, text: t.displayName || t.name || t.driverId })));
     const name = h('input', { type: 'text', placeholder: '实例名称，如 我的阿里云盘' });
     const desc = h('input', { type: 'text', placeholder: '可选' });
     const fieldsBox = h('div');
     let inputs = [];
 
     const buildFields = () => {
-      const type = types.find((t) => t.type === typeSelect.value);
+      const type = types.find((t) => t.driverId === typeSelect.value);
       inputs = (type?.configFields || []).map((f) => {
         const input = inputFor(f);
         input.dataset.name = f.name;
@@ -307,10 +307,11 @@ export async function renderAdminProviders(main, route) {
     }
     try {
       await call('/api/admin/provider/add', {
-        providerType: typeSelect.value,
+        driverId: typeSelect.value,
         name: providerName,
         description: desc.value.trim(),
         config: JSON.stringify(config),
+        enabled: true,
       });
       toast('已添加', 'ok');
       modal.close();

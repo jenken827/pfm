@@ -10,8 +10,9 @@ type Config struct {
 	// 认证配置（本地认证：users 表 + HS256 JWT）
 	Auth AuthConfig `json:"auth" yaml:"auth"`
 	//服务对外地址，用于telegram回调，i.e. https://example.com
-	ServerURL string      `json:"server_url" yaml:"server_url"`
-	Aria2     Aria2Config `json:"aria2" yaml:"aria2"`
+	ServerURL string `json:"server_url" yaml:"server_url"`
+	// 离线下载后端（kind=downloader 插件）：选哪个插件 + 下发给它的选项
+	Downloader DownloaderConfig `json:"downloader" yaml:"downloader"`
 	// 分享链接签名密钥，用于生成和验证分享链接的签名
 	SignToken string `json:"sign_token" yaml:"sign_token"`
 	// 上传配置
@@ -20,13 +21,13 @@ type Config struct {
 	Transfer TransferConfig `json:"transfer" yaml:"transfer"`
 	// 照片日期解析配置（相册备份按"年/月"归档；不配置时使用内置默认规则）
 	PhotoDate PhotoDateConfig `json:"photo_date" yaml:"photo_date"`
-	// 离线下载配置（aria2 目标地址校验）
+	// 离线下载配置（下载器 目标地址校验）
 	Download DownloadConfig `json:"download" yaml:"download"`
 	// 每 IP 限频配置（令牌桶；缩略图走独立配额，见 middleware/rate_limit.go）
 	RateLimit RateLimitConfig `json:"ratelimit" yaml:"ratelimit"`
 	// 缩略图尺寸（网格 / 预览两档，见 internal/thumbnail）
 	Thumbnail ThumbnailConfig `json:"thumbnail" yaml:"thumbnail"`
-	// 插件驱动（默认关闭；开启后宿主会拉起 plugins/<id>/ 下的子进程）
+	// 驱动插件（默认关闭；开启后宿主会拉起 plugins/<id>/ 下的子进程）
 	Plugin PluginConfig `json:"plugin" yaml:"plugin"`
 }
 
@@ -154,7 +155,7 @@ type Schema struct {
 }
 
 // DB 数据库配置
-// 支持mysql,pgsql,sqlite
+// Type 取 sqlite3 / postgres / mysql（默认 sqlite3）
 type DB struct {
 	Type        string `json:"type" yaml:"type"`
 	Addr        string `json:"addr" yaml:"addr"`
@@ -191,14 +192,19 @@ type Cors struct {
 	AllowHeaders []string `json:"allow_headers" yaml:"allow_headers"`
 }
 
-// Aria2Config aria2 downloader config
-type Aria2Config struct {
-	Endpoint string `json:"endpoint" yaml:"endpoint"`
-	Token    string `json:"token" yaml:"token"`
-	Timeout  int64  `json:"timeout" yaml:"timeout"`
+// DownloaderConfig 离线下载后端配置
+//
+// 后端以 kind=downloader 插件提供（下载器 / 未来的 qBittorrent …）：插件由
+// plugin.enabled + plugin.dir 统一加载，这里只说「用哪个」和「给它什么参数」。
+// Options 原样下发给插件（下载器 需要 endpoint / token / timeout），核心不解析。
+type DownloaderConfig struct {
+	// Plugin 使用哪个 downloader_id 的插件（如 下载器）；留空表示不启用离线下载
+	Plugin string `json:"plugin" yaml:"plugin"`
+	// Options 传给插件的后端参数
+	Options map[string]string `json:"options" yaml:"options"`
 }
 
-// PluginConfig 插件驱动配置
+// PluginConfig 驱动插件配置
 //
 // 插件与宿主同权限运行（同一用户、同一文件系统），加载一个插件等于授予它
 // 读取配置与数据库的权限：只放可信来源的二进制，详见 DESIGN.md 的威胁模型。

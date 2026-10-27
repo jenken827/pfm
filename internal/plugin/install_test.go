@@ -26,16 +26,17 @@ type testPackage struct {
 
 func newTestPackage(driverID, version string) *testPackage {
 	mf := map[string]any{
+		"kind":        "driver",
 		"driver_id":   driverID,
-		"exec":        "./pfm-plugin-" + driverID,
+		"exec":        "./pfm-plugin-driver-" + driverID,
 		"abi_version": 1,
 		"name":        "pfm-" + driverID,
 		"version":     version,
 	}
 	raw, _ := json.Marshal(mf)
 	return &testPackage{files: map[string]string{
-		"plugin.json":            string(raw),
-		"pfm-plugin-" + driverID: "#!/bin/sh\n",
+		"plugin.json":                   string(raw),
+		"pfm-plugin-driver-" + driverID: "#!/bin/sh\n",
 	}}
 }
 
@@ -162,7 +163,7 @@ func TestInstallVerifiesSignatureAndSHA(t *testing.T) {
 	dir := newPluginRoot(t)
 	ts := newTestIndexServer(t, dir)
 	entry := IndexEntry{
-		Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
+		Kind: KindDriver, ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
 		URL: ts.server.URL + "/pkg/smoke-1.0.0.tar.gz",
 	}
 	ts.publish(entry, newTestPackage("smoke", "1.0.0"))
@@ -204,7 +205,7 @@ func TestInstallVerifiesSignatureAndSHA(t *testing.T) {
 	t.Run("包内容被替换必须拒绝", func(t *testing.T) {
 		ts.packages["smoke-tampered.tar.gz"] = []byte("not the published archive")
 		entry := IndexEntry{
-			Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.1",
+			Kind: KindDriver, ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.1",
 			URL: ts.server.URL + "/pkg/smoke-tampered.tar.gz", SHA256: "deadbeef",
 		}
 		ts.publish(entry, newTestPackage("smoke", "1.0.1"))
@@ -216,7 +217,7 @@ func TestInstallVerifiesSignatureAndSHA(t *testing.T) {
 	})
 
 	t.Run("索引回退必须拒绝", func(t *testing.T) {
-		ts.publish(IndexEntry{Name: "pfm-smoke", DriverID: "smoke", Version: "1.1.0",
+		ts.publish(IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "1.1.0",
 			URL: ts.server.URL + "/pkg/smoke-1.1.0.tar.gz"}, newTestPackage("smoke", "1.1.0"))
 		ts.seq = 5
 		if _, installErr := ts.installer(dir).Install(context.Background(), "pfm-smoke", ""); installErr != nil {
@@ -234,7 +235,7 @@ func TestInstallRejectsUnsafeArchive(t *testing.T) {
 	dir := newPluginRoot(t)
 	ts := newTestIndexServer(t, dir)
 	pkg := newTestPackage("evil", "1.0.0").add("../escape.txt", "x")
-	entry := IndexEntry{Name: "pfm-evil", DriverID: "evil", Version: "1.0.0",
+	entry := IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-evil", DriverID: "evil", Version: "1.0.0",
 		URL: ts.server.URL + "/pkg/evil.tar.gz"}
 	ts.publish(entry, pkg)
 	if _, err := ts.installer(dir).Install(context.Background(), "pfm-evil", ""); err == nil {
@@ -245,7 +246,7 @@ func TestInstallRejectsUnsafeArchive(t *testing.T) {
 	}
 
 	t.Run("driver_id 不一致必须拒绝", func(t *testing.T) {
-		mismatch := IndexEntry{Name: "pfm-mismatch", DriverID: "expected", Version: "1.0.0",
+		mismatch := IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-mismatch", DriverID: "expected", Version: "1.0.0",
 			URL: ts.server.URL + "/pkg/mismatch.tar.gz"}
 		ts.publish(mismatch, newTestPackage("actual", "1.0.0"))
 		if _, err := ts.installer(dir).Install(context.Background(), "pfm-mismatch", ""); err == nil {
@@ -254,7 +255,7 @@ func TestInstallRejectsUnsafeArchive(t *testing.T) {
 	})
 
 	t.Run("min_pfm_version 不足必须拒绝", func(t *testing.T) {
-		entry := IndexEntry{Name: "pfm-future", DriverID: "future", Version: "1.0.0",
+		entry := IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-future", DriverID: "future", Version: "1.0.0",
 			URL: ts.server.URL + "/pkg/future.tar.gz", MinPfmVersion: "99.0.0"}
 		ts.publish(entry, newTestPackage("future", "1.0.0"))
 		if _, err := ts.installer(dir).Install(context.Background(), "pfm-future", ""); err == nil {
@@ -266,9 +267,9 @@ func TestInstallRejectsUnsafeArchive(t *testing.T) {
 func TestInstallUpgradeAndRollback(t *testing.T) {
 	dir := newPluginRoot(t)
 	ts := newTestIndexServer(t, dir)
-	ts.publish(IndexEntry{Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
+	ts.publish(IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
 		URL: ts.server.URL + "/pkg/smoke-1.0.0.tar.gz"}, newTestPackage("smoke", "1.0.0"))
-	ts.publish(IndexEntry{Name: "pfm-smoke", DriverID: "smoke", Version: "2.0.0",
+	ts.publish(IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "2.0.0",
 		URL: ts.server.URL + "/pkg/smoke-2.0.0.tar.gz"}, newTestPackage("smoke", "2.0.0"))
 	installer := ts.installer(dir)
 
@@ -318,12 +319,12 @@ func TestInstallUpgradeAndRollback(t *testing.T) {
 func TestCheckInstalledDetectsModification(t *testing.T) {
 	dir := newPluginRoot(t)
 	ts := newTestIndexServer(t, dir)
-	ts.publish(IndexEntry{Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
+	ts.publish(IndexEntry{Kind: "driver", ABIVersion: 1, Name: "pfm-smoke", DriverID: "smoke", Version: "1.0.0",
 		URL: ts.server.URL + "/pkg/smoke.tar.gz"}, newTestPackage("smoke", "1.0.0"))
 	if _, err := ts.installer(dir).Install(context.Background(), "pfm-smoke", ""); err != nil {
 		t.Fatalf("安装失败: %v", err)
 	}
-	target := filepath.Join(dir, "pfm-smoke", "pfm-plugin-smoke")
+	target := filepath.Join(dir, "pfm-smoke", "pfm-plugin-driver-smoke")
 	if err := os.WriteFile(target, []byte("#!/bin/sh\necho hacked\n"), 0o755); err != nil {
 		t.Fatalf("改写文件失败: %v", err)
 	}
@@ -355,5 +356,48 @@ func TestCompareVersion(t *testing.T) {
 	}
 	if !versionAtLeast("1.2.0", "") {
 		t.Fatal("空的最低版本要求应满足")
+	}
+}
+
+// TestIndexWithUnknownKindEntryDoesNotBlockOthers 索引是所有插件类型共用的：
+// 出现本宿主不认识的类型时，只能影响那一条，别的类型照常可装 ——
+// 否则发布一个通知插件，就会让所有老客户端连驱动都装不了。
+func TestIndexWithUnknownKindEntryDoesNotBlockOthers(t *testing.T) {
+	dir := newPluginRoot(t)
+	ts := newTestIndexServer(t, dir)
+	ts.publish(IndexEntry{
+		Kind: "notifier", ABIVersion: 1, Name: "pfm-plugin-notifier-demo", Version: "1.0.0",
+		URL: ts.server.URL + "/pkg/notifier.tar.gz",
+	}, newTestPackage("demo", "1.0.0"))
+	ts.publish(IndexEntry{
+		Kind: KindDriver, ABIVersion: 1, Name: "pfm-plugin-driver-smoke", DriverID: "smoke",
+		Version: "1.0.0", URL: ts.server.URL + "/pkg/smoke.tar.gz",
+	}, newTestPackage("smoke", "1.0.0"))
+
+	if _, err := ts.installer(dir).Install(context.Background(), "pfm-plugin-driver-smoke", ""); err != nil {
+		t.Fatalf("同一份索引里有不认识的类型，不该影响驱动安装: %v", err)
+	}
+	_, err := ts.installer(dir).Install(context.Background(), "pfm-plugin-notifier-demo", "")
+	if err == nil {
+		t.Fatal("装本宿主不支持的插件类型应报错")
+	}
+	// 报错要能指导操作：说清是什么类型、支持哪些、该升级
+	for _, want := range []string{"notifier", "不支持", "升级"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("错误信息应包含 %q，实际：%v", want, err)
+		}
+	}
+}
+
+// TestInstallRejectsMismatchedIndexABI 索引声明的 abi 与类型应得的不一致时，下载前就拒绝
+func TestInstallRejectsMismatchedIndexABI(t *testing.T) {
+	dir := newPluginRoot(t)
+	ts := newTestIndexServer(t, dir)
+	ts.publish(IndexEntry{
+		Kind: KindDriver, ABIVersion: 9, Name: "pfm-plugin-driver-smoke", DriverID: "smoke",
+		Version: "1.0.0", URL: ts.server.URL + "/pkg/smoke.tar.gz",
+	}, newTestPackage("smoke", "1.0.0"))
+	if _, err := ts.installer(dir).Install(context.Background(), "pfm-plugin-driver-smoke", ""); err == nil {
+		t.Fatal("索引 abi_version 与类型不符时应拒绝安装")
 	}
 }

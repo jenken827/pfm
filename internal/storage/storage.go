@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"strings"
 
 	"golang.org/x/sync/syncmap"
 	"jenken827.com/jenken827/pfm/driver/types"
@@ -90,6 +91,46 @@ func createAndStoreDriver(sp *entity.StorageProviderORM) error {
 
 	storages.Store(*sp.Id, ins)
 	return nil
+}
+
+// ReloadDrivers 重建指定驱动身份下的 provider 实例（插件热加载后调用）。
+//
+// 热加载会换掉插件进程：旧的驱动实例还握着已经断开的 loopback 连接，必须按驱动
+// 身份重建一遍，否则对应 provider 会一直被算作「可用」但每次调用都失败。
+//
+// 返回重建成功的实例数；单个 provider 重建失败只记日志（例如插件配置过期），
+// 失败的实例已从缓存摘掉，等下一次 EnsureProvider / 热加载再试。
+func ReloadDrivers(driverIDs map[string]struct{}) (int, error) {
+	if len(driverIDs) == 0 {
+		return 0, nil
+	}
+	sps, err := db.GetEnabledProviders()
+	if err != nil {
+		return 0, fmt.Errorf("读取存储提供者失败: %w", err)
+	}
+	rebuilt := 0
+	var failures []string
+	for _, sp := range sps {
+		if sp.Id == nil || sp.DriverId == nil {
+			continue
+		}
+		if _, ok := driverIDs[*sp.DriverId]; !ok {
+			continue
+		}
+		id := *sp.Id
+		// 先摘掉旧实例：它绑着已经关闭（或即将关闭）的旧插件进程
+		storages.Delete(id)
+		if err := createAndStoreDriver(sp); err != nil {
+			failures = append(failures, fmt.Sprintf("%d(%s): %v", id, *sp.DriverId, err))
+			continue
+		}
+		rebuilt++
+		llog.L().Infof("storage provider reloaded, id: %d, driver: %s", id, *sp.DriverId)
+	}
+	if len(failures) > 0 {
+		return rebuilt, fmt.Errorf("重建 %d 个 provider 实例失败: %s", len(failures), strings.Join(failures, "; "))
+	}
+	return rebuilt, nil
 }
 
 // EnsureProvider 确保指定 provider 的驱动已初始化（懒加载、幂等）。

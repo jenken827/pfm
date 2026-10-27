@@ -27,7 +27,7 @@ PFM(Personal File Manager)是一款个人文件管理系统。前端使用 Flutt
 
 ## 当前实现概览
 
-- **后端**：Go 1.25.1+；`net/http` + REST/JSON（proto 只定义数据结构）；GORM + SQLite / PostgreSQL / MySQL；本地账号 + HS256 JWT；驱动以元数据描述自身配置，前端表单据此自动渲染；支持进程外插件驱动，核心只内置 `local`。
+- **后端**：Go 1.25.1+；`net/http` + REST/JSON（proto 只定义数据结构）；GORM + SQLite / PostgreSQL / MySQL；本地账号 + HS256 JWT；驱动以元数据描述自身配置，前端表单据此自动渲染；支持进程外插件（存储驱动 / 离线下载后端），核心只内置 `local` 驱动、不内置下载器。
 - **客户端**：Flutter（Dart SDK `^3.13.0`），`flutter_bloc` + `go_router` + `Dio`，Hive / SQLite 本地持久化，与后端共用 protobuf 数据结构；另带一套无需构建的 Web UI，已 `//go:embed` 进二进制。
 - **内置驱动**：`local`。
 - **主要能力**：文件树 / 回收站 / 标签 / 历史版本、分片上传与断点续传、BLAKE3 秒传、多提供者副本同步、直链下载（不可直链时自动回退代理）、可控分享、WebDAV、URL 离线下载、缩略图与流式预览、移动端相册与通讯录 / 短信 / 通话记录备份。
@@ -87,7 +87,7 @@ flowchart TB
 │   ├── storage/        # 上传调度、提供者解析、副本维护
 │   └── ...             # auth / config / download / thumbnail / backup
 ├── driver/             # 存储驱动实现；types/ 为驱动接口与元数据注册
-├── plugin/sdk/         # 进程外插件 SDK（把驱动打包成独立进程）
+├── plugin/sdk/         # 进程外插件 SDK（驱动 / 下载器后端都打成独立进程）
 ├── proto/              # Protobuf 定义（数据结构唯一真理源，生成物不入库）
 ├── frontend/           # Flutter 客户端
 ├── cmd/                # cobra 子命令：server / user / plugin / cleanup-* 等
@@ -157,9 +157,38 @@ bash dev.sh flutter run windows     # 运行（设备名可省略，如 android 
    | 配置回写 | `types.ConfigPersisterSetter` | token 续期后写回提供者配置 |
 
 4. **注册**：在 `init()` 里 `types.RegisterStorageDriverWithMetadata(ctor, metadata)`，内置驱动在 `driver/driver.go` 里 import 一行即生效。
-5. **要独立分发就打成插件**：加一个 `plugin.json`，`main` 里 `func main() { sdk.MustServe("<driver_id>") }`；宿主打开 `plugin.enabled` 后通过 loopback RPC 调用同一个驱动。插件与宿主同权限运行，只应安装可信来源的二进制。
+5. **要独立分发就打成驱动插件**：加一个 `plugin.json`（`kind: "driver"` + `driver_id` + `exec` + `abi_version`），`main` 里 `func main() { sdk.MustServe("<driver_id>") }`；宿主打开 `plugin.enabled` 后通过 loopback RPC 调用同一个驱动。插件与宿主同权限运行，只应安装可信来源的二进制。装 / 删 / 回滚插件不用重启服务：`pfm plugin install` 会向运行中的实例发 `SIGHUP` 重新扫描插件目录并重建受影响的 provider（手工等价 `pfm plugin reload` 或 `kill -HUP <pid>`）。
 
 边界：驱动包只能依赖 `driver/types`、`proto/gen/*`、`pkg/*`、`utils`，不要 import `internal/*`，否则编不进独立插件进程。
+
+## 其他类型的插件
+
+`plugin.json` 里的 `kind` 决定宿主怎么用它，目前有两种：
+
+| kind | 身份字段 | 作用 |
+|------|----------|------|
+| `driver` | `driver_id` | 存储驱动，覆盖同 id 的内置驱动 |
+| `downloader` | `downloader_id` | 离线下载后端（提交任务 / 查进度 / 取消） |
+
+`downloader` 类型的插件负责对接真正的下载器（aria2、qBittorrent …），示例实现见
+`pfm-plugin-downloader-aria2`。下载产物落在**宿主机**上，算 BLAKE3、建文件记录、
+分发到各存储提供者这些入库动作仍由核心完成；插件不碰数据库。
+
+```yaml
+plugin:
+  enabled: true
+  dir: plugins
+
+downloader:
+  plugin: aria2        # 用哪个 downloader_id；留空则离线下载不可用
+  options:             # 原样下发给插件（由插件解释）
+    endpoint: http://127.0.0.1:6800/jsonrpc
+    token: ""
+    timeout: "30"
+```
+
+宿主不订阅下载器的推送：每 5 秒对齐一次任务状态（`internal/download/reconcile.go`），
+所以下载器重启、暂停、改选文件这些变化最多 5 秒后收敛。
 
 ## 配置示例
 

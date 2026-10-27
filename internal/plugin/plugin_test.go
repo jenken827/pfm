@@ -118,6 +118,7 @@ func writePluginDir(t *testing.T, driverID string) string {
 		t.Fatalf("取测试二进制路径失败: %v", err)
 	}
 	mf := map[string]any{
+		"kind":        "driver",
 		"driver_id":   driverID,
 		"exec":        execPath,
 		"abi_version": 1,

@@ -20,11 +20,15 @@ const stagingDirName = ".staging"
 
 // installedRecord 一个已安装插件的记录（用于完整性校验与回滚）
 type installedRecord struct {
-	Name       string `json:"name"`
-	DriverID   string `json:"driver_id"`
-	Version    string `json:"version"`
-	ABIVersion uint32 `json:"abi_version"`
-	SHA256     string `json:"sha256"`
+	// Kind 插件类型（driver / …），回滚与完整性校验都按它来
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	DriverID string `json:"driver_id"`
+	// DownloaderID 下载器身份（kind=downloader 才有）
+	DownloaderID string `json:"downloader_id,omitempty"`
+	Version      string `json:"version"`
+	ABIVersion   uint32 `json:"abi_version"`
+	SHA256       string `json:"sha256"`
 	// TreeSHA256 安装目录内容摘要（改过任何一个文件都能发现）
 	TreeSHA256      string    `json:"tree_sha256"`
 	InstalledAt     time.Time `json:"installed_at"`

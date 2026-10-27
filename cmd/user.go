@@ -267,8 +267,10 @@ var userRenameCmd = &cobra.Command{
 		}
 
 		if err := db.UpdateUserUsername(userID, newUsername); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE") ||
-				strings.Contains(err.Error(), "duplicate key") {
+			if errors.Is(err, gorm.ErrDuplicatedKey) ||
+				strings.Contains(err.Error(), "UNIQUE") ||
+				strings.Contains(err.Error(), "duplicate key") ||
+				strings.Contains(err.Error(), "Duplicate entry") {
 				return fmt.Errorf("用户名 %s 已存在", newUsername)
 			}
 			return fmt.Errorf("修改用户名失败: %w", err)

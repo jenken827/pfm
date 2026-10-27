@@ -13,6 +13,10 @@ import (
 // 历史数据回填清理后，这两个索引是"新库也正确"的唯一保证，不能被误删。
 func TestAutoMigrateCreatesSchemaIndexes(t *testing.T) {
 	dbtest.Setup(t) // 内部已跑 db.Init → autoMigrate
+	// MySQL 没有 partial index，同目录重名退化为服务层校验（见 db.ensureFilesUniqueIndex）
+	if dbtest.Dialect != "sqlite3" {
+		t.Skip("只验证 SQLite 的 partial unique index；其他方言见 mysql_schema_test.go")
+	}
 	gdb := db.GetDB()
 
 	indexSQL := func(name string) string {

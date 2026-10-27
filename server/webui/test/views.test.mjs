@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { install, renderView, mountShell, FAIL, RAW, HTTP } from './support/harness.mjs';
+import { install, renderView, mountShell, FAIL, RAW, HTTP, SUCCESS } from './support/harness.mjs';
 
 const ts = '2026-10-20T10:00:00Z';
 
@@ -271,7 +271,7 @@ const ADMIN_USERS = {
     total: '1',
   },
   '/api/admin/provider/list': {
-    providers: [{ id: 1, name: '本地', providerType: 'LOCAL', enabled: true, description: '', defaultBound: true }],
+    providers: [{ id: 1, name: '本地', driverId: 'local', enabled: true, description: '', defaultBound: true }],
     total: '1',
   },
 };
@@ -300,7 +300,7 @@ test('admin users：配额展示按 GB 换算', async () => {
 const ADMIN_PROVIDERS = {
   '/api/admin/provider/list': {
     providers: [{
-      id: 1, name: '本地存储', providerType: 'LOCAL', description: '默认', enabled: true,
+      id: 1, name: '本地存储', driverId: 'local', description: '默认', enabled: true,
       defaultBound: true, sortOrder: 0, totalCapacity: '0', usedCapacity: '1024',
       fileSizeLimit: '0', maxConcurrentUploads: 0, proxy: '',
     }],
@@ -308,12 +308,12 @@ const ADMIN_PROVIDERS = {
   },
   '/api/admin/provider/types': {
     types: [
-      { type: 'LOCAL', displayName: '本地存储', configFields: [] },
+      { driverId: 'local', name: 'LOCAL', displayName: '本地存储', configFields: [] },
       {
-        type: 'PAN123', displayName: '123 云盘',
+        driverId: 'pan123', name: 'PAN123', displayName: '123 云盘',
         configFields: [
-          { key: 'refresh_token', label: '刷新令牌', fieldType: 'FIELD_TYPE_STRING', required: true, secret: true },
-          { key: 'use_proxy', label: '走代理', fieldType: 'FIELD_TYPE_BOOLEAN', required: false },
+          { name: 'refresh_token', label: '刷新令牌', fieldType: 'STRING', required: true, inputType: 'password', selectOptions: [] },
+          { name: 'use_proxy', label: '走代理', fieldType: 'BOOLEAN', required: false, selectOptions: [] },
         ],
       },
     ],
@@ -337,6 +337,49 @@ test('admin providers：新增弹层的类型下拉按接口顺序排列', async
   const select = env.find('select');
   assert.ok(select, '应当渲染出类型下拉');
   assert.deepEqual(select.childNodes.map((o) => o.textContent), ['本地存储', '123 云盘']);
+});
+
+test('admin providers：列表里的类型列按 driverId 显示驱动名', async () => {
+  const routes = structuredClone(ADMIN_PROVIDERS);
+  routes['/api/admin/provider/list'].providers[0].name = '我的盘';
+  const env = install(routes);
+  await renderView(env, V.adminProviders.renderAdminProviders, {});
+  const text = env.text();
+  assert.match(text, /我的盘/);
+  // 类型来自 /api/admin/provider/types 的 driverId → displayName 映射
+  assert.match(text, /本地存储/);
+});
+
+test('admin providers：新增提交 driverId + 动态表单字段', async () => {
+  // 回归：早先这里提交的是 providerType、并读 t.type / provider.providerType，
+  // 真实接口（protojson）用的是 driverId，导致「新增存储源」一律 400 unknown field。
+  const env = install({ ...ADMIN_PROVIDERS, '/api/admin/provider/add': SUCCESS({}) });
+  const main = await renderView(env, V.adminProviders.renderAdminProviders, {});
+  env.clickButton('＋ 新增存储源', main);
+  await env.settle();
+
+  const select = env.find('select');
+  assert.deepEqual(select.childNodes.map((o) => o.value), ['local', 'pan123']);
+  select.value = 'pan123';
+  select.dispatchEvent(new Event('change'));
+  await env.settle();
+
+  const inputs = env.document.querySelectorAll('.modal-body input');
+  const byName = (name) => inputs.find((n) => n.dataset.name === name);
+  // 前两个是「名称 / 描述」，后面是驱动声明的字段
+  inputs[0].value = '我的 123 盘';
+  byName('refresh_token').value = 'tok-123';
+  byName('use_proxy').checked = true;
+
+  // 弹层挂在 #overlays 下，不在 main 里
+  env.clickButton('添加');
+  await env.settle();
+
+  const req = env.requests.find((r) => r.path === '/api/admin/provider/add');
+  assert.ok(req, '应当请求新增接口');
+  assert.equal(req.body.driverId, 'pan123');
+  assert.equal(req.body.name, '我的 123 盘');
+  assert.deepEqual(JSON.parse(req.body.config), { refresh_token: 'tok-123', use_proxy: true });
 });
 
 // ---------------------------------------------------------------- admin: backup
