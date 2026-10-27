@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/driver/types"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -352,7 +353,7 @@ func DeleteBackupFileRecordsByTaskID(taskID uint64) error {
 func GetLocalProviderID() (uint32, error) {
 	ctx := context.Background()
 	var provider native.StorageProviderORM
-	err := db.WithContext(ctx).Where("provider_type = ? AND enabled = ?", int32(native.StorageProviderType_LOCAL), true).First(&provider).Error
+	err := db.WithContext(ctx).Where("provider_type = ? AND enabled = ?", types.DriverLocal, true).First(&provider).Error
 	if err != nil {
 		return 0, err
 	}

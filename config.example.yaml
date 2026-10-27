@@ -108,3 +108,19 @@ transfer:
 thumbnail:
   small: 200 # 网格视图边长
   large: 400 # 全屏预览边长
+
+# 插件驱动（见 DESIGN.md §11.4）。插件是**与宿主同权限的子进程**：能读 config.yaml（含全部
+# token）、能读写 data/，没有任何系统级沙箱。因此默认关闭，只放可信来源的二进制。
+plugin:
+  enabled: false
+  # 插件根目录（相对配置文件所在目录解析），每个子目录一个插件：
+  #   plugins/<name>/plugin.json + 可执行文件
+  dir: plugins
+  # 拉起插件后等待握手 / Configure 的超时（秒）
+  handshake_timeout_seconds: 10
+  configure_timeout_seconds: 30
+  # 官方插件索引（index.json，签名在同 URL + ".sig"）；pfm plugin install 用它
+  index_url: https://github.com/jenken827/pfm-plugins-index/releases/latest/download/index.json
+  # 索引签名公钥（base64 raw ed25519）。留空 = 用内置的官方公钥；
+  # 自建索引时填自己的公钥（自签名自用），此时官方索引会被拒绝
+  public_keys: []

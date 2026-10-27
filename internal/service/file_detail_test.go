@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -24,10 +25,10 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 	// 实例名刻意与驱动类型名（LOCAL）不同，便于发现"用错来源"
 	const instanceName = "我的本地盘"
 	provider := &native.StorageProviderORM{
-		Name:         utils.StringPtr(instanceName),
-		ProviderType: utils.Int32Ptr(int32(native.StorageProviderType_LOCAL)),
-		Config:       utils.StringPtr(`{"root_path":"/tmp/x"}`),
-		Enabled:      utils.BoolPtr(true),
+		Name:     utils.StringPtr(instanceName),
+		DriverId: utils.StringPtr(types.DriverLocal),
+		Config:   utils.StringPtr(`{"root_path":"/tmp/x"}`),
+		Enabled:  utils.BoolPtr(true),
 	}
 	if err := db.CreateStorageProvider(provider); err != nil {
 		t.Fatalf("create provider failed: %v", err)
@@ -79,8 +80,8 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 		t.Errorf("ProviderName = %q, want 实例名 %q（不能用驱动类型名）",
 			got.GetProviderName(), instanceName)
 	}
-	if got.GetProviderType() != native.StorageProviderType_LOCAL {
-		t.Errorf("ProviderType = %v, want LOCAL", got.GetProviderType())
+	if got.GetDriverId() != types.DriverLocal {
+		t.Errorf("DriverId = %q, want %s", got.GetDriverId(), types.DriverLocal)
 	}
 	if got.GetStatus() != native.LocationStatus_PCOMPLETED {
 		t.Errorf("Status = %v, want PCOMPLETED", got.GetStatus())

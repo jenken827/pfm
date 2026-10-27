@@ -283,7 +283,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
     final isChunked = loc.isChunked;
     final chunkTotal = loc.chunkTotal;
     final statusText = _getProviderStatusText(loc.status, al);
-    final isTelegram = loc.providerType == StorageProviderType.TELEGRAM;
+    final isTelegram = loc.hasCacheStatus();
 
     // Telegram 缓存状态
     final cacheStatusText = isTelegram
@@ -300,7 +300,7 @@ class _FileDetailPageState extends State<FileDetailPage> {
           // 第一行：图标 + 名称 + 状态 + 下载按钮
           Row(
             children: [
-              Icon(_getProviderIcon(loc.providerType), size: 20),
+              Icon(_driverIconByName(loc.driverIcon), size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -877,24 +877,6 @@ class _FileDetailPageState extends State<FileDetailPage> {
     }
   }
 
-  IconData _getProviderIcon(StorageProviderType type) {
-    switch (type) {
-      case StorageProviderType.LOCAL:
-        return Icons.computer;
-      case StorageProviderType.TELEGRAM:
-        return Icons.send;
-      case StorageProviderType.DISCORD:
-        return Icons.discord;
-      case StorageProviderType.HUGGINGFACE:
-        return Icons.cloud;
-      case StorageProviderType.PAN123:
-        return Icons.cloud;
-      case StorageProviderType.BAIDU_NETDISK:
-        return Icons.cloud_circle;
-      default:
-        return Icons.cloud;
-    }
-  }
 
   String _getProviderStatusText(LocationStatus status, AppLocalizations al) {
     switch (status) {
@@ -1313,7 +1295,7 @@ class _SyncProviderSelectionDialog extends StatefulWidget {
   });
 
   final List<StorageProvider> providers;
-  final List<StorageProviderTypeInfo> providerTypes;
+  final List<DriverInfo> providerTypes;
 
   @override
   State<_SyncProviderSelectionDialog> createState() =>
@@ -1324,23 +1306,10 @@ class _SyncProviderSelectionDialogState
     extends State<_SyncProviderSelectionDialog> {
   final Set<int> _selectedProviderIds = {};
 
-  /// Get icon from icon name string
-  IconData _typeIcon(String iconName) {
-    final iconMap = {
-      'computer': Icons.computer,
-      'storage': Icons.storage,
-      'telegram': Icons.telegram,
-      'discord': Icons.discord,
-      'cloud': Icons.cloud,
-      'send': Icons.send,
-    };
-    return iconMap[iconName] ?? Icons.storage;
-  }
-
   /// Get provider type display name
-  String _getTypeName(StorageProviderType type) {
+  String _getTypeName(String driverId) {
     final typeInfo = widget.providerTypes
-        .where((t) => t.type == type)
+        .where((t) => t.driverId == driverId)
         .firstOrNull;
     return typeInfo?.displayName.isNotEmpty == true
         ? typeInfo!.displayName
@@ -1348,9 +1317,9 @@ class _SyncProviderSelectionDialogState
   }
 
   /// Get provider icon name
-  String _getIconName(StorageProviderType type) {
+  String _getIconName(String driverId) {
     final typeInfo = widget.providerTypes
-        .where((t) => t.type == type)
+        .where((t) => t.driverId == driverId)
         .firstOrNull;
     return typeInfo?.iconName.isNotEmpty == true
         ? typeInfo!.iconName
@@ -1371,8 +1340,8 @@ class _SyncProviderSelectionDialogState
             final provider = widget.providers[index];
             return CheckboxListTile(
               title: Text(provider.name),
-              subtitle: Text(_getTypeName(provider.providerType)),
-              secondary: Icon(_typeIcon(_getIconName(provider.providerType))),
+              subtitle: Text(_getTypeName(provider.driverId)),
+              secondary: Icon(_driverIconByName(_getIconName(provider.driverId))),
               value: _selectedProviderIds.contains(provider.id),
               onChanged: (value) {
                 setState(() {
@@ -1401,4 +1370,20 @@ class _SyncProviderSelectionDialogState
       ],
     );
   }
+}
+
+/// 驱动图标：按驱动元数据下发的 icon name 映射（未知一律 storage）。
+///
+/// 不再按驱动身份写死：插件新增驱动时只需在 DriverInfo.icon_name 里声明，
+/// 前端无需改动。
+IconData _driverIconByName(String? iconName) {
+  const iconMap = {
+    'computer': Icons.computer,
+    'storage': Icons.storage,
+    'telegram': Icons.telegram,
+    'discord': Icons.discord,
+    'cloud': Icons.cloud,
+    'send': Icons.send,
+  };
+  return iconMap[iconName] ?? Icons.storage;
 }

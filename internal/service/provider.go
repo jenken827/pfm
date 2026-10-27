@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -16,28 +17,26 @@ import (
 func GetStorageProviderTypes(ctx context.Context, req *native.GetStorageProviderTypesReq) (*native.GetStorageProviderTypesRespData, *models.Err) {
 	metadatas := types.GetAllDriverMetadata()
 
-	typeInfos := make([]*native.StorageProviderTypeInfo, 0, len(metadatas))
-	for _, metadata := range metadatas {
-		typeInfo := &native.StorageProviderTypeInfo{
-			Type:         metadata.Type,
-			Name:         metadata.Name,
-			DisplayName:  metadata.DisplayName,
-			Description:  metadata.Description,
-			IconName:     metadata.IconName,
-			ConfigFields: metadata.ConfigFields,
-		}
-		typeInfos = append(typeInfos, typeInfo)
-	}
-
 	return &native.GetStorageProviderTypesRespData{
-		Types: typeInfos,
+		Types: metadatas,
 	}, nil
 }
 
 // AddStorageProvider 添加存储提供者
 func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) *models.Err {
+	driverID := req.GetDriverId()
+	if err := types.ValidateDriverID(driverID); err != nil {
+		return &models.Err{E: err, C: native.RespCode_PARAMS_ERROR}
+	}
+	if types.GetDriverConstructor(driverID) == nil {
+		// 驱动未安装：先装插件再建 provider，否则落库后也没有实例可用。
+		return &models.Err{
+			E: fmt.Errorf("驱动 %q 未安装", driverID),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
 	orm := &native.StorageProviderORM{
-		ProviderType:  utils.EnumPtr(*req.ProviderType),
+		DriverId:      utils.StringPtr(driverID),
 		Name:          req.Name,
 		Config:        req.Config,
 		TotalCapacity: req.TotalCapacity,

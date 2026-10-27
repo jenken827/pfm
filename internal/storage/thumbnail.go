@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 

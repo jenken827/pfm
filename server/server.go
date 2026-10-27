@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"jenken827.com/jenken827/pfm/bootstrap"
 	"net"
 	"net/http"
 	"os"
@@ -14,8 +15,8 @@ import (
 	"golang.org/x/net/http2"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/server/middleware"
 )
 
@@ -124,8 +125,9 @@ func Run() {
 	case err := <-serverErr:
 		// 服务启动失败
 		llog.L().Errorf("Server failed to start: %v", err)
-		// 关闭所有存储驱动
+		// 关闭所有存储驱动与插件进程
 		storage.CloseAll()
+		bootstrap.ClosePlugins()
 		os.Exit(1)
 	case <-quit:
 		// 收到结束信号
@@ -140,8 +142,9 @@ func Run() {
 			llog.L().Errorf("Server shutdown error: %v", err)
 		}
 
-		// 关闭所有存储驱动
+		// 关闭所有存储驱动与插件进程
 		storage.CloseAll()
+		bootstrap.ClosePlugins()
 
 		llog.L().Info("Server exited")
 	}

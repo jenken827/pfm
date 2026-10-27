@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // Go 安全启动 goroutine，自动捕获 panic 并打印堆栈

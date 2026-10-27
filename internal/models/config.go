@@ -26,6 +26,8 @@ type Config struct {
 	RateLimit RateLimitConfig `json:"ratelimit" yaml:"ratelimit"`
 	// 缩略图尺寸（网格 / 预览两档，见 internal/thumbnail）
 	Thumbnail ThumbnailConfig `json:"thumbnail" yaml:"thumbnail"`
+	// 插件驱动（默认关闭；开启后宿主会拉起 plugins/<id>/ 下的子进程）
+	Plugin PluginConfig `json:"plugin" yaml:"plugin"`
 }
 
 // 缩略图默认边长（像素）。放在 models 里是为了让 config 与 thumbnail 都能引用，
@@ -138,7 +140,7 @@ type TransferConfig struct {
 type DirectLinkConfig struct {
 	// 是否启用，默认 true（nil = 启用）
 	Enabled *bool `json:"enabled" yaml:"enabled"`
-	// 允许直链的存储提供者类型白名单（如 pan123 / aliyundrive_open / baidu_netdisk）；
+	// 允许直链的存储提供者类型白名单（如 baidu / pan123 / aliyundrive_open）；
 	// 留空 = 所有实现直链的驱动
 	Providers []string `json:"providers" yaml:"providers"`
 	// 选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
@@ -194,4 +196,23 @@ type Aria2Config struct {
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
 	Token    string `json:"token" yaml:"token"`
 	Timeout  int64  `json:"timeout" yaml:"timeout"`
+}
+
+// PluginConfig 插件驱动配置
+//
+// 插件与宿主同权限运行（同一用户、同一文件系统），加载一个插件等于授予它
+// 读取配置与数据库的权限：只放可信来源的二进制，详见 DESIGN.md 的威胁模型。
+type PluginConfig struct {
+	// Enabled 是否启用插件（默认 false）
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// Dir 插件根目录，每个子目录是一个插件（plugin.json + 可执行文件）
+	Dir string `json:"dir" yaml:"dir"`
+	// HandshakeTimeoutSeconds 拉起插件后等待握手的秒数
+	HandshakeTimeoutSeconds int `json:"handshake_timeout_seconds" yaml:"handshake_timeout_seconds"`
+	// ConfigureTimeoutSeconds Configure 调用的超时秒数（插件可能在这里登录）
+	ConfigureTimeoutSeconds int `json:"configure_timeout_seconds" yaml:"configure_timeout_seconds"`
+	// IndexURL 官方插件索引地址（index.json，签名在同 URL + ".sig"）
+	IndexURL string `json:"index_url" yaml:"index_url"`
+	// PublicKeys 索引签名公钥（base64 raw ed25519）；留空用内置的官方公钥
+	PublicKeys []string `json:"public_keys" yaml:"public_keys"`
 }

@@ -8,8 +8,8 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // dedupCmd 子树去重：阶段 1 按 hash 合并，阶段 2 按「同名 + (N) 后缀」配对核验（保大）

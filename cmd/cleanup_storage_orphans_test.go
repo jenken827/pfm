@@ -10,7 +10,6 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // fakeRootLister 只实现 RemoteRoot，用于测扫描根解析
@@ -22,29 +21,31 @@ func (f fakeRootLister) ListRemote(_ context.Context, _ string) ([]types.RemoteE
 	return nil, nil
 }
 
-// TestRemoteListSupported 能力表必须与驱动实现保持一致：Telegram 明确不支持
+// TestRemoteListSupported 能力判定必须与驱动的能力声明一致：Telegram 明确不支持
 func TestRemoteListSupported(t *testing.T) {
-	supported := []native.StorageProviderType{
-		native.StorageProviderType_LOCAL,
-		native.StorageProviderType_PAN123,
-		native.StorageProviderType_BAIDU_NETDISK,
-		native.StorageProviderType_ALIYUNDRIVE_OPEN,
-		native.StorageProviderType_YUN139,
-		native.StorageProviderType_CLOUD189_PC,
+	supported := []string{
+		types.DriverLocal,
+		types.DriverPan123,
+		types.DriverAliyundriveOpen,
+		types.DriverYun139,
+		types.DriverCloud189pc,
 	}
 	for _, tp := range supported {
 		if !remoteListSupported(tp) {
-			t.Fatalf("%v 应支持远端枚举", tp)
+			t.Fatalf("%s 应支持远端枚举", tp)
 		}
 	}
-	for _, tp := range []native.StorageProviderType{
-		native.StorageProviderType_TELEGRAM,
-		native.StorageProviderType_DISCORD,
-		native.StorageProviderType_HUGGINGFACE,
-		native.StorageProviderType_PROVIDER_UNSPECIFIED,
+	// baidu 已迁出为插件：未安装插件时没有元数据，判定为不支持（能力由插件 Describe 提供）
+	for _, tp := range []string{
+		types.DriverTelegram,
+		types.DriverDiscord,
+		types.DriverHuggingFace,
+		types.DriverBaidu,
+		"",
+		"nonexistent_driver",
 	} {
 		if remoteListSupported(tp) {
-			t.Fatalf("%v 不应支持远端枚举", tp)
+			t.Fatalf("%q 不应支持远端枚举", tp)
 		}
 	}
 }

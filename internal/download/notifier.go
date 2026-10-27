@@ -15,13 +15,14 @@ import (
 	"github.com/google/uuid"
 	"lukechampine.com/blake3"
 
+	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/fileutil"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -488,7 +489,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 		encryptionKey := pcfg.EncryptionKey
 
 		// 4.3 创建解密器
-		decryptor, err := storage.NewCryptEncryptor(encryptionKey, salt)
+		decryptor, err := cryptostream.NewCryptEncryptor(encryptionKey, salt)
 		if err != nil {
 			llog.L().Errorf("create decryptor failed: %v", err)
 			return

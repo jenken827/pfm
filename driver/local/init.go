@@ -13,13 +13,13 @@ type LocalDriver struct {
 }
 
 // GetType 获取驱动类型
-func (t *LocalDriver) GetType() native.StorageProviderType {
-	return native.StorageProviderType_LOCAL
+func (t *LocalDriver) GetType() string {
+	return types.DriverLocal
 }
 
 // GetName 获取驱动名称
 func (t *LocalDriver) GetName() string {
-	return native.StorageProviderType_LOCAL.String()
+	return types.DriverLocal
 }
 
 // GetConfig 获取驱动配置

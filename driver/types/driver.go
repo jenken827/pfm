@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"time"
-
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // ReadSeekCloser 支持定位的 Reader（用于断点续传）
@@ -17,7 +15,8 @@ type ReadSeekCloser interface {
 
 // StorageDriver 存储驱动
 type StorageDriver interface {
-	GetType() native.StorageProviderType
+	// GetType 返回驱动身份（稳定字符串，如 local / baidu，见 ids.go）
+	GetType() string
 	GetName() string
 	// GetConfig 获取驱动自身配置
 	GetConfig() any

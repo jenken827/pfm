@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // MaxFilesPerDir 每个目录最大文件数

@@ -24,10 +24,15 @@ message StorageProvider {
   optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
   optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
 
-  // 类型
-  optional StorageProviderType provider_type = 5 [
-    (gorm.field).tag = {not_null: true},
-    (buf.validate.field).required = true
+  // 驱动身份（稳定字符串，如 local / baidu / aliyundrive_open）
+  //
+  // 由驱动在注册或加载时声明，发布后不可更改：改了库里的 provider 就
+  // 找不到驱动。规则见 driver/types.ValidateDriverID。
+  optional string driver_id = 5 [
+    (gorm.field).tag = {not_null: true, column: "provider_type"},
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 32
   ];
   // 实例名称
   optional string name = 6 [
@@ -160,10 +165,10 @@ message ConfigSelectOption {
   string label = 2;
 }
 
-// StorageProviderTypeInfo 存储提供者类型信息
-message StorageProviderTypeInfo {
-  // 类型枚举值
-  optional StorageProviderType type = 1;
+// DriverInfo 驱动元数据
+message DriverInfo {
+  // 驱动身份（稳定字符串）
+  optional string driver_id = 1;
   // 类型名称
   optional string name = 2;
   // 显示名称
@@ -174,6 +179,8 @@ message StorageProviderTypeInfo {
   optional string icon_name = 5;
   // 配置字段列表
   repeated ConfigField config_fields = 6;
+  // 驱动声明的可选能力
+  repeated DriverCapability capabilities = 7;
 }
 
 // GetStorageProviderTypesReq 获取存储提供者类型列表请求
@@ -183,7 +190,7 @@ message GetStorageProviderTypesReq {
 
 // GetStorageProviderTypesRespData 获取存储提供者类型列表响应
 message GetStorageProviderTypesRespData {
-  repeated StorageProviderTypeInfo types = 1;
+  repeated DriverInfo types = 1;
 }
 
 
@@ -195,8 +202,12 @@ message StorageProviderDeleteReq {
 
 // AddStorageProviderReq 创建存储提供者请求
 message AddStorageProviderReq {
-  // 类型
-  optional StorageProviderType provider_type = 1 [(buf.validate.field).required = true];
+  // 驱动身份
+  optional string driver_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 32
+  ];
   // 实例名称
   optional string name = 2 [
     (buf.validate.field).required = true,

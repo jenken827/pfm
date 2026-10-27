@@ -1,7 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pfm/api/api.dart';
-import 'package:pfm/proto/native/enum.pbenum.dart';
 import 'package:pfm/proto/native/provider.pb.dart';
 
 part 'storage_provider_event.dart';
@@ -85,7 +84,7 @@ class StorageProviderBloc
     Emitter<StorageProviderState> emit,
   ) async {
     final result = await _repository.addStorageProvider(
-      providerType: event.providerType,
+      driverId: event.driverId,
       name: event.name,
       description: event.description,
       config: event.config,

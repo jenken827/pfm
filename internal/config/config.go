@@ -108,6 +108,15 @@ func defaultConfig() *models.Config {
 			ThumbnailRefillMS: 5,
 		},
 
+		// 插件驱动：默认关闭，插件目录相对于数据目录所在位置由用户指定
+		Plugin: models.PluginConfig{
+			Enabled:                 false,
+			Dir:                     "plugins",
+			HandshakeTimeoutSeconds: 10,
+			ConfigureTimeoutSeconds: 30,
+			IndexURL:                "https://github.com/jenken827/pfm-plugins-index/releases/latest/download/index.json",
+		},
+
 		// 缩略图两档边长（像素）：网格 200、全屏预览 400
 		Thumbnail: models.ThumbnailConfig{
 			Small: models.DefaultThumbnailSmallSize,

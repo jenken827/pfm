@@ -4,19 +4,26 @@ package native;
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
-// StorageProviderType
-// 存储提供者类型
-enum StorageProviderType {
-  PROVIDER_UNSPECIFIED = 0;
-  LOCAL = 1;
-  TELEGRAM = 2;
-  DISCORD = 3;
-  HUGGINGFACE = 4;
-  PAN123 = 5;
-  BAIDU_NETDISK = 6;
-  ALIYUNDRIVE_OPEN = 7;
-  YUN139 = 8;
-  CLOUD189_PC = 9;
+// DriverCapability
+// 驱动可选能力
+//
+// 驱动在 DriverInfo.capabilities 里静态声明，宿主据此决定是否把它当作
+// types.BatchDeleter / types.DirectLinker / types.RemoteLister /
+// types.PreDownloader 使用。声明必须与实现一致：
+// 多声明会把不支持的操作派进来，少声明则能力对上层不可见。
+//
+// 注意：这里没有「加密」能力 —— 加密由宿主下发 key/salt，驱动只负责按
+// 给定的 Encryptor 读写，与能力无关。
+enum DriverCapability {
+  DRIVER_CAPABILITY_UNSPECIFIED = 0;
+  // BatchDeleter：批量删除远程对象
+  DRIVER_CAPABILITY_BATCH_DELETE = 1;
+  // DirectLinker：签发客户端可直连的下载直链
+  DRIVER_CAPABILITY_DIRECT_LINK = 2;
+  // RemoteLister：枚举远端对象（cleanup-storage-orphans 依赖）
+  DRIVER_CAPABILITY_REMOTE_LIST = 3;
+  // PreDownloader：大文件预缓存
+  DRIVER_CAPABILITY_PREDOWNLOAD = 4;
 }
 
 // ConfigFieldType

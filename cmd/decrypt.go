@@ -3,14 +3,14 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"os"
 
 	"github.com/spf13/cobra"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
-	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // decryptCmd 按 file_locations id 解密本地加密文件
@@ -84,7 +84,7 @@ var decryptCmd = &cobra.Command{
 		}
 
 		// 5. 解密
-		enc, err := storage.NewCryptEncryptor(key, salt)
+		enc, err := cryptostream.NewCryptEncryptor(key, salt)
 		if err != nil {
 			return fmt.Errorf("创建加密器失败: %w", err)
 		}

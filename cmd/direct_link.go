@@ -17,8 +17,8 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -46,7 +46,7 @@ type directLinkOptions struct {
 type directLinkRow struct {
 	ProviderID       uint32            `json:"provider_id"`
 	ProviderName     string            `json:"provider_name"`
-	ProviderType     string            `json:"provider_type"`
+	DriverId         string            `json:"driver_id"`
 	Chunks           int               `json:"chunks"`
 	Encrypted        bool              `json:"encrypted"`
 	Eligible         bool              `json:"eligible"`
@@ -215,8 +215,8 @@ func buildDirectLinkRow(ctx context.Context, providerID uint32,
 		if sp.Name != nil {
 			row.ProviderName = *sp.Name
 		}
-		if sp.ProviderType != nil {
-			row.ProviderType = native.StorageProviderType_name[*sp.ProviderType]
+		if sp.DriverId != nil {
+			row.DriverId = *sp.DriverId
 		}
 	}
 	for _, loc := range locs {
@@ -232,7 +232,7 @@ func buildDirectLinkRow(ctx context.Context, providerID uint32,
 	}
 	linker, ok := drv.(types.DirectLinker)
 	if !ok {
-		row.IneligibleReason = fmt.Sprintf("%s 驱动未实现 DirectLinker（如 telegram/local）", row.ProviderType)
+		row.IneligibleReason = fmt.Sprintf("%s 驱动未声明 DIRECT_LINK 能力（如 telegram/local）", row.DriverId)
 		return row
 	}
 
@@ -369,9 +369,9 @@ func printDirectLinkText(file *native.FileORM, rows []directLinkRow) {
 
 // printDirectLinkRow 打印单个提供者的结果
 func printDirectLinkRow(row *directLinkRow) {
-	title := row.ProviderType
+	title := row.DriverId
 	if row.ProviderName != "" {
-		title = fmt.Sprintf("%s(%s)", row.ProviderType, row.ProviderName)
+		title = fmt.Sprintf("%s(%s)", row.DriverId, row.ProviderName)
 	}
 	fmt.Printf("\n===== provider %d %s =====\n", row.ProviderID, title)
 	fmt.Printf("分片=%d 加密=%v\n", row.Chunks, row.Encrypted)

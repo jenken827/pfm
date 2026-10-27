@@ -10,9 +10,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -213,7 +214,7 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 				salt = *sourceLocations[0].EncryptionSalt
 			}
 			// 创建加密器用于解密
-			encryptor, err = NewCryptEncryptor(pcfg.EncryptionKey, salt)
+			encryptor, err = cryptostream.NewCryptEncryptor(pcfg.EncryptionKey, salt)
 			if err != nil {
 				markUploadFailed(ctx, ur, fmt.Sprintf("create encryptor failed: %v", err))
 				return

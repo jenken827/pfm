@@ -136,10 +136,10 @@ func loadProviderTypeNames() (map[uint32]string, error) {
 	}
 	names := make(map[uint32]string, len(providers))
 	for _, p := range providers {
-		if p.Id == nil || p.ProviderType == nil {
+		if p.Id == nil || p.DriverId == nil {
 			continue
 		}
-		names[*p.Id] = native.StorageProviderType_name[*p.ProviderType]
+		names[*p.Id] = *p.DriverId
 	}
 	return names, nil
 }

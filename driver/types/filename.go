@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // DefaultEncryptionSuffix 默认加密文件后缀

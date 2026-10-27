@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"jenken827.com/jenken827/pfm/driver/types"
 )
 
@@ -20,7 +21,7 @@ func prepareEncryptor(fileEncrypt bool, pcfg *types.ProviderConfig) (types.Encry
 		saltStr := hex.EncodeToString(saltBytes)
 
 		// 创建加密器
-		enc, err := NewCryptEncryptor(pcfg.EncryptionKey, saltStr)
+		enc, err := cryptostream.NewCryptEncryptor(pcfg.EncryptionKey, saltStr)
 		if err != nil {
 			return nil, "", fmt.Errorf("create encryptor failed: %v", err)
 		}

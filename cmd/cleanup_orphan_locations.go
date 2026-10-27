@@ -9,8 +9,8 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // cleanupOrphanLocationsCmd 清理孤儿 file_locations 行（跨所有提供者）

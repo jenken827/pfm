@@ -4,15 +4,19 @@ import (
 	"encoding/json"
 
 	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
 func init() {
 	// 定义本地存储驱动的元数据
-	metadata := &native.StorageProviderTypeInfo{
-		Type:        native.StorageProviderType_LOCAL.Enum(),
+	metadata := &native.DriverInfo{
+		DriverId: utils.StringPtr(types.DriverLocal),
+		Capabilities: []native.DriverCapability{
+			native.DriverCapability_DRIVER_CAPABILITY_BATCH_DELETE,
+			native.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST,
+		},
 		Name:        utils.StringPtr("LOCAL"),
 		DisplayName: utils.StringPtr("本地存储"),
 		Description: utils.StringPtr("使用本地文件系统存储文件"),

@@ -23,6 +23,27 @@ type Encryptor interface {
 	IsEncrypted() bool
 }
 
+// EncryptorParamProvider 可选接口：能给出重建加密器所需的原始参数
+//
+// 跨进程（插件）场景下宿主不能传递 Encryptor 对象，只能把 key+salt 下发，
+// 由插件侧用 driver/cryptostream 重建等价加密器。
+type EncryptorParamProvider interface {
+	EncryptorParams() (key, salt string)
+}
+
+// EncryptorParams 取加密器的重建参数；不加密或实现不了时返回 ok=false
+func EncryptorParams(enc Encryptor) (key, salt string, ok bool) {
+	if enc == nil || !enc.IsEncrypted() {
+		return "", "", false
+	}
+	provider, ok := enc.(EncryptorParamProvider)
+	if !ok {
+		return "", "", false
+	}
+	key, salt = provider.EncryptorParams()
+	return key, salt, key != ""
+}
+
 // NullEncryptor 空加密器（不加密）
 type NullEncryptor struct{}
 

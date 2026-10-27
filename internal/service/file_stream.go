@@ -9,12 +9,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"jenken827.com/jenken827/pfm/driver/telegram"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -467,7 +468,8 @@ func CheckFileIsImage(fileID string) bool {
 // 不能使用 sourceLocations[0].Size，因为 Telegram API 可能返回错误的值。
 func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations []*native.FileLocationORM, fileID string, sourceProviderID uint32, fileSize *int64) map[string]any {
 	llog.L().Infof("checkTelegramPreDownload ENTER: file_id=%s, storage_type=%v, fileSize=%v, locs=%d", fileID, sourceStorage.GetType(), fileSize, len(sourceLocations))
-	if sourceStorage.GetType() != native.StorageProviderType_TELEGRAM {
+	// 只有声明了 PREDOWNLOAD 能力的驱动（telegram 类）才有预缓存状态
+	if !types.HasCapability(types.GetDriverMetadata(sourceStorage.GetType()), native.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD) {
 		return nil
 	}
 
@@ -552,7 +554,7 @@ func createEncryptorIfNeeded(sourceStorage types.StorageDriver, sourceLocations 
 		salt = *sourceLocations[0].EncryptionSalt
 	}
 
-	return storage.NewCryptEncryptor(pcfg.EncryptionKey, salt)
+	return cryptostream.NewCryptEncryptor(pcfg.EncryptionKey, salt)
 }
 
 // getThumbnailCacheDir 获取缩略图缓存目录

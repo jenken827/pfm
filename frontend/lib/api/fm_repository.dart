@@ -1159,7 +1159,7 @@ class FmRepository {
 
   /// 添加存储提供者
   Future<ApiResult<void>> addStorageProvider({
-    required StorageProviderType providerType,
+    required String driverId,
     required String name,
     String? description,
     String? config,
@@ -1174,7 +1174,7 @@ class FmRepository {
     int? maxConcurrentUploads,
   }) async {
     try {
-      final req = AddStorageProviderReq(providerType: providerType, name: name);
+      final req = AddStorageProviderReq(driverId: driverId, name: name);
 
       if (description != null) req.description = description;
       if (config != null) req.config = config;

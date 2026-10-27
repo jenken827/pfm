@@ -15,7 +15,7 @@ class StorageProviderState extends Equatable {
   final StorageProviderStatus status;
   final String message;
   final List<StorageProvider> providers;
-  final List<StorageProviderTypeInfo> providerTypes;
+  final List<DriverInfo> providerTypes;
 
   @override
   List<Object?> get props => [status, message, providers, providerTypes];
@@ -24,7 +24,7 @@ class StorageProviderState extends Equatable {
     StorageProviderStatus? status,
     String? message,
     List<StorageProvider>? providers,
-    List<StorageProviderTypeInfo>? providerTypes,
+    List<DriverInfo>? providerTypes,
   }) {
     return StorageProviderState(
       status: status ?? this.status,

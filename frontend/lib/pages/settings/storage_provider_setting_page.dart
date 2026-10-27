@@ -126,13 +126,13 @@ class _StorageProviderView extends StatelessWidget {
     }
 
     final formKey = GlobalKey<FormBuilderState>();
-    StorageProviderTypeInfo? selectedTypeInfo;
+    DriverInfo? selectedTypeInfo;
 
     // 初始化选中的类型
     if (provider != null) {
       selectedTypeInfo = providerTypes.isNotEmpty
           ? providerTypes.firstWhere(
-              (t) => t.type == provider.providerType,
+              (t) => t.driverId == provider.driverId,
               orElse: () => providerTypes.first,
             )
           : null;
@@ -202,7 +202,7 @@ class _StorageProviderView extends StatelessWidget {
                     const SizedBox(height: 12),
                     // 添加时显示类型选择器
                     if (provider == null && providerTypes.isNotEmpty) ...[
-                      FormBuilderDropdown<StorageProviderTypeInfo>(
+                      FormBuilderDropdown<DriverInfo>(
                         name: 'provider_type',
                         decoration: InputDecoration(
                           labelText: al.storageProvider_storageType,
@@ -542,7 +542,7 @@ class _StorageProviderView extends StatelessWidget {
                   // 获取有效的提供者类型（确保非空）
                   final effectiveTypeInfo = selectedTypeInfo;
                   final effectiveProviderType =
-                      provider?.providerType ?? effectiveTypeInfo?.type;
+                      provider?.driverId ?? effectiveTypeInfo?.driverId;
 
                   if (effectiveTypeInfo != null) {
                     final configMap = <String, dynamic>{};
@@ -582,9 +582,9 @@ class _StorageProviderView extends StatelessWidget {
                   context.read<StorageProviderBloc>().add(
                     provider == null
                         ? StorageProviderAddEvent(
-                            providerType:
+                            driverId:
                                 effectiveProviderType ??
-                                effectiveTypeInfo!.type,
+                                effectiveTypeInfo!.driverId,
                             name: formData['name'],
                             description:
                                 formData['description']?.isNotEmpty == true
@@ -642,7 +642,7 @@ class _StorageProviderView extends StatelessWidget {
   /// 现场补拉存储提供者类型列表（首次拉取失败后的补救）。
   /// 成功后写回 bloc，避免同一次进入页面内反复补拉。
   /// 返回空列表表示仍未成功，失败原因已通过 SnackBar 提示。
-  Future<List<StorageProviderTypeInfo>> _reloadProviderTypes(
+  Future<List<DriverInfo>> _reloadProviderTypes(
     BuildContext context,
     AppLocalizations al,
   ) async {
@@ -672,7 +672,7 @@ class _StorageProviderView extends StatelessWidget {
       return const [];
     }
 
-    final types = result.data?.types.toList() ?? <StorageProviderTypeInfo>[];
+    final types = result.data?.types.toList() ?? <DriverInfo>[];
     if (types.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(al.storageProvider_typesNotLoaded)),

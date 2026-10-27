@@ -3,7 +3,6 @@ package driver
 import (
 	// 隐式加载所有驱动
 	_ "jenken827.com/jenken827/pfm/driver/aliyundrive_open"
-	_ "jenken827.com/jenken827/pfm/driver/baidu_netdisk"
 	_ "jenken827.com/jenken827/pfm/driver/cloud189pc"
 	_ "jenken827.com/jenken827/pfm/driver/local"
 	_ "jenken827.com/jenken827/pfm/driver/pan123"

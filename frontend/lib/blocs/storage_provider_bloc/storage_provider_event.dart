@@ -19,13 +19,13 @@ class StorageProviderLoadEvent extends StorageProviderEvent {
 class StorageProviderTypesLoadedEvent extends StorageProviderEvent {
   const StorageProviderTypesLoadedEvent(this.types);
 
-  final List<StorageProviderTypeInfo> types;
+  final List<DriverInfo> types;
 }
 
 /// 添加存储介质
 class StorageProviderAddEvent extends StorageProviderEvent {
   const StorageProviderAddEvent({
-    required this.providerType,
+    required this.driverId,
     required this.name,
     this.description,
     this.config,
@@ -40,7 +40,7 @@ class StorageProviderAddEvent extends StorageProviderEvent {
     this.maxConcurrentUploads,
   });
 
-  final StorageProviderType providerType;
+  final String driverId;
   final String name;
   final String? description;
   final String? config;

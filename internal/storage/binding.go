@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // 本文件集中定义「目录绑定 → 落盘存储提供者集合」的解析规则。

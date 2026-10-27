@@ -9,9 +9,9 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -168,9 +168,8 @@ func buildDirectLinkResp(file *native.FileORM, providerID uint32,
 	if !link.ExpiresAt.IsZero() {
 		resp.ExpiresAt = timestamppb.New(link.ExpiresAt)
 	}
-	if sp, err := db.GetProviderByID(providerID); err == nil && sp.ProviderType != nil {
-		providerType := native.StorageProviderType(*sp.ProviderType)
-		resp.ProviderType = &providerType
+	if sp, err := db.GetProviderByID(providerID); err == nil && sp.DriverId != nil {
+		resp.DriverId = sp.DriverId
 	}
 	return resp
 }
@@ -193,12 +192,12 @@ func directLinkProviderAllowed(providerID uint32) bool {
 		return true
 	}
 	sp, err := db.GetProviderByID(providerID)
-	if err != nil || sp.ProviderType == nil {
+	if err != nil || sp.DriverId == nil {
 		return false
 	}
-	typeName := native.StorageProviderType_name[*sp.ProviderType]
+	driverID := *sp.DriverId
 	for _, allowed := range whitelist {
-		if allowed == typeName {
+		if types.NormalizeDriverID(allowed) == driverID {
 			return true
 		}
 	}

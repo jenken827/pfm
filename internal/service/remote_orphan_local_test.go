@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
@@ -19,11 +20,11 @@ func setupLocalProvider(t *testing.T, root string) uint32 {
 	t.Helper()
 	const providerID uint32 = 4242 // 与其他用例隔离的固定 id
 	if err := db.CreateStorageProvider(&native.StorageProviderORM{
-		Id:           utils.Uint32Ptr(providerID),
-		Name:         utils.StringPtr("test-local-orphan"),
-		ProviderType: utils.EnumPtr(native.StorageProviderType_LOCAL),
-		Config:       utils.StringPtr(fmt.Sprintf(`{"root_path":%q}`, root)),
-		Enabled:      utils.BoolPtr(true),
+		Id:       utils.Uint32Ptr(providerID),
+		Name:     utils.StringPtr("test-local-orphan"),
+		DriverId: utils.StringPtr(types.DriverLocal),
+		Config:   utils.StringPtr(fmt.Sprintf(`{"root_path":%q}`, root)),
+		Enabled:  utils.BoolPtr(true),
 	}); err != nil {
 		t.Fatalf("创建 provider 失败: %v", err)
 	}
@@ -99,11 +100,11 @@ func TestScanRemoteOrphansUnsupportedProvider(t *testing.T) {
 	dbtest.Setup(t)
 	const providerID uint32 = 4243
 	if err := db.CreateStorageProvider(&native.StorageProviderORM{
-		Id:           utils.Uint32Ptr(providerID),
-		Name:         utils.StringPtr("test-telegram-orphan"),
-		ProviderType: utils.EnumPtr(native.StorageProviderType_TELEGRAM),
-		Config:       utils.StringPtr(`{"bot_token":"x","chat_id":1}`),
-		Enabled:      utils.BoolPtr(true),
+		Id:       utils.Uint32Ptr(providerID),
+		Name:     utils.StringPtr("test-telegram-orphan"),
+		DriverId: utils.StringPtr(types.DriverTelegram),
+		Config:   utils.StringPtr(`{"bot_token":"x","chat_id":1}`),
+		Enabled:  utils.BoolPtr(true),
 	}); err != nil {
 		t.Fatalf("创建 provider 失败: %v", err)
 	}

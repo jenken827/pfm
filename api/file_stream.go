@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/server/middleware"
 	"jenken827.com/jenken827/pfm/utils"
 )

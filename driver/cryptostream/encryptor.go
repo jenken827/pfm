@@ -1,4 +1,4 @@
-package storage
+package cryptostream
 
 import (
 	"context"
@@ -11,6 +11,10 @@ import (
 // CryptEncryptor 基于 crypt.Cipher 的加密器
 type CryptEncryptor struct {
 	cipher *crypt.Cipher
+	// 保留原始参数：插件模式下宿主需要把 key+salt 下发给插件进程，
+	// 让插件用公共包重建同一个加密器（cipher 本身不可序列化）
+	password string
+	salt     string
 }
 
 // NewCryptEncryptor 创建加密器
@@ -19,7 +23,12 @@ func NewCryptEncryptor(password, salt string) (*CryptEncryptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &CryptEncryptor{cipher: cipher}, nil
+	return &CryptEncryptor{cipher: cipher, password: password, salt: salt}, nil
+}
+
+// EncryptorParams 实现 types.EncryptorParamProvider：给出重建参数
+func (e *CryptEncryptor) EncryptorParams() (string, string) {
+	return e.password, e.salt
 }
 
 // Encrypt 加密数据

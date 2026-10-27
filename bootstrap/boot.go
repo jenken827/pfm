@@ -1,16 +1,48 @@
 package bootstrap
 
 import (
+	"context"
+	"time"
+
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/backup"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/download"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/internal/plugin"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 )
+
+// plugins 插件管理器（未启用时为 nil）
+var plugins *plugin.Manager
+
+// initPlugins 按配置加载插件；单个插件失败只记日志，不影响启动
+func initPlugins() {
+	pluginCfg := config.GetConfig().Plugin
+	if !pluginCfg.Enabled {
+		return
+	}
+	manager := plugin.NewManager(plugin.Options{
+		Dir:              plugin.ResolveDir(pluginCfg.Dir),
+		HandshakeTimeout: time.Duration(pluginCfg.HandshakeTimeoutSeconds) * time.Second,
+		ConfigureTimeout: time.Duration(pluginCfg.ConfigureTimeoutSeconds) * time.Second,
+	})
+	if err := manager.Load(context.Background()); err != nil {
+		llog.L().Errorf("加载插件失败: %v", err)
+	}
+	plugins = manager
+}
+
+// ClosePlugins 结束插件进程（服务退出时调用）
+func ClosePlugins() {
+	if plugins != nil {
+		plugins.Close()
+		plugins = nil
+	}
+}
 
 // Init 初始化
 func Init() {
@@ -40,6 +72,9 @@ func Init() {
 
 	// 初始化存储
 	storage.Init()
+
+	// 插件驱动（默认关闭）：在存储之后加载，插件会覆盖对应 driver_id 的构造器
+	initPlugins()
 
 	// 初始化备份调度器
 	backup.Init()

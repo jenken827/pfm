@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/schema"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -108,6 +108,11 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 // 回填、is_ready 脏数据修复）。新增需要回填的字段时，按同样的方式写幂等迁移函数挂到
 // 这里，确认线上执行完后再删。
 func autoMigrate() error {
+	// 驱动身份（provider_type）字符串化必须在 AutoMigrate 之前：模型已是 string，
+	// GORM 对 int -> varchar 只会生成没有 USING 的 ALTER COLUMN。
+	if err := migrateProviderTypeToString(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(
 		&native.FileORM{},
 		&native.FileTagORM{},

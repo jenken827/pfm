@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
@@ -63,10 +64,10 @@ func TestDirectLinkEnabledDefaultOn(t *testing.T) {
 func TestDirectLinkProviderAllowedWhitelist(t *testing.T) {
 	dbtest.Setup(t)
 	provider := &native.StorageProviderORM{
-		Name:         utils.StringPtr("123盘"),
-		ProviderType: utils.Int32Ptr(int32(native.StorageProviderType_PAN123)),
-		Config:       utils.StringPtr(`{}`),
-		Enabled:      utils.BoolPtr(true),
+		Name:     utils.StringPtr("123盘"),
+		DriverId: utils.StringPtr(types.DriverPan123),
+		Config:   utils.StringPtr(`{}`),
+		Enabled:  utils.BoolPtr(true),
 	}
 	if err := db.CreateStorageProvider(provider); err != nil {
 		t.Fatalf("create provider failed: %v", err)
@@ -102,10 +103,10 @@ func TestGetFileDirectLinkUnavailable(t *testing.T) {
 	rootID := createTestFolder(t, userID, "root-"+userID, "")
 
 	provider := &native.StorageProviderORM{
-		Name:         utils.StringPtr("移动云"),
-		ProviderType: utils.Int32Ptr(int32(native.StorageProviderType_YUN139)),
-		Config:       utils.StringPtr(`{}`),
-		Enabled:      utils.BoolPtr(true),
+		Name:     utils.StringPtr("移动云"),
+		DriverId: utils.StringPtr(types.DriverYun139),
+		Config:   utils.StringPtr(`{}`),
+		Enabled:  utils.BoolPtr(true),
 	}
 	if err := db.CreateStorageProvider(provider); err != nil {
 		t.Fatalf("create provider failed: %v", err)

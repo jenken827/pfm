@@ -5,10 +5,11 @@ import (
 	"errors"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -155,16 +156,15 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 	var result []*native.ProviderLocationInfo
 	// 实例名/类型批量取一次（避免逐 provider 查库）
 	//
-	// 注意不能用 st.GetName()：各驱动的 GetName() 返回的是**驱动类型名**
-	// （LocalDriver 返回 "LOCAL"、Telegram 返回 "TELEGRAM"…），同类型多实例
-	// 无法区分；实例名在 storage_providers.name。provider 行已被删除（位置行还在）
-	// 时回退到驱动类型名。
+	// 注意不能用 st.GetName()：各驱动的 GetName() 返回的是**驱动身份**
+	// （local / telegram…），同驱动多实例无法区分；实例名在 storage_providers.name。
+	// provider 行已被删除（位置行还在）时回退到驱动身份。
 	ids := make([]uint32, 0, len(groupMap))
 	for id := range groupMap {
 		ids = append(ids, id)
 	}
 	nameByID := make(map[uint32]string, len(ids))
-	typeByID := make(map[uint32]native.StorageProviderType, len(ids))
+	typeByID := make(map[uint32]string, len(ids))
 	if providers, err := db.GetStorageProvidersByIDs(ids); err == nil {
 		for _, p := range providers {
 			if p == nil || p.Id == nil {
@@ -173,8 +173,8 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			if p.Name != nil && *p.Name != "" {
 				nameByID[*p.Id] = *p.Name
 			}
-			if p.ProviderType != nil {
-				typeByID[*p.Id] = native.StorageProviderType(*p.ProviderType)
+			if p.DriverId != nil {
+				typeByID[*p.Id] = *p.DriverId
 			}
 		}
 	}
@@ -182,13 +182,13 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 	for _, group := range groupMap {
 		st := storage.GetStorage(group.providerID)
 		providerName := nameByID[group.providerID]
-		providerType, hasType := typeByID[group.providerID]
+		driverID, hasDriverID := typeByID[group.providerID]
 		if st != nil {
 			if providerName == "" {
 				providerName = st.GetName()
 			}
-			if !hasType {
-				providerType = st.GetType()
+			if !hasDriverID {
+				driverID = st.GetType()
 			}
 		}
 
@@ -197,7 +197,7 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 		info := &native.ProviderLocationInfo{
 			ProviderId:   &group.providerID,
 			ProviderName: &providerName,
-			ProviderType: &providerType,
+			DriverId:     &driverID,
 			Encrypted:    &group.encrypted,
 			IsChunked:    &isChunked,
 			ChunkTotal:   &group.chunkTotal,
@@ -205,6 +205,9 @@ func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.Pro
 			Size:         &group.size,
 			CacheStatus:  &group.cacheStatus,
 			StoragePath:  &group.storagePath,
+		}
+		if metadata := types.GetDriverMetadata(driverID); metadata != nil && metadata.IconName != nil {
+			info.DriverIcon = metadata.IconName
 		}
 		result = append(result, info)
 	}

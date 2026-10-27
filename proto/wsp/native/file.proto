@@ -377,8 +377,8 @@ message ProviderLocationInfo {
   optional uint32 provider_id = 1;
   // 存储提供者名称
   optional string provider_name = 2;
-  // 存储提供者类型
-  optional StorageProviderType provider_type = 3;
+  // 驱动身份
+  optional string driver_id = 3;
   // 是否已加密
   optional bool encrypted = 4;
   // 是否分片存储
@@ -393,6 +393,8 @@ message ProviderLocationInfo {
   optional CacheStatus cache_status = 9;
   // 存储路径
   optional string storage_path = 10;
+  // 驱动图标名（取自 DriverInfo.icon_name，前端据此渲染，不再按类型写死）
+  optional string driver_icon = 11;
 }
 
 // FileShare 文件分享记录
@@ -781,8 +783,8 @@ message DirectLinkFileRespData {
   optional google.protobuf.Timestamp expires_at = 3;
   // 实际选中的存储提供者
   optional uint32 provider_id = 4;
-  // 存储提供者类型
-  optional StorageProviderType provider_type = 5;
+  // 驱动身份
+  optional string driver_id = 5;
   // 逻辑文件名（客户端落盘用；直链本身给不出这个名字）
   optional string file_name = 6;
   // 文件大小（字节）

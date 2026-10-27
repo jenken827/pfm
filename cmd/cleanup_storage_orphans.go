@@ -17,9 +17,9 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -122,9 +122,9 @@ func scanOneProvider(ctx context.Context, sp *native.StorageProviderORM, rootOve
 	remove, dryRun bool) (scanned, orphans, deleted, failed int, err error) {
 	providerID := *sp.Id
 	providerName := derefStr(sp.Name)
-	providerType := native.StorageProviderType(*sp.ProviderType)
-	fmt.Printf("\n===== provider #%d %s (%s) =====\n", providerID, providerName, providerType.String())
-	if !remoteListSupported(providerType) {
+	driverID := derefStr(sp.DriverId)
+	fmt.Printf("\n===== provider #%d %s (%s) =====\n", providerID, providerName, driverID)
+	if !remoteListSupported(driverID) {
 		fmt.Println("  跳过：该提供者不支持远端目录枚举")
 		return 0, 0, 0, 0, nil
 	}
@@ -295,7 +295,7 @@ func selectOrphanProviders(name string, id uint32, all bool) ([]*native.StorageP
 	}
 	var picked []*native.StorageProviderORM
 	for _, sp := range providers {
-		if sp.Id == nil || sp.Name == nil || sp.ProviderType == nil {
+		if sp.Id == nil || sp.Name == nil || sp.DriverId == nil {
 			continue
 		}
 		switch {
@@ -308,7 +308,7 @@ func selectOrphanProviders(name string, id uint32, all bool) ([]*native.StorageP
 				continue
 			}
 		default: // --all：只选启用且支持远端枚举的
-			if sp.Enabled == nil || !*sp.Enabled || !remoteListSupported(native.StorageProviderType(*sp.ProviderType)) {
+			if sp.Enabled == nil || !*sp.Enabled || !remoteListSupported(*sp.DriverId) {
 				continue
 			}
 		}
@@ -331,35 +331,27 @@ func printProviderList() error {
 	}
 	fmt.Printf("存储提供者列表 (%d 个):\n", len(providers))
 	for _, sp := range providers {
-		if sp.Id == nil || sp.Name == nil || sp.ProviderType == nil {
+		if sp.Id == nil || sp.Name == nil || sp.DriverId == nil {
 			continue
 		}
-		ptype := native.StorageProviderType(*sp.ProviderType)
+		driverID := *sp.DriverId
 		enabled := sp.Enabled != nil && *sp.Enabled
 		support := "不支持远端枚举"
-		if remoteListSupported(ptype) {
+		if remoteListSupported(driverID) {
 			support = "支持远端枚举"
 		}
-		fmt.Printf("  id=%-3d %-24s type=%-18s enabled=%-5v %s\n",
-			*sp.Id, *sp.Name, ptype.String(), enabled, support)
+		fmt.Printf("  id=%-3d %-24s driver=%-18s enabled=%-5v %s\n",
+			*sp.Id, *sp.Name, driverID, enabled, support)
 	}
 	fmt.Println("\n说明：Telegram 只能按消息 ID 读取，不做远端目录枚举；其余网盘/本地均支持。")
 	return nil
 }
 
-// remoteListSupported 与各驱动是否实现 types.RemoteLister 保持一致
-func remoteListSupported(t native.StorageProviderType) bool {
-	switch t {
-	case native.StorageProviderType_LOCAL,
-		native.StorageProviderType_PAN123,
-		native.StorageProviderType_BAIDU_NETDISK,
-		native.StorageProviderType_ALIYUNDRIVE_OPEN,
-		native.StorageProviderType_YUN139,
-		native.StorageProviderType_CLOUD189_PC:
-		return true
-	default:
-		return false
-	}
+// remoteListSupported 依据驱动声明的能力判断（驱动在 DriverInfo.Capabilities 里
+// 声明 REMOTE_LIST，与其是否实现 types.RemoteLister 一致）
+func remoteListSupported(driverID string) bool {
+	return types.HasCapability(types.GetDriverMetadata(driverID),
+		native.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST)
 }
 
 func init() {

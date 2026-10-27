@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sync/syncmap"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/llog"
+	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -61,10 +61,15 @@ func GetStorage(id uint32) types.StorageDriver {
 
 // createAndStoreDriver 创建并存储驱动实例
 func createAndStoreDriver(sp *native.StorageProviderORM) error {
-	dc := types.GetDriverConstructor(native.StorageProviderType(*sp.ProviderType))
+	driverID := ""
+	if sp.DriverId != nil {
+		driverID = *sp.DriverId
+	}
+	dc := types.GetDriverConstructor(driverID)
 	if dc == nil {
-		llog.L().Error("storage provider driver constructor is nil", *sp.ProviderType)
-		return fmt.Errorf("storage provider driver constructor is nil for type: %v", *sp.ProviderType)
+		// 驱动未安装（插件被卸载或身份未知）：provider 数据保留，只报告不可用。
+		llog.L().Errorf("storage provider driver constructor is nil, driver_id=%s", driverID)
+		return fmt.Errorf("storage provider driver not installed: driver_id=%s", driverID)
 	}
 
 	ins, err := dc(sp)

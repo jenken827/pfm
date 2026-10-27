@@ -14,7 +14,7 @@ class StorageProviderTile extends StatelessWidget {
   });
 
   final StorageProvider provider;
-  final List<StorageProviderTypeInfo> providerTypes;
+  final List<DriverInfo> providerTypes;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -30,7 +30,7 @@ class StorageProviderTile extends StatelessWidget {
   String get _typeName {
     // 从 providerTypes 中查找匹配的类型信息
     final typeInfo = providerTypes
-        .where((t) => t.type == provider.providerType)
+        .where((t) => t.driverId == provider.driverId)
         .firstOrNull;
     return typeInfo?.displayName.isNotEmpty == true
         ? typeInfo!.displayName
@@ -40,7 +40,7 @@ class StorageProviderTile extends StatelessWidget {
   String get _iconName {
     // 从 providerTypes 中查找匹配的类型信息
     final typeInfo = providerTypes
-        .where((t) => t.type == provider.providerType)
+        .where((t) => t.driverId == provider.driverId)
         .firstOrNull;
     return typeInfo?.iconName.isNotEmpty == true ? typeInfo!.iconName : '';
   }
