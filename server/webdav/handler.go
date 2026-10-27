@@ -13,7 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // Handler WebDAV HTTP handler
@@ -124,7 +124,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // allowedMethodsHeader 按账号权限生成 OPTIONS 的 Allow 头（只读账号不宣告写方法）
-func allowedMethodsHeader(account *native.WebdavAccountORM) string {
+func allowedMethodsHeader(account *entity.WebdavAccountORM) string {
 	if account.ReadOnly != nil && *account.ReadOnly {
 		return "OPTIONS, PROPFIND, HEAD, GET"
 	}
@@ -139,7 +139,7 @@ func writeUnauthorized(w http.ResponseWriter, reason string) {
 }
 
 // webdavAccountID 取账号主键（ORM 字段为指针）
-func webdavAccountID(account *native.WebdavAccountORM) uint32 {
+func webdavAccountID(account *entity.WebdavAccountORM) uint32 {
 	if account == nil || account.Id == nil {
 		return 0
 	}
@@ -147,7 +147,7 @@ func webdavAccountID(account *native.WebdavAccountORM) uint32 {
 }
 
 // webdavOwnerID 取账号归属用户 ID（ORM 字段为指针）
-func webdavOwnerID(account *native.WebdavAccountORM) string {
+func webdavOwnerID(account *entity.WebdavAccountORM) string {
 	if account == nil || account.UserId == nil {
 		return ""
 	}
@@ -155,7 +155,7 @@ func webdavOwnerID(account *native.WebdavAccountORM) string {
 }
 
 // webdavRootFileID 取账号绑定的根目录 ID（ORM 字段为指针）
-func webdavRootFileID(account *native.WebdavAccountORM) string {
+func webdavRootFileID(account *entity.WebdavAccountORM) string {
 	if account == nil || account.RootFileId == nil {
 		return ""
 	}
@@ -163,7 +163,7 @@ func webdavRootFileID(account *native.WebdavAccountORM) string {
 }
 
 // getBoundProviderIds 解析 UserSpace 绑定的存储提供者 ID（管理员分配范围）
-func getBoundProviderIds(space *native.UserSpaceORM) []uint32 {
+func getBoundProviderIds(space *entity.UserSpaceORM) []uint32 {
 	if space == nil || space.BoundProviderIds == nil {
 		return nil
 	}

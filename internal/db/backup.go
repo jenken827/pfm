@@ -6,19 +6,20 @@ import (
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // ==================== BackupTask ====================
 
 // CreateBackupTask 创建备份任务
-func CreateBackupTask(task *native.BackupTaskORM) error {
+func CreateBackupTask(task *entity.BackupTaskORM) error {
 	ctx := context.Background()
-	return gorm.G[native.BackupTaskORM](db).Create(ctx, task)
+	return gorm.G[entity.BackupTaskORM](db).Create(ctx, task)
 }
 
 // UpdateBackupTask 更新备份任务
-func UpdateBackupTask(task *native.BackupTaskORM) error {
+func UpdateBackupTask(task *entity.BackupTaskORM) error {
 	ctx := context.Background()
 	id := *task.Id
 	fields := []string{}
@@ -64,7 +65,7 @@ func UpdateBackupTask(task *native.BackupTaskORM) error {
 	}
 
 	if len(fields) == 0 {
-		_, err := gorm.G[*native.BackupTaskORM](db).Where("id=?", id).Updates(ctx, task)
+		_, err := gorm.G[*entity.BackupTaskORM](db).Where("id=?", id).Updates(ctx, task)
 		return err
 	}
 
@@ -101,7 +102,7 @@ func UpdateBackupTask(task *native.BackupTaskORM) error {
 		}
 	}
 
-	result := db.WithContext(ctx).Model(&native.BackupTaskORM{}).Where("id = ?", id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.BackupTaskORM{}).Where("id = ?", id).Updates(updateMap)
 	return result.Error
 }
 
@@ -110,12 +111,12 @@ func DeleteBackupTask(ids []uint64) error {
 	ctx := context.Background()
 	return db.Transaction(func(tx *gorm.DB) error {
 		// 先删除关联的 BackupFileRecord
-		if _, err := gorm.G[native.BackupFileRecordORM](tx).Where("task_id IN ?", ids).Delete(ctx); err != nil {
+		if _, err := gorm.G[entity.BackupFileRecordORM](tx).Where("task_id IN ?", ids).Delete(ctx); err != nil {
 			llog.L().Errorf("delete backup file records for tasks failed, ids: %v, err: %v", ids, err)
 			return err
 		}
 		// 再删除任务
-		if _, err := gorm.G[native.BackupTaskORM](tx).Where("id IN ?", ids).Delete(ctx); err != nil {
+		if _, err := gorm.G[entity.BackupTaskORM](tx).Where("id IN ?", ids).Delete(ctx); err != nil {
 			llog.L().Errorf("delete backup tasks failed, ids: %v, err: %v", ids, err)
 			return err
 		}
@@ -124,9 +125,9 @@ func DeleteBackupTask(ids []uint64) error {
 }
 
 // GetBackupTaskByID 根据ID获取备份任务
-func GetBackupTaskByID(id uint64) (*native.BackupTaskORM, error) {
+func GetBackupTaskByID(id uint64) (*entity.BackupTaskORM, error) {
 	ctx := context.Background()
-	record, err := gorm.G[*native.BackupTaskORM](db).Where("id = ?", id).First(ctx)
+	record, err := gorm.G[*entity.BackupTaskORM](db).Where("id = ?", id).First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -134,15 +135,15 @@ func GetBackupTaskByID(id uint64) (*native.BackupTaskORM, error) {
 }
 
 // GetEnabledBackupTasks 获取所有启用的备份任务
-func GetEnabledBackupTasks() ([]*native.BackupTaskORM, error) {
+func GetEnabledBackupTasks() ([]*entity.BackupTaskORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.BackupTaskORM](db).Where("enabled = ?", true).Find(ctx)
+	return gorm.G[*entity.BackupTaskORM](db).Where("enabled = ?", true).Find(ctx)
 }
 
 // GetBackupTaskBySourcePath 根据源路径获取备份任务
-func GetBackupTaskBySourcePath(sourcePath string) (*native.BackupTaskORM, error) {
+func GetBackupTaskBySourcePath(sourcePath string) (*entity.BackupTaskORM, error) {
 	ctx := context.Background()
-	record, err := gorm.G[*native.BackupTaskORM](db).Where("source_path = ?", sourcePath).First(ctx)
+	record, err := gorm.G[*entity.BackupTaskORM](db).Where("source_path = ?", sourcePath).First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +151,9 @@ func GetBackupTaskBySourcePath(sourcePath string) (*native.BackupTaskORM, error)
 }
 
 // GetBackupTaskBySourcePathExcludeID 根据源路径获取备份任务（排除指定ID，用于更新时去重）
-func GetBackupTaskBySourcePathExcludeID(sourcePath string, excludeID uint64) (*native.BackupTaskORM, error) {
+func GetBackupTaskBySourcePathExcludeID(sourcePath string, excludeID uint64) (*entity.BackupTaskORM, error) {
 	ctx := context.Background()
-	record, err := gorm.G[*native.BackupTaskORM](db).Where("source_path = ? AND id != ?", sourcePath, excludeID).First(ctx)
+	record, err := gorm.G[*entity.BackupTaskORM](db).Where("source_path = ? AND id != ?", sourcePath, excludeID).First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func GetBackupTaskBySourcePathExcludeID(sourcePath string, excludeID uint64) (*n
 
 // ListBackupTasks 获取备份任务列表（分页），支持 ownerID 过滤
 // ownerID 为空时不过滤（管理员模式）
-func ListBackupTasks(page, pageSize uint32, enabled *bool, ownerID string) ([]*native.BackupTaskORM, int64, error) {
+func ListBackupTasks(page, pageSize uint32, enabled *bool, ownerID string) ([]*entity.BackupTaskORM, int64, error) {
 	ctx := context.Background()
 
 	if pageSize == 0 {
@@ -169,7 +170,7 @@ func ListBackupTasks(page, pageSize uint32, enabled *bool, ownerID string) ([]*n
 	}
 	offset := (page - 1) * pageSize
 
-	query := db.WithContext(ctx).Model(&native.BackupTaskORM{})
+	query := db.WithContext(ctx).Model(&entity.BackupTaskORM{})
 	if enabled != nil {
 		query = query.Where("enabled = ?", *enabled)
 	}
@@ -182,7 +183,7 @@ func ListBackupTasks(page, pageSize uint32, enabled *bool, ownerID string) ([]*n
 		return nil, 0, err
 	}
 
-	var tasks []*native.BackupTaskORM
+	var tasks []*entity.BackupTaskORM
 	if err := query.Offset(int(offset)).Limit(int(pageSize)).Order("id DESC").Find(&tasks).Error; err != nil {
 		return nil, 0, err
 	}
@@ -197,13 +198,13 @@ func UpdateBackupTaskStatus(id uint64, status native.BackupRunStatus, message st
 		"last_run_status":  int32(status),
 		"last_run_message": message,
 	}
-	return db.WithContext(ctx).Model(&native.BackupTaskORM{}).Where("id = ?", id).Updates(values).Error
+	return db.WithContext(ctx).Model(&entity.BackupTaskORM{}).Where("id = ?", id).Updates(values).Error
 }
 
 // UpdateBackupTaskRunTime 更新备份任务执行时间
 func UpdateBackupTaskRunTime(id uint64) error {
 	ctx := context.Background()
-	return db.WithContext(ctx).Model(&native.BackupTaskORM{}).
+	return db.WithContext(ctx).Model(&entity.BackupTaskORM{}).
 		Where("id = ?", id).
 		Update("last_run_at", gorm.Expr("NOW()")).Error
 }
@@ -211,7 +212,7 @@ func UpdateBackupTaskRunTime(id uint64) error {
 // IncrementBackupStats 增加备份统计
 func IncrementBackupStats(id uint64, count uint64, size uint64) error {
 	ctx := context.Background()
-	return db.WithContext(ctx).Model(&native.BackupTaskORM{}).
+	return db.WithContext(ctx).Model(&entity.BackupTaskORM{}).
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"backed_up_count": gorm.Expr("backed_up_count + ?", count),
@@ -222,13 +223,13 @@ func IncrementBackupStats(id uint64, count uint64, size uint64) error {
 // ==================== BackupFileRecord ====================
 
 // CreateBackupFileRecord 创建备份文件记录
-func CreateBackupFileRecord(record *native.BackupFileRecordORM) error {
+func CreateBackupFileRecord(record *entity.BackupFileRecordORM) error {
 	ctx := context.Background()
-	return gorm.G[native.BackupFileRecordORM](db).Create(ctx, record)
+	return gorm.G[entity.BackupFileRecordORM](db).Create(ctx, record)
 }
 
 // UpdateBackupFileRecord 更新备份文件记录
-func UpdateBackupFileRecord(record *native.BackupFileRecordORM) error {
+func UpdateBackupFileRecord(record *entity.BackupFileRecordORM) error {
 	ctx := context.Background()
 	id := *record.Id
 	fields := []string{}
@@ -275,14 +276,14 @@ func UpdateBackupFileRecord(record *native.BackupFileRecordORM) error {
 		}
 	}
 
-	result := db.WithContext(ctx).Model(&native.BackupFileRecordORM{}).Where("id = ?", id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.BackupFileRecordORM{}).Where("id = ?", id).Updates(updateMap)
 	return result.Error
 }
 
 // GetBackupFileRecord 获取备份文件记录
-func GetBackupFileRecord(taskID uint64, relativePath string) (*native.BackupFileRecordORM, error) {
+func GetBackupFileRecord(taskID uint64, relativePath string) (*entity.BackupFileRecordORM, error) {
 	ctx := context.Background()
-	record, err := gorm.G[*native.BackupFileRecordORM](db).Where("task_id = ? AND relative_path = ?", taskID, relativePath).First(ctx)
+	record, err := gorm.G[*entity.BackupFileRecordORM](db).Where("task_id = ? AND relative_path = ?", taskID, relativePath).First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +291,7 @@ func GetBackupFileRecord(taskID uint64, relativePath string) (*native.BackupFile
 }
 
 // ListBackupFileRecords 获取备份文件记录列表（分页）
-func ListBackupFileRecords(taskID uint64, page, pageSize uint32, status *native.BackupFileStatus) ([]*native.BackupFileRecordORM, int64, error) {
+func ListBackupFileRecords(taskID uint64, page, pageSize uint32, status *native.BackupFileStatus) ([]*entity.BackupFileRecordORM, int64, error) {
 	ctx := context.Background()
 
 	if pageSize == 0 {
@@ -298,7 +299,7 @@ func ListBackupFileRecords(taskID uint64, page, pageSize uint32, status *native.
 	}
 	offset := (page - 1) * pageSize
 
-	query := db.WithContext(ctx).Model(&native.BackupFileRecordORM{}).Where("task_id = ?", taskID)
+	query := db.WithContext(ctx).Model(&entity.BackupFileRecordORM{}).Where("task_id = ?", taskID)
 	if status != nil {
 		query = query.Where("status = ?", int32(*status))
 	}
@@ -308,7 +309,7 @@ func ListBackupFileRecords(taskID uint64, page, pageSize uint32, status *native.
 		return nil, 0, err
 	}
 
-	var records []*native.BackupFileRecordORM
+	var records []*entity.BackupFileRecordORM
 	if err := query.Offset(int(offset)).Limit(int(pageSize)).Order("id DESC").Find(&records).Error; err != nil {
 		return nil, 0, err
 	}
@@ -317,9 +318,9 @@ func ListBackupFileRecords(taskID uint64, page, pageSize uint32, status *native.
 }
 
 // GetPendingBackupFileRecords 获取待处理的备份文件记录（用于重启恢复）
-func GetPendingBackupFileRecords(taskID uint64) ([]*native.BackupFileRecordORM, error) {
+func GetPendingBackupFileRecords(taskID uint64) ([]*entity.BackupFileRecordORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.BackupFileRecordORM](db).
+	return gorm.G[*entity.BackupFileRecordORM](db).
 		Where("task_id = ? AND status IN ?", taskID,
 			[]int32{
 				int32(native.BackupFileStatus_BACKUP_FILE_STATUS_PENDING),
@@ -330,12 +331,12 @@ func GetPendingBackupFileRecords(taskID uint64) ([]*native.BackupFileRecordORM, 
 }
 
 // GetRecentBackupFileRecords 获取最近备份的文件记录
-func GetRecentBackupFileRecords(taskID uint64, limit int) ([]*native.BackupFileRecordORM, error) {
+func GetRecentBackupFileRecords(taskID uint64, limit int) ([]*entity.BackupFileRecordORM, error) {
 	ctx := context.Background()
 	if limit <= 0 {
 		limit = 10
 	}
-	return gorm.G[*native.BackupFileRecordORM](db).
+	return gorm.G[*entity.BackupFileRecordORM](db).
 		Where("task_id = ?", taskID).
 		Order("updated_at DESC").
 		Limit(limit).
@@ -345,14 +346,14 @@ func GetRecentBackupFileRecords(taskID uint64, limit int) ([]*native.BackupFileR
 // DeleteBackupFileRecordsByTaskID 删除指定任务的所有备份文件记录
 func DeleteBackupFileRecordsByTaskID(taskID uint64) error {
 	ctx := context.Background()
-	_, err := gorm.G[native.BackupFileRecordORM](db).Where("task_id = ?", taskID).Delete(ctx)
+	_, err := gorm.G[entity.BackupFileRecordORM](db).Where("task_id = ?", taskID).Delete(ctx)
 	return err
 }
 
 // GetLocalProviderID 获取 LOCAL 类型的存储提供者ID
 func GetLocalProviderID() (uint32, error) {
 	ctx := context.Background()
-	var provider native.StorageProviderORM
+	var provider entity.StorageProviderORM
 	err := db.WithContext(ctx).Where("provider_type = ? AND enabled = ?", types.DriverLocal, true).First(&provider).Error
 	if err != nil {
 		return 0, err

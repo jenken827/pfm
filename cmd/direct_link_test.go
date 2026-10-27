@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 func TestParseContentRangeTotal(t *testing.T) {
@@ -85,24 +85,24 @@ func TestShortHash(t *testing.T) {
 }
 
 // loc 构造一条位置行（nil 指针字段按"未设置"处理）
-func loc(providerID uint32, encrypted bool) *native.FileLocationORM {
-	return &native.FileLocationORM{ProviderId: &providerID, Encrypted: &encrypted}
+func loc(providerID uint32, encrypted bool) *entity.FileLocationORM {
+	return &entity.FileLocationORM{ProviderId: &providerID, Encrypted: &encrypted}
 }
 
 // TestDirectLinkLocationVerdict 列表模式的单提供者结论
 func TestDirectLinkLocationVerdict(t *testing.T) {
 	cases := []struct {
 		name     string
-		locs     []*native.FileLocationORM
+		locs     []*entity.FileLocationORM
 		typeName string
 		state    directLinkDriverState
 		wantOK   bool
 	}{
-		{"单副本明文且驱动就绪", []*native.FileLocationORM{loc(3, false)}, "YUN139", directLinkDriverReady, true},
-		{"驱动不支持（telegram/local）", []*native.FileLocationORM{loc(2, false)}, "TELEGRAM", directLinkDriverNoCapability, false},
-		{"提供者未启用", []*native.FileLocationORM{loc(4, false)}, "PAN123", directLinkDriverMissing, false},
-		{"多分片", []*native.FileLocationORM{loc(2, false), loc(2, false)}, "TELEGRAM", directLinkDriverReady, false},
-		{"已加密", []*native.FileLocationORM{loc(4, true)}, "ALIYUNDRIVE_OPEN", directLinkDriverReady, false},
+		{"单副本明文且驱动就绪", []*entity.FileLocationORM{loc(3, false)}, "YUN139", directLinkDriverReady, true},
+		{"驱动不支持（telegram/local）", []*entity.FileLocationORM{loc(2, false)}, "TELEGRAM", directLinkDriverNoCapability, false},
+		{"提供者未启用", []*entity.FileLocationORM{loc(4, false)}, "PAN123", directLinkDriverMissing, false},
+		{"多分片", []*entity.FileLocationORM{loc(2, false), loc(2, false)}, "TELEGRAM", directLinkDriverReady, false},
+		{"已加密", []*entity.FileLocationORM{loc(4, true)}, "ALIYUNDRIVE_OPEN", directLinkDriverReady, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

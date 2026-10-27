@@ -8,13 +8,14 @@ import (
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
 // directLinkLocation 构造一条位置行
-func directLinkLocation(providerID uint32, encrypted bool) *native.FileLocationORM {
-	return &native.FileLocationORM{
+func directLinkLocation(providerID uint32, encrypted bool) *entity.FileLocationORM {
+	return &entity.FileLocationORM{
 		ProviderId:  utils.Uint32Ptr(providerID),
 		Encrypted:   utils.BoolPtr(encrypted),
 		Status:      utils.EnumPtr(native.LocationStatus_PCOMPLETED),
@@ -27,12 +28,12 @@ func directLinkLocation(providerID uint32, encrypted bool) *native.FileLocationO
 func TestDirectLinkIneligibleReason(t *testing.T) {
 	cases := []struct {
 		name      string
-		locations []*native.FileLocationORM
+		locations []*entity.FileLocationORM
 		wantEmpty bool
 	}{
-		{"单分片明文", []*native.FileLocationORM{directLinkLocation(1, false)}, true},
-		{"单分片加密", []*native.FileLocationORM{directLinkLocation(1, true)}, false},
-		{"多分片明文", []*native.FileLocationORM{directLinkLocation(1, false), directLinkLocation(1, false)}, false},
+		{"单分片明文", []*entity.FileLocationORM{directLinkLocation(1, false)}, true},
+		{"单分片加密", []*entity.FileLocationORM{directLinkLocation(1, true)}, false},
+		{"多分片明文", []*entity.FileLocationORM{directLinkLocation(1, false), directLinkLocation(1, false)}, false},
 		{"零副本", nil, false},
 	}
 	for _, c := range cases {
@@ -63,7 +64,7 @@ func TestDirectLinkEnabledDefaultOn(t *testing.T) {
 // TestDirectLinkProviderAllowedWhitelist 白名单按**提供者类型**过滤，留空 = 不限制
 func TestDirectLinkProviderAllowedWhitelist(t *testing.T) {
 	dbtest.Setup(t)
-	provider := &native.StorageProviderORM{
+	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr("123盘"),
 		DriverId: utils.StringPtr(types.DriverPan123),
 		Config:   utils.StringPtr(`{}`),
@@ -102,7 +103,7 @@ func TestGetFileDirectLinkUnavailable(t *testing.T) {
 	userID := uuid.New().String()
 	rootID := createTestFolder(t, userID, "root-"+userID, "")
 
-	provider := &native.StorageProviderORM{
+	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr("移动云"),
 		DriverId: utils.StringPtr(types.DriverYun139),
 		Config:   utils.StringPtr(`{}`),
@@ -114,7 +115,7 @@ func TestGetFileDirectLinkUnavailable(t *testing.T) {
 
 	const hash = "directlinkhash0001"
 	fileID := uuid.New().String()
-	file := &native.FileORM{
+	file := &entity.FileORM{
 		Id:       utils.StringPtr(fileID),
 		Name:     utils.StringPtr("secret.enc"),
 		ParentId: utils.StringPtr(rootID),
@@ -127,7 +128,7 @@ func TestGetFileDirectLinkUnavailable(t *testing.T) {
 	if err := db.CreateFile(file); err != nil {
 		t.Fatalf("create file failed: %v", err)
 	}
-	loc := &native.FileLocationORM{
+	loc := &entity.FileLocationORM{
 		Blake3Hash:  utils.StringPtr(hash),
 		ProviderId:  provider.Id,
 		Path:        utils.StringPtr("/x/secret.enc"),

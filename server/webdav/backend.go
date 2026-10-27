@@ -17,6 +17,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
@@ -43,7 +44,7 @@ func NewBackend(rootID, ownerID, mountPrefix string) *Backend {
 }
 
 // resolvePath 解析 WebDAV 路径到 PFM 文件
-func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM, error) {
+func (b *Backend) resolvePath(ctx context.Context, name string) (*entity.FileORM, error) {
 	// 去掉全部尾斜杠（而不是单个）：MKCOL/MOVE 的 URI 允许以 "/" 结尾，
 	// "/a/b//" 也要能解析成同一个目录
 	name = strings.TrimRight(strings.TrimPrefix(name, "/"), "/")
@@ -64,7 +65,7 @@ func (b *Backend) resolvePath(ctx context.Context, name string) (*native.FileORM
 
 	// 逐级解析
 	parts := strings.Split(name, "/")
-	var current *native.FileORM
+	var current *entity.FileORM
 	for _, part := range parts {
 		if part == "" {
 			// 容忍 "/a//b" 这类多余分隔符。注意 ".." 仍按普通名字去库里查
@@ -136,7 +137,7 @@ func (b *Backend) stripMountPrefix(p string) string {
 // 处理，后端看到的路径是剥掉前缀后的 "/webvav/…"，而 PROPFIND 的 href 必须与请求
 // URI 的路径（"/dav/webvav/…"）一致，否则按路径匹配子项的客户端会把所有条目丢掉
 // （ReadAny 因此判定「远端没有任何书」，每轮重传整个本地书库）。
-func (b *Backend) toFileInfo(file *native.FileORM, webdavPath string) gowebdav.FileInfo {
+func (b *Backend) toFileInfo(file *entity.FileORM, webdavPath string) gowebdav.FileInfo {
 	fi := gowebdav.FileInfo{Path: b.mountPrefix + webdavPath}
 	if file.Size != nil {
 		fi.Size = int64(*file.Size)
@@ -232,7 +233,7 @@ func (b *Backend) ReadDir(ctx context.Context, name string, recursive bool) ([]g
 
 // checkPrecondition 检查 If-Match / If-None-Match 条件请求头
 // 返回 412 错误表示条件不满足
-func checkPrecondition(existing *native.FileORM, ifMatch, ifNoneMatch gowebdav.ConditionalMatch) error {
+func checkPrecondition(existing *entity.FileORM, ifMatch, ifNoneMatch gowebdav.ConditionalMatch) error {
 	// 计算当前 ETag
 	currentETag := ""
 	if existing != nil && existing.Hash != nil {
@@ -284,7 +285,7 @@ func (b *Backend) Create(ctx context.Context, name string, body io.ReadCloser, o
 
 	// 检查是否已存在
 	existing, err := db.GetFileByParentAndName(*parentFile.Id, fileName, b.ownerID)
-	var existingFile *native.FileORM
+	var existingFile *entity.FileORM
 	if err == nil {
 		existingFile = existing
 	}

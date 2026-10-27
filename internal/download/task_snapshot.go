@@ -9,7 +9,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // ============================================================
@@ -205,7 +205,7 @@ func torrentBaseName(raw string) string {
 }
 
 // recordInfoHash 记录关联的 infohash：磁力链直接解析，.torrent URL 用对齐时记下的值
-func recordInfoHash(dr *native.DownloadRecordORM) string {
+func recordInfoHash(dr *entity.DownloadRecordORM) string {
 	if ih := magnetInfoHash(derefString(dr.Url)); ih != "" {
 		return ih
 	}
@@ -230,7 +230,7 @@ func storedInfoHash(callbackInfo string) string {
 //
 // 返回的任务可能仍是中间任务（元数据 / 种子文件阶段），调用方用 classifyTask
 // 判断；ok == false 表示 aria2 里完全找不到这单。
-func (s *taskSnapshot) targetFor(dr *native.DownloadRecordORM) (aria2.StatusInfo, bool) {
+func (s *taskSnapshot) targetFor(dr *entity.DownloadRecordORM) (aria2.StatusInfo, bool) {
 	// 1. infohash：跨 gid、跨 aria2 重启都稳定。
 	//    磁力链自带；.torrent URL 的 infohash 由对齐时记进 callback_info。
 	if ih := recordInfoHash(dr); ih != "" {

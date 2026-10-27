@@ -10,6 +10,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -72,7 +73,7 @@ func ensureDirPathForOwner(userID, parentID, relPath string) (string, error) {
 
 		// 目录不存在，创建（并发冲突时唯一索引兜底）
 		newID := uuid.New().String()
-		newDir := &native.FileORM{
+		newDir := &entity.FileORM{
 			Id:               utils.StringPtr(newID),
 			Name:             utils.StringPtr(seg),
 			ParentId:         utils.StringPtr(currentID),

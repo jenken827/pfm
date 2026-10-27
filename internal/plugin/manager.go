@@ -13,6 +13,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/plugin"
 )
@@ -144,13 +145,13 @@ func (m *Manager) loadOne(ctx context.Context, dir string) error {
 
 // constructor 该插件的驱动构造器：宿主每次初始化 provider 都会调用
 func (m *Manager) constructor(p *loadedPlugin) types.DriverConstructor {
-	return func(orm *native.StorageProviderORM) (types.StorageDriver, error) {
+	return func(orm *entity.StorageProviderORM) (types.StorageDriver, error) {
 		return m.configure(p, orm)
 	}
 }
 
 // configure 在插件侧创建 provider 实例，并按返回能力组装代理
-func (m *Manager) configure(p *loadedPlugin, orm *native.StorageProviderORM) (types.StorageDriver, error) {
+func (m *Manager) configure(p *loadedPlugin, orm *entity.StorageProviderORM) (types.StorageDriver, error) {
 	if orm.Id == nil || *orm.Id == 0 {
 		return nil, fmt.Errorf("provider 缺少 id")
 	}
@@ -164,7 +165,7 @@ func (m *Manager) configure(p *loadedPlugin, orm *native.StorageProviderORM) (ty
 	resp := &plugin.ConfigureResp{}
 	req := &plugin.ConfigureReq{
 		ProviderId: proto.Uint32(providerID),
-		Provider:   &pb,
+		Provider:   pb,
 		Host: &plugin.HostEndpoint{
 			Addr:  proto.String(m.host.addr),
 			Token: proto.String(m.host.token),

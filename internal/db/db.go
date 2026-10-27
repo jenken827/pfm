@@ -16,7 +16,7 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 var db *gorm.DB
@@ -114,20 +114,20 @@ func autoMigrate() error {
 		return err
 	}
 	if err := db.AutoMigrate(
-		&native.FileORM{},
-		&native.FileTagORM{},
-		&native.FileShareORM{},
-		&native.FileHistoryORM{},
-		&native.FileLocationORM{},
-		&native.StorageProviderORM{},
-		&native.UploadRecordORM{},
-		&native.UploadChunkRecordORM{},
-		&native.DownloadRecordORM{},
-		&native.BackupTaskORM{},
-		&native.BackupFileRecordORM{},
-		&native.UserSpaceORM{},
-		&native.UserORM{},
-		&native.WebdavAccountORM{},
+		&entity.FileORM{},
+		&entity.FileTagORM{},
+		&entity.FileShareORM{},
+		&entity.FileHistoryORM{},
+		&entity.FileLocationORM{},
+		&entity.StorageProviderORM{},
+		&entity.UploadRecordORM{},
+		&entity.UploadChunkRecordORM{},
+		&entity.DownloadRecordORM{},
+		&entity.BackupTaskORM{},
+		&entity.BackupFileRecordORM{},
+		&entity.UserSpaceORM{},
+		&entity.UserORM{},
+		&entity.WebdavAccountORM{},
 	); err != nil {
 		return err
 	}

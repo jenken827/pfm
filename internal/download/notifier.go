@@ -23,6 +23,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -117,7 +118,7 @@ func handleDownloadComplete(_ string) {
 }
 
 // markDownloadCompleted 落库完成信息（主文件路径 + 总大小），成功返回 nil
-func markDownloadCompleted(dr *native.DownloadRecordORM, gid, primaryPath, totalLength string) error {
+func markDownloadCompleted(dr *entity.DownloadRecordORM, gid, primaryPath, totalLength string) error {
 	dr.FilePath = &primaryPath
 	dr.State = (*int32)(native.DownloadRecordState_DOWNLOAD_COMPLETED.Enum())
 	if totalLength != "" {
@@ -146,7 +147,7 @@ func markDownloadCompleted(dr *native.DownloadRecordORM, gid, primaryPath, total
 //     storage.PreallocateFileLocations），消除「记录已指向新 hash、位置行未落库」窗口的读取硬 500
 //  6. 创建 File 记录（owner/parent 来自 DownloadRecord）
 //  7. 创建 UploadRecord → Dispatch
-func importOfflineDownload(dr *native.DownloadRecordORM, task aria2.StatusInfo, files []string) {
+func importOfflineDownload(dr *entity.DownloadRecordORM, task aria2.StatusInfo, files []string) {
 	if dr.OwnerId == nil || *dr.OwnerId == "" || dr.ParentId == nil || *dr.ParentId == "" {
 		llog.L().Errorf("offline download record missing owner/parent, download_record_id: %v", dr.Id)
 		return
@@ -174,7 +175,7 @@ func importOfflineDownload(dr *native.DownloadRecordORM, task aria2.StatusInfo, 
 }
 
 // importTorrentFiles 多文件种子导入：目标目录下建种子名子目录，按相对路径逐级还原子目录
-func importTorrentFiles(dr *native.DownloadRecordORM, task aria2.StatusInfo, files []string) {
+func importTorrentFiles(dr *entity.DownloadRecordORM, task aria2.StatusInfo, files []string) {
 	ownerID := *dr.OwnerId
 	rootName := torrentRootName(dr, task.BitTorrent.Info.Name, files, task.Dir)
 	rootID, err := ensureFolderPath(ownerID, *dr.ParentId, []string{rootName})
@@ -213,7 +214,7 @@ func importTorrentFiles(dr *native.DownloadRecordORM, task aria2.StatusInfo, fil
 }
 
 // importTorrentEntry 导入种子里的单个文件（自动建中间目录）
-func importTorrentEntry(dr *native.DownloadRecordORM, dir, rootID, rootName, filePath string) error {
+func importTorrentEntry(dr *entity.DownloadRecordORM, dir, rootID, rootName, filePath string) error {
 	segs := relativeSegments(dir, filePath)
 	if len(segs) > 1 && segs[0] == rootName {
 		segs = segs[1:]
@@ -234,7 +235,7 @@ func importTorrentEntry(dr *native.DownloadRecordORM, dir, rootID, rootName, fil
 }
 
 // importOneFile 单个文件入库：hash → staging → 秒传 → File 记录 → UploadRecord → Dispatch
-func importOneFile(dr *native.DownloadRecordORM, downloadedFilePath, parentID, fileName string) error {
+func importOneFile(dr *entity.DownloadRecordORM, downloadedFilePath, parentID, fileName string) error {
 	ownerID := *dr.OwnerId
 
 	fileInfo, err := os.Stat(downloadedFilePath)
@@ -332,7 +333,7 @@ func createFileAndDispatch(ownerID, parentID, fileName, hash string, fileSize ui
 
 	fileType, mime := fileutil.GetFileType(stagingPath, fileName)
 	isReady := false
-	newFile := &native.FileORM{
+	newFile := &entity.FileORM{
 		Name:     &fileName,
 		ParentId: &parentID,
 		Size:     &fileSize,
@@ -350,7 +351,7 @@ func createFileAndDispatch(ownerID, parentID, fileName, hash string, fileSize ui
 
 	providerIdsJSON, _ := json.Marshal(providerIds)
 	targetProviderIds := string(providerIdsJSON)
-	uploadRecord := &native.UploadRecordORM{
+	uploadRecord := &entity.UploadRecordORM{
 		FileHash:          &hash,
 		FileName:          &fileName,
 		FileSize:          &fileSize,
@@ -372,7 +373,7 @@ func createFileAndDispatch(ownerID, parentID, fileName, hash string, fileSize ui
 }
 
 // markImportDone 入库成功 → 记录置完成（按记录更新，元数据 gid 换过也不影响）
-func markImportDone(dr *native.DownloadRecordORM) {
+func markImportDone(dr *entity.DownloadRecordORM) {
 	state := int32(native.DownloadRecordState_DOWNLOAD_COMPLETED)
 	dr.State = &state
 	if err := db.UpdateDownloadRecord(dr, []string{"state"}); err != nil {
@@ -381,7 +382,7 @@ func markImportDone(dr *native.DownloadRecordORM) {
 }
 
 // markImportFailed 入库失败 → 记录置失败并写入可读原因（前端可据此提示，也可重试）
-func markImportFailed(dr *native.DownloadRecordORM, err error) {
+func markImportFailed(dr *entity.DownloadRecordORM, err error) {
 	llog.L().Errorf("offline download import failed, record: %v, err: %v", dr.Id, err)
 	msg := err.Error()
 	state := int32(native.DownloadRecordState_DOWNLOAD_FAILED)
@@ -434,9 +435,9 @@ func copyFile(src, dst string) error {
 }
 
 // resumeSyncFromDownload 从下载的文件恢复同步任务
-func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath string) {
+func resumeSyncFromDownload(dr *entity.DownloadRecordORM, downloadedFilePath string) {
 	// 1. 获取上传记录
-	var uploadRecord *native.UploadRecordORM
+	var uploadRecord *entity.UploadRecordORM
 	if dr.UploadRecordId != nil {
 		record, _, err := db.GetUploadRecordByID(*dr.UploadRecordId, false)
 		if err == nil {
@@ -451,7 +452,7 @@ func resumeSyncFromDownload(dr *native.DownloadRecordORM, downloadedFilePath str
 	}
 
 	// 3. 获取源文件位置记录
-	var sourceLocation *native.FileLocationORM
+	var sourceLocation *entity.FileLocationORM
 	if dr.SourceLocationId != nil {
 		location, err := db.GetFileLocationByID(*dr.SourceLocationId)
 		if err == nil {

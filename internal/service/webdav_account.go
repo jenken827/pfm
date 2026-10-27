@@ -17,6 +17,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -65,28 +66,28 @@ const webdavDummyBcryptHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68
 
 // ===== ORM 指针字段读取 =====
 
-func webdavAccountID(a *native.WebdavAccountORM) uint32 {
+func webdavAccountID(a *entity.WebdavAccountORM) uint32 {
 	if a == nil || a.Id == nil {
 		return 0
 	}
 	return *a.Id
 }
 
-func webdavAccountRootID(a *native.WebdavAccountORM) string {
+func webdavAccountRootID(a *entity.WebdavAccountORM) string {
 	if a == nil || a.RootFileId == nil {
 		return ""
 	}
 	return *a.RootFileId
 }
 
-func webdavAccountUserID(a *native.WebdavAccountORM) string {
+func webdavAccountUserID(a *entity.WebdavAccountORM) string {
 	if a == nil || a.UserId == nil {
 		return ""
 	}
 	return *a.UserId
 }
 
-func webdavAccountDisabledReason(a *native.WebdavAccountORM) string {
+func webdavAccountDisabledReason(a *entity.WebdavAccountORM) string {
 	if a == nil || a.DisabledReason == nil {
 		return ""
 	}
@@ -217,7 +218,7 @@ func CreateWebdavAccount(ctx context.Context, req *native.WebdavAccountCreateReq
 		return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
 	}
 
-	account := &native.WebdavAccountORM{
+	account := &entity.WebdavAccountORM{
 		UserId:       utils.StringPtr(userID),
 		Username:     utils.StringPtr(username),
 		PasswordHash: utils.StringPtr(hash),
@@ -325,7 +326,7 @@ func ResetWebdavAccountPassword(ctx context.Context, req *native.WebdavAccountRe
 //
 // 失败时返回描述性错误（只写服务端日志，客户端一律 401）。
 // 绑定目录失效时**自动禁用**账号并清缓存（决策：目录没了就禁用账号）。
-func AuthenticateWebdav(ctx context.Context, username, password string) (*native.WebdavAccountORM, error) {
+func AuthenticateWebdav(ctx context.Context, username, password string) (*entity.WebdavAccountORM, error) {
 	if username == "" || password == "" {
 		return nil, errWebdavAuthFailed
 	}
@@ -387,7 +388,7 @@ func DisableWebdavAccountsForDeletedRoots(ctx context.Context, rootIDs []string)
 // ===== 内部辅助 =====
 
 // ensureWebdavAccountUsable 认证通过后的可用性检查（启用状态 + 绑定目录有效性）
-func ensureWebdavAccountUsable(ctx context.Context, account *native.WebdavAccountORM) error {
+func ensureWebdavAccountUsable(ctx context.Context, account *entity.WebdavAccountORM) error {
 	if account == nil || account.Id == nil {
 		return errWebdavAuthFailed
 	}
@@ -399,7 +400,7 @@ func ensureWebdavAccountUsable(ctx context.Context, account *native.WebdavAccoun
 
 // checkWebdavRootUsable 校验绑定目录仍然有效（存在 + 未软删 + 属于本用户 + 是目录），
 // 无效则自动禁用账号并清缓存
-func checkWebdavRootUsable(ctx context.Context, account *native.WebdavAccountORM) error {
+func checkWebdavRootUsable(ctx context.Context, account *entity.WebdavAccountORM) error {
 	rootID := webdavAccountRootID(account)
 	ownerID := webdavAccountUserID(account)
 	if rootID == "" || ownerID == "" {
@@ -426,7 +427,7 @@ func checkWebdavRootUsable(ctx context.Context, account *native.WebdavAccountORM
 
 // loadOwnWebdavAccount 取当前用户自己的账号；不存在或不属于该用户都返回 NOT_FOUND
 // （不区分，避免用错误码探测他人账号 ID）
-func loadOwnWebdavAccount(userID string, id uint32) (*native.WebdavAccountORM, *models.Err) {
+func loadOwnWebdavAccount(userID string, id uint32) (*entity.WebdavAccountORM, *models.Err) {
 	if userID == "" {
 		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_TOKEN_INVALID}
 	}
@@ -510,7 +511,7 @@ func resolveWebdavPassword(raw string) (string, *models.Err) {
 }
 
 // buildWebdavAccountInfo 组装对外视图（不含 password_hash）
-func buildWebdavAccountInfo(resolver *db.FilePathResolver, account *native.WebdavAccountORM, rootID string, validRoots map[string]bool) *native.WebdavAccountInfo {
+func buildWebdavAccountInfo(resolver *db.FilePathResolver, account *entity.WebdavAccountORM, rootID string, validRoots map[string]bool) *native.WebdavAccountInfo {
 	rootFileID := webdavAccountRootID(account)
 	info := &native.WebdavAccountInfo{
 		Id:             account.Id,
@@ -544,7 +545,7 @@ func currentUserRootFileID(userID string) string {
 }
 
 // loadValidRootIDs 批量查询各账号绑定目录是否仍然有效（1 次查询，避免逐账号 N+1）
-func loadValidRootIDs(accounts []*native.WebdavAccountORM, userID string) map[string]bool {
+func loadValidRootIDs(accounts []*entity.WebdavAccountORM, userID string) map[string]bool {
 	valid := make(map[string]bool, len(accounts))
 	ids := make([]string, 0, len(accounts))
 	for _, a := range accounts {

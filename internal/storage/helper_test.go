@@ -3,6 +3,7 @@ package storage
 import (
 	"testing"
 
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -11,8 +12,8 @@ func uint32Ptr(v uint32) *uint32 { return &v }
 
 // mkPendingLocation 构造一行「位置行预建」产物：PPENDING、chunk_total 为 nil。
 // 这正是 PreallocateFileLocations/getOrCreateFileLocation 在分发完成前写入的形态。
-func mkPendingLocation(providerID uint32) *native.FileLocationORM {
-	return &native.FileLocationORM{
+func mkPendingLocation(providerID uint32) *entity.FileLocationORM {
+	return &entity.FileLocationORM{
 		ProviderId: uint32Ptr(providerID),
 		Status:     int32Ptr(int32(native.LocationStatus_PPENDING)),
 	}
@@ -26,13 +27,13 @@ func mkPendingLocation(providerID uint32) *native.FileLocationORM {
 // 若被判为「完整副本」，读取端会去 open 一个根本不存在的远端文件；
 // 若在此 panic，则整个读取路径 500（旧实现直接解引用 *chunk_total）。
 func TestPendingLocationIsIncomplete(t *testing.T) {
-	locations := []*native.FileLocationORM{
+	locations := []*entity.FileLocationORM{
 		mkPendingLocation(2),
 		mkPendingLocation(4),
 	}
 
 	t.Run("CheckProviderComplete 判为不完整且不 panic", func(t *testing.T) {
-		complete, expected, actual := CheckProviderComplete([]*native.FileLocationORM{mkPendingLocation(2)})
+		complete, expected, actual := CheckProviderComplete([]*entity.FileLocationORM{mkPendingLocation(2)})
 		if complete {
 			t.Fatalf("预建的 PPENDING 行不得被判为完整副本")
 		}
@@ -62,7 +63,7 @@ func TestPendingLocationIsIncomplete(t *testing.T) {
 // TestCompleteLocationStillWins 保证判定没有被「预建行」逻辑误伤：
 // 同一 hash 下存在已完成行时，仍能选出该 provider（含混合形态：预建行 + 完成行）。
 func TestCompleteLocationStillWins(t *testing.T) {
-	locations := []*native.FileLocationORM{
+	locations := []*entity.FileLocationORM{
 		mkPendingLocation(4),
 		{
 			ProviderId:  uint32Ptr(2),

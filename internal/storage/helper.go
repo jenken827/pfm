@@ -10,6 +10,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -19,8 +20,8 @@ import (
 // ========================================
 
 // GroupLocationsByProvider 按提供者分组FileLocation
-func GroupLocationsByProvider(locations []*native.FileLocationORM) map[uint32][]*native.FileLocationORM {
-	result := make(map[uint32][]*native.FileLocationORM)
+func GroupLocationsByProvider(locations []*entity.FileLocationORM) map[uint32][]*entity.FileLocationORM {
+	result := make(map[uint32][]*entity.FileLocationORM)
 	for _, loc := range locations {
 		if loc.ProviderId != nil {
 			result[*loc.ProviderId] = append(result[*loc.ProviderId], loc)
@@ -31,7 +32,7 @@ func GroupLocationsByProvider(locations []*native.FileLocationORM) map[uint32][]
 
 // CheckProviderComplete 检查单个提供者的所有分片是否都完成
 // 返回：是否完整, 预期分片数, 实际分片数
-func CheckProviderComplete(locations []*native.FileLocationORM) (bool, int, int) {
+func CheckProviderComplete(locations []*entity.FileLocationORM) (bool, int, int) {
 	if len(locations) == 0 {
 		return false, 0, 0
 	}
@@ -65,7 +66,7 @@ func CheckProviderComplete(locations []*native.FileLocationORM) (bool, int, int)
 }
 
 // GetCompleteProviders 获取所有分片都完成的提供者ID列表
-func GetCompleteProviders(locations []*native.FileLocationORM) ([]uint32, error) {
+func GetCompleteProviders(locations []*entity.FileLocationORM) ([]uint32, error) {
 	providerMap := GroupLocationsByProvider(locations)
 
 	var completeProviders []uint32
@@ -83,8 +84,8 @@ func GetCompleteProviders(locations []*native.FileLocationORM) ([]uint32, error)
 }
 
 // GetCompleteProviderLocations 获取指定提供者的所有分片Location（按chunk_number排序）
-func GetCompleteProviderLocations(locations []*native.FileLocationORM, providerID uint32) ([]*native.FileLocationORM, error) {
-	var result []*native.FileLocationORM
+func GetCompleteProviderLocations(locations []*entity.FileLocationORM, providerID uint32) ([]*entity.FileLocationORM, error) {
+	var result []*entity.FileLocationORM
 
 	for _, loc := range locations {
 		if loc.ProviderId != nil && *loc.ProviderId == providerID {
@@ -118,7 +119,7 @@ func GetCompleteProviderLocations(locations []*native.FileLocationORM, providerI
 func DownloadAndMergeFile(
 	ctx context.Context,
 	sourceStorage types.StorageDriver,
-	locations []*native.FileLocationORM,
+	locations []*entity.FileLocationORM,
 	encryptor types.Encryptor,
 	blake3Hash string,
 ) (string, error) {
@@ -172,7 +173,7 @@ func DownloadAndMergeFile(
 //
 // 这是选源的**唯一排序口径**：SelectBestSourceProvider 与直链的"优先挑可直链提供者"
 // 都走这里，避免两处各写一份排序导致行为漂移。
-func OrderedCompleteProviders(locations []*native.FileLocationORM) ([]uint32, error) {
+func OrderedCompleteProviders(locations []*entity.FileLocationORM) ([]uint32, error) {
 	completeProviders, err := GetCompleteProviders(locations)
 	if err != nil {
 		return nil, err
@@ -214,7 +215,7 @@ func OrderedCompleteProviders(locations []*native.FileLocationORM) ([]uint32, er
 
 // SelectBestSourceProvider 选择最优的源提供者（按存储提供者Order排序）
 // 返回提供者ID和对应的分片Location列表
-func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*native.FileLocationORM, error) {
+func SelectBestSourceProvider(locations []*entity.FileLocationORM) (uint32, []*entity.FileLocationORM, error) {
 	ordered, err := OrderedCompleteProviders(locations)
 	if err != nil {
 		return 0, nil, err
@@ -230,7 +231,7 @@ func SelectBestSourceProvider(locations []*native.FileLocationORM) (uint32, []*n
 }
 
 // BuildCompleteProviderMap 构建完整提供者的映射
-func BuildCompleteProviderMap(locations []*native.FileLocationORM) map[uint32]bool {
+func BuildCompleteProviderMap(locations []*entity.FileLocationORM) map[uint32]bool {
 	completeProviders, _ := GetCompleteProviders(locations)
 	result := make(map[uint32]bool)
 	for _, pid := range completeProviders {

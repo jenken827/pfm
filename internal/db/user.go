@@ -5,13 +5,13 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // GetUserByUsername 按用户名查询本地认证用户
 // 返回 gorm.ErrRecordNotFound 表示用户不存在
-func GetUserByUsername(username string) (*native.UserORM, error) {
-	user, err := gorm.G[*native.UserORM](db).
+func GetUserByUsername(username string) (*entity.UserORM, error) {
+	user, err := gorm.G[*entity.UserORM](db).
 		Where("username = ?", username).
 		First(context.Background())
 	if err != nil {
@@ -21,8 +21,8 @@ func GetUserByUsername(username string) (*native.UserORM, error) {
 }
 
 // GetUserByID 按用户 ID 查询本地认证用户
-func GetUserByID(userID string) (*native.UserORM, error) {
-	user, err := gorm.G[*native.UserORM](db).
+func GetUserByID(userID string) (*entity.UserORM, error) {
+	user, err := gorm.G[*entity.UserORM](db).
 		Where("user_id = ?", userID).
 		First(context.Background())
 	if err != nil {
@@ -32,13 +32,13 @@ func GetUserByID(userID string) (*native.UserORM, error) {
 }
 
 // CreateUser 创建本地认证用户
-func CreateUser(user *native.UserORM) error {
+func CreateUser(user *entity.UserORM) error {
 	return db.Create(user).Error
 }
 
 // ListUsers 列出所有本地认证用户
-func ListUsers() ([]*native.UserORM, error) {
-	var users []*native.UserORM
+func ListUsers() ([]*entity.UserORM, error) {
+	var users []*entity.UserORM
 	if err := db.Order("created_at ASC").Find(&users).Error; err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func ListUsers() ([]*native.UserORM, error) {
 // DeleteUser 删除本地认证用户（硬删除）
 // 返回 gorm.ErrRecordNotFound 表示用户不存在
 func DeleteUser(userID string) error {
-	result := db.Where("user_id = ?", userID).Delete(&native.UserORM{})
+	result := db.Where("user_id = ?", userID).Delete(&entity.UserORM{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -60,7 +60,7 @@ func DeleteUser(userID string) error {
 
 // UpdateUserPassword 更新本地认证用户密码哈希
 func UpdateUserPassword(userID, passwordHash string) error {
-	result := db.Model(&native.UserORM{}).
+	result := db.Model(&entity.UserORM{}).
 		Where("user_id = ?", userID).
 		Update("password_hash", passwordHash)
 	if result.Error != nil {
@@ -76,7 +76,7 @@ func UpdateUserPassword(userID, passwordHash string) error {
 // user_id 不变，UserSpace / admin_users 等关联不受影响
 // 返回 gorm.ErrRecordNotFound 表示用户不存在；用户名冲突返回唯一键错误
 func UpdateUserUsername(userID, newUsername string) error {
-	result := db.Model(&native.UserORM{}).
+	result := db.Model(&entity.UserORM{}).
 		Where("user_id = ?", userID).
 		Update("username", newUsername)
 	if result.Error != nil {

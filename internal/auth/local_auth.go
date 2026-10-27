@@ -18,7 +18,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // jwtSecretFile 自动生成的 JWT 密钥持久化路径（相对数据目录）
@@ -140,7 +140,7 @@ func (a *LocalAuthenticator) Authenticate(username, password string) (string, er
 }
 
 // IssueToken 为本地用户签发 JWT（claims 顶层扁平：id/name/email）
-func (a *LocalAuthenticator) IssueToken(user *native.UserORM) (string, error) {
+func (a *LocalAuthenticator) IssueToken(user *entity.UserORM) (string, error) {
 	if user.UserId == nil || user.Username == nil {
 		return "", fmt.Errorf("issue token failed: user id/username is nil")
 	}

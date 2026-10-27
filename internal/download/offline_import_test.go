@@ -11,6 +11,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -31,7 +32,7 @@ func newImportTestUser(t *testing.T) (string, string) {
 
 	ownerID := uuid.New().String()
 	rootID := uuid.New().String()
-	if err := db.CreateFile(&native.FileORM{
+	if err := db.CreateFile(&entity.FileORM{
 		Id:       utils.StringPtr(rootID),
 		Name:     utils.StringPtr("root"),
 		ParentId: utils.StringPtr(""),
@@ -41,7 +42,7 @@ func newImportTestUser(t *testing.T) (string, string) {
 	}); err != nil {
 		t.Fatalf("create root folder failed: %v", err)
 	}
-	if err := db.CreateUserSpace(&native.UserSpaceORM{
+	if err := db.CreateUserSpace(&entity.UserSpaceORM{
 		UserId:           utils.StringPtr(ownerID),
 		RootFileId:       utils.StringPtr(rootID),
 		BoundProviderIds: utils.StringPtr("[1]"),
@@ -53,9 +54,9 @@ func newImportTestUser(t *testing.T) (string, string) {
 	return ownerID, rootID
 }
 
-func newOfflineRecord(t *testing.T, ownerID, parentID, gid, rawURL string) *native.DownloadRecordORM {
+func newOfflineRecord(t *testing.T, ownerID, parentID, gid, rawURL string) *entity.DownloadRecordORM {
 	t.Helper()
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid:              utils.StringPtr(gid),
 		Blake3Hash:       utils.StringPtr(""),
 		SourceLocationId: utils.Uint64Ptr(0),
@@ -323,7 +324,7 @@ func TestResolveImportName(t *testing.T) {
 	}
 
 	// 目录里已有 clip.mp4（hash-a）：同内容 → 跳过
-	if err := db.CreateFile(&native.FileORM{
+	if err := db.CreateFile(&entity.FileORM{
 		Id:       utils.StringPtr(uuid.New().String()),
 		Name:     utils.StringPtr("clip.mp4"),
 		ParentId: utils.StringPtr(rootID),
@@ -346,7 +347,7 @@ func TestResolveImportName(t *testing.T) {
 	}
 
 	// 再下一个不同内容 → clip (2).mp4
-	if err := db.CreateFile(&native.FileORM{
+	if err := db.CreateFile(&entity.FileORM{
 		Id:       utils.StringPtr(uuid.New().String()),
 		Name:     utils.StringPtr("clip (1).mp4"),
 		ParentId: utils.StringPtr(rootID),

@@ -20,6 +20,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -118,7 +119,7 @@ var cleanupStorageOrphansCmd = &cobra.Command{
 }
 
 // scanOneProvider 扫描并处理单个 provider，返回 扫描数/孤儿数/删除数/失败数
-func scanOneProvider(ctx context.Context, sp *native.StorageProviderORM, rootOverride, outputPath string,
+func scanOneProvider(ctx context.Context, sp *entity.StorageProviderORM, rootOverride, outputPath string,
 	remove, dryRun bool) (scanned, orphans, deleted, failed int, err error) {
 	providerID := *sp.Id
 	providerName := derefStr(sp.Name)
@@ -285,7 +286,7 @@ func sanitizeFileName(name string) string {
 }
 
 // selectOrphanProviders 按 --provider-name / --provider-id / --all 选出目标 provider
-func selectOrphanProviders(name string, id uint32, all bool) ([]*native.StorageProviderORM, error) {
+func selectOrphanProviders(name string, id uint32, all bool) ([]*entity.StorageProviderORM, error) {
 	if !all && name == "" && id == 0 {
 		return nil, fmt.Errorf("必须指定 --provider-name、--provider-id 或 --all 之一（--list-providers 可先查看）")
 	}
@@ -293,7 +294,7 @@ func selectOrphanProviders(name string, id uint32, all bool) ([]*native.StorageP
 	if err != nil {
 		return nil, fmt.Errorf("查询 provider 失败: %w", err)
 	}
-	var picked []*native.StorageProviderORM
+	var picked []*entity.StorageProviderORM
 	for _, sp := range providers {
 		if sp.Id == nil || sp.Name == nil || sp.DriverId == nil {
 			continue

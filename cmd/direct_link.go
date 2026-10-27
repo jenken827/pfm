@@ -19,7 +19,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // 本文件是"直链下载"的**打表工具**：把某个文件在各存储提供者上的直链取出来，
@@ -173,7 +173,7 @@ func runDirectLink(cmd *cobra.Command, _ []string) error {
 }
 
 // loadDirectLinkTarget 读文件元数据与全部位置行
-func loadDirectLinkTarget(fileID string) (*native.FileORM, []*native.FileLocationORM, error) {
+func loadDirectLinkTarget(fileID string) (*entity.FileORM, []*entity.FileLocationORM, error) {
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("查询文件失败: %w", err)
@@ -192,7 +192,7 @@ func loadDirectLinkTarget(fileID string) (*native.FileORM, []*native.FileLocatio
 }
 
 // resolveDirectLinkProviders 决定要对哪些提供者取链：显式指定则只取它，否则取全部完整副本
-func resolveDirectLinkProviders(locations []*native.FileLocationORM, providerID uint32) ([]uint32, error) {
+func resolveDirectLinkProviders(locations []*entity.FileLocationORM, providerID uint32) ([]uint32, error) {
 	if providerID != 0 {
 		return []uint32{providerID}, nil
 	}
@@ -209,7 +209,7 @@ func resolveDirectLinkProviders(locations []*native.FileLocationORM, providerID 
 // 资格判定与服务端将采用的口径一致：单分片 + 未加密 + 驱动实现 DirectLinker。
 // 不合格时**仍然取链**，只是标记出来——本工具是打表用的，需要看到真实行为。
 func buildDirectLinkRow(ctx context.Context, providerID uint32,
-	locs []*native.FileLocationORM, opts *directLinkOptions) directLinkRow {
+	locs []*entity.FileLocationORM, opts *directLinkOptions) directLinkRow {
 	row := directLinkRow{ProviderID: providerID, Chunks: len(locs)}
 	if sp, err := db.GetProviderByID(providerID); err == nil {
 		if sp.Name != nil {
@@ -345,7 +345,7 @@ func parseContentRangeTotal(contentRange string) int64 {
 }
 
 // printDirectLinkText 打印人类可读的打表结果
-func printDirectLinkText(file *native.FileORM, rows []directLinkRow) {
+func printDirectLinkText(file *entity.FileORM, rows []directLinkRow) {
 	fmt.Println("===== 文件 =====")
 	name, hash, size := "<nil>", "<nil>", uint64(0)
 	if file.Name != nil {

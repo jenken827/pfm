@@ -596,7 +596,7 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 
 // respondPreDownload 回 202 + 预下载状态，提示客户端稍后重试。
 //
-// Telegram 大文件（> telegram.LargeFileSizeThreshold）首次访问时尚未落到本地缓存，
+// 大文件（驱动声明了 PREDOWNLOAD 能力）首次访问时尚未落到本地缓存，
 // 服务端不阻塞请求（bot-api 拉 30MB+ 可能几十秒），而是触发异步预下载并立即返回本响应。
 // 缓存完成后（cache_status=CACHED）同一个请求会正常流式返回。
 //

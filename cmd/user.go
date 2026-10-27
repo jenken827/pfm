@@ -16,7 +16,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // userCmd 本地认证用户管理（auth.mode=local 时使用）
@@ -149,7 +149,7 @@ var userAddCmd = &cobra.Command{
 		}
 
 		userID := uuid.New().String()
-		user := &native.UserORM{
+		user := &entity.UserORM{
 			UserId:       &userID,
 			Username:     &username,
 			PasswordHash: &hash,

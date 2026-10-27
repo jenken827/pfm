@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"strconv"
@@ -91,7 +92,7 @@ func GetOrCreateSubfolder(ctx context.Context, req *native.GetOrCreateSubfolderR
 	}
 
 	newID := uuid.New().String()
-	newFolder := &native.FileORM{
+	newFolder := &entity.FileORM{
 		Id:               &newID,
 		Name:             &newName,
 		ParentId:         &parentID,

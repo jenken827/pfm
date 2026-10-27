@@ -222,8 +222,7 @@ cmd_proto_go() {
     echo "📦 生成 Go protobuf 代码..."
     check_command "buf"
     check_command "protoc-gen-go"
-    check_command "protoc-gen-connect-go"
-    check_command "protoc-gen-gorm"
+    check_command "protoc-gen-sgorm"
 
     cd "$SCRIPT_DIR/proto"
     buf generate

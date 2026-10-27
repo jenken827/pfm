@@ -1,6 +1,7 @@
 package types
 
 import (
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -58,7 +59,7 @@ type ProviderConfig struct {
 }
 
 // ProviderConfigFromORM 从 StorageProviderORM 提取类型化配置视图
-func ProviderConfigFromORM(orm *native.StorageProviderORM) ProviderConfig {
+func ProviderConfigFromORM(orm *entity.StorageProviderORM) ProviderConfig {
 	cfg := ProviderConfig{}
 	if orm == nil {
 		return cfg
@@ -88,7 +89,7 @@ func ProviderConfigFromORM(orm *native.StorageProviderORM) ProviderConfig {
 }
 
 // FileRefFromLocation 把 FileLocationORM 转为 FileRef（唯一碰 ORM 的转换点）
-func FileRefFromLocation(loc *native.FileLocationORM) FileRef {
+func FileRefFromLocation(loc *entity.FileLocationORM) FileRef {
 	ref := FileRef{}
 	if loc == nil {
 		return ref
@@ -130,7 +131,7 @@ func FileRefFromLocation(loc *native.FileLocationORM) FileRef {
 }
 
 // FileRefsFromLocations 批量转换
-func FileRefsFromLocations(locs []*native.FileLocationORM) []FileRef {
+func FileRefsFromLocations(locs []*entity.FileLocationORM) []FileRef {
 	refs := make([]FileRef, 0, len(locs))
 	for _, loc := range locs {
 		refs = append(refs, FileRefFromLocation(loc))

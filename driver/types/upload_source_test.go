@@ -3,6 +3,7 @@ package types
 import (
 	"testing"
 
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -20,7 +21,7 @@ func TestFileRefFromLocation(t *testing.T) {
 	messageID := int32(456)
 	cacheStatus := int32(native.CacheStatus_CACHED)
 
-	loc := &native.FileLocationORM{
+	loc := &entity.FileLocationORM{
 		Id:             &id,
 		ProviderFileId: &providerFileID,
 		Path:           &path,
@@ -88,7 +89,7 @@ func TestProviderConfigFromORM(t *testing.T) {
 	hashType := int32(native.HashType_MD5)
 	enabled := true
 
-	orm := &native.StorageProviderORM{
+	orm := &entity.StorageProviderORM{
 		EncryptionKey:        &key,
 		EncryptionSuffix:     &suffix,
 		SortOrder:            &sortOrder,

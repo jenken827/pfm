@@ -38,7 +38,7 @@ func (s *FileServer) GetFileList(ctx context.Context, req *native.FileListReq) (
 			total--
 			continue
 		}
-		result = append(result, &pb)
+		result = append(result, pb)
 	}
 	tc := uint32(total)
 	return response.SuccessResp(&native.FileListRespData{
@@ -61,7 +61,7 @@ func (s *FileServer) GetFolderList(ctx context.Context, req *native.FolderListRe
 			llog.C(ctx).Errorf("convert folder to pb failed, err: %v", err)
 			continue
 		}
-		result = append(result, &pb)
+		result = append(result, pb)
 	}
 	return response.SuccessResp(&native.FolderListRespData{
 		Folders: result,
@@ -264,7 +264,7 @@ func (s *FileServer) SearchFiles(ctx context.Context, req *native.SearchFilesReq
 			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
-		result = append(result, &pb)
+		result = append(result, pb)
 	}
 	tc := uint32(total)
 	return response.SuccessResp(&native.SearchFilesRespData{
@@ -305,7 +305,7 @@ func (s *FileServer) GetRecentFiles(ctx context.Context, req *native.GetRecentFi
 			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
-		result = append(result, &pb)
+		result = append(result, pb)
 	}
 	tc := uint32(total)
 	return response.SuccessResp(&native.GetRecentFilesRespData{
@@ -328,7 +328,7 @@ func (s *FileServer) GetFilesByType(ctx context.Context, req *native.GetFilesByT
 			llog.C(ctx).Errorf("convert file to pb failed, err: %v", err)
 			continue
 		}
-		result = append(result, &pb)
+		result = append(result, pb)
 	}
 	tc := uint32(total)
 	return response.SuccessResp(&native.GetFilesByTypeRespData{

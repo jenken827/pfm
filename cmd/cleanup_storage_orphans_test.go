@@ -23,24 +23,24 @@ func (f fakeRootLister) ListRemote(_ context.Context, _ string) ([]types.RemoteE
 
 // TestRemoteListSupported 能力判定必须与驱动的能力声明一致：Telegram 明确不支持
 func TestRemoteListSupported(t *testing.T) {
-	supported := []string{
-		types.DriverLocal,
-		types.DriverPan123,
-		types.DriverAliyundriveOpen,
-		types.DriverYun139,
-		types.DriverCloud189pc,
-	}
+	// 核心现在只内置 local；其余驱动的能力由插件 Describe 提供，未装插件时判定为不支持
+	supported := []string{types.DriverLocal}
 	for _, tp := range supported {
 		if !remoteListSupported(tp) {
 			t.Fatalf("%s 应支持远端枚举", tp)
 		}
 	}
-	// baidu 已迁出为插件：未安装插件时没有元数据，判定为不支持（能力由插件 Describe 提供）
+	// baidu / pan123 已迁出为插件：未安装插件时没有元数据，判定为不支持
+	// （能力由插件 Describe 提供）
 	for _, tp := range []string{
 		types.DriverTelegram,
 		types.DriverDiscord,
 		types.DriverHuggingFace,
 		types.DriverBaidu,
+		types.DriverPan123,
+		types.DriverAliyundriveOpen,
+		types.DriverYun139,
+		types.DriverCloud189pc,
 		"",
 		"nonexistent_driver",
 	} {

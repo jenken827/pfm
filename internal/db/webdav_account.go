@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // ===== WebDAV 独立账号 CRUD =====
@@ -15,28 +15,28 @@ import (
 
 // CreateWebdavAccount 创建 WebDAV 账号
 // 用户名重复由 idx_wa_un 唯一索引兜底（并发下「先查后插」不可靠）
-func CreateWebdavAccount(a *native.WebdavAccountORM) error {
+func CreateWebdavAccount(a *entity.WebdavAccountORM) error {
 	return db.WithContext(context.Background()).Create(a).Error
 }
 
 // GetWebdavAccountByUsername 按 WebDAV 用户名查询（/dav 认证热路径）
 // 返回 gorm.ErrRecordNotFound 表示账号不存在
-func GetWebdavAccountByUsername(username string) (*native.WebdavAccountORM, error) {
-	return gorm.G[*native.WebdavAccountORM](db).
+func GetWebdavAccountByUsername(username string) (*entity.WebdavAccountORM, error) {
+	return gorm.G[*entity.WebdavAccountORM](db).
 		Where("username = ?", username).
 		First(context.Background())
 }
 
 // GetWebdavAccountByID 按主键查询 WebDAV 账号
-func GetWebdavAccountByID(id uint32) (*native.WebdavAccountORM, error) {
-	return gorm.G[*native.WebdavAccountORM](db).
+func GetWebdavAccountByID(id uint32) (*entity.WebdavAccountORM, error) {
+	return gorm.G[*entity.WebdavAccountORM](db).
 		Where("id = ?", id).
 		First(context.Background())
 }
 
 // ListWebdavAccountsByUser 列出某用户的全部 WebDAV 账号（新建的排前面）
-func ListWebdavAccountsByUser(userID string) ([]*native.WebdavAccountORM, error) {
-	return gorm.G[*native.WebdavAccountORM](db).
+func ListWebdavAccountsByUser(userID string) ([]*entity.WebdavAccountORM, error) {
+	return gorm.G[*entity.WebdavAccountORM](db).
 		Where("user_id = ?", userID).
 		Order("id DESC").
 		Find(context.Background())
@@ -51,7 +51,7 @@ func UpdateWebdavAccountFields(id uint32, fields map[string]any) error {
 		return nil
 	}
 	return db.WithContext(context.Background()).
-		Model(&native.WebdavAccountORM{}).
+		Model(&entity.WebdavAccountORM{}).
 		Where("id = ?", id).
 		Updates(fields).Error
 }
@@ -80,7 +80,7 @@ func SetWebdavAccountEnabled(id uint32, enabled bool, reason string) error {
 func DeleteWebdavAccount(id uint32) error {
 	result := db.WithContext(context.Background()).
 		Where("id = ?", id).
-		Delete(&native.WebdavAccountORM{})
+		Delete(&entity.WebdavAccountORM{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -101,9 +101,9 @@ func DisableWebdavAccountsByRootIDs(rootIDs []string, reason string) ([]uint32, 
 	}
 	ctx := context.Background()
 
-	var accounts []*native.WebdavAccountORM
+	var accounts []*entity.WebdavAccountORM
 	if err := db.WithContext(ctx).
-		Model(&native.WebdavAccountORM{}).
+		Model(&entity.WebdavAccountORM{}).
 		Where("root_file_id IN ?", rootIDs).
 		Find(&accounts).Error; err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func DisableWebdavAccountsByRootIDs(rootIDs []string, reason string) ([]uint32, 
 	}
 
 	if err := db.WithContext(ctx).
-		Model(&native.WebdavAccountORM{}).
+		Model(&entity.WebdavAccountORM{}).
 		Where("id IN ?", ids).
 		Updates(map[string]any{"enabled": false, "disabled_reason": reason}).Error; err != nil {
 		return nil, err

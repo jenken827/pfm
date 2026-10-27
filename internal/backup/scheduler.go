@@ -18,6 +18,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/fileutil"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
@@ -40,7 +41,7 @@ type BackupScheduler struct {
 
 // BackupRegisterItem 注册队列项
 type BackupRegisterItem struct {
-	Task      *native.BackupTaskORM
+	Task      *entity.BackupTaskORM
 	Candidate *BackupCandidate
 }
 
@@ -88,7 +89,7 @@ func GetScheduler() *BackupScheduler {
 }
 
 // AddTask 添加备份任务到调度器
-func (s *BackupScheduler) AddTask(task *native.BackupTaskORM) {
+func (s *BackupScheduler) AddTask(task *entity.BackupTaskORM) {
 	s.addTask(task)
 }
 
@@ -98,7 +99,7 @@ func (s *BackupScheduler) RemoveTask(taskID uint64) {
 }
 
 // addTask 添加备份任务（内部）
-func (s *BackupScheduler) addTask(task *native.BackupTaskORM) {
+func (s *BackupScheduler) addTask(task *entity.BackupTaskORM) {
 	if task.Id == nil || task.Strategy == nil || task.SourcePath == nil {
 		return
 	}
@@ -354,7 +355,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 		fileID = *existingFile.Id
 	} else {
 		fileType, mime := fileutil.GetFileType(candidate.AbsPath, filepath.Base(candidate.RelativePath))
-		newFile := &native.FileORM{
+		newFile := &entity.FileORM{
 			Name:     utils.StringPtr(filepath.Base(candidate.RelativePath)),
 			ParentId: &targetParentID,
 			Size:     &candidate.FileSize,
@@ -391,7 +392,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 	// 备份源文件在本地，将其路径作为 TempPath，走普通上传流程
 	// 每个 provider（包括 local）都会通过自己的 Upload 方法物理写入文件
 	fileName := filepath.Base(candidate.RelativePath)
-	uploadRecord := &native.UploadRecordORM{
+	uploadRecord := &entity.UploadRecordORM{
 		FileHash:          &hash,
 		FileName:          &fileName,
 		FileSize:          &candidate.FileSize,
@@ -421,7 +422,7 @@ func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 }
 
 // updateBackupFileRecord 更新或创建备份文件记录
-func (s *BackupScheduler) updateBackupFileRecord(task *native.BackupTaskORM, candidate *BackupCandidate, hash string, fileID *string, status native.BackupFileStatus) {
+func (s *BackupScheduler) updateBackupFileRecord(task *entity.BackupTaskORM, candidate *BackupCandidate, hash string, fileID *string, status native.BackupFileStatus) {
 	record, err := db.GetBackupFileRecord(*task.Id, candidate.RelativePath)
 	if err == nil {
 		// 记录存在，更新
@@ -433,7 +434,7 @@ func (s *BackupScheduler) updateBackupFileRecord(task *native.BackupTaskORM, can
 		db.UpdateBackupFileRecord(record)
 	} else {
 		// 记录不存在，创建
-		newRecord := &native.BackupFileRecordORM{
+		newRecord := &entity.BackupFileRecordORM{
 			TaskId:       task.Id,
 			RelativePath: &candidate.RelativePath,
 			FileHash:     &hash,
@@ -504,7 +505,7 @@ func ensureDirStructure(ctx context.Context, targetParentID, relativePath, owner
 			}
 		}
 
-		newDir := &native.FileORM{
+		newDir := &entity.FileORM{
 			Name:             utils.StringPtr(part),
 			ParentId:         &currentParentID,
 			Type:             utils.EnumPtr(native.FileType_FOLDER),
@@ -567,7 +568,7 @@ func adaptCronExpr(expr string) string {
 // ==================== WATCH 策略 ====================
 
 // addWatch 添加文件监听
-func (s *BackupScheduler) addWatch(task *native.BackupTaskORM) {
+func (s *BackupScheduler) addWatch(task *entity.BackupTaskORM) {
 	s.watchMu.Lock()
 	defer s.watchMu.Unlock()
 

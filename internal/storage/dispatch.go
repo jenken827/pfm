@@ -14,6 +14,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -25,7 +26,7 @@ var dispatchingRecords sync.Map // map[uint32]struct{}
 // 支持两种场景：
 // 1. 普通上传：有临时文件，从临时文件上传
 // 2. 同步任务：无临时文件，从现有提供者同步
-func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
+func Dispatch(ctx context.Context, ur *entity.UploadRecordORM) {
 	defer func() {
 		if r := recover(); r != nil {
 			var fileHash string
@@ -107,7 +108,7 @@ func Dispatch(ctx context.Context, ur *native.UploadRecordORM) {
 // dispatchToProviders 分发上传任务到各存储提供者
 
 // dispatchToProviders 分发上传任务到各存储提供者
-func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, isSyncTask bool) {
+func dispatchToProviders(ctx context.Context, ur *entity.UploadRecordORM, targetProviderIds []uint32, isSyncTask bool) {
 	// 1. 查询文件已经在哪些存储提供者上
 	existingLocations, err := db.GetFileLocationsByBlake3Hash(*ur.FileHash)
 	if err != nil {
@@ -115,7 +116,7 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 	}
 
 	// 2. 构建已存在的提供者映射（按提供者分组）
-	providerChunksMap := make(map[uint32][]*native.FileLocationORM)
+	providerChunksMap := make(map[uint32][]*entity.FileLocationORM)
 	for _, loc := range existingLocations {
 		providerChunksMap[*loc.ProviderId] = append(providerChunksMap[*loc.ProviderId], loc)
 	}
@@ -174,7 +175,7 @@ func dispatchToProviders(ctx context.Context, ur *native.UploadRecordORM, target
 // uploadFromTempFile 从临时文件上传
 
 // uploadFromTempFile 从临时文件上传
-func uploadFromTempFile(ctx context.Context, ur *native.UploadRecordORM, needUploadProviders []uint32) {
+func uploadFromTempFile(ctx context.Context, ur *entity.UploadRecordORM, needUploadProviders []uint32) {
 	// 生成缩略图（在分发前完成）
 	generateThumbnailForUpload(ctx, ur)
 
@@ -185,7 +186,7 @@ func uploadFromTempFile(ctx context.Context, ur *native.UploadRecordORM, needUpl
 // syncFromExistingProviders 从现有副本同步到新提供者
 
 // syncFromExistingProviders 从现有副本同步到新提供者
-func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, needUploadProviders []uint32, existingLocations []*native.FileLocationORM) {
+func syncFromExistingProviders(ctx context.Context, ur *entity.UploadRecordORM, needUploadProviders []uint32, existingLocations []*entity.FileLocationORM) {
 	// 1. 选择最优源提供者（支持分片完整性检查）
 	sourceProviderID, sourceLocations, err := SelectBestSourceProvider(existingLocations)
 	if err != nil {
@@ -243,7 +244,7 @@ func syncFromExistingProviders(ctx context.Context, ur *native.UploadRecordORM, 
 // batchUploadFromSource 从源文件批量上传到多个目标提供者
 
 // batchUploadFromSource 从源文件批量上传到多个目标提供者
-func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targetProviderIds []uint32, sourcePath string) {
+func batchUploadFromSource(ctx context.Context, ur *entity.UploadRecordORM, targetProviderIds []uint32, sourcePath string) {
 	fileName, parentID, fileEncrypt := getUploadContext(ur)
 
 	var wg sync.WaitGroup
@@ -282,7 +283,7 @@ func batchUploadFromSource(ctx context.Context, ur *native.UploadRecordORM, targ
 // getUploadContext 获取上传上下文信息（文件名、父目录ID、加密设置）
 
 // getUploadContext 获取上传上下文信息（文件名、父目录ID、加密设置）
-func getUploadContext(ur *native.UploadRecordORM) (fileName, parentID string, fileEncrypt bool) {
+func getUploadContext(ur *entity.UploadRecordORM) (fileName, parentID string, fileEncrypt bool) {
 	fileName = "unknown"
 	if ur.FileName != nil {
 		fileName = *ur.FileName
@@ -309,7 +310,7 @@ func getUploadContext(ur *native.UploadRecordORM) (fileName, parentID string, fi
 //
 // 注意 ur.Version 必须是**本次上传**发号得到的版本：复用旧 upload record 时若
 // 不刷新版本号，CAS 会静默命中 0 行，文件永远停在"未就绪"（见 BUGS.md）。
-func markFileReadyIfVersionMatches(ctx context.Context, ur *native.UploadRecordORM) {
+func markFileReadyIfVersionMatches(ctx context.Context, ur *entity.UploadRecordORM) {
 	if ur.ParentId == nil || *ur.ParentId == "" || ur.FileName == nil || *ur.FileName == "" {
 		return
 	}
@@ -337,7 +338,7 @@ func markFileReadyIfVersionMatches(ctx context.Context, ur *native.UploadRecordO
 // uploadToProviderAsync 异步上传到单个提供者，返回是否失败和错误信息
 
 // uploadToProviderAsync 异步上传到单个提供者，返回是否失败和错误信息
-func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sourcePath, fileName, parentID string, fileEncrypt bool, tid uint32) (failed bool, errMsg string) {
+func uploadToProviderAsync(ctx context.Context, ur *entity.UploadRecordORM, sourcePath, fileName, parentID string, fileEncrypt bool, tid uint32) (failed bool, errMsg string) {
 	// 捕获 panic 并打印堆栈
 	defer func() {
 		if r := recover(); r != nil {
@@ -383,7 +384,7 @@ func uploadToProviderAsync(ctx context.Context, ur *native.UploadRecordORM, sour
 // finalizeBatchUpload 完成批量上传，处理结果
 
 // finalizeBatchUpload 完成批量上传，处理结果
-func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMessages []string) {
+func finalizeBatchUpload(ur *entity.UploadRecordORM, failedCount int32, errorMessages []string) {
 	if failedCount > 0 {
 		llog.L().Warnf("batch upload completed with %d failures, hash: %s", failedCount, *ur.FileHash)
 
@@ -435,7 +436,7 @@ func finalizeBatchUpload(ur *native.UploadRecordORM, failedCount int32, errorMes
 //
 // 临时文件按 hash 共享：同一条内容可能还有别的在途上传记录（PENDING/UPLOADING）
 // 正等着它分发，此时保留，等最后一条记录完成时再清理（兜底由 temp janitor 回收）。
-func cleanupUploadTemp(ur *native.UploadRecordORM) {
+func cleanupUploadTemp(ur *entity.UploadRecordORM) {
 	if ur.FileHash == nil || *ur.FileHash == "" {
 		return
 	}
@@ -464,7 +465,7 @@ func cleanupUploadTemp(ur *native.UploadRecordORM) {
 // sourcePath: 源文件路径（明文）
 // providerID: 目标存储提供者ID
 // fileEncrypt: 文件是否启用加密（文件夹设置）
-func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadRecordORM, providerID uint32, fl *native.FileLocationORM, fileEncrypt bool) error {
+func uploadToProvider(ctx context.Context, sourcePath string, ur *entity.UploadRecordORM, providerID uint32, fl *entity.FileLocationORM, fileEncrypt bool) error {
 	llog.C(ctx).Infof("[uploadToProvider] start, provider: %d", providerID)
 
 	fileName := ""
@@ -562,7 +563,7 @@ func uploadToProvider(ctx context.Context, sourcePath string, ur *native.UploadR
 }
 
 // completeUpload 完成上传，清理临时文件
-func completeUpload(ur *native.UploadRecordORM) {
+func completeUpload(ur *entity.UploadRecordORM) {
 	// 幂等检查：如果已经是 COMPLETED，跳过
 	if ur.TaskStatus != nil && *ur.TaskStatus == int32(native.UploadStatus_COMPLETED) {
 		return
@@ -596,7 +597,7 @@ func completeUpload(ur *native.UploadRecordORM) {
 	if completedCount == len(targetProviderIds) {
 		// 使用 DB 乐观锁防止并发更新
 		if ur.Id != nil {
-			result := db.GetDB().Model(&native.UploadRecordORM{}).
+			result := db.GetDB().Model(&entity.UploadRecordORM{}).
 				Where("id = ? AND task_status != ?", *ur.Id, int32(native.UploadStatus_COMPLETED)).
 				Updates(map[string]interface{}{
 					"task_status": int32(native.UploadStatus_COMPLETED),
@@ -632,7 +633,7 @@ func completeUpload(ur *native.UploadRecordORM) {
 // markUploadFailed 标记上传失败
 
 // markUploadFailed 标记上传失败
-func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason string) {
+func markUploadFailed(ctx context.Context, ur *entity.UploadRecordORM, reason string) {
 	if ur.Id == nil {
 		llog.C(ctx).Errorf("upload failed (no record id): %s, hash: %s", reason, *ur.FileHash)
 		return
@@ -646,7 +647,7 @@ func markUploadFailed(ctx context.Context, ur *native.UploadRecordORM, reason st
 }
 
 // markUploadUploading 标记上传中
-func markUploadUploading(ctx context.Context, ur *native.UploadRecordORM) {
+func markUploadUploading(ctx context.Context, ur *entity.UploadRecordORM) {
 	if ur.Id == nil {
 		return
 	}
@@ -680,7 +681,7 @@ func resumeDispatch() {
 	for _, record := range records {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(r *native.UploadRecordORM) {
+		go func(r *entity.UploadRecordORM) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			Dispatch(context.Background(), r)

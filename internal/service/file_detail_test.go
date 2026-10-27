@@ -7,6 +7,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -24,7 +25,7 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 
 	// 实例名刻意与驱动类型名（LOCAL）不同，便于发现"用错来源"
 	const instanceName = "我的本地盘"
-	provider := &native.StorageProviderORM{
+	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr(instanceName),
 		DriverId: utils.StringPtr(types.DriverLocal),
 		Config:   utils.StringPtr(`{"root_path":"/tmp/x"}`),
@@ -40,7 +41,7 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 	// 文件 + 该 provider 上一条已完成的位置行
 	const hash = "deadbeefdeadbeef"
 	fileID := uuid.New().String()
-	file := &native.FileORM{
+	file := &entity.FileORM{
 		Id:       utils.StringPtr(fileID),
 		Name:     utils.StringPtr("a.txt"),
 		ParentId: utils.StringPtr(rootID),
@@ -54,7 +55,7 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 	if err := db.CreateFile(file); err != nil {
 		t.Fatalf("create file failed: %v", err)
 	}
-	loc := &native.FileLocationORM{
+	loc := &entity.FileLocationORM{
 		Blake3Hash:  utils.StringPtr(hash),
 		ProviderId:  provider.Id,
 		Path:        utils.StringPtr("/tmp/x/a.txt"),

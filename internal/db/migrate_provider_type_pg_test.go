@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // Postgres 迁移用例：本地/CI 有可用 PG 时用 PFM_TEST_POSTGRES_DSN 打开，
@@ -48,7 +48,7 @@ func TestMigrateProviderTypeToStringPostgres(t *testing.T) {
 
 	// 先按当前模型建全表，再退回旧形态（整型 provider_type + NOT NULL），
 	// 这样后续 AutoMigrate 检查的是"真实老库"而不是缺列的简化表。
-	if err := gdb.AutoMigrate(&native.StorageProviderORM{}); err != nil {
+	if err := gdb.AutoMigrate(&entity.StorageProviderORM{}); err != nil {
 		t.Fatalf("create current table failed: %v", err)
 	}
 	for _, sql := range []string{
@@ -105,7 +105,7 @@ func TestMigrateProviderTypeToStringPostgres(t *testing.T) {
 	if err := gdb.Exec("SET search_path TO " + schema).Error; err != nil {
 		t.Fatalf("reset search_path failed: %v", err)
 	}
-	if err := gdb.AutoMigrate(&native.StorageProviderORM{}); err != nil {
+	if err := gdb.AutoMigrate(&entity.StorageProviderORM{}); err != nil {
 		t.Fatalf("AutoMigrate after migration failed: %v", err)
 	}
 	columnType, exists, err := providerTypeColumnType(gdb)

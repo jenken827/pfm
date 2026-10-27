@@ -14,6 +14,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -91,7 +92,7 @@ func checkOwnershipBatch(ctx context.Context, fileIDs []string) (string, *models
 }
 
 // GetFileList 获取文件列表
-func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileORM, int64, bool, *models.Err) {
+func GetFileList(ctx context.Context, req *native.FileListReq) ([]*entity.FileORM, int64, bool, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	parentID := req.GetParentId()
 	llog.C(ctx).Infof("GetFileList: user=%s, parentId=%s", userID, parentID)
@@ -136,7 +137,7 @@ func GetFileList(ctx context.Context, req *native.FileListReq) ([]*native.FileOR
 }
 
 // GetFolderList 获取文件夹列表（用于移动文件选择目标文件夹）
-func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*native.FileORM, *models.Err) {
+func GetFolderList(ctx context.Context, req *native.FolderListReq) ([]*entity.FileORM, *models.Err) {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return nil, &models.Err{E: fmt.Errorf("unauthorized"), C: native.RespCode_PARAMS_ERROR}
@@ -221,7 +222,7 @@ func CreateDir(ctx context.Context, req *native.CreateDirReq) (string, *models.E
 		return "", mErr
 	}
 
-	f := &native.FileORM{
+	f := &entity.FileORM{
 		Name:             req.Name,
 		ParentId:         &parentID,
 		Type:             utils.EnumPtr(native.FileType_FOLDER),
@@ -318,7 +319,7 @@ func UpdateDir(ctx context.Context, req *native.UpdateDirReq) *models.Err {
 		}
 	}
 
-	orm := native.FileORM{
+	orm := entity.FileORM{
 		Id:               req.Id,
 		Name:             req.Name,
 		EnableEncryption: req.EnableEncryption,
@@ -467,7 +468,7 @@ func GetAvailableProvidersForSync(ctx context.Context, fileHash string) ([]*nati
 			llog.C(ctx).Errorf("convert provider to PB failed: %v", err)
 			continue
 		}
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 
 	return items, nil
@@ -513,7 +514,7 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 	// selectedRestore: 用户选中的文件（可能改名/改父目录）
 	// childRestore: 文件夹下的子文件（只清 deleted_at，保持原 parent_id）
 	type restoreItem struct {
-		file        *native.FileORM
+		file        *entity.FileORM
 		newParentID string // 空表示保持原 parent_id
 		newName     string // 空表示保持原名
 	}
@@ -588,7 +589,7 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 			if item.newName != "" {
 				updates["name"] = item.newName
 			}
-			if err := tx.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+			if err := tx.WithContext(ctx).Unscoped().Model(&entity.FileORM{}).
 				Where("id = ?", *item.file.Id).
 				Updates(updates).Error; err != nil {
 				return fmt.Errorf("restore file %s failed: %w", *item.file.Id, err)
@@ -597,7 +598,7 @@ func RestoreFromTrash(ctx context.Context, req *native.RestoreFromTrashReq) *mod
 
 		// 2. 恢复子文件（只清 deleted_at，保持原 parent_id 和 name）
 		if len(childIDs) > 0 {
-			if err := tx.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+			if err := tx.WithContext(ctx).Unscoped().Model(&entity.FileORM{}).
 				Where("id IN ?", childIDs).
 				Update("deleted_at", nil).Error; err != nil {
 				return fmt.Errorf("restore children failed: %w", err)
@@ -631,7 +632,7 @@ func resolveNameConflict(parentID, name, ownerID string) string {
 func batchDeleteFromProvider(
 	ctx context.Context,
 	providerID uint32,
-	locations []*native.FileLocationORM,
+	locations []*entity.FileLocationORM,
 ) (deletedIDs []uint64, failedIDs []uint64, deletedSize uint64) {
 	st := storage.GetStorage(providerID)
 	if st == nil {
@@ -780,7 +781,7 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 	}
 
 	// 4. 批量获取所有文件位置记录，按 provider_id 分组
-	providerLocations := make(map[uint32][]*native.FileLocationORM) // providerID -> locations
+	providerLocations := make(map[uint32][]*entity.FileLocationORM) // providerID -> locations
 	for fileHash := range hashSet {
 		locations, err := db.GetFileLocationsByBlake3Hash(fileHash)
 		if err != nil {
@@ -806,7 +807,7 @@ func deleteFilesFromProviders(ctx context.Context, fileIDs []string) {
 
 	for providerID, locations := range providerLocations {
 		// 过滤掉仍有其他文件引用的 location
-		var locationsToDelete []*native.FileLocationORM
+		var locationsToDelete []*entity.FileLocationORM
 		for _, loc := range locations {
 			if loc.Blake3Hash != nil && hashesWithRefs[*loc.Blake3Hash] {
 				llog.C(ctx).Debugf("skip deleting location %d for hash %s (still referenced by other files)", loc.Id, *loc.Blake3Hash)
@@ -987,7 +988,7 @@ func RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) 
 		}
 		myVersion := AllocateFileVersion(strPtrVal(file.OwnerId), strPtrVal(file.ParentId), strPtrVal(file.Name))
 		ctx = withUploadVersion(ctx, myVersion)
-		f := &native.FileORM{
+		f := &entity.FileORM{
 			Id:      file.Id,
 			Hash:    &targetHash,
 			Size:    &targetSize,
@@ -1039,7 +1040,7 @@ func RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) 
 	// 类型/扩展名按新文件名判定（同名恢复时与原文件类型一致）
 	ftype, mime := GetFileType("", finalName)
 	myVersion := AllocateFileVersion(ownerID, parentID, finalName)
-	newFile := &native.FileORM{
+	newFile := &entity.FileORM{
 		Name:     &finalName,
 		ParentId: &parentID,
 		Size:     &targetSize,
@@ -1060,7 +1061,7 @@ func RestoreFileHistory(ctx context.Context, req *native.RestoreFileHistoryReq) 
 }
 
 // hasUsableLocation 判断历史 hash 是否至少有一个可用的（已上传完成/已缓存）存储位置
-func hasUsableLocation(locations []*native.FileLocationORM) bool {
+func hasUsableLocation(locations []*entity.FileLocationORM) bool {
 	for _, loc := range locations {
 		if loc == nil || loc.Status == nil {
 			continue
@@ -1080,7 +1081,7 @@ func deleteFileHistories(ctx context.Context, fileIDs []string) {
 	}
 	llog.C(ctx).Infof("delete file history ids length: %d", len(fileIDs))
 	// 批量获取所有文件的历史记录
-	allHistories := make([]*native.FileHistoryORM, 0)
+	allHistories := make([]*entity.FileHistoryORM, 0)
 	for _, fileID := range fileIDs {
 		histories, err := db.GetFileHistoryByFileID(fileID)
 		if err != nil {
@@ -1153,7 +1154,7 @@ func DeleteFileHistory(ctx context.Context, ids []uint64) *models.Err {
 
 // deleteHistoryFromProviders 从存储提供者删除历史文件（公共逻辑）
 // 收集 hash -> 查询 FileLocation -> 按 provider 分组 -> 批量删除 -> 更新容量 -> 删除 FileLocation 记录
-func deleteHistoryFromProviders(ctx context.Context, histories []*native.FileHistoryORM) {
+func deleteHistoryFromProviders(ctx context.Context, histories []*entity.FileHistoryORM) {
 	// 收集所有历史记录的 hash
 	hashSet := make(map[string]bool)
 	for _, history := range histories {
@@ -1163,7 +1164,7 @@ func deleteHistoryFromProviders(ctx context.Context, histories []*native.FileHis
 	}
 
 	// 根据 hash 批量获取文件位置记录，按 provider 分组
-	providerLocations := make(map[uint32][]*native.FileLocationORM)
+	providerLocations := make(map[uint32][]*entity.FileLocationORM)
 	for hash := range hashSet {
 		locations, err := db.GetFileLocationsByBlake3Hash(hash)
 		if err != nil {
@@ -1279,7 +1280,7 @@ func GetTrashList(ctx context.Context) (*native.TrashListRespData, *models.Err) 
 			llog.C(ctx).Errorf("convert file to PB failed: %v", err)
 			continue
 		}
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 
 	totalUint32 := uint32(total)
@@ -1290,7 +1291,7 @@ func GetTrashList(ctx context.Context) (*native.TrashListRespData, *models.Err) 
 }
 
 // SearchFiles 按文件名或标签搜索文件
-func SearchFiles(ctx context.Context, req *native.SearchFilesReq) ([]*native.FileORM, int64, bool, *models.Err) {
+func SearchFiles(ctx context.Context, req *native.SearchFilesReq) ([]*entity.FileORM, int64, bool, *models.Err) {
 	keyword := req.GetKeyword()
 	if keyword == "" {
 		return nil, 0, false, &models.Err{
@@ -1307,7 +1308,7 @@ func SearchFiles(ctx context.Context, req *native.SearchFilesReq) ([]*native.Fil
 
 	// 根据搜索类型选择查询方式
 	searchType := req.GetSearchType()
-	var files []*native.FileORM
+	var files []*entity.FileORM
 	var total int64
 	var hasMore bool
 	var err error
@@ -1428,7 +1429,7 @@ func SyncFileToProviders(ctx context.Context, req *native.SyncFileToProvidersReq
 	}
 
 	// 6. Create ONE sync upload record with all target providers
-	uploadRecord := &native.UploadRecordORM{
+	uploadRecord := &entity.UploadRecordORM{
 		FileHash:          file.Hash,
 		FileName:          file.Name,
 		FileSize:          file.Size,
@@ -1486,7 +1487,7 @@ func deleteThumbnailsForFiles(fileIDs []string) {
 
 // GetRecentFiles 获取最近使用的文件（已废弃：前端改为本地存储，此接口保留用于兼容）
 // Deprecated: 前端已改用本地 RecentFilesStorage，此接口将在后续版本移除
-func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*native.FileORM, int64, bool, *models.Err) {
+func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*entity.FileORM, int64, bool, *models.Err) {
 	offset := req.GetOffset()
 	pageSize := req.GetPageSize()
 	if pageSize == 0 {
@@ -1504,7 +1505,7 @@ func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*nati
 	// 不能用 CheckOwnership(*f.ParentId)：父目录可能已进回收站或被永久删除，
 	// 查不到父目录会导致文件被误过滤。
 	userID := getCurrentUserIDFromCtx(ctx)
-	var filtered []*native.FileORM
+	var filtered []*entity.FileORM
 	for _, f := range files {
 		if f.OwnerId != nil && *f.OwnerId == userID {
 			filtered = append(filtered, f)
@@ -1515,7 +1516,7 @@ func GetRecentFiles(ctx context.Context, req *native.GetRecentFilesReq) ([]*nati
 }
 
 // GetFilesByType 按文件类型获取文件列表（带权限过滤）
-func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*native.FileORM, int64, bool, *models.Err) {
+func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*entity.FileORM, int64, bool, *models.Err) {
 	fileType := req.GetFileType()
 	offset := req.GetOffset()
 	pageSize := req.GetPageSize()
@@ -1541,7 +1542,7 @@ func GetFilesByType(ctx context.Context, req *native.GetFilesByTypeReq) ([]*nati
 	// 注：db.GetFilesByType 已按 owner_id 过滤，此处为防御性二次校验。
 	// 不能用 CheckOwnership(*f.ParentId)：父目录可能已进回收站或被永久删除，
 	// 查不到父目录会导致文件被误过滤。
-	var filtered []*native.FileORM
+	var filtered []*entity.FileORM
 	userID := getCurrentUserIDFromCtx(ctx)
 	llog.C(ctx).Infof("GetFilesByType: user=%s, totalFiles=%d", userID, len(allFiles))
 	for _, f := range allFiles {

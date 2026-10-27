@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -21,7 +22,7 @@ func TestResolveNameConflict(t *testing.T) {
 	create := func(name string) string {
 		t.Helper()
 		id := uuid.New().String()
-		err := db.CreateFile(&native.FileORM{
+		err := db.CreateFile(&entity.FileORM{
 			Id:       utils.StringPtr(id),
 			Name:     utils.StringPtr(name),
 			ParentId: utils.StringPtr(parentID),

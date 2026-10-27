@@ -6,103 +6,70 @@ import "buf/validate/validate.proto";
 // import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // UploadRecord
 message UploadRecord {
-  option (gorm.opts).ormable = true;
-  optional uint32 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
 
   // blake3 hash
   // 唯一约束为复合 (file_hash, owner_id)：同一用户同 hash 只能有一条活跃
   // 上传记录（秒传复用），不同用户同 hash 互不干扰（并发上传隔离）
-  optional string file_hash = 4 [(gorm.field).tag = {unique_index: "idx_ur_fh_owner,priority:1, length:10"}];
-  optional string file_name = 5 [(gorm.field).tag = {not_null: true}];
+  optional string file_hash = 4 [(sgorm.field).tag = {unique_index: "idx_ur_fh_owner,priority:1, length:10"}];
+  optional string file_name = 5 [(sgorm.field).tag = {not_null: true}];
   // unit: byte
-  optional uint64 file_size = 6 [(gorm.field).tag = {not_null: true}];
+  optional uint64 file_size = 6 [(sgorm.field).tag = {not_null: true}];
 
-  optional string parent_id = 7 [(gorm.field).tag = {not_null: true}];
-  optional uint32 chunk_total = 8 [(gorm.field).tag = {
-    not_null: true
-    default: "1"
-  }];
+  optional string parent_id = 7 [(sgorm.field).tag = {not_null: true}];
+  optional uint32 chunk_total = 8 [(sgorm.field).tag = {not_null: true default: "1"}];
   // unit: byte
-  optional uint64 chunk_size = 9 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
-  optional string temp_path = 10 [(gorm.field).tag = {not_null: true}];
-  optional string overwrite_id = 11 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
-  optional  LocationStatus status = 12 [(gorm.field).tag = {not_null: true}];
+  optional uint64 chunk_size = 9 [(sgorm.field).tag = {not_null: true default: "0"}];
+  optional string temp_path = 10 [(sgorm.field).tag = {not_null: true}];
+  optional string overwrite_id = 11 [(sgorm.field).tag = {not_null: true default: "false"}];
+  optional  LocationStatus status = 12 [(sgorm.field).tag = {not_null: true}];
   // 目标存储提供者ID列表（JSON 数组格式）
-  optional string target_provider_ids = 13 [(gorm.field).tag = {
-    not_null: true
-    default: "[]"
-  }];
+  optional string target_provider_ids = 13 [(sgorm.field).tag = {not_null: true default: "[]"}];
   // 任务类型：普通上传(UPLOAD)或同步任务(SYNC)
-  optional UploadTaskType task_type = 14 [(gorm.field).tag = {
-    not_null: true
-    default: "1"
-  }];
+  optional UploadTaskType task_type = 14 [(sgorm.field).tag = {not_null: true default: "1"}];
   // 文件标签（逗号分隔）
-  optional string tags = 15 [(gorm.field).tag = {default: "''"}];
+  optional string tags = 15 [(sgorm.field).tag = {default: "''"}];
   // 错误信息
-  optional string message = 16 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-  }];
+  optional string message = 16 [(sgorm.field).tag = {not_null: true default: "''"}];
   // 任务状态（与 FileLocation.status 的 LocationStatus 分离，语义对齐前端 UploadStatus）
   // status(12) 为历史字段，保留用于数据迁移回填，已废弃
   // default=0(UNSPECIFIED) 作为"未迁移/未初始化"标记，保证回填幂等
-  optional UploadStatus task_status = 17 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional UploadStatus task_status = 17 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 创建时文件的内容版本号（与 files.version 对齐）：分发完成回调用它
   // 做 CAS 判断是否仍是最新内容，防止并发覆盖场景下旧分发把 file 状态改坏
-  optional uint64 version = 18 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint64 version = 18 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 上传发起者（owner_id 模型鉴权）：Cancel/Delete/Retry/Detail 按 owner
   // 或管理员放行；与 file_hash 组成复合唯一索引（并发上传隔离）
-  optional string owner_id = 19 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-    index: "idx_ur_owner"
-    unique_index: "idx_ur_fh_owner,priority:2"
-  }];
+  optional string owner_id = 19 [(sgorm.field).tag = {not_null: true default: "''" index: "idx_ur_owner" unique_index: "idx_ur_fh_owner,priority:2"}];
 }
 
 
 //
 message UploadChunkRecord {
-  option (gorm.opts).ormable = true;
-  optional uint32 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
 
   // 上传分片记录ID
-  optional uint32 upload_id = 4 [(gorm.field).tag = {index: "idx_ucr_uid"}];
+  optional uint32 upload_id = 4 [(sgorm.field).tag = {index: "idx_ucr_uid"}];
   // 分片索引
-  optional uint32 index = 5 [(gorm.field).tag = {not_null: true}];
+  optional uint32 index = 5 [(sgorm.field).tag = {not_null: true}];
   // 分片hash
-  optional string hash = 6 [(gorm.field).tag = {not_null: true}];
+  optional string hash = 6 [(sgorm.field).tag = {not_null: true}];
 }
 
 // 初始化上传请求

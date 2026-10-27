@@ -7,6 +7,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -118,7 +119,7 @@ func GetMyBoundProviders(ctx context.Context) (*native.GetMyBoundProvidersResp, 
 		llog.C(ctx).Errorf("get assigned providers failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
-	byID := make(map[uint32]*native.StorageProviderORM, len(providers))
+	byID := make(map[uint32]*entity.StorageProviderORM, len(providers))
 	for _, p := range providers {
 		if p.Id != nil {
 			byID[*p.Id] = p
@@ -136,7 +137,7 @@ func GetMyBoundProviders(ctx context.Context) (*native.GetMyBoundProvidersResp, 
 			llog.C(ctx).Warnf("convert provider %d to PB failed: %v", id, convErr)
 			continue
 		}
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 
 	return &native.GetMyBoundProvidersResp{Providers: items}, nil

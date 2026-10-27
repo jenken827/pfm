@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -73,7 +74,7 @@ func fileOnDiskComplete(path, expectedLength string) bool {
 
 // torrentRootName 种子根目录名：优先用 aria2 的种子名，
 // 其次记录里的 sourceName，再退到第一个文件的顶层目录，最后用 gid 兜底
-func torrentRootName(dr *native.DownloadRecordORM, btName string, files []string, dir string) string {
+func torrentRootName(dr *entity.DownloadRecordORM, btName string, files []string, dir string) string {
 	if name := safeSegment(btName); name != "" {
 		return name
 	}
@@ -158,7 +159,7 @@ func ensureFolderPath(ownerID, parentID string, segments []string) (string, erro
 			current = *existing.Id
 			continue
 		}
-		dir := &native.FileORM{
+		dir := &entity.FileORM{
 			Name:     utils.StringPtr(name),
 			ParentId: utils.StringPtr(current),
 			Type:     utils.EnumPtr(native.FileType_FOLDER),

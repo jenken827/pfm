@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -35,7 +36,7 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 			C: native.RespCode_PARAMS_ERROR,
 		}
 	}
-	orm := &native.StorageProviderORM{
+	orm := &entity.StorageProviderORM{
 		DriverId:      utils.StringPtr(driverID),
 		Name:          req.Name,
 		Config:        req.Config,
@@ -76,7 +77,7 @@ func AddStorageProvider(ctx context.Context, req *native.AddStorageProviderReq) 
 }
 
 // GetStorageProvider 获取存储提供者详情
-func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) (*native.StorageProviderORM, *models.Err) {
+func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) (*entity.StorageProviderORM, *models.Err) {
 	provider, err := db.GetProviderByID(req.GetId())
 	if err != nil {
 		llog.C(ctx).Errorf("GetStorageProviders, id: %d, err: %v", req.GetId(), err)
@@ -87,7 +88,7 @@ func GetStorageProvider(ctx context.Context, req *native.StorageProviderGetReq) 
 }
 
 // ListStorageProviders 获取存储提供者列表
-func ListStorageProviders(ctx context.Context) ([]*native.StorageProviderORM, *models.Err) {
+func ListStorageProviders(ctx context.Context) ([]*entity.StorageProviderORM, *models.Err) {
 	providers, err := db.GetAllProviders()
 	if err != nil {
 		llog.C(ctx).Errorf("GetStorageProviders, err: %v", err)
@@ -98,7 +99,7 @@ func ListStorageProviders(ctx context.Context) ([]*native.StorageProviderORM, *m
 
 // UpdateStorageProvider update
 func UpdateStorageProvider(ctx context.Context, req *native.UpdateStorageProviderReq) *models.Err {
-	orm := &native.StorageProviderORM{
+	orm := &entity.StorageProviderORM{
 		Id: req.Id,
 	}
 

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // ============================================================
@@ -44,7 +44,7 @@ func versionKey(ownerID, parentID, fileName string) string {
 func loadMaxVersion(ownerID, parentID, fileName string) (uint64, error) {
 	var maxVer int64
 	err := db.GetDB().WithContext(context.Background()).
-		Model(&native.FileORM{}).
+		Model(&entity.FileORM{}).
 		Unscoped().
 		Where("owner_id = ? AND parent_id = ? AND name = ?", ownerID, parentID, fileName).
 		Select("COALESCE(MAX(version), 0)").

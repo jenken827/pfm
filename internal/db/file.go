@@ -12,13 +12,14 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
 // GetFileByID 获取文件
-func GetFileByID(id string) (*native.FileORM, error) {
-	file, err := gorm.G[*native.FileORM](db).Where("id=?", id).First(context.Background())
+func GetFileByID(id string) (*entity.FileORM, error) {
+	file, err := gorm.G[*entity.FileORM](db).Where("id=?", id).First(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +74,11 @@ func GetNearestBoundProviderIds(fileID string) ([]uint32, error) {
 }
 
 // GetFilesByIDs 批量获取文件
-func GetFilesByIDs(ids []string) ([]*native.FileORM, error) {
+func GetFilesByIDs(ids []string) ([]*entity.FileORM, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	files, err := gorm.G[*native.FileORM](db).Where("id IN ?", ids).Find(context.Background())
+	files, err := gorm.G[*entity.FileORM](db).Where("id IN ?", ids).Find(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -85,12 +86,12 @@ func GetFilesByIDs(ids []string) ([]*native.FileORM, error) {
 }
 
 // GetFilesByIDsUnscoped 批量获取文件（包含软删除的记录）
-func GetFilesByIDsUnscoped(ids []string) ([]*native.FileORM, error) {
+func GetFilesByIDsUnscoped(ids []string) ([]*entity.FileORM, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	ctx := context.Background()
-	var files []*native.FileORM
+	var files []*entity.FileORM
 	if err := db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Find(&files).Error; err != nil {
 		return nil, err
 	}
@@ -98,8 +99,8 @@ func GetFilesByIDsUnscoped(ids []string) ([]*native.FileORM, error) {
 }
 
 // GetFileByHash 获取文件（全局，任意 owner）
-func GetFileByHash(hash string) (*native.FileORM, error) {
-	file, err := gorm.G[*native.FileORM](db).Where("hash=?", hash).First(context.Background())
+func GetFileByHash(hash string) (*entity.FileORM, error) {
+	file, err := gorm.G[*entity.FileORM](db).Where("hash=?", hash).First(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +109,8 @@ func GetFileByHash(hash string) (*native.FileORM, error) {
 
 // GetFileByHashAndOwner 获取文件（限定 owner，用于复用判断）
 // 只查自己名下的同 hash 记录，避免全局 First 命中其他用户的记录
-func GetFileByHashAndOwner(hash, ownerID string) (*native.FileORM, error) {
-	file, err := gorm.G[*native.FileORM](db).
+func GetFileByHashAndOwner(hash, ownerID string) (*entity.FileORM, error) {
+	file, err := gorm.G[*entity.FileORM](db).
 		Where("hash=? AND owner_id=?", hash, ownerID).
 		First(context.Background())
 	if err != nil {
@@ -119,8 +120,8 @@ func GetFileByHashAndOwner(hash, ownerID string) (*native.FileORM, error) {
 }
 
 // GetFileByParentAndName 获取文件
-func GetFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, error) {
-	file, err := gorm.G[*native.FileORM](db).Where("parent_id=? AND name=? AND owner_id=?", parentID, name, ownerID).First(context.Background())
+func GetFileByParentAndName(parentID, name, ownerID string) (*entity.FileORM, error) {
+	file, err := gorm.G[*entity.FileORM](db).Where("parent_id=? AND name=? AND owner_id=?", parentID, name, ownerID).First(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +132,8 @@ func GetFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, er
 // 与 GetFileByParentAndName 的区别：不存在时返回 (nil, nil) 而不是
 // gorm.ErrRecordNotFound，避免 GORM 默认 logger 打印大量 record not found 噪音
 // （高频存在性检查场景：目录逐级查找、同名冲突检测等）
-func FindFileByParentAndName(parentID, name, ownerID string) (*native.FileORM, error) {
-	var files []*native.FileORM
+func FindFileByParentAndName(parentID, name, ownerID string) (*entity.FileORM, error) {
+	var files []*entity.FileORM
 	if err := db.Where("parent_id=? AND name=? AND owner_id=?", parentID, name, ownerID).
 		Find(&files).Error; err != nil {
 		return nil, err
@@ -168,13 +169,13 @@ func ResolveNameConflict(parentID, name, ownerID string) string {
 
 // GetFileNamesInParent 获取指定父目录下当前用户的「文件名 -> file」映射（单条 SQL）
 // 用于批量同名冲突检测，避免逐文件查询的 N+1。key 为文件名。
-func GetFileNamesInParent(parentID, ownerID string) (map[string]*native.FileORM, error) {
-	var files []*native.FileORM
+func GetFileNamesInParent(parentID, ownerID string) (map[string]*entity.FileORM, error) {
+	var files []*entity.FileORM
 	if err := db.Where("parent_id=? AND owner_id=?", parentID, ownerID).
 		Find(&files).Error; err != nil {
 		return nil, err
 	}
-	result := make(map[string]*native.FileORM, len(files))
+	result := make(map[string]*entity.FileORM, len(files))
 	for _, f := range files {
 		if f.Name != nil {
 			result[*f.Name] = f
@@ -184,7 +185,7 @@ func GetFileNamesInParent(parentID, ownerID string) (map[string]*native.FileORM,
 }
 
 // CreateFile 创建文件
-func CreateFile(file *native.FileORM) error {
+func CreateFile(file *entity.FileORM) error {
 	if file.Id == nil {
 		uuid, _ := uuid.NewV7()
 		file.Id = utils.StringPtr(uuid.String())
@@ -194,21 +195,21 @@ func CreateFile(file *native.FileORM) error {
 
 // DeleteFiles 批量删除文件（软删除，移至回收站）
 func DeleteFiles(ids []string) error {
-	_, err := gorm.G[native.FileORM](db).Where("id IN ?", ids).Delete(context.Background())
+	_, err := gorm.G[entity.FileORM](db).Where("id IN ?", ids).Delete(context.Background())
 	return err
 }
 
 // RestoreFromTrash 从回收站恢复文件
 func RestoreFromTrash(ids []string) error {
 	ctx := context.Background()
-	return db.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+	return db.WithContext(ctx).Unscoped().Model(&entity.FileORM{}).
 		Where("id IN ?", ids).
 		Update("deleted_at", nil).Error
 }
 
 // GetTrashList 获取回收站文件列表（分页）
 // 只显示顶级被删除的文件：parent_id 指向未删除的文件夹
-func GetTrashList(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, error) {
+func GetTrashList(offset, pageSize uint32, ownerID string) ([]*entity.FileORM, int64, error) {
 	ctx := context.Background()
 
 	// 默认每页500条
@@ -218,7 +219,7 @@ func GetTrashList(offset, pageSize uint32, ownerID string) ([]*native.FileORM, i
 
 	// 获取总数
 	var total int64
-	if err := db.WithContext(ctx).Model(&native.FileORM{}).
+	if err := db.WithContext(ctx).Model(&entity.FileORM{}).
 		Unscoped(). // 查询包含软删除的记录
 		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
 		Count(&total).Error; err != nil {
@@ -227,7 +228,7 @@ func GetTrashList(offset, pageSize uint32, ownerID string) ([]*native.FileORM, i
 
 	// 分页查询 - 显示所有有软删除标记的文件
 	// 因为删除文件夹时只会标记文件夹本身，所以有软删除标记的都是用户显式删除的
-	var files []*native.FileORM
+	var files []*entity.FileORM
 	if err := db.WithContext(ctx).
 		Unscoped(). // 查询包含软删除的记录
 		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
@@ -247,7 +248,7 @@ func DeletePermanently(ids []string) error {
 	return db.WithContext(ctx).
 		Unscoped(). // 永久删除，绕过软删除
 		Where("id IN ?", ids).
-		Delete(&native.FileORM{}).Error
+		Delete(&entity.FileORM{}).Error
 }
 
 // GetAllChildrenIDs 递归获取文件夹下的所有子文件和子文件夹的ID（包括软删除的）
@@ -269,9 +270,9 @@ func GetAllChildrenIDs(parentIDs []string) ([]string, error) {
 		queue = make([]string, 0)
 
 		// 查询这些父ID下的所有子文件和子文件夹（包括软删除的）
-		var children []*native.FileORM
+		var children []*entity.FileORM
 		if err := db.WithContext(ctx).Unscoped().
-			Model(&native.FileORM{}).
+			Model(&entity.FileORM{}).
 			Where("parent_id IN ?", currentParents).
 			Find(&children).Error; err != nil {
 			return nil, err
@@ -298,7 +299,7 @@ func EmptyTrash(ownerID string) error {
 	return db.WithContext(ctx).
 		Unscoped(). // 永久删除，绕过软删除
 		Where("deleted_at IS NOT NULL AND owner_id = ?", ownerID).
-		Delete(&native.FileORM{}).Error
+		Delete(&entity.FileORM{}).Error
 }
 
 // GetFileList 获取文件列表
@@ -306,8 +307,8 @@ func EmptyTrash(ownerID string) error {
 // parentID: 父目录ID
 // offset: 偏移量
 // pageSize: 每页数量，如果为0则使用默认值500
-func GetFileList(parentID string, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
-	var files []*native.FileORM
+func GetFileList(parentID string, offset, pageSize uint32, ownerID string) ([]*entity.FileORM, int64, bool, error) {
+	var files []*entity.FileORM
 	var total int64
 	var err error
 	ctx := context.Background()
@@ -318,13 +319,13 @@ func GetFileList(parentID string, offset, pageSize uint32, ownerID string) ([]*n
 	}
 
 	// 获取总数
-	gdb := gorm.G[*native.FileORM](db).Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID)
+	gdb := gorm.G[*entity.FileORM](db).Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID)
 	if total, err = gdb.Count(ctx, "*"); err != nil {
 		return nil, 0, false, err
 	}
 
 	// 分页查询
-	if files, err = gorm.G[*native.FileORM](db).
+	if files, err = gorm.G[*entity.FileORM](db).
 		Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID).
 		Offset(int(offset)).
 		Limit(int(pageSize)).
@@ -339,8 +340,8 @@ func GetFileList(parentID string, offset, pageSize uint32, ownerID string) ([]*n
 }
 
 // SearchFiles 按文件名搜索文件（排除已删除和文件夹）
-func SearchFiles(keyword string, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
-	var files []*native.FileORM
+func SearchFiles(keyword string, offset, pageSize uint32, ownerID string) ([]*entity.FileORM, int64, bool, error) {
+	var files []*entity.FileORM
 	var total int64
 	ctx := context.Background()
 
@@ -353,7 +354,7 @@ func SearchFiles(keyword string, offset, pageSize uint32, ownerID string) ([]*na
 		Where("name LIKE ? AND type != ? AND owner_id = ?", "%"+keyword+"%", folderType, ownerID)
 
 	// 获取总数
-	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+	if err := query.Model(&entity.FileORM{}).Count(&total).Error; err != nil {
 		return nil, 0, false, err
 	}
 
@@ -371,8 +372,8 @@ func SearchFiles(keyword string, offset, pageSize uint32, ownerID string) ([]*na
 }
 
 // SearchFilesByTag 按标签搜索文件（排除已删除和文件夹）
-func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileORM, int64, bool, error) {
-	var files []*native.FileORM
+func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*entity.FileORM, int64, bool, error) {
+	var files []*entity.FileORM
 	var total int64
 	ctx := context.Background()
 
@@ -384,7 +385,7 @@ func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileOR
 
 	// 子查询：匹配标签的文件ID
 	matchingFileIDs := db.WithContext(ctx).
-		Model(&native.FileTagORM{}).
+		Model(&entity.FileTagORM{}).
 		Select("file_id").
 		Where("tag_name LIKE ?", "%"+keyword+"%")
 
@@ -392,7 +393,7 @@ func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileOR
 	query := db.WithContext(ctx).
 		Where("id IN (?) AND type != ?", matchingFileIDs, folderType)
 
-	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+	if err := query.Model(&entity.FileORM{}).Count(&total).Error; err != nil {
 		return nil, 0, false, err
 	}
 
@@ -409,8 +410,8 @@ func SearchFilesByTag(keyword string, offset, pageSize uint32) ([]*native.FileOR
 }
 
 // GetFileChildren 获取指定目录下的所有子文件（不含软删除）
-func GetFileChildren(parentID string, ownerID string) ([]*native.FileORM, error) {
-	var children []*native.FileORM
+func GetFileChildren(parentID string, ownerID string) ([]*entity.FileORM, error) {
+	var children []*entity.FileORM
 	ctx := context.Background()
 	if err := db.WithContext(ctx).
 		Where("parent_id = ? AND owner_id = ?", parentID, ownerID).
@@ -421,14 +422,14 @@ func GetFileChildren(parentID string, ownerID string) ([]*native.FileORM, error)
 }
 
 // GetFolderList 获取指定目录下的所有文件夹
-func GetFolderList(parentID string, ownerID string) ([]*native.FileORM, error) {
-	var folders []*native.FileORM
+func GetFolderList(parentID string, ownerID string) ([]*entity.FileORM, error) {
+	var folders []*entity.FileORM
 	var err error
 	ctx := context.Background()
 
 	// 查询文件夹类型（FileType_FOLDER = 2）
 	folderType := int32(native.FileType_FOLDER)
-	if folders, err = gorm.G[*native.FileORM](db).
+	if folders, err = gorm.G[*entity.FileORM](db).
 		Where("parent_id = ?", parentID).Where("owner_id = ?", ownerID).
 		Where("type = ?", folderType).
 		Order("name ASC").
@@ -440,7 +441,7 @@ func GetFolderList(parentID string, ownerID string) ([]*native.FileORM, error) {
 }
 
 // UpdateDir 更新文件夹配置
-func UpdateDir(orm *native.FileORM) error {
+func UpdateDir(orm *entity.FileORM) error {
 	ctx := context.Background()
 	fields := []string{}
 	if orm.Name != nil {
@@ -457,7 +458,7 @@ func UpdateDir(orm *native.FileORM) error {
 	}
 
 	if len(fields) == 0 {
-		_, err := gorm.G[*native.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
+		_, err := gorm.G[*entity.FileORM](db).Where("id = ?", *orm.Id).Updates(ctx, orm)
 		return err
 	}
 
@@ -477,7 +478,7 @@ func UpdateDir(orm *native.FileORM) error {
 		}
 	}
 
-	result := db.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *orm.Id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.FileORM{}).Where("id = ?", *orm.Id).Updates(updateMap)
 	return result.Error
 }
 
@@ -527,7 +528,7 @@ func RenameFiles(renames []*native.RenameObj) error {
 }
 
 // UpdateFile 更新文件记录
-func UpdateFile(file *native.FileORM, updateFields []string) error {
+func UpdateFile(file *entity.FileORM, updateFields []string) error {
 	ctx := context.Background()
 
 	// 使用 map 进行更新，避免 GORM 的零值检查问题
@@ -555,14 +556,14 @@ func UpdateFile(file *native.FileORM, updateFields []string) error {
 		}
 	}
 
-	if err := GetDB().WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Model(&entity.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // UpdateFileWithHistory 更新文件记录并记录历史
-func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *native.FileORM) error {
+func UpdateFileWithHistory(ctx context.Context, file *entity.FileORM, oldFile *entity.FileORM) error {
 
 	err := db.Transaction(func(tx *gorm.DB) error {
 		// 使用 map 进行更新，避免 GORM 的零值检查问题
@@ -570,17 +571,17 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 			"hash": *file.Hash,
 			"size": *file.Size,
 		}
-		if err := tx.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
+		if err := tx.WithContext(ctx).Model(&entity.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap).Error; err != nil {
 			return err
 		}
-		history := &native.FileHistoryORM{
+		history := &entity.FileHistoryORM{
 			FileId:        file.Id,
 			Hash:          oldFile.Hash,
 			Size:          oldFile.Size,
 			VersionNumber: oldFile.UpdatedAt,
 		}
 
-		if err := gorm.G[native.FileHistoryORM](tx).Create(ctx, history); err != nil {
+		if err := gorm.G[entity.FileHistoryORM](tx).Create(ctx, history); err != nil {
 			return err
 		}
 
@@ -590,14 +591,14 @@ func UpdateFileWithHistory(ctx context.Context, file *native.FileORM, oldFile *n
 }
 
 // UpdateFileSimple 简单更新文件（不创建历史）
-func UpdateFileSimple(file *native.FileORM) error {
+func UpdateFileSimple(file *entity.FileORM) error {
 	ctx := context.Background()
 	// 使用 map 进行更新，避免 GORM 的零值检查问题
 	updateMap := map[string]interface{}{
 		"hash": *file.Hash,
 		"size": *file.Size,
 	}
-	result := db.WithContext(ctx).Model(&native.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.FileORM{}).Where("id = ?", *file.Id).Updates(updateMap)
 	return result.Error
 }
 
@@ -612,7 +613,7 @@ func UpdateFileSimple(file *native.FileORM) error {
 func UpdateFileIsReady(parentID, fileName, ownerID string, version uint64) (int64, error) {
 	ctx := context.Background()
 	isReady := true
-	q := gorm.G[*native.FileORM](db).
+	q := gorm.G[*entity.FileORM](db).
 		Where("parent_id = ? AND name = ?", parentID, fileName)
 	if ownerID != "" {
 		q = q.Where("owner_id = ?", ownerID)
@@ -639,7 +640,7 @@ func TakeoverFileVersion(fileID string, myVersion uint64, newHash string, newSiz
 	for k, v := range extra {
 		updateMap[k] = v
 	}
-	q := db.WithContext(ctx).Model(&native.FileORM{})
+	q := db.WithContext(ctx).Model(&entity.FileORM{})
 	if myVersion > 0 {
 		q = q.Where("id = ? AND version < ?", fileID, myVersion)
 	} else {
@@ -656,7 +657,7 @@ func TakeoverFileVersion(fileID string, myVersion uint64, newHash string, newSiz
 // myVersion 必须大于文件当前 version 才生效，返回是否成功。
 // myVersion == 0（存量任务/无版本上下文）时退化为无条件更新，兼容老数据。
 // 旧内容始终写入 file_histories，max_histories 由调用方异步裁剪。
-func UpdateFileWithHistoryCAS(ctx context.Context, file *native.FileORM, oldFile *native.FileORM, myVersion uint64) (bool, error) {
+func UpdateFileWithHistoryCAS(ctx context.Context, file *entity.FileORM, oldFile *entity.FileORM, myVersion uint64) (bool, error) {
 	taken := false
 	err := db.Transaction(func(tx *gorm.DB) error {
 		updateMap := map[string]interface{}{
@@ -664,7 +665,7 @@ func UpdateFileWithHistoryCAS(ctx context.Context, file *native.FileORM, oldFile
 			"size":    *file.Size,
 			"version": myVersion,
 		}
-		q := tx.WithContext(ctx).Model(&native.FileORM{})
+		q := tx.WithContext(ctx).Model(&entity.FileORM{})
 		if myVersion > 0 {
 			q = q.Where("id = ? AND version < ?", *file.Id, myVersion)
 		} else {
@@ -680,13 +681,13 @@ func UpdateFileWithHistoryCAS(ctx context.Context, file *native.FileORM, oldFile
 		}
 		taken = true
 
-		history := &native.FileHistoryORM{
+		history := &entity.FileHistoryORM{
 			FileId:        file.Id,
 			Hash:          oldFile.Hash,
 			Size:          oldFile.Size,
 			VersionNumber: oldFile.UpdatedAt,
 		}
-		return gorm.G[native.FileHistoryORM](tx).Create(ctx, history)
+		return gorm.G[entity.FileHistoryORM](tx).Create(ctx, history)
 	})
 	return taken, err
 }
@@ -698,16 +699,16 @@ func UpdateFileLocationStatus(ids []uint64, status int32) error {
 	}
 
 	ctx := context.Background()
-	_, err := gorm.G[*native.FileLocationORM](db).
+	_, err := gorm.G[*entity.FileLocationORM](db).
 		Where("id IN ?", ids).
 		Update(ctx, "status", status)
 	return err
 }
 
 // GetFileHistoryByFileID 根据文件 ID 获取历史记录
-func GetFileHistoryByFileID(fileID string) ([]*native.FileHistoryORM, error) {
+func GetFileHistoryByFileID(fileID string) ([]*entity.FileHistoryORM, error) {
 	ctx := context.Background()
-	var histories []*native.FileHistoryORM
+	var histories []*entity.FileHistoryORM
 	err := db.WithContext(ctx).Where("file_id = ?", fileID).Find(&histories).Error
 	if err != nil {
 		return nil, err
@@ -721,13 +722,13 @@ func DeleteFileHistoryByFileIDs(fileIDs []string) error {
 		return nil
 	}
 
-	return db.Where("file_id IN ?", fileIDs).Delete(&native.FileHistoryORM{}).Error
+	return db.Where("file_id IN ?", fileIDs).Delete(&entity.FileHistoryORM{}).Error
 }
 
 // GetFileHistoryByID 根据历史记录 ID 获取历史记录
-func GetFileHistoryByID(id uint64) (*native.FileHistoryORM, error) {
+func GetFileHistoryByID(id uint64) (*entity.FileHistoryORM, error) {
 	ctx := context.Background()
-	var history native.FileHistoryORM
+	var history entity.FileHistoryORM
 	err := db.WithContext(ctx).Where("id = ?", id).First(&history).Error
 	if err != nil {
 		return nil, err
@@ -736,12 +737,12 @@ func GetFileHistoryByID(id uint64) (*native.FileHistoryORM, error) {
 }
 
 // GetFileHistoriesByIDs 批量获取文件历史记录（用于避免逐条查询的 N+1）
-func GetFileHistoriesByIDs(ids []uint64) ([]*native.FileHistoryORM, error) {
+func GetFileHistoriesByIDs(ids []uint64) ([]*entity.FileHistoryORM, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	ctx := context.Background()
-	var histories []*native.FileHistoryORM
+	var histories []*entity.FileHistoryORM
 	if err := db.WithContext(ctx).Where("id IN ?", ids).Find(&histories).Error; err != nil {
 		return nil, err
 	}
@@ -754,7 +755,7 @@ func DeleteFileHistoryByIDs(ids []uint64) error {
 		return nil
 	}
 
-	return db.Where("id IN ?", ids).Delete(&native.FileHistoryORM{}).Error
+	return db.Where("id IN ?", ids).Delete(&entity.FileHistoryORM{}).Error
 }
 
 // DeleteFileHistory 删除单个历史记录
@@ -763,7 +764,7 @@ func DeleteFileHistory(id uint64) error {
 		return nil
 	}
 
-	return db.Where("id = ?", id).Delete(&native.FileHistoryORM{}).Error
+	return db.Where("id = ?", id).Delete(&entity.FileHistoryORM{}).Error
 }
 
 // CountFileHistoriesByHash 统计指定 hash 在文件历史表中的引用数
@@ -774,7 +775,7 @@ func CountFileHistoriesByHash(hash string) (int64, error) {
 	}
 
 	ctx := context.Background()
-	gdb := gorm.G[*native.FileHistoryORM](db).Where("hash = ?", hash)
+	gdb := gorm.G[*entity.FileHistoryORM](db).Where("hash = ?", hash)
 	count, err := gdb.Count(ctx, "*")
 	if err != nil {
 		return 0, err
@@ -788,7 +789,7 @@ func DeleteFileLocationsByBlake3Hash(hash string) error {
 		return nil
 	}
 
-	return db.Where("blake3_hash = ?", hash).Delete(&native.FileLocationORM{}).Error
+	return db.Where("blake3_hash = ?", hash).Delete(&entity.FileLocationORM{}).Error
 }
 
 // CountActiveFilesByHashExcludingIDs 统计引用指定 hash 的未删除文件数量（排除指定 ID）
@@ -800,7 +801,7 @@ func CountActiveFilesByHashExcludingIDs(hash string, excludeIDs []string) (int64
 
 	ctx := context.Background()
 	var count int64
-	query := db.WithContext(ctx).Model(&native.FileORM{}).
+	query := db.WithContext(ctx).Model(&entity.FileORM{}).
 		Where("hash = ?", hash)
 	if len(excludeIDs) > 0 {
 		query = query.Where("id NOT IN ?", excludeIDs)
@@ -820,7 +821,7 @@ func CountFilesByHashIncludingDeleted(hash string) (int64, error) {
 
 	ctx := context.Background()
 	var count int64
-	err := db.WithContext(ctx).Unscoped().Model(&native.FileORM{}).
+	err := db.WithContext(ctx).Unscoped().Model(&entity.FileORM{}).
 		Where("hash = ?", hash).Count(&count).Error
 	if err != nil {
 		return 0, err
@@ -838,7 +839,7 @@ func CountActiveUploadRecordsByHash(hash string) (int64, error) {
 
 	ctx := context.Background()
 	var count int64
-	err := db.WithContext(ctx).Model(&native.UploadRecordORM{}).
+	err := db.WithContext(ctx).Model(&entity.UploadRecordORM{}).
 		Where("file_hash = ? AND task_status IN ?", hash,
 			[]int32{int32(native.UploadStatus_PENDING), int32(native.UploadStatus_UPLOADING)}).
 		Count(&count).Error
@@ -860,7 +861,7 @@ func ArchiveHashAsHistoryIfAbsent(fileID, hash string, size uint64) error {
 
 	ctx := context.Background()
 	var count int64
-	if err := db.WithContext(ctx).Model(&native.FileHistoryORM{}).
+	if err := db.WithContext(ctx).Model(&entity.FileHistoryORM{}).
 		Where("file_id = ? AND hash = ?", fileID, hash).
 		Count(&count).Error; err != nil {
 		return err
@@ -870,7 +871,7 @@ func ArchiveHashAsHistoryIfAbsent(fileID, hash string, size uint64) error {
 	}
 
 	now := time.Now()
-	history := &native.FileHistoryORM{
+	history := &entity.FileHistoryORM{
 		FileId:        &fileID,
 		Hash:          &hash,
 		Size:          &size,
@@ -880,9 +881,9 @@ func ArchiveHashAsHistoryIfAbsent(fileID, hash string, size uint64) error {
 }
 
 // GetFileHistoryByFileIDAndHash 按文件ID+hash查询历史记录（幂等归档时用）
-func GetFileHistoryByFileIDAndHash(fileID, hash string) (*native.FileHistoryORM, error) {
+func GetFileHistoryByFileIDAndHash(fileID, hash string) (*entity.FileHistoryORM, error) {
 	ctx := context.Background()
-	var history native.FileHistoryORM
+	var history entity.FileHistoryORM
 	err := db.WithContext(ctx).
 		Where("file_id = ? AND hash = ?", fileID, hash).
 		First(&history).Error
@@ -893,8 +894,8 @@ func GetFileHistoryByFileIDAndHash(fileID, hash string) (*native.FileHistoryORM,
 }
 
 // GetRecentFiles 获取最近使用的文件（排除已删除和文件夹）
-func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
-	var files []*native.FileORM
+func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*entity.FileORM, int64, bool, error) {
+	var files []*entity.FileORM
 	var total int64
 	ctx := context.Background()
 
@@ -907,7 +908,7 @@ func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM,
 		Where("type != ? AND last_accessed_at IS NOT NULL AND owner_id = ?", folderType, ownerID)
 
 	// 获取总数
-	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+	if err := query.Model(&entity.FileORM{}).Count(&total).Error; err != nil {
 		return nil, 0, false, err
 	}
 
@@ -925,8 +926,8 @@ func GetRecentFiles(offset, pageSize uint32, ownerID string) ([]*native.FileORM,
 }
 
 // GetFilesByType 按文件类型获取文件列表（排除已删除）
-func GetFilesByType(fileType native.FileType, offset, pageSize uint32, ownerID string) ([]*native.FileORM, int64, bool, error) {
-	var files []*native.FileORM
+func GetFilesByType(fileType native.FileType, offset, pageSize uint32, ownerID string) ([]*entity.FileORM, int64, bool, error) {
+	var files []*entity.FileORM
 	var total int64
 	ctx := context.Background()
 
@@ -939,7 +940,7 @@ func GetFilesByType(fileType native.FileType, offset, pageSize uint32, ownerID s
 		Where("type = ? AND owner_id = ?", typeVal, ownerID)
 
 	// 获取总数
-	if err := query.Model(&native.FileORM{}).Count(&total).Error; err != nil {
+	if err := query.Model(&entity.FileORM{}).Count(&total).Error; err != nil {
 		return nil, 0, false, err
 	}
 
@@ -960,7 +961,7 @@ func GetFilesByType(fileType native.FileType, offset, pageSize uint32, ownerID s
 func UpdateLastAccessedAt(fileID string) error {
 	ctx := context.Background()
 	return db.WithContext(ctx).
-		Model(&native.FileORM{}).
+		Model(&entity.FileORM{}).
 		Where("id = ?", fileID).
 		Update("last_accessed_at", time.Now()).Error
 }
@@ -970,16 +971,16 @@ func CountChildrenByParentID(parentID string, ownerID string) (int64, error) {
 	ctx := context.Background()
 	var count int64
 	err := db.WithContext(ctx).
-		Model(&native.FileORM{}).
+		Model(&entity.FileORM{}).
 		Where("parent_id = ? AND type != ? AND owner_id = ?", parentID, native.FileType_FOLDER, ownerID).
 		Count(&count).Error
 	return count, err
 }
 
 // GetSubfoldersByParentID 获取父目录下的所有子文件夹（不含软删除，按名称排序）
-func GetSubfoldersByParentID(parentID string, ownerID string) ([]*native.FileORM, error) {
+func GetSubfoldersByParentID(parentID string, ownerID string) ([]*entity.FileORM, error) {
 	ctx := context.Background()
-	var folders []*native.FileORM
+	var folders []*entity.FileORM
 	err := db.WithContext(ctx).
 		Where("parent_id = ? AND type = ? AND owner_id = ?", parentID, native.FileType_FOLDER, ownerID).
 		Order("name ASC").
@@ -996,7 +997,7 @@ func SumAllFileSizesByOwner(ownerID string) (uint64, error) {
 	ctx := context.Background()
 	var sum int64
 	err := db.WithContext(ctx).Unscoped().
-		Model(&native.FileORM{}).
+		Model(&entity.FileORM{}).
 		Where("owner_id = ? AND type != ?", ownerID, native.FileType_FOLDER).
 		Select("COALESCE(SUM(size), 0)").
 		Scan(&sum).Error

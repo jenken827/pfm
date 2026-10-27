@@ -12,6 +12,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -31,7 +32,7 @@ func newTestWebdavUser(t *testing.T) (string, string, string) {
 
 	userID := uuid.New().String()
 	rootID := createTestFolder(t, userID, "root-"+userID, "")
-	space := &native.UserSpaceORM{
+	space := &entity.UserSpaceORM{
 		UserId:           utils.StringPtr(userID),
 		RootFileId:       utils.StringPtr(rootID),
 		BoundProviderIds: utils.StringPtr("[1]"),
@@ -49,7 +50,7 @@ func newTestWebdavUser(t *testing.T) (string, string, string) {
 func createTestFolder(t *testing.T, ownerID, name, parentID string) string {
 	t.Helper()
 	id := uuid.New().String()
-	file := &native.FileORM{
+	file := &entity.FileORM{
 		Id:       utils.StringPtr(id),
 		Name:     utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),
@@ -71,7 +72,7 @@ func TestCreateWebdavAccountValidation(t *testing.T) {
 
 	// 绑定目录必须是文件夹：绑定用户根目录（文件夹）之外的普通文件应被拒
 	fileID := uuid.New().String()
-	plainFile := &native.FileORM{
+	plainFile := &entity.FileORM{
 		Id:       utils.StringPtr(fileID),
 		Name:     utils.StringPtr("note.txt"),
 		ParentId: utils.StringPtr(rootID),
@@ -422,7 +423,7 @@ func TestWebdavUsernameUniqueIndex(t *testing.T) {
 	username := "uniq-" + uuid.New().String()[:8]
 	userID := uuid.New().String()
 
-	first := &native.WebdavAccountORM{
+	first := &entity.WebdavAccountORM{
 		UserId:       utils.StringPtr(userID),
 		Username:     utils.StringPtr(username),
 		PasswordHash: utils.StringPtr("x"),
@@ -433,7 +434,7 @@ func TestWebdavUsernameUniqueIndex(t *testing.T) {
 		t.Fatalf("first insert failed: %v", err)
 	}
 
-	second := &native.WebdavAccountORM{
+	second := &entity.WebdavAccountORM{
 		UserId:       utils.StringPtr(uuid.New().String()),
 		Username:     utils.StringPtr(username),
 		PasswordHash: utils.StringPtr("y"),

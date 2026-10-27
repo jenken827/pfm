@@ -1,0 +1,80 @@
+// sgorm 是 protoc-gen-sgorm 的选项定义。
+//
+// 用法（迁移自 protoc-gen-gorm 的写法）：
+//
+//	import "sgorm/options.proto";
+//
+//	message Transaction {
+//	  option (sgorm.opts).ormable = true;
+//	  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true, auto_increment: true}];
+//	}
+//
+// 插件只生成三样东西：ORM 结构体（含 gorm tag）、TableName()、ToPB / FromXxx。
+// 不生成任何 CRUD / hook / 关联装配代码。
+syntax = "proto3";
+
+package sgorm;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "jenken827.com/jenken827/pfm/proto/gen/sgorm;sgorm";
+
+extend google.protobuf.MessageOptions {
+  // opts 挂在消息上：标记该消息需要生成 ORM 实体。
+  Opts opts = 52200;
+}
+
+extend google.protobuf.FieldOptions {
+  // field 挂在字段上：控制列名、索引、类型与是否参与生成。
+  Field field = 52201;
+}
+
+// Opts 消息级选项。
+message Opts {
+  // ormable 为 true 时该消息生成 <Name>ORM 实体。
+  bool ormable = 1;
+
+  // table 指定表名；留空按消息名转蛇形后加复数（Category → categories）。
+  string table = 2;
+}
+
+// Field 字段级选项。
+message Field {
+  // ignore 为 true 时该字段不进实体（例如 proto 里有、库里没有的派生字段）。
+  bool ignore = 1;
+
+  // tag 描述生成的 gorm tag。
+  Tag tag = 2;
+}
+
+// Tag 对应 gorm 结构体 tag 的常用键。
+message Tag {
+  bool primary_key = 1;
+  bool auto_increment = 2;
+  bool not_null = 3;
+  bool unique = 4;
+
+  // column 覆盖列名（proto 字段名与库列名不一致时用，如 driver_id → provider_type）。
+  string column = 5;
+
+  // type 指定列类型，如 uuid / jsonb / bytea。
+  // 特殊值 "deleted_at" 会把字段生成成 *gorm.DeletedAt 并加上 type:timestamp。
+  string type = 6;
+
+  int32 size = 7;
+  int32 precision = 8;
+
+  // default 原样写入，如 "0"、"false"、"''"。
+  string default = 9;
+
+  // index / unique_index 是索引名，可带参数（"idx_f_npoi,length:10"）。
+  string index = 10;
+  string unique_index = 11;
+
+  // auto_create_time / auto_update_time 只对 Timestamp 字段有意义。
+  bool auto_create_time = 12;
+  bool auto_update_time = 13;
+
+  // serializer 如 "json"。
+  string serializer = 14;
+}

@@ -11,6 +11,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -120,7 +121,7 @@ func SaveShareToMySpace(ctx context.Context, shareCode, targetParentID, displayN
 }
 
 // saveShareTask 后台执行保存逻辑
-func saveShareTask(taskID string, source *native.FileORM, targetParentID, displayName, ownerID string) {
+func saveShareTask(taskID string, source *entity.FileORM, targetParentID, displayName, ownerID string) {
 	updateAsyncTask(taskID, func(t *AsyncTask) {
 		t.Status = TaskRunning
 	})
@@ -188,8 +189,8 @@ func countFilesRecursive(fileID string) int32 {
 }
 
 // saveSingleFile 保存单个文件（创建新记录，hash 引用同一内容）
-func saveSingleFile(source *native.FileORM, parentID, name, ownerID string) error {
-	newFile := &native.FileORM{
+func saveSingleFile(source *entity.FileORM, parentID, name, ownerID string) error {
+	newFile := &entity.FileORM{
 		Name:     &name,
 		ParentId: &parentID,
 		OwnerId:  &ownerID,
@@ -209,9 +210,9 @@ func saveSingleFile(source *native.FileORM, parentID, name, ownerID string) erro
 
 // saveFolderRecursive 递归保存目录
 // binding：本次保存创建的目录统一继承目标目录解析出的绑定（JSON 数组，空串 = 未显式绑定）
-func saveFolderRecursive(taskID string, source *native.FileORM, parentID, name, ownerID, binding string, completed *int32) error {
+func saveFolderRecursive(taskID string, source *entity.FileORM, parentID, name, ownerID, binding string, completed *int32) error {
 	// 创建当前目录
-	newDir := &native.FileORM{
+	newDir := &entity.FileORM{
 		Name:     &name,
 		ParentId: &parentID,
 		OwnerId:  &ownerID,
@@ -282,7 +283,7 @@ func GetUserSpace(ctx context.Context) (*native.UserSpace, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pb, nil
+	return pb, nil
 }
 
 // ListUserSpaces 管理员：列出所有用户空间
@@ -312,7 +313,7 @@ func ListUserSpaces(ctx context.Context, req *native.ListUserSpacesReq) (*native
 		if err != nil {
 			continue
 		}
-		pbSpaces = append(pbSpaces, &pb)
+		pbSpaces = append(pbSpaces, pb)
 	}
 
 	return &native.ListUserSpacesResp{
@@ -397,7 +398,7 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 
 	// 没有 UserSpace，创建根目录 File + UserSpace 记录
 	rootFileID := uuid.New().String()
-	rootFile := &native.FileORM{
+	rootFile := &entity.FileORM{
 		Id:               &rootFileID,
 		Name:             &rootFileID, // name = UUID
 		ParentId:         utils.StringPtr(""),
@@ -412,7 +413,7 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	newSpace := &native.UserSpaceORM{
+	newSpace := &entity.UserSpaceORM{
 		UserId:           &targetUserID,
 		RootFileId:       &rootFileID,
 		BoundProviderIds: &boundProviderIds,
@@ -430,11 +431,11 @@ func AssignRootDir(ctx context.Context, req *native.AssignRootDirReq) (*native.A
 
 // updateRootDirBinding 把用户根目录行的 bound_provider_ids 同步为管理员最新分配。
 // 根目录是所有「未显式绑定目录」的解析兜底点，与 UserSpace 保持一致。
-func updateRootDirBinding(space *native.UserSpaceORM, boundProviderIds string) *models.Err {
+func updateRootDirBinding(space *entity.UserSpaceORM, boundProviderIds string) *models.Err {
 	if space == nil || space.RootFileId == nil || *space.RootFileId == "" {
 		return nil
 	}
-	orm := native.FileORM{
+	orm := entity.FileORM{
 		Id:               space.RootFileId,
 		BoundProviderIds: &boundProviderIds,
 	}

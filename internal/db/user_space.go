@@ -6,13 +6,13 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // GetUserSpaceByUserID 根据用户ID获取用户空间信息
-func GetUserSpaceByUserID(userID string) (*native.UserSpaceORM, error) {
+func GetUserSpaceByUserID(userID string) (*entity.UserSpaceORM, error) {
 	ctx := context.Background()
-	var space native.UserSpaceORM
+	var space entity.UserSpaceORM
 	if err := db.WithContext(ctx).Where("user_id = ?", userID).First(&space).Error; err != nil {
 		return nil, err
 	}
@@ -20,14 +20,14 @@ func GetUserSpaceByUserID(userID string) (*native.UserSpaceORM, error) {
 }
 
 // CreateUserSpace 创建用户空间
-func CreateUserSpace(space *native.UserSpaceORM) error {
+func CreateUserSpace(space *entity.UserSpaceORM) error {
 	return db.Create(space).Error
 }
 
 // UpdateUserSpace 更新用户空间
-func UpdateUserSpace(space *native.UserSpaceORM) error {
+func UpdateUserSpace(space *entity.UserSpaceORM) error {
 	ctx := context.Background()
-	_, err := gorm.G[*native.UserSpaceORM](db).
+	_, err := gorm.G[*entity.UserSpaceORM](db).
 		Where("id = ?", *space.Id).
 		Updates(ctx, space)
 	return err
@@ -37,7 +37,7 @@ func UpdateUserSpace(space *native.UserSpaceORM) error {
 func UpdateUserSpaceUsedBytes(userID string, usedBytes uint64) error {
 	ctx := context.Background()
 	return db.WithContext(ctx).
-		Model(&native.UserSpaceORM{}).
+		Model(&entity.UserSpaceORM{}).
 		Where("user_id = ?", userID).
 		Update("used_bytes", usedBytes).Error
 }
@@ -47,7 +47,7 @@ func GetAllUserIDs() ([]string, error) {
 	ctx := context.Background()
 	var ids []string
 	if err := db.WithContext(ctx).
-		Model(&native.UserSpaceORM{}).
+		Model(&entity.UserSpaceORM{}).
 		Pluck("user_id", &ids).Error; err != nil {
 		return nil, err
 	}
@@ -55,18 +55,18 @@ func GetAllUserIDs() ([]string, error) {
 }
 
 // ListUserSpaces 获取用户空间列表（分页）
-func ListUserSpaces(offset, pageSize uint32) ([]*native.UserSpaceORM, int64, error) {
+func ListUserSpaces(offset, pageSize uint32) ([]*entity.UserSpaceORM, int64, error) {
 	ctx := context.Background()
 
 	if pageSize == 0 {
 		pageSize = 50
 	}
 
-	var spaces []*native.UserSpaceORM
+	var spaces []*entity.UserSpaceORM
 	var total int64
 
 	// 获取总数
-	if err := db.WithContext(ctx).Model(&native.UserSpaceORM{}).Count(&total).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&entity.UserSpaceORM{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 

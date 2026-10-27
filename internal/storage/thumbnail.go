@@ -5,11 +5,11 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // generateThumbnailForUpload 为上传的文件生成缩略图
-func generateThumbnailForUpload(ctx context.Context, ur *native.UploadRecordORM) {
+func generateThumbnailForUpload(ctx context.Context, ur *entity.UploadRecordORM) {
 	// 检查是否是图片文件
 	if ur.FileName == nil || ur.TempPath == nil || ur.FileHash == nil {
 		return

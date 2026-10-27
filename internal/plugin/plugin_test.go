@@ -15,6 +15,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/plugin/sdk"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -44,7 +45,7 @@ type fakeDriver struct {
 	config     *types.ProviderConfig
 }
 
-func newFakeDriver(orm *native.StorageProviderORM) (types.StorageDriver, error) {
+func newFakeDriver(orm *entity.StorageProviderORM) (types.StorageDriver, error) {
 	cfg := types.ProviderConfigFromORM(orm)
 	providerID := uint32(0)
 	if orm.Id != nil {
@@ -157,7 +158,7 @@ func TestManagerLoadsPluginAndProxiesCalls(t *testing.T) {
 	if constructor == nil {
 		t.Fatal("插件加载后应能取到构造器")
 	}
-	orm := &native.StorageProviderORM{
+	orm := &entity.StorageProviderORM{
 		Id:            proto.Uint32(7),
 		EncryptionKey: proto.String(testConfigKey),
 	}
@@ -282,7 +283,7 @@ func TestManagerCloseStopsPlugin(t *testing.T) {
 		t.Fatalf("加载插件失败: %v", err)
 	}
 	constructor := types.GetDriverConstructor(testDriverID)
-	drv, err := constructor(&native.StorageProviderORM{Id: proto.Uint32(1)})
+	drv, err := constructor(&entity.StorageProviderORM{Id: proto.Uint32(1)})
 	if err != nil {
 		t.Fatalf("构造插件驱动失败: %v", err)
 	}

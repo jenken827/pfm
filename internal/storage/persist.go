@@ -8,12 +8,13 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
 // failFileLocation 标记文件位置为失败状态
-func failFileLocation(fl *native.FileLocationORM, msg string) error {
+func failFileLocation(fl *entity.FileLocationORM, msg string) error {
 	fl.Message = &msg
 	fl.Status = (*int32)(native.LocationStatus_PFAILED.Enum())
 	// 乐观锁：仅当非 PCOMPLETED 时才标记失败，防止并发覆盖已完成分片
@@ -29,7 +30,7 @@ func failFileLocation(fl *native.FileLocationORM, msg string) error {
 // salt 非空表示启用了加密
 
 // saveUploadChunks 处理上传结果，保存分片信息到数据库
-func saveUploadChunks(fl *native.FileLocationORM, refs []types.FileRef, providerID uint32) uint64 {
+func saveUploadChunks(fl *entity.FileLocationORM, refs []types.FileRef, providerID uint32) uint64 {
 	chunkTotal := uint32(len(refs))
 	var totalUploadedSize uint64
 
@@ -65,7 +66,7 @@ func saveUploadChunks(fl *native.FileLocationORM, refs []types.FileRef, provider
 // updateFirstChunkLocation 更新第一个分片的 FileLocation 记录
 
 // updateFirstChunkLocation 更新第一个分片的 FileLocation 记录
-func updateFirstChunkLocation(fl *native.FileLocationORM, ref types.FileRef, chunkTotal, chunkNumber uint32) {
+func updateFirstChunkLocation(fl *entity.FileLocationORM, ref types.FileRef, chunkTotal, chunkNumber uint32) {
 	updateFields := []string{"provider_file_id", "status", "chunk_number", "chunk_total", "message"}
 	fl.ProviderFileId = &ref.ProviderFileID
 	fl.Status = (*int32)(native.LocationStatus_PCOMPLETED.Enum())
@@ -113,8 +114,8 @@ func updateFirstChunkLocation(fl *native.FileLocationORM, ref types.FileRef, chu
 // createChunkLocation 创建后续分片的 FileLocation 记录
 
 // createChunkLocation 创建后续分片的 FileLocation 记录
-func createChunkLocation(fl *native.FileLocationORM, ref types.FileRef, chunkTotal, chunkNumber uint32) error {
-	newFl := &native.FileLocationORM{
+func createChunkLocation(fl *entity.FileLocationORM, ref types.FileRef, chunkTotal, chunkNumber uint32) error {
+	newFl := &entity.FileLocationORM{
 		Blake3Hash:     fl.Blake3Hash,
 		ProviderId:     fl.ProviderId,
 		ProviderFileId: &ref.ProviderFileID,
@@ -155,7 +156,7 @@ func createChunkLocation(fl *native.FileLocationORM, ref types.FileRef, chunkTot
 // getOrCreateFileLocation 获取或创建文件位置记录
 
 // getOrCreateFileLocation 获取或创建文件位置记录
-func getOrCreateFileLocation(providerID uint32, blake3Hash string) (*native.FileLocationORM, error) {
+func getOrCreateFileLocation(providerID uint32, blake3Hash string) (*entity.FileLocationORM, error) {
 	// 先查询是否已存在
 	location, err := db.GetFileLocationByProviderAndHash(providerID, blake3Hash)
 	if err == nil {
@@ -174,7 +175,7 @@ func getOrCreateFileLocation(providerID uint32, blake3Hash string) (*native.File
 	}
 
 	// 创建文件位置记录
-	fl := &native.FileLocationORM{
+	fl := &entity.FileLocationORM{
 		ProviderId: &providerID,
 		Blake3Hash: &blake3Hash,
 		Status:     (*int32)(native.LocationStatus_PPENDING.Enum()),

@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -16,7 +17,7 @@ import (
 func createTestFile(t *testing.T, ownerID, parentID, name string) string {
 	t.Helper()
 	id := uuid.New().String()
-	file := &native.FileORM{
+	file := &entity.FileORM{
 		Id:       utils.StringPtr(id),
 		Name:     utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),

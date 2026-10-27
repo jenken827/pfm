@@ -8,6 +8,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -27,7 +28,7 @@ func TestDispatchMarksReadyWhenContentAlreadyStored(t *testing.T) {
 	name := "same-content-new-name.mp4"
 
 	fileID := uuid.New().String()
-	if err := db.CreateFile(&native.FileORM{
+	if err := db.CreateFile(&entity.FileORM{
 		Id:       utils.StringPtr(fileID),
 		Name:     utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),
@@ -42,7 +43,7 @@ func TestDispatchMarksReadyWhenContentAlreadyStored(t *testing.T) {
 	}
 
 	// 该 hash 在 provider 1 上已有完整副本（单分片、PCOMPLETED、chunk_total 为空 → 旧数据形态）
-	if err := db.CreateFileLocation(&native.FileLocationORM{
+	if err := db.CreateFileLocation(&entity.FileLocationORM{
 		ProviderId: uint32Ptr(1),
 		Blake3Hash: utils.StringPtr(hash),
 		Status:     int32Ptr(int32(native.LocationStatus_PCOMPLETED)),
@@ -51,7 +52,7 @@ func TestDispatchMarksReadyWhenContentAlreadyStored(t *testing.T) {
 		t.Fatalf("create location: %v", err)
 	}
 
-	ur := &native.UploadRecordORM{
+	ur := &entity.UploadRecordORM{
 		FileHash: utils.StringPtr(hash),
 		FileName: utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),

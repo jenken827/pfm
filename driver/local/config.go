@@ -5,6 +5,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -46,7 +47,7 @@ func init() {
 		},
 	}
 
-	types.RegisterStorageDriverWithMetadata(func(provider *native.StorageProviderORM) (types.StorageDriver, error) {
+	types.RegisterStorageDriverWithMetadata(func(provider *entity.StorageProviderORM) (types.StorageDriver, error) {
 		c := native.LocalDriverConfig{}
 		err := json.Unmarshal([]byte(*provider.Config), &c)
 		if err != nil {

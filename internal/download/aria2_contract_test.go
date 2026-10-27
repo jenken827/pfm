@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -62,7 +62,7 @@ func TestAria2MagnetMetadataContract(t *testing.T) {
 
 	// 整条解析链路：真实快照 → 磁力记录 → 中间任务（不能当产物导入）
 	snap := fetchTaskSnapshot(c)
-	dr := &native.DownloadRecordORM{Gid: utils.StringPtr(gid), Url: utils.StringPtr(uri)}
+	dr := &entity.DownloadRecordORM{Gid: utils.StringPtr(gid), Url: utils.StringPtr(uri)}
 	task, ok := snap.targetFor(dr)
 	if !ok {
 		t.Fatal("真实 aria2 快照里找不到刚添加的磁力任务")

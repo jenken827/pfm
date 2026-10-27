@@ -4,8 +4,8 @@ package native;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
-import "gorm/gorm.proto";
 import "native/common.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
@@ -17,57 +17,29 @@ option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 // 每个账号绑定用户自己的一个目录作为「WebDAV 根」（root_file_id），账号可见的 "/"
 // 即该目录，路径逐级解析天然无法越出该子树。read_only 账号只允许读方法。
 message WebdavAccount {
-    option (gorm.opts).ormable = true;
-    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
-    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+    optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true, auto_increment: true}];
+    optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+    optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
     // 归属用户 ID（UUID，关联 users.user_id）
-    optional string user_id = 4 [(gorm.field).tag = {
-        not_null: true
-        size: 36
-        index: "idx_wa_uid"
-    }];
+    optional string user_id = 4 [(sgorm.field).tag = {not_null: true size: 36 index: "idx_wa_uid"}];
     // WebDAV 独立用户名（全局唯一，仅用于 /dav Basic Auth）
-    optional string username = 5 [(gorm.field).tag = {
-        not_null: true
-        size: 64
-        unique_index: "idx_wa_un"
-    }];
+    optional string username = 5 [(sgorm.field).tag = {not_null: true size: 64 unique_index: "idx_wa_un"}];
     // 密码哈希（bcrypt，与 users.password_hash 同算法）
-    optional string password_hash = 6 [(gorm.field).tag = {
-        not_null: true
-        default: "''"
-    }];
+    optional string password_hash = 6 [(sgorm.field).tag = {not_null: true default: "''"}];
     // 客户端标签（如 ReadAny / BeeCount，仅展示用）
-    optional string name = 7 [(gorm.field).tag = {
-        not_null: true
-        default: "''"
-        size: 64
-    }];
+    optional string name = 7 [(sgorm.field).tag = {not_null: true default: "''" size: 64}];
     // 绑定目录 file_id（关联 files.id，即账号可见的 "/"）
-    optional string root_file_id = 8 [(gorm.field).tag = {
-        not_null: true
-        type: "char(36)"
-        index: "idx_wa_rfid"
-    }];
+    optional string root_file_id = 8 [(sgorm.field).tag = {not_null: true type: "char(36)" index: "idx_wa_rfid"}];
     // 是否只读（只读账号拦截 PUT/DELETE/MKCOL/MOVE）
-    optional bool read_only = 9 [(gorm.field).tag = {
-        not_null: true
-        default: "false"
-    }];
+    optional bool read_only = 9 [(sgorm.field).tag = {not_null: true default: "false"}];
     // 是否启用（绑定目录失效时由服务端自动置 false）
-    optional bool enabled = 10 [(gorm.field).tag = {
-        not_null: true
-        default: "true"
-    }];
+    optional bool enabled = 10 [(sgorm.field).tag = {not_null: true default: "true"}];
     // 最后使用时间（认证成功时节流更新）
     optional google.protobuf.Timestamp last_used_at = 11;
     // 失效原因（仅自动禁用时写入，空串表示正常/用户手动禁用）
-    optional string disabled_reason = 12 [(gorm.field).tag = {
-        not_null: true
-        default: "''"
-        size: 128
-    }];
+    optional string disabled_reason = 12 [(sgorm.field).tag = {not_null: true default: "''" size: 128}];
 }
 
 // ===== 视图与请求/响应消息 =====

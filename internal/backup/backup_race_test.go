@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"jenken827.com/jenken827/pfm/internal/db"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -61,7 +62,7 @@ func TestEnsureDirStructureRaceCondition(t *testing.T) {
 
 func createTestTargetDir(t *testing.T) string {
 	// 创建目标文件夹
-	targetDir := &native.FileORM{
+	targetDir := &entity.FileORM{
 		Name:    utils.StringPtr("test-backup-target"),
 		Type:    utils.EnumPtr(native.FileType_FOLDER),
 		IsReady: utils.BoolPtr(true),

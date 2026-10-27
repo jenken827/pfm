@@ -5,21 +5,22 @@ import (
 
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // GetUploadRecordByID 获取上传记录ByID
-func GetUploadRecordByID(id uint32, withChunk bool) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
+func GetUploadRecordByID(id uint32, withChunk bool) (*entity.UploadRecordORM, []*entity.UploadChunkRecordORM, error) {
 	return getUploadRecord("id = ?", withChunk, id)
 }
 
 // GetUploadRecordByHash 获取上传记录
-func GetUploadRecordByHash(hash string, withChunk bool) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
+func GetUploadRecordByHash(hash string, withChunk bool) (*entity.UploadRecordORM, []*entity.UploadChunkRecordORM, error) {
 	return getUploadRecord("file_hash = ?", withChunk, hash)
 }
 
 // GetUploadRecordsByStatus 获取上传记录
-func GetUploadRecordsByStatus(status []native.UploadStatus) ([]*native.UploadRecordORM, error) {
+func GetUploadRecordsByStatus(status []native.UploadStatus) ([]*entity.UploadRecordORM, error) {
 	ints := []int32{}
 	for _, s := range status {
 
@@ -27,14 +28,14 @@ func GetUploadRecordsByStatus(status []native.UploadStatus) ([]*native.UploadRec
 
 	}
 
-	return gorm.G[*native.UploadRecordORM](db).Where("task_status in ?", ints).Find(context.Background())
+	return gorm.G[*entity.UploadRecordORM](db).Where("task_status in ?", ints).Find(context.Background())
 
 }
 
 // GetChunkRecord 获取分片记录
-func GetChunkRecord(uploadID uint32, chunkIndex uint32) (*native.UploadChunkRecordORM, error) {
+func GetChunkRecord(uploadID uint32, chunkIndex uint32) (*entity.UploadChunkRecordORM, error) {
 	ctx := context.Background()
-	chunk, err := gorm.G[*native.UploadChunkRecordORM](db).
+	chunk, err := gorm.G[*entity.UploadChunkRecordORM](db).
 		Where(`upload_id = ? AND "index" = ?`, uploadID, chunkIndex).
 		First(ctx)
 	if err != nil {
@@ -43,14 +44,14 @@ func GetChunkRecord(uploadID uint32, chunkIndex uint32) (*native.UploadChunkReco
 	return chunk, nil
 }
 
-func getUploadRecord(expression string, withChunk bool, args ...any) (*native.UploadRecordORM, []*native.UploadChunkRecordORM, error) {
-	record, err := gorm.G[*native.UploadRecordORM](db).Where(expression, args...).First(context.Background())
+func getUploadRecord(expression string, withChunk bool, args ...any) (*entity.UploadRecordORM, []*entity.UploadChunkRecordORM, error) {
+	record, err := gorm.G[*entity.UploadRecordORM](db).Where(expression, args...).First(context.Background())
 	if err != nil {
 		llog.L().Errorf("query upload record failed: %v", err)
 		return nil, nil, err
 	}
 	if withChunk {
-		chunks, err := gorm.G[*native.UploadChunkRecordORM](db).Where("upload_id = ?", *record.Id).Find(context.Background())
+		chunks, err := gorm.G[*entity.UploadChunkRecordORM](db).Where("upload_id = ?", *record.Id).Find(context.Background())
 		if err != nil {
 			llog.L().Warnf("get uploading chunks failed, uploadID: %d, err: %v", *record.Id, err)
 			return record, nil, err
@@ -62,7 +63,7 @@ func getUploadRecord(expression string, withChunk bool, args ...any) (*native.Up
 }
 
 // CreateUploadRecord 创建上传记录
-func CreateUploadRecord(record *native.UploadRecordORM) error {
+func CreateUploadRecord(record *entity.UploadRecordORM) error {
 	return db.Create(record).Error
 }
 
@@ -70,11 +71,11 @@ func CreateUploadRecord(record *native.UploadRecordORM) error {
 // func DelUploadRecord(id uint32) error {
 // 	ctx := context.Background()
 // 	err := db.Transaction(func(tx *gorm.DB) error {
-// 		if _, err := gorm.G[*native.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
+// 		if _, err := gorm.G[*entity.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
 // 			llog.L().Errorf("delete upload record failed, id: %d, err: %v", id, err)
 // 			return err
 // 		}
-// 		if _, err := gorm.G[*native.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
+// 		if _, err := gorm.G[*entity.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
 // 			llog.L().Errorf("delete upload chunk record failed, id: %d, err: %v", id, err)
 // 			return err
 // 		}
@@ -84,10 +85,10 @@ func CreateUploadRecord(record *native.UploadRecordORM) error {
 // }
 
 // UpdateUploadRecord 更新上传记录
-func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error {
+func UpdateUploadRecord(r *entity.UploadRecordORM, updateFields []string) error {
 	ctx := context.Background()
 	if len(updateFields) == 0 {
-		if _, err := gorm.G[*native.UploadRecordORM](db).Where("id = ?", *r.Id).Updates(ctx, r); err != nil {
+		if _, err := gorm.G[*entity.UploadRecordORM](db).Where("id = ?", *r.Id).Updates(ctx, r); err != nil {
 			llog.L().Errorf("update upload record failed: %v", err)
 			return err
 		}
@@ -129,7 +130,7 @@ func UpdateUploadRecord(r *native.UploadRecordORM, updateFields []string) error 
 		}
 	}
 
-	result := db.WithContext(ctx).Model(&native.UploadRecordORM{}).Where("id = ?", *r.Id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.UploadRecordORM{}).Where("id = ?", *r.Id).Updates(updateMap)
 	if result.Error != nil {
 		llog.L().Errorf("update upload record failed: %v", result.Error)
 		return result.Error
@@ -149,7 +150,7 @@ func TransitionUploadRecordTaskStatus(id uint32, prevStatuses []native.UploadSta
 	for _, s := range prevStatuses {
 		prevInts = append(prevInts, int32(s))
 	}
-	if err := db.WithContext(ctx).Model(&native.UploadRecordORM{}).
+	if err := db.WithContext(ctx).Model(&entity.UploadRecordORM{}).
 		Where("id = ? AND task_status IN ?", id, prevInts).
 		Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("transition upload record task status failed: %v, id: %d", err, id)
@@ -162,11 +163,11 @@ func TransitionUploadRecordTaskStatus(id uint32, prevStatuses []native.UploadSta
 func ClearUploadRecords(id uint32) error {
 	ctx := context.Background()
 	return db.Transaction(func(tx *gorm.DB) error {
-		if _, err := gorm.G[*native.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
+		if _, err := gorm.G[*entity.UploadRecordORM](tx).Where("id = ?", id).Delete(ctx); err != nil {
 			llog.L().Errorf("delete upload record failed, id: %d, err: %v", id, err)
 			return err
 		}
-		if _, err := gorm.G[*native.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
+		if _, err := gorm.G[*entity.UploadChunkRecordORM](tx).Where("upload_id = ?", id).Delete(ctx); err != nil {
 			llog.L().Errorf("delete upload chunk record failed, id: %d, err: %v", id, err)
 			return err
 		}
@@ -177,7 +178,7 @@ func ClearUploadRecords(id uint32) error {
 // CountUploadRecordsByStatus 按状态统计上传记录数（可按 owner 过滤，ownerID 空则全局）
 func CountUploadRecordsByStatus(status int32, ownerID string) (int64, error) {
 	var count int64
-	query := db.Model(&native.UploadRecordORM{}).Where("task_status = ?", status)
+	query := db.Model(&entity.UploadRecordORM{}).Where("task_status = ?", status)
 	if ownerID != "" {
 		query = query.Where("owner_id = ?", ownerID)
 	}
@@ -189,11 +190,11 @@ func CountUploadRecordsByStatus(status int32, ownerID string) (int64, error) {
 }
 
 // ListUploadRecords 分页查询上传记录（按 ownerID 过滤，ownerID 空则全局）
-func ListUploadRecords(page, pageSize int32, status *int32, ownerID string) ([]*native.UploadRecordORM, int64, error) {
+func ListUploadRecords(page, pageSize int32, status *int32, ownerID string) ([]*entity.UploadRecordORM, int64, error) {
 	var total int64
 
 	// 构建基础查询
-	query := db.Model(&native.UploadRecordORM{})
+	query := db.Model(&entity.UploadRecordORM{})
 	if status != nil {
 		query = query.Where("task_status = ?", *status)
 	}
@@ -208,9 +209,9 @@ func ListUploadRecords(page, pageSize int32, status *int32, ownerID string) ([]*
 	}
 
 	// 分页查询
-	var records []*native.UploadRecordORM
+	var records []*entity.UploadRecordORM
 	offset := (page - 1) * pageSize
-	if err := db.Model(&native.UploadRecordORM{}).
+	if err := db.Model(&entity.UploadRecordORM{}).
 		Scopes(func(d *gorm.DB) *gorm.DB {
 			if status != nil {
 				d = d.Where("task_status = ?", *status)

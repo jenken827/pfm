@@ -2,7 +2,7 @@ package db
 
 import (
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // CreateFileTags 创建文件标签
@@ -10,12 +10,12 @@ func CreateFileTags(fileID string, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
-	var tagRecords []native.FileTagORM
+	var tagRecords []entity.FileTagORM
 	for _, tag := range tags {
 		if tag == "" {
 			continue
 		}
-		tagRecords = append(tagRecords, native.FileTagORM{
+		tagRecords = append(tagRecords, entity.FileTagORM{
 			FileId:  &fileID,
 			TagName: &tag,
 		})
@@ -31,12 +31,12 @@ func CreateFileTagsTx(tx *gorm.DB, fileID string, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
-	var tagRecords []native.FileTagORM
+	var tagRecords []entity.FileTagORM
 	for _, tag := range tags {
 		if tag == "" {
 			continue
 		}
-		tagRecords = append(tagRecords, native.FileTagORM{
+		tagRecords = append(tagRecords, entity.FileTagORM{
 			FileId:  &fileID,
 			TagName: &tag,
 		})
@@ -49,17 +49,17 @@ func CreateFileTagsTx(tx *gorm.DB, fileID string, tags []string) error {
 
 // DeleteFileTagsByFileID 删除文件的所有标签
 func DeleteFileTagsByFileID(fileID string) error {
-	return db.Where("file_id = ?", fileID).Delete(&native.FileTagORM{}).Error
+	return db.Where("file_id = ?", fileID).Delete(&entity.FileTagORM{}).Error
 }
 
 // DeleteFileTagsByFileIDTx 在事务中删除文件的所有标签
 func DeleteFileTagsByFileIDTx(tx *gorm.DB, fileID string) error {
-	return tx.Where("file_id = ?", fileID).Delete(&native.FileTagORM{}).Error
+	return tx.Where("file_id = ?", fileID).Delete(&entity.FileTagORM{}).Error
 }
 
 // GetFileTagsByFileID 获取文件的所有标签
 func GetFileTagsByFileID(fileID string) ([]string, error) {
-	var tags []native.FileTagORM
+	var tags []entity.FileTagORM
 	if err := db.Where("file_id = ?", fileID).Find(&tags).Error; err != nil {
 		return nil, err
 	}

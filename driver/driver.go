@@ -1,11 +1,6 @@
 package driver
 
 import (
-	// 隐式加载所有驱动
-	_ "jenken827.com/jenken827/pfm/driver/aliyundrive_open"
-	_ "jenken827.com/jenken827/pfm/driver/cloud189pc"
+	// 核心只内置 local；其余存储提供者都是独立进程插件（见 DESIGN §11.4）
 	_ "jenken827.com/jenken827/pfm/driver/local"
-	_ "jenken827.com/jenken827/pfm/driver/pan123"
-	_ "jenken827.com/jenken827/pfm/driver/telegram"
-	_ "jenken827.com/jenken827/pfm/driver/yun139"
 )

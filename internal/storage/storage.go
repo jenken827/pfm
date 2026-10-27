@@ -7,6 +7,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -60,7 +61,7 @@ func GetStorage(id uint32) types.StorageDriver {
 }
 
 // createAndStoreDriver 创建并存储驱动实例
-func createAndStoreDriver(sp *native.StorageProviderORM) error {
+func createAndStoreDriver(sp *entity.StorageProviderORM) error {
 	driverID := ""
 	if sp.DriverId != nil {
 		driverID = *sp.DriverId
@@ -144,7 +145,7 @@ func closeAndDeleteStorage(id uint32) {
 }
 
 // AddStorage 添加存储实例（异步执行，不阻塞请求）
-func AddStorage(sp *native.StorageProviderORM) {
+func AddStorage(sp *entity.StorageProviderORM) {
 	if !*sp.Enabled {
 		return
 	}
@@ -165,7 +166,7 @@ func AddStorage(sp *native.StorageProviderORM) {
 }
 
 // UpdateStorage 更新存储实例（异步执行，不阻塞请求）
-func UpdateStorage(sp *native.StorageProviderORM) {
+func UpdateStorage(sp *entity.StorageProviderORM) {
 	// 先关闭并删除旧实例（这个操作很快，可以同步执行）
 	closeAndDeleteStorage(*sp.Id)
 

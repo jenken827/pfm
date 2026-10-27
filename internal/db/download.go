@@ -7,11 +7,12 @@ import (
 	"gorm.io/gorm"
 
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // CreateDownloadRecord 创建下载记录
-func CreateDownloadRecord(dr *native.DownloadRecordORM) error {
+func CreateDownloadRecord(dr *entity.DownloadRecordORM) error {
 	ctx := context.Background()
 	if err := GetDB().WithContext(ctx).Create(dr).Error; err != nil {
 		llog.L().Errorf("create download record failed: %v", err)
@@ -21,9 +22,9 @@ func CreateDownloadRecord(dr *native.DownloadRecordORM) error {
 }
 
 // GetDownloadRecordByGid 根据gid获取下载记录
-func GetDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
+func GetDownloadRecordByGid(gid string) (*entity.DownloadRecordORM, error) {
 	ctx := context.Background()
-	var dr native.DownloadRecordORM
+	var dr entity.DownloadRecordORM
 	if err := GetDB().WithContext(ctx).Where("gid = ?", gid).First(&dr).Error; err != nil {
 		llog.L().Errorf("get download record by gid failed, gid: %s, err: %v", gid, err)
 		return nil, err
@@ -35,9 +36,9 @@ func GetDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
 //
 // 仅供「顺手置状态」这类可忽略场景使用（如 aria2 通知了非 pfm 发起的任务）；
 // 正常业务流程仍用 GetDownloadRecordByGid（查不到要当异常处理）。
-func FindDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
+func FindDownloadRecordByGid(gid string) (*entity.DownloadRecordORM, error) {
 	ctx := context.Background()
-	var dr native.DownloadRecordORM
+	var dr entity.DownloadRecordORM
 	if err := GetDB().WithContext(ctx).Where("gid = ?", gid).First(&dr).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -49,9 +50,9 @@ func FindDownloadRecordByGid(gid string) (*native.DownloadRecordORM, error) {
 }
 
 // GetDownloadRecordByID 根据 ID 获取下载记录
-func GetDownloadRecordByID(id uint32) (*native.DownloadRecordORM, error) {
+func GetDownloadRecordByID(id uint32) (*entity.DownloadRecordORM, error) {
 	ctx := context.Background()
-	var dr native.DownloadRecordORM
+	var dr entity.DownloadRecordORM
 	if err := GetDB().WithContext(ctx).Where("id = ?", id).First(&dr).Error; err != nil {
 		llog.L().Errorf("get download record by id failed, id: %d, err: %v", id, err)
 		return nil, err
@@ -60,9 +61,9 @@ func GetDownloadRecordByID(id uint32) (*native.DownloadRecordORM, error) {
 }
 
 // GetDownloadRecordByUploadID 根据uploadId获取下载记录
-func GetDownloadRecordByUploadID(uploadID uint32) (*native.DownloadRecordORM, error) {
+func GetDownloadRecordByUploadID(uploadID uint32) (*entity.DownloadRecordORM, error) {
 	ctx := context.Background()
-	var dr native.DownloadRecordORM
+	var dr entity.DownloadRecordORM
 	if err := GetDB().WithContext(ctx).Where("upload_record_id = ?", uploadID).First(&dr).Error; err != nil {
 		llog.L().Errorf("get download record by upload id failed, upload id: %d, err: %v", uploadID, err)
 		return nil, err
@@ -71,13 +72,13 @@ func GetDownloadRecordByUploadID(uploadID uint32) (*native.DownloadRecordORM, er
 }
 
 // ListOfflineDownloadsByOwner 分页列出指定用户的 URL 离线下载任务（按 id 倒序）
-func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*native.DownloadRecordORM, int64, error) {
+func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*entity.DownloadRecordORM, int64, error) {
 	ctx := context.Background()
-	var drs []*native.DownloadRecordORM
+	var drs []*entity.DownloadRecordORM
 	q := GetDB().WithContext(ctx).Where("owner_id = ?", ownerID).Order("id DESC")
 
 	var total int64
-	if err := q.Model(&native.DownloadRecordORM{}).Count(&total).Error; err != nil {
+	if err := q.Model(&entity.DownloadRecordORM{}).Count(&total).Error; err != nil {
 		llog.L().Errorf("count download records failed, owner: %s, err: %v", ownerID, err)
 		return nil, 0, err
 	}
@@ -92,8 +93,8 @@ func ListOfflineDownloadsByOwner(ownerID string, offset, limit int) ([]*native.D
 //
 // 用于启动时与 aria2 真实状态对齐（见 internal/download/reconcile.go）：
 // 完成通知只推给当时连着的客户端，停机期间完成或 aria2 重启换 gid 都会漏。
-func ListUnfinishedDownloadRecords() ([]*native.DownloadRecordORM, error) {
-	var drs []*native.DownloadRecordORM
+func ListUnfinishedDownloadRecords() ([]*entity.DownloadRecordORM, error) {
+	var drs []*entity.DownloadRecordORM
 	if err := GetDB().
 		Where("state IN (?, ?)",
 			int32(native.DownloadRecordState_DOWNLOAD_PENDING),
@@ -106,7 +107,7 @@ func ListUnfinishedDownloadRecords() ([]*native.DownloadRecordORM, error) {
 }
 
 // UpdateDownloadRecord 更新下载记录
-func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) error {
+func UpdateDownloadRecord(dr *entity.DownloadRecordORM, updateFields []string) error {
 	ctx := context.Background()
 
 	// 使用 map 进行更新，避免 GORM 的零值检查问题
@@ -158,7 +159,7 @@ func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) e
 	if dr.Id == nil {
 		return nil
 	}
-	if err := GetDB().WithContext(ctx).Model(&native.DownloadRecordORM{}).Where("id = ?", *dr.Id).Updates(updateMap).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Model(&entity.DownloadRecordORM{}).Where("id = ?", *dr.Id).Updates(updateMap).Error; err != nil {
 		llog.L().Errorf("update download record failed: %v", err)
 		return err
 	}
@@ -168,7 +169,7 @@ func UpdateDownloadRecord(dr *native.DownloadRecordORM, updateFields []string) e
 // DeleteDownloadRecord 删除下载记录
 func DeleteDownloadRecord(id uint32) error {
 	ctx := context.Background()
-	if err := GetDB().WithContext(ctx).Delete(&native.DownloadRecordORM{}, id).Error; err != nil {
+	if err := GetDB().WithContext(ctx).Delete(&entity.DownloadRecordORM{}, id).Error; err != nil {
 		llog.L().Errorf("delete download record failed, id: %d, err: %v", id, err)
 		return err
 	}

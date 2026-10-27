@@ -4,7 +4,7 @@ package native;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
-import "gorm/gorm.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
@@ -66,25 +66,23 @@ message UploadAvatarResp {
 // user_id 为该用户的稳定唯一 ID（UUID），与 owner_id / user_spaces.user_id 一致，
 // 用于跨表关联。
 message User {
-  option (gorm.opts).ormable = true;
-  optional uint32 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
   // 用户唯一 ID（UUID），作为 owner_id / user_id 关联 UserSpace
-  optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 36}];
+  optional string user_id = 4 [(sgorm.field).tag = {not_null: true, unique: true, size: 36}];
   // 登录用户名（唯一）
-  optional string username = 5 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
+  optional string username = 5 [(sgorm.field).tag = {not_null: true, unique: true, size: 64}];
   // 密码哈希（bcrypt）
-  optional string password_hash = 6 [(gorm.field).tag = {not_null: true}];
+  optional string password_hash = 6 [(sgorm.field).tag = {not_null: true}];
   // 邮箱（可选）
-  optional string email = 7 [(gorm.field).tag = {default: "''", size: 128}];
+  optional string email = 7 [(sgorm.field).tag = {default: "''", size: 128}];
   // 是否为管理员（替代原 admin_users 表）
-  optional bool is_admin = 8 [(gorm.field).tag = {not_null: true, default: "false"}];
+  optional bool is_admin = 8 [(sgorm.field).tag = {not_null: true, default: "false"}];
   // 头像 URL（相对路径，形如 /api/user/avatar/{userID}?v={ts}；空串表示未设置）
   // 注意：注释里不要写尖括号，protoc-gen-dart 会原样搬进 ///
   // 文档注释，触发 unintended_html_in_doc_comment 导致 flutter analyze 非零。
-  optional string avatar = 9 [(gorm.field).tag = {default: "''", size: 255}];
+  optional string avatar = 9 [(sgorm.field).tag = {default: "''", size: 255}];
 }

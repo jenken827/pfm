@@ -12,6 +12,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -73,7 +74,7 @@ func GetFileDirectLink(ctx context.Context, req *native.DirectLinkFileReq) (*nat
 }
 
 // loadDirectLinkLocations 读文件与全部位置行
-func loadDirectLinkLocations(fileID string) (*native.FileORM, []*native.FileLocationORM, *models.Err) {
+func loadDirectLinkLocations(fileID string) (*entity.FileORM, []*entity.FileLocationORM, *models.Err) {
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
 		return nil, nil, &models.Err{E: fmt.Errorf("file not found: %w", err), C: native.RespCode_NOT_FOUND}
@@ -92,8 +93,8 @@ func loadDirectLinkLocations(fileID string) (*native.FileORM, []*native.FileLoca
 }
 
 // selectDirectLinkProvider 选源：显式指定则只用它；否则按配置决定是否优先挑可直链的提供者
-func selectDirectLinkProvider(locations []*native.FileLocationORM,
-	requested *uint32) (uint32, []*native.FileLocationORM, *models.Err) {
+func selectDirectLinkProvider(locations []*entity.FileLocationORM,
+	requested *uint32) (uint32, []*entity.FileLocationORM, *models.Err) {
 	if requested != nil {
 		locs, err := storage.GetCompleteProviderLocations(locations, *requested)
 		if err != nil {
@@ -119,7 +120,7 @@ func selectDirectLinkProvider(locations []*native.FileLocationORM,
 }
 
 // firstDirectableProvider 按既有选源优先级找第一个"能直链"的提供者（prefer_directable_provider）
-func firstDirectableProvider(locations []*native.FileLocationORM) (uint32, []*native.FileLocationORM, bool) {
+func firstDirectableProvider(locations []*entity.FileLocationORM) (uint32, []*entity.FileLocationORM, bool) {
 	ordered, err := storage.OrderedCompleteProviders(locations)
 	if err != nil {
 		return 0, nil, false
@@ -141,7 +142,7 @@ func firstDirectableProvider(locations []*native.FileLocationORM) (uint32, []*na
 }
 
 // directLinkIneligibleReason 资格判定：返回空串表示可直链
-func directLinkIneligibleReason(locations []*native.FileLocationORM) string {
+func directLinkIneligibleReason(locations []*entity.FileLocationORM) string {
 	if len(locations) != 1 {
 		return fmt.Sprintf("多分片（%d 个物理对象），一个 URL 无法表达拼接", len(locations))
 	}
@@ -152,7 +153,7 @@ func directLinkIneligibleReason(locations []*native.FileLocationORM) string {
 }
 
 // buildDirectLinkResp 组装响应（fallback_url 保证任何客户端都有兜底）
-func buildDirectLinkResp(file *native.FileORM, providerID uint32,
+func buildDirectLinkResp(file *entity.FileORM, providerID uint32,
 	link *types.DirectLink) *native.DirectLinkFileRespData {
 	resp := &native.DirectLinkFileRespData{
 		Url:        &link.URL,

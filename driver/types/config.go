@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -14,7 +15,7 @@ type DriverRegistry struct {
 }
 
 // DriverConstructor 驱动构造函数
-type DriverConstructor func(provider *native.StorageProviderORM) (StorageDriver, error)
+type DriverConstructor func(provider *entity.StorageProviderORM) (StorageDriver, error)
 
 // driverRegistries 驱动注册表（内置驱动在 init 阶段注册，之后只读）
 var driverRegistries = make(map[string]*DriverRegistry)

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 func namePtr(s string) *string       { return &s }
@@ -13,8 +13,8 @@ func timePtr(t time.Time) *time.Time { return &t }
 
 func TestPickKeeper(t *testing.T) {
 	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	mk := func(id, name string, created time.Time) *native.FileORM {
-		return &native.FileORM{
+	mk := func(id, name string, created time.Time) *entity.FileORM {
+		return &entity.FileORM{
 			Id:        idPtr(id),
 			Name:      namePtr(name),
 			CreatedAt: timePtr(created),
@@ -22,7 +22,7 @@ func TestPickKeeper(t *testing.T) {
 	}
 
 	t.Run("保留名称最短", func(t *testing.T) {
-		group := []*native.FileORM{
+		group := []*entity.FileORM{
 			mk("a", "mmexport1713701399029.jpg", base),
 			mk("b", "IMG_1.jpg", base.Add(time.Hour)),
 			mk("c", "Screenshot_20240109_xxx.jpg", base.Add(2*time.Hour)),
@@ -34,7 +34,7 @@ func TestPickKeeper(t *testing.T) {
 	})
 
 	t.Run("同长度保留最早创建", func(t *testing.T) {
-		group := []*native.FileORM{
+		group := []*entity.FileORM{
 			mk("a", "IMG_11.jpg", base.Add(3*time.Hour)),
 			mk("b", "IMG_22.jpg", base), // 同名长度，更早
 		}
@@ -45,7 +45,7 @@ func TestPickKeeper(t *testing.T) {
 	})
 
 	t.Run("同长度同时创建保留id较小", func(t *testing.T) {
-		group := []*native.FileORM{
+		group := []*entity.FileORM{
 			mk("z", "IMG_33.jpg", base),
 			mk("a", "IMG_44.jpg", base),
 		}
@@ -56,7 +56,7 @@ func TestPickKeeper(t *testing.T) {
 	})
 
 	t.Run("中文名按字符数", func(t *testing.T) {
-		group := []*native.FileORM{
+		group := []*entity.FileORM{
 			mk("a", "照片备份最终版最终版.jpg", base), // 12 字符
 			mk("b", "照片.jpg", base),         // 5 字符
 		}
@@ -67,7 +67,7 @@ func TestPickKeeper(t *testing.T) {
 	})
 
 	t.Run("单元素组返回自身", func(t *testing.T) {
-		group := []*native.FileORM{mk("a", "only.jpg", base)}
+		group := []*entity.FileORM{mk("a", "only.jpg", base)}
 		if *pickKeeper(group).Id != "a" {
 			t.Fatal("single element group should return itself")
 		}
@@ -76,8 +76,8 @@ func TestPickKeeper(t *testing.T) {
 
 func TestBetterSuffixKeeper(t *testing.T) {
 	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	mk := func(id, name string, size uint64, created time.Time) *native.FileORM {
-		return &native.FileORM{
+	mk := func(id, name string, size uint64, created time.Time) *entity.FileORM {
+		return &entity.FileORM{
 			Id:        idPtr(id),
 			Name:      namePtr(name),
 			Size:      &size,
@@ -121,8 +121,8 @@ func TestBetterSuffixKeeper(t *testing.T) {
 func TestPickSuffixKeeperKeepsLarger(t *testing.T) {
 	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	size := func(v uint64) *uint64 { return &v }
-	orig := &native.FileORM{Id: idPtr("a"), Name: namePtr("a.jpg"), Size: size(1024), CreatedAt: timePtr(base)}
-	cand := &native.FileORM{Id: idPtr("b"), Name: namePtr("a (1).jpg"), Size: size(4096), CreatedAt: timePtr(base)}
+	orig := &entity.FileORM{Id: idPtr("a"), Name: namePtr("a.jpg"), Size: size(1024), CreatedAt: timePtr(base)}
+	cand := &entity.FileORM{Id: idPtr("b"), Name: namePtr("a (1).jpg"), Size: size(4096), CreatedAt: timePtr(base)}
 	keeper := pickSuffixKeeper(orig, dupMeta{}, []*suffixCandDecision{{cand: cand, dup: true, kind: "compressed-dup"}})
 	if *keeper.Id != "b" {
 		t.Fatalf("want keeper b (larger compressed copy), got %s", *keeper.Id)

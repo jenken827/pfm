@@ -21,6 +21,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
@@ -87,7 +88,7 @@ func parseAndCreateTags(fileID string, tagsStr *string) {
 }
 
 // validateAndGetParent 验证父文件夹存在且为文件夹类型
-func validateAndGetParent(parentID string) (*native.FileORM, *models.Err) {
+func validateAndGetParent(parentID string) (*entity.FileORM, *models.Err) {
 	parentFile, err := db.GetFileByID(parentID)
 	if err != nil {
 		llog.L().Errorf("get parent folder failed: %v", err)
@@ -113,7 +114,7 @@ func validateAndGetParent(parentID string) (*native.FileORM, *models.Err) {
 //   - sameNameFile: 同目录同名的记录（用于同名冲突/覆盖判断）
 //   - globalFile:  全局同 hash 的记录（仅当 ownerFile 不存在时查询，
 //     用于判断存储层数据是否已存在，决定秒传还是完整上传）
-func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.FileORM, *native.FileORM, *native.FileORM, *models.Err) {
+func checkFileExists(parentID, fileName, fileHash, ownerID string) (*entity.FileORM, *entity.FileORM, *entity.FileORM, *models.Err) {
 	ownerFile, err := db.GetFileByHashAndOwner(fileHash, ownerID)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		llog.L().Errorf("check file exists by hash and owner failed: %v", err)
@@ -127,7 +128,7 @@ func checkFileExists(parentID, fileName, fileHash, ownerID string) (*native.File
 	}
 
 	// 仅当自己名下没有同 hash 记录时，才需要全局查询判断数据是否存在
-	var globalFile *native.FileORM
+	var globalFile *entity.FileORM
 	if ownerFile == nil {
 		globalFile, err = db.GetFileByHash(fileHash)
 		if err != nil && err != gorm.ErrRecordNotFound {
@@ -160,7 +161,7 @@ func createSyncTask(ctx context.Context, fileName *string, fileSize *uint64, par
 			strPtrVal(parentID), fileHash)
 	}
 
-	syncRecord := &native.UploadRecordORM{
+	syncRecord := &entity.UploadRecordORM{
 		FileName:          fileName,
 		FileSize:          fileSize,
 		ParentId:          parentID,
@@ -179,7 +180,7 @@ func createSyncTask(ctx context.Context, fileName *string, fileSize *uint64, par
 		// 必须带 owner_id 限定：复合唯一索引是 (file_hash, owner_id)，但查询
 		// 若只按 file_hash，会命中他人同名 hash 记录并覆写其 target_provider_ids
 		// 后重新 dispatch（跨用户串台，与 upload.go:761 同类防护）。
-		var existing native.UploadRecordORM
+		var existing entity.UploadRecordORM
 		if qErr := gormDB.Where("file_hash = ? AND owner_id = ?", fileHash, ownerID).First(&existing).Error; qErr != nil {
 			llog.L().Errorf("create sync record failed and lookup also failed: %v / %v", err, qErr)
 			return
@@ -245,7 +246,7 @@ func mergeProviderIds(existingJSON *string, newIds []uint32) []uint32 {
 
 // buildExistingEncryptMap 构建每个 provider 的加密状态映射
 // 取每个 provider 第一个已完成分片的 Encrypted 字段作为该 provider 的加密状态
-func buildExistingEncryptMap(locations []*native.FileLocationORM) map[uint32]bool {
+func buildExistingEncryptMap(locations []*entity.FileLocationORM) map[uint32]bool {
 	result := make(map[uint32]bool)
 	for _, loc := range locations {
 		if loc.ProviderId == nil || loc.Status == nil || *loc.Status != int32(native.LocationStatus_PCOMPLETED) {
@@ -278,12 +279,12 @@ func handleInstantUpload(
 	fileSize *uint64,
 	parentID *string,
 	providerIds []uint32,
-	ownerFile *native.FileORM,
-	sameNameFile *native.FileORM,
-	globalFile *native.FileORM,
+	ownerFile *entity.FileORM,
+	sameNameFile *entity.FileORM,
+	globalFile *entity.FileORM,
 	overwrite bool,
 	tags *string,
-) (handled bool, fileToUse *native.FileORM, err *models.Err) {
+) (handled bool, fileToUse *entity.FileORM, err *models.Err) {
 	// 秒传数据源：新内容是否已存在于存储（同 hash 的文件记录）。需在
 	// 同名分支之前确定 —— 同名覆盖若指向全新内容，不能走"只改记录"捷径，
 	// 否则文件会指向没有 file_location 的 blob（读取报 no file location found）。
@@ -321,7 +322,7 @@ func handleInstantUpload(
 		// 分发窗口期（upload_record UPLOADING），直接删位置会使其卡死；
 		// 物理回收由 cleanupOldHistories 裁剪历史后做引用检查（含
 		// upload_record 活跃检查）决定。
-		f := &native.FileORM{
+		f := &entity.FileORM{
 			Id:   sameNameFile.Id,
 			Hash: &fileHash,
 			Size: fileSize,
@@ -414,7 +415,7 @@ func handleInstantUpload(
 
 	// 没有同名文件，创建新的文件记录（秒传：数据已存在，仅新增目录条目）
 	myVersion := getUploadVersion(ctx)
-	newFileRecord := &native.FileORM{
+	newFileRecord := &entity.FileORM{
 		Name:     fileName,
 		ParentId: parentID,
 		Size:     dataFile.Size,
@@ -457,11 +458,11 @@ func handleInstantUpload(
 // 会命中 len(locations)==0 的硬 500（详见 storage.PreallocateFileLocations）。
 func handleOverwriteFile(
 	ctx context.Context,
-	fileRecord *native.FileORM,
+	fileRecord *entity.FileORM,
 	overwriteID string,
 	cleanupPath string,
 	providerIDs []uint32,
-) (*native.FileORM, *models.Err) {
+) (*entity.FileORM, *models.Err) {
 	myVersion := getUploadVersion(ctx)
 
 	storage.PreallocateFileLocations(ctx, strPtrVal(fileRecord.Hash), providerIDs)
@@ -606,7 +607,7 @@ func getMaxHistoriesOfParent(parentID *string) uint32 {
 }
 
 // checkSameNameFile 检查同名文件并返回 overwriteID
-func checkSameNameFile(sameNameFile *native.FileORM, fileName string, overwrite bool) (string, *models.Err) {
+func checkSameNameFile(sameNameFile *entity.FileORM, fileName string, overwrite bool) (string, *models.Err) {
 	if sameNameFile == nil {
 		return "", nil
 	}
@@ -719,7 +720,7 @@ func InitUpload(ctx context.Context, req *native.InitUploadReq) (*native.InitUpl
 }
 
 // resumeExistingUpload 处理断点续传
-func resumeExistingUpload(record *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM, blake3Hash string) (*native.InitUploadRespData, *models.Err) {
+func resumeExistingUpload(record *entity.UploadRecordORM, chunks []*entity.UploadChunkRecordORM, blake3Hash string) (*native.InitUploadRespData, *models.Err) {
 	// 根据 task_type 区分任务类型
 	if record.TaskType != nil && *record.TaskType == int32(native.UploadTaskType_SYNC) {
 		llog.L().Infof("found sync task for hash: %s, file already exists", blake3Hash)
@@ -748,7 +749,7 @@ func resumeExistingUpload(record *native.UploadRecordORM, chunks []*native.Uploa
 }
 
 // createNewUploadTask 创建新的上传任务
-func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3Hash string, providerIds []uint32, sameNameFile *native.FileORM) (*native.InitUploadRespData, *models.Err) {
+func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3Hash string, providerIds []uint32, sameNameFile *entity.FileORM) (*native.InitUploadRespData, *models.Err) {
 	overwriteID, mErr := checkSameNameFile(sameNameFile, *req.Name, req.GetOverwrite())
 	if mErr != nil {
 		return nil, mErr
@@ -778,7 +779,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 	// 记录本次上传的版本号（由入口发号器分配，贯穿到分发完成回调做 CAS）
 	urVersion := getUploadVersion(ctx)
 
-	ur := &native.UploadRecordORM{
+	ur := &entity.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
 		FileSize:          req.Size,
@@ -801,7 +802,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 		// 注意必须带 owner_id 限定：老实现的全局 file_hash 唯一约束会让
 		// B 命中 A 的记录并篡改其 file_name/parent_id（跨用户串台）。
 		ownerID := getCurrentUserIDFromCtx(ctx)
-		var existing native.UploadRecordORM
+		var existing entity.UploadRecordORM
 		if qErr := db.GetDB().Where("file_hash = ? AND owner_id = ?", blake3Hash, ownerID).First(&existing).Error; qErr != nil {
 			llog.C(ctx).Errorf("create upload record failed and lookup also failed: %v / %v", err, qErr)
 			return nil, &models.Err{E: err, C: native.RespCode_INTERNAL_ERROR}
@@ -843,7 +844,7 @@ func createNewUploadTask(ctx context.Context, req *native.InitUploadReq, blake3H
 	}, nil
 }
 
-func buildUploadedBitmap(chunks []*native.UploadChunkRecordORM, chunkTotal uint32) []byte {
+func buildUploadedBitmap(chunks []*entity.UploadChunkRecordORM, chunkTotal uint32) []byte {
 	// 构建已上传分片位图
 	uploadedChunksBitmap := make([]byte, (chunkTotal+7)/8)
 	for _, r := range chunks {
@@ -933,7 +934,7 @@ func UploadChunkSingle(ctx context.Context, req *native.UploadChunkReq) *models.
 	}
 
 	// 创建新的分片记录
-	newRecord := &native.UploadChunkRecordORM{
+	newRecord := &entity.UploadChunkRecordORM{
 		UploadId: &uploadID,
 		Hash:     &actualHash,
 		Index:    &chunkIndex,
@@ -990,7 +991,7 @@ func CompleteUpload(ctx context.Context, req *native.CompleteUploadReq) *models.
 }
 
 // processCompleteUpload 后台处理文件合并和上传
-func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecordORM, chunks []*native.UploadChunkRecordORM) {
+func processCompleteUpload(ctx context.Context, uploadRecord *entity.UploadRecordORM, chunks []*entity.UploadChunkRecordORM) {
 	// 标记上传已进入异步处理阶段，前端重试时可识别
 	uploadDone.MarkDone(*uploadRecord.Id)
 	llog.C(ctx).Infof("start processing complete upload: %d", *uploadRecord.Id)
@@ -1065,7 +1066,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 			ownerID = *parent.OwnerId
 		}
 	}
-	fileRecord := &native.FileORM{
+	fileRecord := &entity.FileORM{
 		Name:     uploadRecord.FileName,
 		ParentId: uploadRecord.ParentId,
 		Size:     func() *uint64 { v := uint64(totalSize); return &v }(),
@@ -1119,7 +1120,7 @@ func processCompleteUpload(ctx context.Context, uploadRecord *native.UploadRecor
 
 // targetProviderIDsOf 解析 upload_record 的目标提供者列表
 // 供「位置行预建」（handleOverwriteFile）与分发共用，保证预建行与分发目标一致。
-func targetProviderIDsOf(ur *native.UploadRecordORM) []uint32 {
+func targetProviderIDsOf(ur *entity.UploadRecordORM) []uint32 {
 	if ur == nil || ur.TargetProviderIds == nil || *ur.TargetProviderIds == "" {
 		return nil
 	}
@@ -1132,7 +1133,7 @@ func targetProviderIDsOf(ur *native.UploadRecordORM) []uint32 {
 }
 
 // markUploadFailedSync 标记分块上传失败（同步版本，用于 processCompleteUpload 错误路径）
-func markUploadFailedSync(ur *native.UploadRecordORM, reason string) {
+func markUploadFailedSync(ur *entity.UploadRecordORM, reason string) {
 	if ur.Id != nil {
 		failedStatus := int32(native.UploadStatus_FAILED)
 		ur.TaskStatus = &failedStatus
@@ -1150,7 +1151,7 @@ func markUploadFailedSync(ur *native.UploadRecordORM, reason string) {
 // cleanupChunks 清理分片临时文件
 // 分片目录按 (owner, hash) 共享：同 hash 还有别的在途上传时保留，
 // 否则会删掉对方正在合并的源分片（同上一条 temp file not found 事故）。
-func cleanupChunks(ur *native.UploadRecordORM) {
+func cleanupChunks(ur *entity.UploadRecordORM) {
 	if otherActiveUploadsForHash(strPtrVal(ur.FileHash)) {
 		llog.L().Infof("keep chunk temp dir, other active upload(s) still use hash: %s", strPtrVal(ur.FileHash))
 		return
@@ -1165,7 +1166,7 @@ func cleanupChunks(ur *native.UploadRecordORM) {
 // 越权取消/删除/重试他人上传。返回 false 时调用方应拒绝请求。
 // 与 ListUploadRecords / RetryAllFailedUploadRecords 同为"仅本人"口径，
 // 保证列表可见即可操作（owner 为空的历史脏记录不可见也不可操作）。
-func checkUploadRecordOwnership(ctx context.Context, record *native.UploadRecordORM) bool {
+func checkUploadRecordOwnership(ctx context.Context, record *entity.UploadRecordORM) bool {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return false
@@ -1341,7 +1342,7 @@ func UploadSmall(ctx context.Context, req *native.UploadSmallReq) (*native.Uploa
 // createSmallFileRecord / smallFileUploadToProviders）。
 // tempPath 必须在规范临时目录（TempDir/<hash>/）下：各 helper 的错误清理路径
 // 依赖该目录的隔离性（RemoveAll 目录是安全的），storage.Dispatch 也按该布局兜底。
-func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempPath string) (*native.FileORM, *models.Err) {
+func UploadWebdavFromTemp(ctx context.Context, req *native.UploadSmallReq, tempPath string) (*entity.FileORM, *models.Err) {
 	// 权限检查：检查对父目录的上传权限
 	if !CheckOwnership(ctx, *req.ParentId) {
 		return nil, &models.Err{
@@ -1464,10 +1465,10 @@ func writeSmallFileTemp(blake3Hash, fileName string, content []byte) (string, *m
 }
 
 // createSmallFileRecord 创建小文件的文件记录
-func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blake3Hash, tempPath, overwriteID string, providerIDs []uint32) (*native.FileORM, *models.Err) {
+func createSmallFileRecord(ctx context.Context, req *native.UploadSmallReq, blake3Hash, tempPath, overwriteID string, providerIDs []uint32) (*entity.FileORM, *models.Err) {
 	filetype, mime := GetFileType(tempPath, *req.Name)
 
-	newFileRecord := &native.FileORM{
+	newFileRecord := &entity.FileORM{
 		Name:     req.Name,
 		ParentId: req.ParentId,
 		Size:     req.Size,
@@ -1507,7 +1508,7 @@ func smallFileUploadToProviders(ctx context.Context, blake3Hash string, req *nat
 	// 本次上传的内容时才标记 is_ready，防止旧分发把新 PUT 接管的内容标就绪）
 	urVersion := getUploadVersion(ctx)
 
-	uploadRecord := &native.UploadRecordORM{
+	uploadRecord := &entity.UploadRecordORM{
 		FileHash:          &blake3Hash,
 		FileName:          req.Name,
 		FileSize:          req.Size,
@@ -1902,7 +1903,7 @@ func RetryAllFailedUploadRecords(ctx context.Context) *models.Err {
 }
 
 // cleanOldFileLocations 异步删除旧文件在存储提供者上的位置
-func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string) {
+func cleanOldFileLocations(locations []*entity.FileLocationORM, oldHash *string) {
 	if len(locations) == 0 {
 		return
 	}
@@ -1910,7 +1911,7 @@ func cleanOldFileLocations(locations []*native.FileLocationORM, oldHash *string)
 	ctx := context.Background()
 
 	// 按 provider_id 分组
-	providerLocations := make(map[uint32][]*native.FileLocationORM)
+	providerLocations := make(map[uint32][]*entity.FileLocationORM)
 	for _, loc := range locations {
 		if loc.ProviderId != nil {
 			providerID := *loc.ProviderId

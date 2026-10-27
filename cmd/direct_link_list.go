@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -54,7 +55,7 @@ func listDirectLinkCandidates(ctx context.Context, limit uint32, jsonOut bool) e
 	if err != nil {
 		return err
 	}
-	byHash := make(map[string][]*native.FileLocationORM, len(files))
+	byHash := make(map[string][]*entity.FileLocationORM, len(files))
 	for _, loc := range locations {
 		if loc.Blake3Hash != nil {
 			byHash[*loc.Blake3Hash] = append(byHash[*loc.Blake3Hash], loc)
@@ -95,9 +96,9 @@ func countDirectLinkCandidateFiles(ctx context.Context) (int64, error) {
 }
 
 // loadLocationsByHashesChunked 分批查位置行：一次性 IN 太多 hash 会撞 Postgres 参数上限
-func loadLocationsByHashesChunked(hashes []string) ([]*native.FileLocationORM, error) {
+func loadLocationsByHashesChunked(hashes []string) ([]*entity.FileLocationORM, error) {
 	const chunkSize = 500
-	all := make([]*native.FileLocationORM, 0, len(hashes))
+	all := make([]*entity.FileLocationORM, 0, len(hashes))
 	for start := 0; start < len(hashes); start += chunkSize {
 		end := start + chunkSize
 		if end > len(hashes) {
@@ -145,7 +146,7 @@ func loadProviderTypeNames() (map[uint32]string, error) {
 }
 
 // buildDirectLinkCandidate 汇总单个文件的各提供者 verdict
-func buildDirectLinkCandidate(file directLinkListFile, locations []*native.FileLocationORM,
+func buildDirectLinkCandidate(file directLinkListFile, locations []*entity.FileLocationORM,
 	typeNames map[uint32]string) directLinkCandidate {
 	candidate := directLinkCandidate{ID: file.ID, Name: file.Name, Size: file.Size}
 
@@ -180,7 +181,7 @@ const (
 )
 
 // directLinkLocationVerdict 单个提供者的可读结论；第二个返回值表示"能直链"
-func directLinkLocationVerdict(locs []*native.FileLocationORM, typeName string,
+func directLinkLocationVerdict(locs []*entity.FileLocationORM, typeName string,
 	state directLinkDriverState) (string, bool) {
 	label := fmt.Sprintf("%s(provider %d)", typeName, providerIDOf(locs))
 	encrypted := false
@@ -218,7 +219,7 @@ func directLinkDriverStateOf(providerID uint32) directLinkDriverState {
 }
 
 // providerIDOf 取位置行的提供者 ID（同组内必然相同）
-func providerIDOf(locs []*native.FileLocationORM) uint32 {
+func providerIDOf(locs []*entity.FileLocationORM) uint32 {
 	if len(locs) == 0 || locs[0].ProviderId == nil {
 		return 0
 	}

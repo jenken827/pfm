@@ -10,6 +10,7 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -64,9 +65,9 @@ func TestCleanupUploadTempKeepsDirsSharedWithActiveUpload(t *testing.T) {
 }
 
 // newTestUploadRecord 建一条指定状态的上传记录（每个测试用独立 hash+owner，避免撞唯一索引）
-func newTestUploadRecord(t *testing.T, hash, ownerID string, status native.UploadStatus) *native.UploadRecordORM {
+func newTestUploadRecord(t *testing.T, hash, ownerID string, status native.UploadStatus) *entity.UploadRecordORM {
 	t.Helper()
-	ur := &native.UploadRecordORM{
+	ur := &entity.UploadRecordORM{
 		FileHash:          utils.StringPtr(hash),
 		FileName:          utils.StringPtr("payload.bin"),
 		FileSize:          utils.Uint64Ptr(1),

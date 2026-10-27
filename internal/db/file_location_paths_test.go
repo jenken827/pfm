@@ -6,6 +6,7 @@ import (
 
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -17,7 +18,7 @@ func TestGetFileLocationPathsByProvider(t *testing.T) {
 
 	create := func(providerID uint32, hash, path string, status native.LocationStatus) {
 		t.Helper()
-		fl := &native.FileLocationORM{
+		fl := &entity.FileLocationORM{
 			Blake3Hash: utils.StringPtr(hash),
 			ProviderId: utils.Uint32Ptr(providerID),
 			Path:       utils.StringPtr(path),

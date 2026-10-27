@@ -11,6 +11,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/internal/models"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -28,7 +29,7 @@ func TestUploadSmallConcurrentSameFileIsIdempotent(t *testing.T) {
 
 	userID := uuid.New().String()
 	rootID := createTestFolder(t, userID, "root-"+userID, "")
-	if err := db.CreateUserSpace(&native.UserSpaceORM{
+	if err := db.CreateUserSpace(&entity.UserSpaceORM{
 		UserId:           utils.StringPtr(userID),
 		RootFileId:       utils.StringPtr(rootID),
 		BoundProviderIds: utils.StringPtr("[1]"),

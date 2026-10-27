@@ -9,6 +9,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -59,7 +60,7 @@ func startReconcileLoop() {
 }
 
 // reconcileOneRecord 对齐单条记录
-func reconcileOneRecord(dr *native.DownloadRecordORM, snap *taskSnapshot) {
+func reconcileOneRecord(dr *entity.DownloadRecordORM, snap *taskSnapshot) {
 	task, ok := snap.targetFor(dr)
 	if !ok {
 		// 刚提交的任务可能还没出现在 aria2 列表里，宽限期内先不动
@@ -94,7 +95,7 @@ func reconcileOneRecord(dr *native.DownloadRecordORM, snap *taskSnapshot) {
 
 // relinkGid 把记录里的 gid 换成 aria2 里真实的产物 gid，
 // 否则后续完成通知仍然匹配不上（磁力通知带的是元数据 gid）
-func relinkGid(dr *native.DownloadRecordORM, gid string) {
+func relinkGid(dr *entity.DownloadRecordORM, gid string) {
 	if gid == "" || derefString(dr.Gid) == gid {
 		return
 	}
@@ -110,7 +111,7 @@ func relinkGid(dr *native.DownloadRecordORM, gid string) {
 //
 // .torrent URL 的 infohash 不体现在 URL 上，aria2 重启后 gid 全变、种子文件也
 // 可能已被清理，只有记下来才能重新关联到对应的 BT 任务。
-func rememberInfoHash(dr *native.DownloadRecordORM, task aria2.StatusInfo) {
+func rememberInfoHash(dr *entity.DownloadRecordORM, task aria2.StatusInfo) {
 	ih := strings.ToLower(task.InfoHash)
 	if ih == "" || recordInfoHash(dr) != "" {
 		return
@@ -125,7 +126,7 @@ func rememberInfoHash(dr *native.DownloadRecordORM, task aria2.StatusInfo) {
 }
 
 // importFinalTask 产物任务已完成 → 落完成信息并入库 / 恢复同步
-func importFinalTask(dr *native.DownloadRecordORM, task aria2.StatusInfo) {
+func importFinalTask(dr *entity.DownloadRecordORM, task aria2.StatusInfo) {
 	paths := importableFiles(task.Dir, task.Files)
 	if len(paths) == 0 {
 		markDownloadFailed(dr, "aria2 已完成但没有可导入的文件（可能文件全部未选中）")
@@ -147,17 +148,17 @@ func importFinalTask(dr *native.DownloadRecordORM, task aria2.StatusInfo) {
 }
 
 // isURLOfflineDownload URL 离线下载任务（有 url、且不是 provider→provider 中转）
-func isURLOfflineDownload(dr *native.DownloadRecordORM) bool {
+func isURLOfflineDownload(dr *entity.DownloadRecordORM) bool {
 	return derefString(dr.Url) != "" && (dr.UploadRecordId == nil || *dr.UploadRecordId == 0)
 }
 
 // withinGrace 记录是否还在「刚提交、可能尚未进入 aria2」的宽限期内
-func withinGrace(dr *native.DownloadRecordORM) bool {
+func withinGrace(dr *entity.DownloadRecordORM) bool {
 	return dr.CreatedAt == nil || time.Since(*dr.CreatedAt) < offlineTaskGracePeriod
 }
 
 // markDownloadRunning 置为下载中（并同步 aria2 已知总大小）
-func markDownloadRunning(dr *native.DownloadRecordORM, totalLength string) {
+func markDownloadRunning(dr *entity.DownloadRecordORM, totalLength string) {
 	changed := false
 	if size, err := parseSize(totalLength); err == nil && size > 0 {
 		if dr.FileSize == nil || *dr.FileSize != size {
@@ -180,7 +181,7 @@ func markDownloadRunning(dr *native.DownloadRecordORM, totalLength string) {
 }
 
 // markDownloadFailed 置为失败并写入可读原因
-func markDownloadFailed(dr *native.DownloadRecordORM, msg string) {
+func markDownloadFailed(dr *entity.DownloadRecordORM, msg string) {
 	state := int32(native.DownloadRecordState_DOWNLOAD_FAILED)
 	dr.State = &state
 	dr.ErrorMessage = &msg

@@ -3,6 +3,7 @@ package webdav
 import (
 	"testing"
 
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -16,7 +17,7 @@ func TestToFileInfoPrefixesClientVisiblePath(t *testing.T) {
 	folderName := "readany"
 	folderType := int32(native.FileType_FOLDER)
 	folderSize := uint64(0)
-	folder := &native.FileORM{
+	folder := &entity.FileORM{
 		Id:   webdavTestStrPtr("file-1"),
 		Name: &folderName,
 		Type: &folderType,
@@ -34,7 +35,7 @@ func TestToFileInfoPrefixesClientVisiblePath(t *testing.T) {
 	fileName := "book.epub"
 	fileType := int32(native.FileType_DOCUMENT)
 	fileSize := uint64(1024)
-	file := &native.FileORM{
+	file := &entity.FileORM{
 		Id:   webdavTestStrPtr("file-2"),
 		Name: &fileName,
 		Type: &fileType,

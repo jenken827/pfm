@@ -14,6 +14,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/pkg/sharelink"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -88,7 +89,7 @@ func CreateShareLink(ctx context.Context, req *native.CreateShareLinkReq) (*nati
 	// 6. 写入数据库
 	status := int32(native.ShareStatus_ACTIVE)
 	ownerID := getCurrentUserIDFromCtx(ctx)
-	fs := &native.FileShareORM{
+	fs := &entity.FileShareORM{
 		ShareCode:      &shareCode,
 		FileId:         &fileID,
 		Sign:           &signParam,
@@ -130,7 +131,7 @@ func buildShareURL(shareCode, sign string) string {
 
 // checkShareOwnership 校验当前用户是否为分享的归属者（分享记录的 owner_id 或管理员）
 // 老数据 owner_id 为空时退化为校验对应文件的所有者
-func checkShareOwnership(ctx context.Context, fs *native.FileShareORM) bool {
+func checkShareOwnership(ctx context.Context, fs *entity.FileShareORM) bool {
 	if isAdminUser(ctx) {
 		return true
 	}
@@ -205,7 +206,7 @@ func ListMyShares(ctx context.Context, req *native.ListMySharesReq) (*native.Lis
 			fileIDs = append(fileIDs, *s.FileId)
 		}
 	}
-	fileMap := make(map[string]*native.FileORM, len(fileIDs))
+	fileMap := make(map[string]*entity.FileORM, len(fileIDs))
 	if len(fileIDs) > 0 {
 		files, fErr := db.GetFilesByIDsUnscoped(fileIDs)
 		if fErr != nil {
@@ -326,7 +327,7 @@ func UpdateShareLink(ctx context.Context, req *native.UpdateShareLinkReq) (*nati
 	}
 
 	// 组装更新字段
-	update := &native.FileShareORM{Id: fs.Id}
+	update := &entity.FileShareORM{Id: fs.Id}
 	fields := []string{}
 
 	// 有效期变化需要重签 sign（sign 由 share_code+file_id+expire_at 决定）

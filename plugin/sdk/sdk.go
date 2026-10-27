@@ -36,6 +36,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/proto/gen/plugin"
 )
@@ -276,7 +277,7 @@ func (s *server) configure(req *plugin.ConfigureReq) (*plugin.ConfigureResp, err
 		return nil, newRPCError("INVALID", "configure 缺少 provider")
 	}
 	providerID := req.GetProviderId()
-	orm, err := req.GetProvider().ToORM(context.Background())
+	orm, err := entity.FromStorageProvider(context.Background(), req.GetProvider())
 	if err != nil {
 		return nil, fmt.Errorf("解析 provider 失败: %w", err)
 	}

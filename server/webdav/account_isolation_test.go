@@ -13,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
 	"jenken827.com/jenken827/pfm/internal/service"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -42,7 +43,7 @@ func newWebdavTestEnv(t *testing.T) *webdavTestEnv {
 
 	userID := uuid.New().String()
 	rootID := makeTestFolder(t, userID, "root-"+userID, "")
-	space := &native.UserSpaceORM{
+	space := &entity.UserSpaceORM{
 		UserId:           utils.StringPtr(userID),
 		RootFileId:       utils.StringPtr(rootID),
 		BoundProviderIds: utils.StringPtr("[1]"),
@@ -72,7 +73,7 @@ func newWebdavTestEnv(t *testing.T) *webdavTestEnv {
 func makeTestFolder(t *testing.T, ownerID, name, parentID string) string {
 	t.Helper()
 	id := uuid.New().String()
-	f := &native.FileORM{
+	f := &entity.FileORM{
 		Id:       utils.StringPtr(id),
 		Name:     utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),
@@ -89,7 +90,7 @@ func makeTestFolder(t *testing.T, ownerID, name, parentID string) string {
 func makeTestFile(t *testing.T, ownerID, name, parentID string) string {
 	t.Helper()
 	id := uuid.New().String()
-	f := &native.FileORM{
+	f := &entity.FileORM{
 		Id:       utils.StringPtr(id),
 		Name:     utils.StringPtr(name),
 		ParentId: utils.StringPtr(parentID),

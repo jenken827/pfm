@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // IsAdmin 检查用户是否为管理员。
@@ -12,7 +12,7 @@ import (
 // 数据源：users.is_admin（原 admin_users 表已移除，管理员标记收敛到用户表）。
 // 用户不存在时返回 false。
 func IsAdmin(userID string) bool {
-	user, err := gorm.G[*native.UserORM](db).
+	user, err := gorm.G[*entity.UserORM](db).
 		Where("user_id = ?", userID).
 		First(context.Background())
 	if err != nil {
@@ -24,7 +24,7 @@ func IsAdmin(userID string) bool {
 // SetAdmin 设置/取消用户的管理员标记
 // 返回 gorm.ErrRecordNotFound 表示用户不存在
 func SetAdmin(userID string, isAdmin bool) error {
-	result := db.Model(&native.UserORM{}).
+	result := db.Model(&entity.UserORM{}).
 		Where("user_id = ?", userID).
 		Update("is_admin", isAdmin)
 	if result.Error != nil {
@@ -40,7 +40,7 @@ func SetAdmin(userID string, isAdmin bool) error {
 // 调用方需自行保证用户名唯一性（冲突时由唯一索引报错）。
 // 返回 gorm.ErrRecordNotFound 表示用户不存在
 func UpdateUserProfile(userID, username, email string) error {
-	result := db.Model(&native.UserORM{}).
+	result := db.Model(&entity.UserORM{}).
 		Where("user_id = ?", userID).
 		Updates(map[string]any{
 			"username": username,
@@ -57,7 +57,7 @@ func UpdateUserProfile(userID, username, email string) error {
 
 // UpdateUserAvatar 更新用户头像 URL
 func UpdateUserAvatar(userID, avatarURL string) error {
-	result := db.Model(&native.UserORM{}).
+	result := db.Model(&entity.UserORM{}).
 		Where("user_id = ?", userID).
 		Update("avatar", avatarURL)
 	if result.Error != nil {
@@ -73,7 +73,7 @@ func UpdateUserAvatar(userID, avatarURL string) error {
 // excludeUserID 用于更新场景（排除自己）
 func IsUsernameTaken(username, excludeUserID string) (bool, error) {
 	var count int64
-	err := db.Model(&native.UserORM{}).
+	err := db.Model(&entity.UserORM{}).
 		Where("username = ? AND user_id != ?", username, excludeUserID).
 		Count(&count).Error
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -116,9 +117,9 @@ type moveBatch struct {
 	// 目标父目录 ID（循环引用检测起点）
 	targetParentID string
 	// 源文件：fileID -> 记录（仅包含属于当前用户的存活文件）
-	files map[string]*native.FileORM
+	files map[string]*entity.FileORM
 	// 目标目录下「文件名 -> 记录」，用于同名冲突检测
-	targetNames map[string]*native.FileORM
+	targetNames map[string]*entity.FileORM
 	// 祖先链：fileID -> parentID，用于循环引用判定
 	parentOf map[string]string
 }
@@ -153,7 +154,7 @@ func prepareMoveBatch(ctx context.Context, fileIDs []string, targetParentID, use
 		llog.C(ctx).Errorf("batch get files failed: %v", err)
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
-	files := make(map[string]*native.FileORM, len(filesSlice))
+	files := make(map[string]*entity.FileORM, len(filesSlice))
 	for _, f := range filesSlice {
 		if f.Id == nil || f.OwnerId == nil || *f.OwnerId != userID {
 			continue // 非本人文件：视为不存在（caller 报 file not found or permission denied）

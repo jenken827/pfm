@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -27,7 +28,7 @@ func TestUpdateFileIsReadyVersionCAS(t *testing.T) {
 	parentID := uuid.New().String()
 	hash := uuid.New().String()
 	fileID := uuid.New().String()
-	if err := db.CreateFile(&native.FileORM{
+	if err := db.CreateFile(&entity.FileORM{
 		Id:       utils.StringPtr(fileID),
 		Name:     utils.StringPtr("cas.jpg"),
 		ParentId: utils.StringPtr(parentID),

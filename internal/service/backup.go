@@ -10,6 +10,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -80,7 +81,7 @@ func CreateBackupTask(ctx context.Context, req *native.CreateBackupTaskReq) *mod
 		return &models.Err{E: errors.New("target directory not found"), C: native.RespCode_PARAMS_ERROR}
 	}
 
-	orm := &native.BackupTaskORM{
+	orm := &entity.BackupTaskORM{
 		Name:        req.Name,
 		SourcePath:  req.SourcePath,
 		TargetDirId: req.TargetDirId,
@@ -283,7 +284,7 @@ func ListBackupTasks(ctx context.Context, req *native.ListBackupTasksReq) (*nati
 			llog.C(ctx).Errorf("convert backup task to PB failed: %v", pbErr)
 			continue
 		}
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 
 	totalUint32 := uint32(total)
@@ -322,11 +323,11 @@ func GetBackupTask(ctx context.Context, req *native.GetBackupTaskReq) (*native.G
 		if rErr != nil {
 			continue
 		}
-		recentFiles = append(recentFiles, &rpb)
+		recentFiles = append(recentFiles, rpb)
 	}
 
 	return &native.GetBackupTaskRespData{
-		Task:        &pb,
+		Task:        pb,
 		RecentFiles: recentFiles,
 	}, nil
 }
@@ -366,7 +367,7 @@ func TriggerBackup(ctx context.Context, req *native.TriggerBackupReq) *models.Er
 }
 
 // checkBackupTaskOwnership 检查当前用户是否为备份任务的所有者（或管理员）
-func checkBackupTaskOwnership(ctx context.Context, task *native.BackupTaskORM) bool {
+func checkBackupTaskOwnership(ctx context.Context, task *entity.BackupTaskORM) bool {
 	userID := getCurrentUserIDFromCtx(ctx)
 	if userID == "" {
 		return false
@@ -413,7 +414,7 @@ func ListBackupFiles(ctx context.Context, req *native.ListBackupFilesReq) (*nati
 		if pbErr != nil {
 			continue
 		}
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 
 	totalUint32 := uint32(total)

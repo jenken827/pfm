@@ -10,6 +10,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -73,7 +74,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 			llog.C(ctx).Warnf("convert file history to pb failed: %v", err)
 			continue
 		}
-		historyPBs = append(historyPBs, &pb)
+		historyPBs = append(historyPBs, pb)
 	}
 
 	// 6. 转换文件为PB格式
@@ -84,7 +85,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 	}
 
 	return &native.FileDetailRespData{
-		File:      &filePB,
+		File:      filePB,
 		Locations: providerLocations,
 		Histories: historyPBs,
 		Tags:      tags,
@@ -92,7 +93,7 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 }
 
 // groupLocationsByProvider 按存储提供者分组文件位置信息
-func groupLocationsByProvider(locations []*native.FileLocationORM) []*native.ProviderLocationInfo {
+func groupLocationsByProvider(locations []*entity.FileLocationORM) []*native.ProviderLocationInfo {
 	type providerGroup struct {
 		providerID  uint32
 		encrypted   bool

@@ -13,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -108,7 +109,7 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 	emptyHash := ""
 	zeroLoc := uint64(0)
 	state := int32(native.DownloadRecordState_DOWNLOAD_PENDING)
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid:              &gid,
 		Blake3Hash:       &emptyHash,
 		SourceLocationId: &zeroLoc,
@@ -129,7 +130,7 @@ func CreateOfflineDownload(ctx context.Context, req *native.CreateOfflineDownloa
 
 	pb, _ := dr.ToPB(ctx)
 	return &native.CreateOfflineDownloadResp{
-		Record: &pb,
+		Record: pb,
 	}, nil
 }
 
@@ -155,7 +156,7 @@ func ListOfflineDownloads(ctx context.Context, req *native.ListOfflineDownloadsR
 	records := make([]*native.DownloadRecord, 0, len(drs))
 	for _, dr := range drs {
 		pb, _ := dr.ToPB(ctx)
-		records = append(records, &pb)
+		records = append(records, pb)
 	}
 
 	return &native.ListOfflineDownloadsResp{
@@ -244,7 +245,7 @@ func RetryOfflineDownload(ctx context.Context, req *native.RetryOfflineDownloadR
 
 	llog.C(ctx).Infof("offline download retried, id: %d, new gid: %s", *req.Id, gid)
 	pb, _ := dr.ToPB(ctx)
-	return &native.CreateOfflineDownloadResp{Record: &pb}, nil
+	return &native.CreateOfflineDownloadResp{Record: pb}, nil
 }
 
 // inferFileName 从 URL 推断文件名，req 指定了则优先用指定名

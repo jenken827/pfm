@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -161,7 +161,7 @@ func TestSafeSegment(t *testing.T) {
 func TestTorrentRootName(t *testing.T) {
 	dir := "/data/.offline"
 	files := []string{filepath.Join(dir, "Torrent/a.mkv")}
-	dr := &native.DownloadRecordORM{SourceName: utils.StringPtr("我的种子"), Gid: utils.StringPtr("gid1")}
+	dr := &entity.DownloadRecordORM{SourceName: utils.StringPtr("我的种子"), Gid: utils.StringPtr("gid1")}
 
 	// aria2 的种子名优先（比 sourceName 更接近真实种子）
 	if got := torrentRootName(dr, "TorrentName", files, dir); got != "TorrentName" {
@@ -172,7 +172,7 @@ func TestTorrentRootName(t *testing.T) {
 		t.Errorf("torrentRootName = %q, want 我的种子", got)
 	}
 	// 都没有 → 用第一个文件的顶层目录
-	dr = &native.DownloadRecordORM{Gid: utils.StringPtr("gid1")}
+	dr = &entity.DownloadRecordORM{Gid: utils.StringPtr("gid1")}
 	if got := torrentRootName(dr, "", files, dir); got != "Torrent" {
 		t.Errorf("torrentRootName = %q, want Torrent", got)
 	}
@@ -182,7 +182,7 @@ func TestTorrentRootName(t *testing.T) {
 		t.Errorf("torrentRootName = %q, want download-gid1", got)
 	}
 	// 种子名 / sourceName 含穿越段 → 净化后回退
-	dr = &native.DownloadRecordORM{SourceName: utils.StringPtr(".."), Gid: utils.StringPtr("gid1")}
+	dr = &entity.DownloadRecordORM{SourceName: utils.StringPtr(".."), Gid: utils.StringPtr("gid1")}
 	if got := torrentRootName(dr, "..", files, dir); got != "Torrent" {
 		t.Errorf("torrentRootName = %q, want Torrent（非法名字回退）", got)
 	}

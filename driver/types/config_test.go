@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -11,7 +12,7 @@ import (
 const testOverrideType = "test_override"
 
 func newTestCtor(name string) DriverConstructor {
-	return func(*native.StorageProviderORM) (StorageDriver, error) {
+	return func(*entity.StorageProviderORM) (StorageDriver, error) {
 		return &namedTestDriver{name: name}, nil
 	}
 }

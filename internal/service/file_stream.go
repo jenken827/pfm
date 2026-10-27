@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"jenken827.com/jenken827/pfm/driver/cryptostream"
-	"jenken827.com/jenken827/pfm/driver/telegram"
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -79,7 +79,7 @@ func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 
 	// 3. 选择源提供者
 	var sourceProviderID uint32
-	var sourceLocations []*native.FileLocationORM
+	var sourceLocations []*entity.FileLocationORM
 	if providerID != nil {
 		sourceProviderID = *providerID
 		sourceLocations, err = storage.GetCompleteProviderLocations(locations, sourceProviderID)
@@ -118,13 +118,13 @@ func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 		return nil, fmt.Errorf("storage not found for provider %d", sourceProviderID)
 	}
 
-	// 5. Telegram 大文件预下载检查（使用 file_location.Size）
+	// 5. 大文件预下载检查（驱动声明 PREDOWNLOAD 能力时；使用 file_location.Size）
 	var fileSizePtr *int64
 	if len(sourceLocations) > 0 && sourceLocations[0].Size != nil {
 		s := int64(*sourceLocations[0].Size)
 		fileSizePtr = &s
 	}
-	if preDownloadResult := checkTelegramPreDownload(sourceStorage, sourceLocations, fileID, sourceProviderID, fileSizePtr); preDownloadResult != nil {
+	if preDownloadResult := checkPreDownloadState(sourceStorage, sourceLocations, fileID, sourceProviderID, fileSizePtr); preDownloadResult != nil {
 		return &FileStreamResult{
 			IsPreDownload:   true,
 			PreDownloadData: preDownloadResult,
@@ -174,7 +174,7 @@ func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 //
 // 兼容旧布局：早期版本写在内容寻址层 TempDir/<hash>/<fileName>，这里做回退查找。
 // 与远程 provider 解密后的内容字节等价，可直接返回；都找不到时返回 false 走轮询兜底。
-func tryServeFromLocalTemp(file *native.FileORM) (*FileStreamResult, bool) {
+func tryServeFromLocalTemp(file *entity.FileORM) (*FileStreamResult, bool) {
 	if file.Hash == nil || *file.Hash == "" || file.Name == nil || *file.Name == "" {
 		return nil, false
 	}
@@ -341,7 +341,7 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool,
 // GetThumbnailPath 获取缩略图路径
 // size: 缩略图尺寸（200 或 400）
 // 返回缩略图路径和是否需要异步生成
-func GetThumbnailPath(fileID string, size thumbnail.ThumbnailSize) (thumbnailPath string, needGenerate bool, file *native.FileORM) {
+func GetThumbnailPath(fileID string, size thumbnail.ThumbnailSize) (thumbnailPath string, needGenerate bool, file *entity.FileORM) {
 	// 1. 获取文件信息
 	file, err := db.GetFileByID(fileID)
 	if err != nil {
@@ -373,7 +373,7 @@ func GetThumbnailPath(fileID string, size thumbnail.ThumbnailSize) (thumbnailPat
 }
 
 // RegenerateThumbnail 重新生成缩略图（异步调用）
-func RegenerateThumbnail(ctx context.Context, file *native.FileORM) {
+func RegenerateThumbnail(ctx context.Context, file *entity.FileORM) {
 	if file.Hash == nil || *file.Hash == "" {
 		return
 	}
@@ -463,18 +463,23 @@ func CheckFileIsImage(fileID string) bool {
 	return file.Name != nil && thumbnail.IsImageFile(*file.Name)
 }
 
-// checkTelegramPreDownload 检查 Telegram 大文件预下载状态
+// preDownloadSizeThreshold 预下载阈值：超过它的文件才走"先缓存再返回 202"的路径
+//
+// 这是宿主侧的策略阈值，不绑定具体提供者（各驱动的分片/缓存策略由驱动自己决定）。
+const preDownloadSizeThreshold int64 = 20 * 1024 * 1024
+
+// checkPreDownloadState 检查大文件预下载状态
 // fileSize: 文件实际大小（来自 files 表），用于判断是否需要预下载。
 // 不能使用 sourceLocations[0].Size，因为 Telegram API 可能返回错误的值。
-func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations []*native.FileLocationORM, fileID string, sourceProviderID uint32, fileSize *int64) map[string]any {
-	llog.L().Infof("checkTelegramPreDownload ENTER: file_id=%s, storage_type=%v, fileSize=%v, locs=%d", fileID, sourceStorage.GetType(), fileSize, len(sourceLocations))
+func checkPreDownloadState(sourceStorage types.StorageDriver, sourceLocations []*entity.FileLocationORM, fileID string, sourceProviderID uint32, fileSize *int64) map[string]any {
+	llog.L().Infof("checkPreDownloadState ENTER: file_id=%s, storage_type=%v, fileSize=%v, locs=%d", fileID, sourceStorage.GetType(), fileSize, len(sourceLocations))
 	// 只有声明了 PREDOWNLOAD 能力的驱动（telegram 类）才有预缓存状态
 	if !types.HasCapability(types.GetDriverMetadata(sourceStorage.GetType()), native.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD) {
 		return nil
 	}
 
-	if fileSize == nil || *fileSize <= telegram.LargeFileSizeThreshold {
-		llog.L().Infof("checkTelegramPreDownload SKIP: fileSize too small or nil")
+	if fileSize == nil || *fileSize <= preDownloadSizeThreshold {
+		llog.L().Infof("checkPreDownloadState SKIP: fileSize too small or nil")
 		return nil
 	}
 
@@ -490,10 +495,10 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 	if cacheStatus != nil {
 		cacheVal = *cacheStatus
 	}
-	llog.L().Infof("checkTelegramPreDownload: file_id=%s, path=%q, cache_status=%d, file_size=%d", fileID, pathVal, cacheVal, *fileSize)
+	llog.L().Infof("checkPreDownloadState: file_id=%s, path=%q, cache_status=%d, file_size=%d", fileID, pathVal, cacheVal, *fileSize)
 
 	// 只根据 cache_status 判断是否需要预下载
-	// 注意：Path 字段是存储提供者的地址（如 Telegram file path），不是本地缓存路径，不能用来判断缓存状态
+	// 注意：Path 字段是存储提供者的地址，不是本地缓存路径，不能用来判断缓存状态
 	shouldTriggerPreDownload := cacheStatus == nil ||
 		*cacheStatus == int32(native.CacheStatus_CACHE_STATUS_UNSPECIFIED) ||
 		*cacheStatus == int32(native.CacheStatus_UNCACHED)
@@ -507,7 +512,7 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 		actualStatus = native.CacheStatus(*cacheStatus)
 	}
 
-	llog.L().Infof("telegram large file pre-download: file_id=%s, provider=%d, file_size=%d, cache_status=%v, triggering async download",
+	llog.L().Infof("large file pre-download: file_id=%s, provider=%d, file_size=%d, cache_status=%v, triggering async download",
 		fileID, sourceProviderID, *fileSize, actualStatus)
 
 	// 检查是否实现了 PreDownloader 接口
@@ -535,7 +540,7 @@ func checkTelegramPreDownload(sourceStorage types.StorageDriver, sourceLocations
 }
 
 // createEncryptorIfNeeded 创建加密器（如果需要）
-func createEncryptorIfNeeded(sourceStorage types.StorageDriver, sourceLocations []*native.FileLocationORM) (types.Encryptor, error) {
+func createEncryptorIfNeeded(sourceStorage types.StorageDriver, sourceLocations []*entity.FileLocationORM) (types.Encryptor, error) {
 	if len(sourceLocations) == 0 {
 		return &types.NullEncryptor{}, nil
 	}

@@ -55,7 +55,7 @@ func (s *StorageProviderServer) GetStorageProvider(ctx context.Context, req *nat
 		return response.ErrResp(&models.Err{E: ce, C: native.RespCode_INTERNAL_ERROR})
 	}
 
-	return response.SuccessResp(&pb)
+	return response.SuccessResp(pb)
 }
 
 // ListStorageProviders 获取存储提供者列表
@@ -77,7 +77,7 @@ func (s *StorageProviderServer) ListStorageProviders(ctx context.Context, req *e
 			return response.ErrResp(&models.Err{E: err, C: native.RespCode_INTERNAL_ERROR})
 		}
 
-		items = append(items, &pb)
+		items = append(items, pb)
 	}
 	return response.SuccessResp(&native.StorageProviderListRespData{Providers: items})
 }

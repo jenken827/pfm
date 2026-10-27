@@ -5,114 +5,71 @@ package native;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
 import "native/provider.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // File 文件信息
 message File {
-  option (gorm.opts).ormable = true;
+  option (sgorm.opts).ormable = true;
+
   // 文件id
-  optional string id = 1 [(gorm.field).tag = {
-    primary_key: true
-    not_null: true
-    type: "char(36)"
-  }];
+  optional string id = 1 [(sgorm.field).tag = {primary_key: true not_null: true type: "char(36)"}];
   // ct,mt,dt 三件套
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(sgorm.field).tag = {type: "deleted_at"}];
   // 文件名称，与父id、owner_id组成唯一约束（同目录+同用户下不重名）
-  optional string name = 5 [(gorm.field).tag = {
-    not_null: true,
-    index: "idx_f_npoi,length:10"
-  }];
+  optional string name = 5 [(sgorm.field).tag = {not_null: true, index: "idx_f_npoi,length:10"}];
   // 父文件夹id
-  optional string parent_id = 6 [(gorm.field).tag = {
-    not_null: true,
-    default: "0",
-    index: "idx_f_npoi"
-  }];
+  optional string parent_id = 6 [(sgorm.field).tag = {not_null: true, default: "0", index: "idx_f_npoi"}];
   // 文件大小，以字节为单位
-  optional uint64 size = 7 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint64 size = 7 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 文件blake3哈希值，这个值可以重复，相同内容的文件可以不同名或不同目录
-  optional string hash = 8 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-    index: "idx_f_hash,length:10"
-  }];
+  optional string hash = 8 [(sgorm.field).tag = {not_null: true default: "''" index: "idx_f_hash,length:10"}];
   // 文件类型
-  optional FileType type = 9 [(gorm.field).tag = {not_null: true, index: "idx_f_type"}];
+  optional FileType type = 9 [(sgorm.field).tag = {not_null: true, index: "idx_f_type"}];
   // 文件mime类型
-  optional string mime = 10 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-  }];
+  optional string mime = 10 [(sgorm.field).tag = {not_null: true default: "''"}];
   // ----------------------下面的字段仅针对文件夹
-  optional bool enable_encryption = 11 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+  optional bool enable_encryption = 11 [(sgorm.field).tag = {not_null: true default: "false"}];
 
   // 文件是否就绪（至少一个存储提供者上传成功）
-  optional bool is_ready = 12 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+  optional bool is_ready = 12 [(sgorm.field).tag = {not_null: true default: "false"}];
   // 最大历史记录数（仅文件夹有效，0表示不保留历史）
-  optional uint32 max_histories = 13 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint32 max_histories = 13 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 最后访问时间（用于"最近使用"功能）
-  optional google.protobuf.Timestamp last_accessed_at = 14 [(gorm.field).tag = {
-    index: "idx_f_laa"
-  }];
+  optional google.protobuf.Timestamp last_accessed_at = 14 [(sgorm.field).tag = {index: "idx_f_laa"}];
   // 文件所有者（用户名/ID），用户只能操作 owner_id=自己的文件
-  optional string owner_id = 15 [(gorm.field).tag = {
-    not_null: true,
-    default: "''",
-    index: "idx_f_npoi,idx_f_owner,length:64"
-  }];
+  optional string owner_id = 15 [(sgorm.field).tag = {not_null: true, default: "''", index: "idx_f_npoi,idx_f_owner,length:64"}];
   // 文件内容版本号（并发上传仲裁用）：每次内容被新 PUT 接管时递增，
   // 分发完成回调通过比对 version 判断自己是否仍是最新内容
-  optional uint64 version = 16 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint64 version = 16 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 绑定的存储提供者ID列表（JSON 数组，仅文件夹有效）。
   // 语义：'[]' = 未显式绑定（解析时沿祖先链向上继承，最终回退到 UserSpace.bound_provider_ids）；
   // 非空 = 该目录下文件只分发到这些 provider（必须 ⊆ 管理员分配给该用户的列表）
-  optional string bound_provider_ids = 17 [(gorm.field).tag = {
-    not_null: true
-    default: "'[]'"
-  }];
+  optional string bound_provider_ids = 17 [(sgorm.field).tag = {not_null: true default: "'[]'"}];
 }
 message FileHistory {
-  option (gorm.opts).ormable = true;
+  option (sgorm.opts).ormable = true;
+
   // 主键 ID
-  optional uint64 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
+  optional uint64 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
 
   // 创建时间
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
 
   // 关联的文件 ID
-  optional string file_id = 3 [(gorm.field).tag = {index: "idx_fh_fid,length:15"}];
+  optional string file_id = 3 [(sgorm.field).tag = {index: "idx_fh_fid,length:15"}];
 
   // 使用上次更新时间作为版本号
-  optional google.protobuf.Timestamp version_number = 4 [(gorm.field).tag = {index: "idx_fh_version"}];
+  optional google.protobuf.Timestamp version_number = 4 [(sgorm.field).tag = {index: "idx_fh_version"}];
 
   // 文件内容哈希（与 FileLocation.blake3_hash 对应）
-  optional string hash = 5 [(gorm.field).tag = {index: "idx_fh_hash, length:10"}];
+  optional string hash = 5 [(sgorm.field).tag = {index: "idx_fh_hash, length:10"}];
 
   // 文件大小
   optional uint64 size = 6;
@@ -122,22 +79,14 @@ message FileHistory {
 
 // FileTag 文件标签
 message FileTag {
-  option (gorm.opts).ormable = true;
-  optional uint64 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint64 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
   // 文件id
-  optional string file_id = 3 [(gorm.field).tag = {
-    not_null: true
-    index: "idx_ft_fid, length:15"
-  }];
+  optional string file_id = 3 [(sgorm.field).tag = {not_null: true index: "idx_ft_fid, length:15"}];
   // 标签名称
-  optional string tag_name = 4 [(gorm.field).tag = {
-    not_null: true
-    index: "idx_ft_name"
-  }];
+  optional string tag_name = 4 [(sgorm.field).tag = {not_null: true index: "idx_ft_name"}];
 }
 
 // FileLocation 文件存储位置信息
@@ -145,37 +94,23 @@ message FileTag {
 // 比如File中可能存储多个相同hash的文件，可能名称不同，位置不同
 // 同样，这个表中也可能存储多个相同hash的文件，不是重复，是为了安全，不同介质可能都存在副本
 message FileLocation {
-  option (gorm.opts).ormable = true;
-  optional uint64 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  // optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint64 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
+  // optional google.protobuf.Timestamp deleted_at = 4;
   // 文件blake3哈希值，
-  optional string blake3_hash = 4 [(gorm.field).tag = {
-    index: "idx_fl_bh, length:10"
-    not_null: true
-  }];
+  optional string blake3_hash = 4 [(sgorm.field).tag = {index: "idx_fl_bh, length:10" not_null: true}];
   // 存储介质文件id，可能不存在
-  optional string provider_file_id = 5 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-  }];
+  optional string provider_file_id = 5 [(sgorm.field).tag = {not_null: true default: "''"}];
 
   // 存储实例id，同一存储类型可能有多个实例
-  optional uint32 provider_id = 6 [(gorm.field).tag = {not_null: true}];
+  optional uint32 provider_id = 6 [(sgorm.field).tag = {not_null: true}];
   // 文件在存储介质中的路径
-  optional string path = 7 [(gorm.field).tag = {
-    not_null: true
-    default: "/"
-  }];
+  optional string path = 7 [(sgorm.field).tag = {not_null: true default: "/"}];
   // 文件在存储介质中的哈希值
-  optional string hash = 8 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-  }];
+  optional string hash = 8 [(sgorm.field).tag = {not_null: true default: "''"}];
   // 上传状态，文件一般会先上传到本地服务，然后再上传到存储介质的服务
   // 所以客户端虽然上传完成了，但是文件实际还未上传到存储介质，此时无法获取到下载链接
   optional LocationStatus status = 9;
@@ -186,15 +121,9 @@ message FileLocation {
   // 文件过期时间
   optional google.protobuf.Timestamp expired_at = 12;
   // 分块编号
-  optional uint32 chunk_number = 13 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint32 chunk_number = 13 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 分块总数
-  optional uint32 chunk_total = 14 [(gorm.field).tag = {
-    not_null: true
-    default: "1"
-  }];
+  optional uint32 chunk_total = 14 [(sgorm.field).tag = {not_null: true default: "1"}];
   // 分块大小
   optional uint64 chunk_size = 15;
   // 分块hash
@@ -202,15 +131,12 @@ message FileLocation {
   optional bool encrypted = 17;
 
   // 加密salt，随机生成的字符串
-  optional string encryption_salt = 18 [(gorm.field).tag = {default: "''"}];
+  optional string encryption_salt = 18 [(sgorm.field).tag = {default: "''"}];
 
   // 文件在存储提供者上的实际存储大小（加密后）
   optional uint64 size = 19;
   // 缓存状态（仅 Telegram 使用，UNCACHED/CACHING/CACHED）
-  optional CacheStatus cache_status = 20 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional CacheStatus cache_status = 20 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 仅123pan使用
   optional string s3_key_flag = 21;
   // 仅Telegram使用
@@ -399,48 +325,32 @@ message ProviderLocationInfo {
 
 // FileShare 文件分享记录
 message FileShare {
-  option (gorm.opts).ormable = true;
-  optional uint64 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint64 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(sgorm.field).tag = {type: "deleted_at"}];
   // 分享码（短链标识，用于URL中，防止暴露文件ID）
-  optional string share_code = 5 [(gorm.field).tag = {
-    not_null: true
-    index: "idx_fs_code, unique"
-  }];
+  optional string share_code = 5 [(sgorm.field).tag = {not_null: true index: "idx_fs_code, unique"}];
   // 文件ID
-  optional string file_id = 6 [(gorm.field).tag = {
-    not_null: true
-    index: "idx_fs_fid"
-  }];
+  optional string file_id = 6 [(sgorm.field).tag = {not_null: true index: "idx_fs_fid"}];
   // 签名（HMAC-SHA256，防篡改）
-  optional string sign = 7 [(gorm.field).tag = {not_null: true}];
+  optional string sign = 7 [(sgorm.field).tag = {not_null: true}];
   // 过期时间
   optional google.protobuf.Timestamp expire_at = 8;
   // 是否永久有效
-  optional bool never_expire = 9 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+  optional bool never_expire = 9 [(sgorm.field).tag = {not_null: true default: "false"}];
   // 分享状态
-  optional ShareStatus status = 10 [(gorm.field).tag = {not_null: true}];
+  optional ShareStatus status = 10 [(sgorm.field).tag = {not_null: true}];
   // 访问次数
-  optional uint32 access_count = 11 [(gorm.field).tag = {
-    not_null: true
-    default: "0"
-  }];
+  optional uint32 access_count = 11 [(sgorm.field).tag = {not_null: true default: "0"}];
   // 最大访问次数（0=不限制）
   optional uint32 max_access_count = 12;
   // 备注
   optional string remark = 13;
   // 分享创建者（用户名/ID，冗余存储便于"我的分享"查询与归属校验）
-  optional string owner_id = 14 [(gorm.field).tag = {
-    index: "idx_fs_owner"
-  }];
+  optional string owner_id = 14 [(sgorm.field).tag = {index: "idx_fs_owner"}];
 }
 
 // 文件详情响应数据
@@ -751,11 +661,7 @@ message PhotoDateConfig {
   // 文件系统 mtime / ctime 兜底）
   repeated PhotoDateFilenameRule filename_rules = 3;
   // 时间戳防误判：允许的年份上界偏移（当前年份 + 偏移），默认 1
-  optional uint32 ts_max_year_offset = 5;
-
-  // 历史字段：时间戳解析的年份下界（默认 2000），已移除该限制
-  reserved 4;
-  reserved "ts_min_year";
+  optional uint32 ts_max_year_offset = 4;
 }
 
 // 获取照片日期解析配置请求

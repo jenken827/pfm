@@ -5,17 +5,18 @@ import (
 
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // CreateStorageProvider 创建存储提供者
-func CreateStorageProvider(provider *native.StorageProviderORM) error {
+func CreateStorageProvider(provider *entity.StorageProviderORM) error {
 	ctx := context.Background()
-	return gorm.G[native.StorageProviderORM](db).Create(ctx, provider)
+	return gorm.G[entity.StorageProviderORM](db).Create(ctx, provider)
 }
 
 // UpdateStorageProvider 更新存储提供者
-func UpdateStorageProvider(provider *native.StorageProviderORM) error {
+func UpdateStorageProvider(provider *entity.StorageProviderORM) error {
 	ctx := context.Background()
 	id := *provider.Id
 	fields := []string{}
@@ -51,7 +52,7 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 	llog.L().Infof("UpdateStorageProvider: id=%d, fields=%v, name=%v, proxy=%v", id, fields, provider.Name, provider.Proxy)
 
 	if len(fields) == 0 {
-		_, err := gorm.G[*native.StorageProviderORM](db).Where("id=?", id).Updates(ctx, provider)
+		_, err := gorm.G[*entity.StorageProviderORM](db).Where("id=?", id).Updates(ctx, provider)
 		return err
 	}
 
@@ -81,7 +82,7 @@ func UpdateStorageProvider(provider *native.StorageProviderORM) error {
 	}
 
 	llog.L().Infof("UpdateStorageProvider: id=%d, updateMap=%v", id, updateMap)
-	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).Where("id = ?", id).Updates(updateMap)
+	result := db.WithContext(ctx).Model(&entity.StorageProviderORM{}).Where("id = ?", id).Updates(updateMap)
 	llog.L().Infof("UpdateStorageProvider: RowsAffected=%d, err=%v", result.RowsAffected, result.Error)
 	return result.Error
 }
@@ -91,12 +92,12 @@ func DeleteStorageProvider(ids []uint32) error {
 	ctx := context.Background()
 	return db.Transaction(func(tx *gorm.DB) error {
 		// 先删除关联的 FileLocation 记录，避免孤儿记录
-		if _, err := gorm.G[*native.FileLocationORM](tx).Where("provider_id IN ?", ids).Delete(ctx); err != nil {
+		if _, err := gorm.G[*entity.FileLocationORM](tx).Where("provider_id IN ?", ids).Delete(ctx); err != nil {
 			llog.L().Errorf("delete file locations for providers failed, ids: %v, err: %v", ids, err)
 			return err
 		}
 		// 再删除存储提供者
-		if _, err := gorm.G[native.StorageProviderORM](tx).Where("id in ?", ids).Delete(ctx); err != nil {
+		if _, err := gorm.G[entity.StorageProviderORM](tx).Where("id in ?", ids).Delete(ctx); err != nil {
 			llog.L().Errorf("delete storage providers failed, ids: %v, err: %v", ids, err)
 			return err
 		}
@@ -105,27 +106,27 @@ func DeleteStorageProvider(ids []uint32) error {
 }
 
 // GetEnabledProviders 获取启用的存储提供者
-func GetEnabledProviders() ([]*native.StorageProviderORM, error) {
+func GetEnabledProviders() ([]*entity.StorageProviderORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.StorageProviderORM](db).Where("enabled = ?", true).Find(ctx)
+	return gorm.G[*entity.StorageProviderORM](db).Where("enabled = ?", true).Find(ctx)
 }
 
 // GetEnabledProvidersByIds 获取启用的存储提供者
-func GetEnabledProvidersByIds(ids []uint32) ([]*native.StorageProviderORM, error) {
+func GetEnabledProvidersByIds(ids []uint32) ([]*entity.StorageProviderORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.StorageProviderORM](db).Where("id in ? and enabled = ?", ids, true).Find(ctx)
+	return gorm.G[*entity.StorageProviderORM](db).Where("id in ? and enabled = ?", ids, true).Find(ctx)
 }
 
 // GetDefaultBoundEnabledProviders 获取默认绑定启用的存储提供者
-func GetDefaultBoundEnabledProviders() ([]*native.StorageProviderORM, error) {
+func GetDefaultBoundEnabledProviders() ([]*entity.StorageProviderORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.StorageProviderORM](db).Where("default_bound = ? and enabled = ?", true, true).Find(ctx)
+	return gorm.G[*entity.StorageProviderORM](db).Where("default_bound = ? and enabled = ?", true, true).Find(ctx)
 }
 
 // GetProviderByID 获取存储提供者
-func GetProviderByID(id uint32) (*native.StorageProviderORM, error) {
+func GetProviderByID(id uint32) (*entity.StorageProviderORM, error) {
 	ctx := context.Background()
-	provider, err := gorm.G[*native.StorageProviderORM](db).Where("id = ?", id).First(ctx)
+	provider, err := gorm.G[*entity.StorageProviderORM](db).Where("id = ?", id).First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -133,16 +134,16 @@ func GetProviderByID(id uint32) (*native.StorageProviderORM, error) {
 }
 
 // GetAllProviders 获取所有存储提供者
-func GetAllProviders() ([]*native.StorageProviderORM, error) {
+func GetAllProviders() ([]*entity.StorageProviderORM, error) {
 	ctx := context.Background()
-	return gorm.G[*native.StorageProviderORM](db).Find(ctx)
+	return gorm.G[*entity.StorageProviderORM](db).Find(ctx)
 }
 
 // UpdateStorageProviderConfig 更新存储提供者的配置
 func UpdateStorageProviderConfig(id uint32, config string) error {
 	ctx := context.Background()
 	// 使用原生 GORM 的 Update 方法，确保更新成功
-	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+	result := db.WithContext(ctx).Model(&entity.StorageProviderORM{}).
 		Where("id = ?", id).
 		Update("config", config)
 
@@ -162,11 +163,11 @@ func UpdateStorageProviderConfig(id uint32, config string) error {
 
 // GetAvailableProvidersForSync 获取可用于同步的存储提供者
 // 返回：已启用的提供者，排除文件已存在且完成的提供者
-func GetAvailableProvidersForSync(fileHash string) ([]*native.StorageProviderORM, error) {
+func GetAvailableProvidersForSync(fileHash string) ([]*entity.StorageProviderORM, error) {
 	ctx := context.Background()
 
 	// Get all enabled providers
-	enabledProviders, err := gorm.G[*native.StorageProviderORM](db).
+	enabledProviders, err := gorm.G[*entity.StorageProviderORM](db).
 		Where("enabled = ?", true).
 		Order("sort_order ASC").
 		Find(ctx)
@@ -176,9 +177,9 @@ func GetAvailableProvidersForSync(fileHash string) ([]*native.StorageProviderORM
 	}
 
 	// Filter out providers where file already exists and is completed
-	var available []*native.StorageProviderORM
+	var available []*entity.StorageProviderORM
 	for _, provider := range enabledProviders {
-		loc, err := gorm.G[*native.FileLocationORM](db).
+		loc, err := gorm.G[*entity.FileLocationORM](db).
 			Where("blake3_hash = ? AND provider_id = ?", fileHash, *provider.Id).
 			First(ctx)
 
@@ -196,7 +197,7 @@ func IncrementUsedCapacity(providerID uint32, size uint64) error {
 	ctx := context.Background()
 
 	// 使用原子操作增加已使用容量
-	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+	result := db.WithContext(ctx).Model(&entity.StorageProviderORM{}).
 		Where("id = ?", providerID).
 		Update("used_capacity", gorm.Expr("used_capacity + ?", size))
 
@@ -219,7 +220,7 @@ func DecrementUsedCapacity(providerID uint32, size uint64) error {
 	ctx := context.Background()
 
 	// 使用原子操作减少已使用容量
-	result := db.WithContext(ctx).Model(&native.StorageProviderORM{}).
+	result := db.WithContext(ctx).Model(&entity.StorageProviderORM{}).
 		Where("id = ?", providerID).
 		Update("used_capacity", gorm.Expr("used_capacity - ?", size))
 
@@ -238,13 +239,13 @@ func DecrementUsedCapacity(providerID uint32, size uint64) error {
 }
 
 // GetStorageProvidersByIDs 批量查询存储提供者
-func GetStorageProvidersByIDs(ids []uint32) ([]*native.StorageProviderORM, error) {
+func GetStorageProvidersByIDs(ids []uint32) ([]*entity.StorageProviderORM, error) {
 	if len(ids) == 0 {
-		return []*native.StorageProviderORM{}, nil
+		return []*entity.StorageProviderORM{}, nil
 	}
 
 	ctx := context.Background()
-	providers, err := gorm.G[*native.StorageProviderORM](db).Where("id IN ?", ids).Find(ctx)
+	providers, err := gorm.G[*entity.StorageProviderORM](db).Where("id IN ?", ids).Find(ctx)
 	if err != nil {
 		llog.L().Errorf("query storage providers failed: %v", err)
 		return nil, err

@@ -8,10 +8,12 @@ plugins:
     opt:
       - paths=source_relative
 
-  - local: protoc-gen-gorm
-    out: gen
+  # GORM 实体（含 gorm tag 与 ToPB/From 转换），由 proto 注解 sgorm.opts/sgorm.field 驱动
+  # 与 pb 代码同在 proto/gen/（已 gitignore）：生成物不入库，克隆后跑一次 `bash dev.sh proto`
+  - local: protoc-gen-sgorm
+    out: gen/entity
     opt:
-      - paths=source_relative
+      - package=entity
 
 
 inputs:

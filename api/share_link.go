@@ -11,6 +11,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/pkg/sharelink"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -55,7 +56,7 @@ func PublicDownloadHandler(w http.ResponseWriter, r *http.Request) {
 			// 异步更新状态为过期
 			utils.Go(func() {
 				expiredStatus := int32(native.ShareStatus_EXPIRED)
-				db.UpdateFileShare(&native.FileShareORM{Id: fs.Id, Status: &expiredStatus}, []string{"status"})
+				db.UpdateFileShare(&entity.FileShareORM{Id: fs.Id, Status: &expiredStatus}, []string{"status"})
 			})
 			http.Error(w, "share expired", http.StatusGone)
 			return

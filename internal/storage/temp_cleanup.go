@@ -8,6 +8,7 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
@@ -152,7 +153,7 @@ func cleanupOwnerTempDirs(usersDir string, maxAge time.Duration) (int, int) {
 // hasActiveUploadRecord 判断该 hash 是否存在进行中（PENDING/UPLOADING）的上传记录
 func hasActiveUploadRecord(hash string) bool {
 	var count int64
-	if err := db.GetDB().Model(&native.UploadRecordORM{}).
+	if err := db.GetDB().Model(&entity.UploadRecordORM{}).
 		Where("file_hash = ? AND task_status IN ?", hash,
 			[]int32{int32(native.UploadStatus_PENDING), int32(native.UploadStatus_UPLOADING)}).
 		Count(&count).Error; err != nil {

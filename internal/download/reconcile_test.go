@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"jenken827.com/jenken827/pfm/pkg/downloader/aria2"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -125,7 +125,7 @@ func TestTargetForMagnetPicksBTProduct(t *testing.T) {
 	}}
 	snap.index()
 
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid: utils.StringPtr("meta-gid"),
 		Url: utils.StringPtr("magnet:?xt=urn:btih:" + ih + "&dn=data.bin"),
 	}
@@ -152,7 +152,7 @@ func TestTargetForMagnetBeforeBTExists(t *testing.T) {
 	}}}
 	snap.index()
 
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid: utils.StringPtr("meta-gid"),
 		Url: utils.StringPtr("magnet:?xt=urn:btih:" + ih),
 	}
@@ -186,7 +186,7 @@ func TestTargetForTorrentURLFollowsFollowedBy(t *testing.T) {
 	}}
 	snap.index()
 
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid: utils.StringPtr("torrent-gid"),
 		Url: utils.StringPtr("https://example.com/test.torrent"),
 	}
@@ -229,7 +229,7 @@ func TestTargetForTorrentURLByInfoHashWhenFollowedByLost(t *testing.T) {
 	}}
 	snap.index()
 
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid: utils.StringPtr("stale-gid"),
 		Url: utils.StringPtr("https://example.com/test.torrent"),
 	}
@@ -260,7 +260,7 @@ func TestTargetForByURLWhenGidGone(t *testing.T) {
 	}}}
 	snap.index()
 
-	dr := &native.DownloadRecordORM{
+	dr := &entity.DownloadRecordORM{
 		Gid: utils.StringPtr("stale"),
 		Url: utils.StringPtr("http://example.com/a.iso"),
 	}
@@ -272,14 +272,14 @@ func TestTargetForByURLWhenGidGone(t *testing.T) {
 
 func TestWithinGrace(t *testing.T) {
 	now := time.Now()
-	if !withinGrace(&native.DownloadRecordORM{CreatedAt: &now}) {
+	if !withinGrace(&entity.DownloadRecordORM{CreatedAt: &now}) {
 		t.Error("刚创建的记录应在宽限期内")
 	}
 	old := now.Add(-time.Hour)
-	if withinGrace(&native.DownloadRecordORM{CreatedAt: &old}) {
+	if withinGrace(&entity.DownloadRecordORM{CreatedAt: &old}) {
 		t.Error("一小时前的记录不应在宽限期内")
 	}
-	if !withinGrace(&native.DownloadRecordORM{}) {
+	if !withinGrace(&entity.DownloadRecordORM{}) {
 		t.Error("没有创建时间的记录按宽限期处理")
 	}
 }

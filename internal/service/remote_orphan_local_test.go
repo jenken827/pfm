@@ -11,6 +11,7 @@ import (
 	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -19,7 +20,7 @@ import (
 func setupLocalProvider(t *testing.T, root string) uint32 {
 	t.Helper()
 	const providerID uint32 = 4242 // 与其他用例隔离的固定 id
-	if err := db.CreateStorageProvider(&native.StorageProviderORM{
+	if err := db.CreateStorageProvider(&entity.StorageProviderORM{
 		Id:       utils.Uint32Ptr(providerID),
 		Name:     utils.StringPtr("test-local-orphan"),
 		DriverId: utils.StringPtr(types.DriverLocal),
@@ -54,7 +55,7 @@ func TestLocalRemoteOrphanEndToEnd(t *testing.T) {
 	writeTestFile(t, kept)
 	writeTestFile(t, orphan)
 
-	if err := db.CreateFileLocation(&native.FileLocationORM{
+	if err := db.CreateFileLocation(&entity.FileLocationORM{
 		Blake3Hash: utils.StringPtr("hash-kept"),
 		ProviderId: utils.Uint32Ptr(providerID),
 		Path:       utils.StringPtr(kept), // 与 LocalDriver 写入 file_locations.path 的形态一致
@@ -99,7 +100,7 @@ func TestLocalRemoteOrphanEndToEnd(t *testing.T) {
 func TestScanRemoteOrphansUnsupportedProvider(t *testing.T) {
 	dbtest.Setup(t)
 	const providerID uint32 = 4243
-	if err := db.CreateStorageProvider(&native.StorageProviderORM{
+	if err := db.CreateStorageProvider(&entity.StorageProviderORM{
 		Id:       utils.Uint32Ptr(providerID),
 		Name:     utils.StringPtr("test-telegram-orphan"),
 		DriverId: utils.StringPtr(types.DriverTelegram),

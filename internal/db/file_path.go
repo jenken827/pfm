@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // FilePathResolver 在单次请求内缓存文件行，供「目录路径回溯」复用。
@@ -15,16 +15,16 @@ import (
 // 缓存后 N 个条目 × 深度次查询会去重成「唯一祖先数」次查询。
 // 注意：不要跨请求复用（缓存不失效、不带过期语义）。
 type FilePathResolver struct {
-	cache map[string]*native.FileORM
+	cache map[string]*entity.FileORM
 }
 
 // NewFilePathResolver 创建请求级路径解析器
 func NewFilePathResolver() *FilePathResolver {
-	return &FilePathResolver{cache: make(map[string]*native.FileORM)}
+	return &FilePathResolver{cache: make(map[string]*entity.FileORM)}
 }
 
 // get 取文件行；不存在/已软删（gorm.ErrRecordNotFound）缓存为 nil，避免重复查询
-func (r *FilePathResolver) get(fileID string) (*native.FileORM, error) {
+func (r *FilePathResolver) get(fileID string) (*entity.FileORM, error) {
 	if file, ok := r.cache[fileID]; ok {
 		return file, nil
 	}

@@ -13,6 +13,7 @@ import (
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -88,11 +89,11 @@ func TestLockUploadTargetReleasesEntry(t *testing.T) {
 	}
 }
 
-func newActiveUploadRecord(t *testing.T, hash, tempPath string) *native.UploadRecordORM {
+func newActiveUploadRecord(t *testing.T, hash, tempPath string) *entity.UploadRecordORM {
 	t.Helper()
 	ownerID := uuid.New().String()
 	parentID := uuid.New().String()
-	ur := &native.UploadRecordORM{
+	ur := &entity.UploadRecordORM{
 		FileHash:          utils.StringPtr(hash),
 		FileName:          utils.StringPtr("_s.png"),
 		FileSize:          utils.Uint64Ptr(1024),

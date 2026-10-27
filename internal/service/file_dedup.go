@@ -26,6 +26,7 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
@@ -58,8 +59,8 @@ func dedupBaseOwnerID(baseParentID string) (string, error) {
 }
 
 // collectSubtreeFiles 递归收集子树下所有非文件夹文件（不含软删除）
-func collectSubtreeFiles(baseParentID, ownerID string) ([]*native.FileORM, error) {
-	var files []*native.FileORM
+func collectSubtreeFiles(baseParentID, ownerID string) ([]*entity.FileORM, error) {
+	var files []*entity.FileORM
 	var walk func(parentID string) error
 	walk = func(parentID string) error {
 		children, err := db.GetFileChildren(parentID, ownerID)
@@ -111,7 +112,7 @@ func DedupFilesByHash(baseParentID string, dryRun bool) (*DedupResult, error) {
 	}
 
 	// 按 hash 分组
-	byHash := make(map[string][]*native.FileORM)
+	byHash := make(map[string][]*entity.FileORM)
 	for _, f := range files {
 		if f.Hash == nil || *f.Hash == "" {
 			continue
@@ -166,7 +167,7 @@ func DedupFilesByHash(baseParentID string, dryRun bool) (*DedupResult, error) {
 }
 
 // pickKeeper 从同 hash 文件组中选出保留者：名称最短，同长度保留最早创建的，再同保留 id 较小
-func pickKeeper(group []*native.FileORM) *native.FileORM {
+func pickKeeper(group []*entity.FileORM) *entity.FileORM {
 	keeper := group[0]
 	for _, f := range group[1:] {
 		if betterKeeper(f, keeper) {
@@ -177,7 +178,7 @@ func pickKeeper(group []*native.FileORM) *native.FileORM {
 }
 
 // betterKeeper 判断 candidate 是否比 current 更适合保留
-func betterKeeper(candidate, current *native.FileORM) bool {
+func betterKeeper(candidate, current *entity.FileORM) bool {
 	cLen := nameLen(candidate)
 	kLen := nameLen(current)
 	if cLen != kLen {
@@ -192,7 +193,7 @@ func betterKeeper(candidate, current *native.FileORM) bool {
 }
 
 // nameLen 文件名长度（按字符数计算，中文名按可见长度）
-func nameLen(f *native.FileORM) int {
+func nameLen(f *entity.FileORM) int {
 	if f.Name == nil {
 		return 0
 	}
@@ -200,7 +201,7 @@ func nameLen(f *native.FileORM) int {
 }
 
 // fileCreatedAt 文件创建时间（nil 按零值处理）
-func fileCreatedAt(f *native.FileORM) time.Time {
+func fileCreatedAt(f *entity.FileORM) time.Time {
 	if f.CreatedAt != nil {
 		return *f.CreatedAt
 	}
@@ -208,7 +209,7 @@ func fileCreatedAt(f *native.FileORM) time.Time {
 }
 
 // formatDedupDetail 格式化单组去重明细，便于人工核对
-func formatDedupDetail(hash string, keeper *native.FileORM, group []*native.FileORM) string {
+func formatDedupDetail(hash string, keeper *entity.FileORM, group []*entity.FileORM) string {
 	var delNames []string
 	for _, f := range group {
 		if f.Id != nil && keeper.Id != nil && *f.Id == *keeper.Id {
@@ -345,7 +346,7 @@ func readLocalPlainContent(hash string, localID uint32) ([]byte, bool) {
 
 // suffixCandDecision 单个后缀候选的核验结论
 type suffixCandDecision struct {
-	cand     *native.FileORM
+	cand     *entity.FileORM
 	dup      bool    // 是否核验为重复（可删）
 	reason   string  // dup 时的核验依据 / 非 dup 时的原因
 	kind     string  // dup | diff-size | diff-content | skip
@@ -354,7 +355,7 @@ type suffixCandDecision struct {
 }
 
 // verifySuffixCandidate 核验候选与原名文件是否实质重复（调用前提：尺寸相同且 hash 不同）
-func verifySuffixCandidate(cand, base *native.FileORM, localID uint32) *suffixCandDecision {
+func verifySuffixCandidate(cand, base *entity.FileORM, localID uint32) *suffixCandDecision {
 	d := &suffixCandDecision{cand: cand}
 	candJpeg := isJpegFile(cand)
 	baseJpeg := isJpegFile(base)
@@ -397,7 +398,7 @@ func verifySuffixCandidate(cand, base *native.FileORM, localID uint32) *suffixCa
 }
 
 // isJpegFile 按扩展名判断是否为 JPEG
-func isJpegFile(f *native.FileORM) bool {
+func isJpegFile(f *entity.FileORM) bool {
 	if f.Name == nil {
 		return false
 	}
@@ -406,7 +407,7 @@ func isJpegFile(f *native.FileORM) bool {
 }
 
 // isImageFile 按扩展名判断是否为支持解码的图片格式（用于压缩衍生核验）
-func isImageFile(f *native.FileORM) bool {
+func isImageFile(f *entity.FileORM) bool {
 	if f.Name == nil {
 		return false
 	}
@@ -498,7 +499,7 @@ func perceptualSimilar(a, b [][]float64) (bool, float64) {
 // verifyCompressedDerivative 对 尺寸不同 的同名图片对做压缩衍生核验。
 // 返回 decision：衍生 → kind=compressed-dup（可删小图保大图）；
 // 不相似 → diff-content；无法解码 → skip。
-func verifyCompressedDerivative(cand, base *native.FileORM, candData, baseData []byte) *suffixCandDecision {
+func verifyCompressedDerivative(cand, base *entity.FileORM, candData, baseData []byte) *suffixCandDecision {
 	d := &suffixCandDecision{cand: cand}
 	if !isImageFile(cand) || !isImageFile(base) {
 		d.kind, d.reason = "diff-size", "同名但尺寸不同"
@@ -543,7 +544,7 @@ func formatSuffixEXIFNote(baseMeta, candMeta dupMeta) string {
 // 2. JPEG 且 EXIF 完整度不同 → 保留非零 tag 更多的一方（拍摄时间等信息更全）
 // 3. 否则保留无后缀的原名文件（名称干净）
 // 4. 再同 → 保留最早创建，再同 → 保留 id 较小
-func pickSuffixKeeper(base *native.FileORM, baseMeta dupMeta, dupCands []*suffixCandDecision) *native.FileORM {
+func pickSuffixKeeper(base *entity.FileORM, baseMeta dupMeta, dupCands []*suffixCandDecision) *entity.FileORM {
 	keeper := base
 	kMeta := baseMeta
 	for _, d := range dupCands {
@@ -559,7 +560,7 @@ func pickSuffixKeeper(base *native.FileORM, baseMeta dupMeta, dupCands []*suffix
 // betterSuffixKeeper 判断候选副本是否比当前保留者更该留下。
 // 第一条即「同名带 (N) 后缀的副本不能只凭名称删除」：先比文件字节大小，
 // 大的一方优先（更可能是原图，小的一方往往被压缩过、信息已丢）。
-func betterSuffixKeeper(cand, cur *native.FileORM, cMeta, curMeta dupMeta) bool {
+func betterSuffixKeeper(cand, cur *entity.FileORM, cMeta, curMeta dupMeta) bool {
 	// 1. 文件更大的一方优先（覆盖压缩衍生对与 EXIF 补齐导致的大小差异）
 	if uint64Val(cand.Size) != uint64Val(cur.Size) {
 		return uint64Val(cand.Size) > uint64Val(cur.Size)
@@ -597,7 +598,7 @@ type suffixGroupOutcome struct {
 // 尺寸不同→先比文件大小（大的一方优先保留），再做压缩衍生核验（图片可判衍生，
 // 删小保大；非图片/不相似→diff-size/diff-content）；同 hash→dup；
 // 同尺寸→读取本地内容核验（JPEG 像素/其他格式字节）
-func classifySuffixCandidate(c, base *native.FileORM, localID uint32) *suffixCandDecision {
+func classifySuffixCandidate(c, base *entity.FileORM, localID uint32) *suffixCandDecision {
 	if !sameSize(base, c) {
 		// 小图是大图压缩衍生而来（重编码/转格式），hash、文件大小都不同，
 		// 但画面内容一致。解码双方做感知比对，确认衍生才删，删小保大。
@@ -616,7 +617,7 @@ func classifySuffixCandidate(c, base *native.FileORM, localID uint32) *suffixCan
 
 // processSuffixGroup 处理一个 原文件 + N 个后缀候选 的同名组：
 // 逐个核验并累计统计，选出保留者，产出 删除/改名 计划
-func processSuffixGroup(base *native.FileORM, cands []*native.FileORM, localID uint32, r *NameSuffixDedupResult) *suffixGroupOutcome {
+func processSuffixGroup(base *entity.FileORM, cands []*entity.FileORM, localID uint32, r *NameSuffixDedupResult) *suffixGroupOutcome {
 	out := &suffixGroupOutcome{}
 	var dupCands []*suffixCandDecision
 	for _, c := range cands {
@@ -726,7 +727,7 @@ func cleanupUploadTasksByHashes(hashes []string) (int64, error) {
 	// 先取出所有相关 upload_record id（带 chunks 清理）
 	var ids []uint32
 	if err := db.GetDB().WithContext(ctx).
-		Model((*native.UploadRecordORM)(nil)).
+		Model((*entity.UploadRecordORM)(nil)).
 		Where("file_hash IN ?", hashes).
 		Pluck("id", &ids).Error; err != nil {
 		return 0, err
@@ -736,12 +737,12 @@ func cleanupUploadTasksByHashes(hashes []string) (int64, error) {
 	}
 	if err := db.GetDB().WithContext(ctx).
 		Where("upload_id IN ?", ids).
-		Delete((*native.UploadChunkRecordORM)(nil)).Error; err != nil {
+		Delete((*entity.UploadChunkRecordORM)(nil)).Error; err != nil {
 		return 0, err
 	}
 	if err := db.GetDB().WithContext(ctx).
 		Where("id IN ?", ids).
-		Delete((*native.UploadRecordORM)(nil)).Error; err != nil {
+		Delete((*entity.UploadRecordORM)(nil)).Error; err != nil {
 		return 0, err
 	}
 	return int64(len(ids)), nil
@@ -765,7 +766,7 @@ func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDed
 	localID, _ := db.GetLocalProviderID() // 无本地 provider 时退化为仅同 hash 命中
 
 	// 按父目录分组，组内文件名唯一（库中有 (owner,name,parent) 活跃唯一索引）
-	byParent := make(map[string][]*native.FileORM)
+	byParent := make(map[string][]*entity.FileORM)
 	for _, f := range files {
 		if f.ParentId == nil {
 			continue
@@ -779,8 +780,8 @@ func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDed
 
 	for _, group := range byParent {
 		// 原文件（无后缀）作为锚点；后缀候选按 baseName 索引
-		var plainFiles []*native.FileORM
-		candByBase := make(map[string][]*native.FileORM)
+		var plainFiles []*entity.FileORM
+		candByBase := make(map[string][]*entity.FileORM)
 		for _, f := range group {
 			if base, ok := nameSuffixBase(strPtrVal(f.Name)); ok {
 				candByBase[base] = append(candByBase[base], f)
@@ -826,12 +827,12 @@ func DedupNameSuffixDuplicates(baseParentID string, dryRun bool) (*NameSuffixDed
 }
 
 // sameSize 两文件记录 size 字段是否相同（nil 视为 0）
-func sameSize(a, b *native.FileORM) bool {
+func sameSize(a, b *entity.FileORM) bool {
 	return uint64Val(a.Size) == uint64Val(b.Size)
 }
 
 // sameHash 两文件记录 hash 是否均非空且相同
-func sameHash(a, b *native.FileORM) bool {
+func sameHash(a, b *entity.FileORM) bool {
 	ha, hb := strPtrVal(a.Hash), strPtrVal(b.Hash)
 	return ha != "" && ha == hb
 }
@@ -844,7 +845,7 @@ func uint64Val(p *uint64) uint64 {
 }
 
 // appendSuffixDetail 追加 非重复（需人工/无法核验）候选的明细行
-func appendSuffixDetail(result *NameSuffixDedupResult, base *native.FileORM, d *suffixCandDecision) {
+func appendSuffixDetail(result *NameSuffixDedupResult, base *entity.FileORM, d *suffixCandDecision) {
 	prefix := "需人工"
 	if d.kind == "skip" {
 		prefix = "跳过"
@@ -854,7 +855,7 @@ func appendSuffixDetail(result *NameSuffixDedupResult, base *native.FileORM, d *
 }
 
 // formatSuffixGroupDetail 格式化一组确认重复的最终处理方案
-func formatSuffixGroupDetail(base *native.FileORM, keeper *native.FileORM, dupCands []*suffixCandDecision) string {
+func formatSuffixGroupDetail(base *entity.FileORM, keeper *entity.FileORM, dupCands []*suffixCandDecision) string {
 	exifNote := ""
 	verifyWay := dupCands[0].reason
 	for _, d := range dupCands {
@@ -937,7 +938,7 @@ func ReclaimOrphanHashStorage(hash string) (int64, error) {
 	}
 
 	// 按 provider 分组
-	byProvider := make(map[uint32][]*native.FileLocationORM)
+	byProvider := make(map[uint32][]*entity.FileLocationORM)
 	for _, loc := range locations {
 		if loc.ProviderId == nil {
 			continue

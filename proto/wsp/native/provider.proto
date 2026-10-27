@@ -5,99 +5,66 @@ package native;
 import "buf/validate/validate.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/driver.proto";
 import "native/enum.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // StorageProvider 存储提供者
 message StorageProvider {
-  option (gorm.opts).ormable = true;
+  option (sgorm.opts).ormable = true;
 
-  optional uint32 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
-  optional google.protobuf.Timestamp deleted_at = 4 [(gorm.field).tag = {type: "deleted_at"}];
+  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
+  optional google.protobuf.Timestamp deleted_at = 4 [(sgorm.field).tag = {type: "deleted_at"}];
 
   // 驱动身份（稳定字符串，如 local / baidu / aliyundrive_open）
   //
   // 由驱动在注册或加载时声明，发布后不可更改：改了库里的 provider 就
   // 找不到驱动。规则见 driver/types.ValidateDriverID。
   optional string driver_id = 5 [
-    (gorm.field).tag = {not_null: true, column: "provider_type"},
     (buf.validate.field).required = true,
     (buf.validate.field).string.min_len = 1,
-    (buf.validate.field).string.max_len = 32
+    (buf.validate.field).string.max_len = 32,
+    (sgorm.field).tag = {not_null: true, column: "provider_type"}
   ];
   // 实例名称
   optional string name = 6 [
-    (gorm.field).tag = {
-      not_null: true
-      unique_index: "idx_sp_n"
-    },
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (sgorm.field).tag = {not_null: true unique_index: "idx_sp_n"}
   ];
   // 实例描述
   optional string description = 7;
   // 实例配置
   optional string config = 8 [
-    (gorm.field).tag = {not_null: true},
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (sgorm.field).tag = {not_null: true}
   ];
   // 总容量
-  optional uint64 total_capacity = 9 [(gorm.field).tag = {
-    default: "0"
-    not_null: true
-  }];
-  optional uint64 used_capacity = 10 [(gorm.field).tag = {
-    default: "0"
-    not_null: true
-  }];
+  optional uint64 total_capacity = 9 [(sgorm.field).tag = {default: "0" not_null: true}];
+  optional uint64 used_capacity = 10 [(sgorm.field).tag = {default: "0" not_null: true}];
   // 是否启用
-  optional bool enabled = 11 [(gorm.field).tag = {
-    default: "true"
-    not_null: true
-  }];
+  optional bool enabled = 11 [(sgorm.field).tag = {default: "true" not_null: true}];
   // 优先级（数字越小优先级越高）
-  optional uint32 sort_order = 12 [(gorm.field).tag = {
-    default: "0"
-    not_null: true
-  }];
+  optional uint32 sort_order = 12 [(sgorm.field).tag = {default: "0" not_null: true}];
   // 文件大小限制
-  optional uint64 file_size_limit = 13 [(gorm.field).tag = {
-    default: "0"
-    not_null: true
-  }];
+  optional uint64 file_size_limit = 13 [(sgorm.field).tag = {default: "0" not_null: true}];
   // 加密密钥
-  optional string encryption_key = 14 [(gorm.field).tag = {
-    not_null: true
-    default: "''"
-  }];
+  optional string encryption_key = 14 [(sgorm.field).tag = {not_null: true default: "''"}];
 
   // 加密后缀
-  optional string encryption_suffix = 15 [(gorm.field).tag = {
-    not_null: true
-    default: "bin"
-  }];
+  optional string encryption_suffix = 15 [(sgorm.field).tag = {not_null: true default: "bin"}];
   // 存储提供者所提供的存储类型
   optional HashType hash_type = 16;
   // 是否为默认绑定的存储提供者
-  optional bool default_bound = 17 [(gorm.field).tag = {
-    not_null: true
-    default: "false"
-  }];
+  optional bool default_bound = 17 [(sgorm.field).tag = {not_null: true default: "false"}];
   // 代理地址（如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080）
   optional string proxy = 18;
   // 最大并发上传数（0 表示使用全局默认值）
-  optional uint32 max_concurrent_uploads = 19 [(gorm.field).tag = {
-    default: "0"
-    not_null: true
-  }];
+  optional uint32 max_concurrent_uploads = 19 [(sgorm.field).tag = {default: "0" not_null: true}];
 }
 
 // StorageProviderGetReq 获取存储提供者请求

@@ -4,58 +4,47 @@ package native;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
-import "gorm/gorm.proto";
 import "native/common.proto";
 import "native/enum.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // 下载记录
 // aria2通知时，只会传递一个gid，此表记录了gid和关联的业务信息
 message DownloadRecord {
-  option (gorm.opts).ormable = true;
-  optional uint32 id = 1 [(gorm.field).tag = {
-    primary_key: true
-    auto_increment: true
-  }];
-  optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-  optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+  optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true auto_increment: true}];
+  optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+  optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
   // aria2 gid
-  optional string gid = 4 [(gorm.field).tag = {
-    unique_index: "idx_dr_gid"
-    not_null: true
-  }];
+  optional string gid = 4 [(sgorm.field).tag = {unique_index: "idx_dr_gid" not_null: true}];
   // blake3 hash
-  optional string blake3_hash = 5 [(gorm.field).tag = {
-    index: "idx_dr_hash"
-    not_null: true
-  }];
+  optional string blake3_hash = 5 [(sgorm.field).tag = {index: "idx_dr_hash" not_null: true}];
   // 源文件位置记录ID（从哪个FileLocation下载）
-  optional uint64 source_location_id = 6 [(gorm.field).tag = {not_null: true}];
+  optional uint64 source_location_id = 6 [(sgorm.field).tag = {not_null: true}];
   // 上传记录ID（关联的UploadRecord）
-  optional uint32 upload_record_id = 7 [(gorm.field).tag = {index: "idx_dr_urid"}];
+  optional uint32 upload_record_id = 7 [(sgorm.field).tag = {index: "idx_dr_urid"}];
   // 下载状态
-  optional DownloadRecordState state = 9 [(gorm.field).tag = {
-    not_null: true
-    default: "1"
-  }];
+  optional DownloadRecordState state = 8 [(sgorm.field).tag = {not_null: true default: "1"}];
   // aria2文件路径（下载完成后）
-  optional string file_path = 10 [(gorm.field).tag = {default: "''"}];
+  optional string file_path = 9 [(sgorm.field).tag = {default: "''"}];
   // 文件大小
-  optional uint64 file_size = 11 [(gorm.field).tag = {default: "0"}];
+  optional uint64 file_size = 10 [(sgorm.field).tag = {default: "0"}];
   // 错误信息
-  optional string error_message = 12 [(gorm.field).tag = {default: "''"}];
+  optional string error_message = 11 [(sgorm.field).tag = {default: "''"}];
   // 下载完成后的回调信息（JSON格式，用于存储额外信息）
-  optional string callback_info = 13 [(gorm.field).tag = {type: "text"}];
+  optional string callback_info = 12 [(sgorm.field).tag = {type: "text"}];
   // ===== URL 离线下载（任务14）字段，均为可空；中转下载（provider→provider）不需要 =====
   // 下载源 URL（http/https/ftp/magnet），URL 任务非空
-  optional string url = 14;
+  optional string url = 13;
   // 文件归属用户 ID
-  optional string owner_id = 15 [(gorm.field).tag = {index: "idx_dr_owner"}];
+  optional string owner_id = 14 [(sgorm.field).tag = {index: "idx_dr_owner"}];
   // 落库目标目录（files.parent_id）
-  optional string parent_id = 16 [(gorm.field).tag = {index: "idx_dr_parent"}];
+  optional string parent_id = 15 [(sgorm.field).tag = {index: "idx_dr_parent"}];
   // 来源文件名（从 URL 推断；下载完成后与 aria2 实际文件名校对）
-  optional string source_name = 17;
+  optional string source_name = 16;
 }
 
 // ===== URL 离线下载请求/响应（任务14） =====

@@ -5,11 +5,11 @@ package native;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-import "gorm/gorm.proto";
 import "native/auth.proto";
 import "native/common.proto";
 import "native/enum.proto";
 import "native/provider.proto";
+import "sgorm/options.proto";
 
 option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
@@ -17,23 +17,21 @@ option go_package = "jenken827.com/jenken827/pfm/proto/gen/native";
 
 // 用户空间（每个用户独立的网盘根目录和配额）
 message UserSpace {
-    option (gorm.opts).ormable = true;
-    optional uint32 id = 1 [(gorm.field).tag = {primary_key: true, auto_increment: true}];
-    optional google.protobuf.Timestamp created_at = 2 [(gorm.field).tag = {auto_create_time: true}];
-    optional google.protobuf.Timestamp updated_at = 3 [(gorm.field).tag = {auto_update_time: true}];
+  option (sgorm.opts).ormable = true;
+
+    optional uint32 id = 1 [(sgorm.field).tag = {primary_key: true, auto_increment: true}];
+    optional google.protobuf.Timestamp created_at = 2 [(sgorm.field).tag = {auto_create_time: true}];
+    optional google.protobuf.Timestamp updated_at = 3 [(sgorm.field).tag = {auto_update_time: true}];
     // 用户 ID（UUID，关联本地用户表 users.user_id）
-    optional string user_id = 4 [(gorm.field).tag = {not_null: true, unique: true, size: 64}];
+    optional string user_id = 4 [(sgorm.field).tag = {not_null: true, unique: true, size: 64}];
     // 该用户的根目录 file_id（关联 files.id）
-    optional string root_file_id = 5 [(gorm.field).tag = {not_null: true, type: "char(36)"}];
+    optional string root_file_id = 5 [(sgorm.field).tag = {not_null: true, type: "char(36)"}];
     // 绑定的存储提供者ID列表（JSON 数组，仅根目录级别绑定）
-    optional string bound_provider_ids = 6 [(gorm.field).tag = {
-        not_null: true,
-        default: "'[]'"
-    }];
+    optional string bound_provider_ids = 6 [(sgorm.field).tag = {not_null: true, default: "'[]'"}];
     // 存储配额（字节，0 = 不限制）
-    optional uint64 quota_bytes = 7 [(gorm.field).tag = {not_null: true, default: "0"}];
+    optional uint64 quota_bytes = 7 [(sgorm.field).tag = {not_null: true, default: "0"}];
     // 已用存储（字节，定时统计更新）
-    optional uint64 used_bytes = 8 [(gorm.field).tag = {not_null: true, default: "0"}];
+    optional uint64 used_bytes = 8 [(sgorm.field).tag = {not_null: true, default: "0"}];
 }
 
 // ===== 请求/响应消息 =====

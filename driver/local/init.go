@@ -2,13 +2,14 @@ package local
 
 import (
 	"jenken827.com/jenken827/pfm/driver/types"
+	"jenken827.com/jenken827/pfm/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // LocalDriver  storage driver for local
 type LocalDriver struct {
 	Config         *native.LocalDriverConfig
-	Orm            *native.StorageProviderORM
+	Orm            *entity.StorageProviderORM
 	ProviderConfig types.ProviderConfig
 }
 
