@@ -3,9 +3,9 @@ package server
 import (
 	"net/http"
 
-	"jenken827.com/jenken827/pfm/api"
-	"jenken827.com/jenken827/pfm/server/middleware"
-	"jenken827.com/jenken827/pfm/server/webdav"
+	"github.com/jenken827/pfm/api"
+	"github.com/jenken827/pfm/server/middleware"
+	"github.com/jenken827/pfm/server/webdav"
 )
 
 // route 装配全部 HTTP 路由。

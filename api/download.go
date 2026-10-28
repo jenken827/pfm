@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/server/response"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/server/response"
 )
 
 // DownloadServer URL 离线下载服务实现

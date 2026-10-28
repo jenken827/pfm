@@ -24,12 +24,12 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/downloader"
-	"jenken827.com/jenken827/pfm/internal/fileutil"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/internal/fileutil"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 )
 
 // completeMu 串行化「完成处理」：完成入库与周期对齐（reconcile）可能同时进来

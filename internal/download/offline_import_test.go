@@ -2,7 +2,7 @@ package download
 
 import (
 	"encoding/json"
-	"jenken827.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,9 +11,9 @@ import (
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/utils"
 )
 
 // ============================================================

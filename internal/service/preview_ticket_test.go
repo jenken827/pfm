@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/utils"
 )
 
 // createTestFile 建一个属于 ownerID 的普通文件（票据只关心归属，不需要真实内容）

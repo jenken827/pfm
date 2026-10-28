@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/dbtest"
 )
 
 // 302 回退到代理下载时 Location 必须自带凭证：浏览器跟随 302 时不会重复带

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/pkg/llog"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // 票据有效期（两种票据读的是同一份字节，只差时间窗）。

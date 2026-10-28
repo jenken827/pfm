@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/utils"
 )
 
 func TestOfflineDownloadBlockedReason(t *testing.T) {

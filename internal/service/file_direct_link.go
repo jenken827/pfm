@@ -9,13 +9,13 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	ormconv "github.com/jenken827/pfm/driver/orm"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	ormconv "jenken827.com/jenken827/pfm/driver/orm"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // 本文件实现"直链下载"的服务端判定与下发。

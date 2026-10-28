@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/internal/downloader"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // ============================================================

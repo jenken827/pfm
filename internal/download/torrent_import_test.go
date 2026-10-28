@@ -1,13 +1,13 @@
 package download
 
 import (
-	"jenken827.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/utils"
 )
 
 // 只导入被选中、非元数据伪文件、且已按种子长度完整落盘的文件

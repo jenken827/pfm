@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/server/response"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/server/response"
 )
 
 // FileServer 文件服务

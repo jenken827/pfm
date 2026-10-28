@@ -114,19 +114,19 @@ flowchart TB
 
 ### 上手
 
-契约与客户端都在独立仓库里，宿主依赖它们；本地联调时四个仓库平级放置（`go.mod` 用 `replace` 指过去），
-换成按 tag 的 `require` 时删掉 `replace` 即可，代码不用改：
+契约与客户端都在独立仓库里，宿主按 tag 依赖它们（`go.mod` 的 `require`，`go build` 自动取，
+**不需要**先把仓库 clone 到旁边）：
 
-| 仓库 | 内容 | 本地位置 |
-|---|---|---|
-| `pfm-plugin-sdk` | 插件 ABI、驱动值类型、插件运行时 | 与 `pfm` 同级的 `pfm-plugin-sdk/` |
-| `pfm-proto` | 应用侧 protobuf（Go 数据结构 + GORM 实体 + Dart 包 `pfm_proto`） | 与 `pfm` 同级的 `pfm-proto/` |
-| `pfm-frontend` | Flutter 客户端 | 与 `pfm` 同级的 `pfm-frontend/` |
+| 仓库 | 内容 |
+|---|---|
+| `pfm-plugin-sdk` | 插件 ABI、驱动值类型、插件运行时 |
+| `pfm-proto` | 应用侧 protobuf（Go 数据结构 + GORM 实体 + Dart 包 `pfm_proto`） |
+| `pfm-frontend` | Flutter 客户端（只有做客户端时才需要） |
+
+要同时改这两个契约仓库时，用工作区把目录并起来（`go.work` 不入库）：
 
 ```bash
-git clone <sdk-repo> pfm-plugin-sdk         # 后端编译必需
-git clone <proto-repo> pfm-proto            # 后端编译必需
-git clone <frontend-repo> pfm-frontend      # 只有做客户端时才需要
+go work init . ../pfm-plugin-sdk ../pfm-proto
 ```
 
 ```bash

@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 const (

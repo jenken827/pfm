@@ -9,14 +9,14 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/pkg/llog"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 var db *gorm.DB

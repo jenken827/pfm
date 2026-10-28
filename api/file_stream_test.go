@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/internal/service"
 )
 
 // mustTicket 用当前本地认证器签一张预览票据（dbtest.Setup 之后才可用）

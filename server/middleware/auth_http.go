@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/auth"
 )
 
 const tokenHeader = "Authorization"

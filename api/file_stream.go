@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/internal/thumbnail"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/server/middleware"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/internal/thumbnail"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/server/middleware"
+	"github.com/jenken827/pfm/utils"
 )
 
 // PreviewFileHandler 文件预览HTTP handler

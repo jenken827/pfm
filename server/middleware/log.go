@@ -9,11 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/server/response"
 	"google.golang.org/protobuf/encoding/protojson"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/server/response"
 )
 
 // requestIDHeader 请求 ID 响应头：前端报错时可带上该值反查服务端日志。

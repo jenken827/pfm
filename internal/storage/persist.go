@@ -8,9 +8,9 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 )
 
 // failFileLocation 标记文件位置为失败状态

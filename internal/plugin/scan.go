@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/globals"
 )
 
 // ManifestInfo 插件目录的静态概况（不拉起进程）

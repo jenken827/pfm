@@ -9,8 +9,8 @@ import (
 
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
-	"jenken827.com/jenken827/pfm/internal/downloader"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // downloaderCallTimeout 单次下载器 RPC 的等待上限（后端本身可能很慢，但别挂死宿主）

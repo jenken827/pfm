@@ -13,12 +13,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/pkg/llog"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // jwtSecretFile 自动生成的 JWT 密钥持久化路径（相对数据目录）

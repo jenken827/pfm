@@ -7,9 +7,9 @@ import (
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // MoveFile 移动文件到目标文件夹

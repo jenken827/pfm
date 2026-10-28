@@ -9,12 +9,12 @@ import (
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/driver/local"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/driver/local"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 )
 
 // builtinDriverOrder 宿主自带驱动的展示顺序（新增内置驱动时在这里加一行）。

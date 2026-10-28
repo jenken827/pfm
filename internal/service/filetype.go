@@ -1,6 +1,6 @@
 package service
 
-import "jenken827.com/jenken827/pfm/internal/fileutil"
+import "github.com/jenken827/pfm/internal/fileutil"
 
 // GetFileType 根据文件内容或扩展名获取文件类型
 func GetFileType(path string, filename string) (int32, string) {

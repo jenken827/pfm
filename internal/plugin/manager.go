@@ -14,8 +14,8 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
-	"jenken827.com/jenken827/pfm/internal/downloader"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // Options 插件管理器配置

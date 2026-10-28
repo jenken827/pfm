@@ -2,10 +2,10 @@ package response
 
 import (
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/pkg/llog"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // SuccessResp 构造成功响应。

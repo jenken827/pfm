@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/driver/local"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/driver/local"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/utils"
 )
 
 // 文件详情「位置分布」里的 provider 名必须是**存储实例名**（storage_providers.name），

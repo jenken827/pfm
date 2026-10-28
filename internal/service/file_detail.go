@@ -7,11 +7,11 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // GetFileDetail 获取文件详情

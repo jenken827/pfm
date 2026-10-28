@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/api"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"jenken827.com/jenken827/pfm/api"
 )
 
 // 本文件是 REST 路由表：显式维护「HTTP 方法 + 路径 → api 层方法」的映射。

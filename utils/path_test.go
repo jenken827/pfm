@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/globals"
 )
 
 // withTempDir 把 globals.TempDir 指向测试临时目录（用例结束恢复）

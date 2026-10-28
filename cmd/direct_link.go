@@ -13,14 +13,14 @@ import (
 
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	_ "github.com/jenken827/pfm/driver" // 注册存储驱动构造器（取直链需要）
+	ormconv "github.com/jenken827/pfm/driver/orm"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
 	"github.com/spf13/cobra"
-	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器（取直链需要）
-	ormconv "jenken827.com/jenken827/pfm/driver/orm"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // 本文件是"直链下载"的**打表工具**：把某个文件在各存储提供者上的直链取出来，

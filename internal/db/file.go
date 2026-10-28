@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
 )
 
 // GetFileByID 获取文件

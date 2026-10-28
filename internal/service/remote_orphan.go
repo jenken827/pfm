@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // ErrRemoteListUnsupported 该提供者只支持按对象 ID 读写，没有目录树可枚举

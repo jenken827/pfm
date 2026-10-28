@@ -3,14 +3,14 @@ package download
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"jenken827.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/internal/downloader"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/utils"
 )
 
 func TestClassifyTask(t *testing.T) {

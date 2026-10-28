@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/models"
 	"github.com/spf13/viper"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/models"
 )
 
 var cfg *models.Config

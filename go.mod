@@ -1,13 +1,12 @@
-module jenken827.com/jenken827/pfm
+module github.com/jenken827/pfm
 
 go 1.26.0
 
-require github.com/jenken827/pfm-plugin-sdk v0.1.0
+require github.com/jenken827/pfm-plugin-sdk v0.3.0
 
-require github.com/jenken827/pfm-proto v0.1.0
+require github.com/jenken827/pfm-proto v0.3.1
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1
 	buf.build/go/protovalidate v1.0.0
 	github.com/emersion/go-webdav v0.7.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -36,6 +35,7 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1 // indirect
 	cel.dev/expr v0.25.1 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -77,9 +77,5 @@ require (
 )
 
 // 本地联调依赖（同级目录）：插件 SDK 与宿主共用同一份 ABI；
-// 改成远端依赖时删掉 replace、require 换成对应 tag。
-replace github.com/jenken827/pfm-plugin-sdk => ../pfm-plugin-sdk
 
 // 本地联调依赖（同级目录）：应用侧 proto 与宿主共用同一份定义；
-// 改成远端依赖时删掉 replace、require 换成对应 tag。
-replace github.com/jenken827/pfm-proto => ../pfm-proto

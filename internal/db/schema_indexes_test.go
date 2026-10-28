@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
 )
 
 // TestAutoMigrateCreatesSchemaIndexes 全新库必须由 autoMigrate 建出两个索引不变式：

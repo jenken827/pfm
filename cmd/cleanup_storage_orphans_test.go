@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
-	"jenken827.com/jenken827/pfm/driver/local"
-	"jenken827.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/driver/local"
+	"github.com/jenken827/pfm/internal/service"
 )
 
 // fakeRootLister 只实现 RemoteRoot，用于测扫描根解析

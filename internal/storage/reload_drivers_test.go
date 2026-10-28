@@ -10,9 +10,9 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/utils"
 )
 
 // markerDriver 只用来区分「重建前 / 重建后」的实例，不碰文件系统。

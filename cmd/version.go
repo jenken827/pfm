@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/jenken827/pfm/globals"
 	"github.com/spf13/cobra"
-	"jenken827.com/jenken827/pfm/globals"
 )
 
 // versionCmd 显示版本信息

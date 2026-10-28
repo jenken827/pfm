@@ -10,14 +10,14 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	ormconv "github.com/jenken827/pfm/driver/orm"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/internal/thumbnail"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 	"gorm.io/gorm"
-	ormconv "jenken827.com/jenken827/pfm/driver/orm"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/internal/thumbnail"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
 )
 
 // checkOwnership 检查当前用户是否拥有指定文件

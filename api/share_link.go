@@ -8,12 +8,12 @@ import (
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/pkg/sharelink"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/pkg/sharelink"
+	"github.com/jenken827/pfm/utils"
 )
 
 // PublicDownloadHandler 公共下载接口（无需认证，签名验证）

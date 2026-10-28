@@ -12,11 +12,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/pidfile"
+	"github.com/jenken827/pfm/internal/plugin"
 	"github.com/spf13/cobra"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/pidfile"
-	"jenken827.com/jenken827/pfm/internal/plugin"
 )
 
 // pluginCmd 驱动插件管理

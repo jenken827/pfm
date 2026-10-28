@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // 暂存文件名约定（写入方与读取方必须一致，故集中定义，避免两侧字符串漂移）

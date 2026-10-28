@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/downloader"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/downloader"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 )
 
 // Init 初始化离线下载：后端由 kind=downloader 插件在插件加载时登记（downloader.SetBackend）。

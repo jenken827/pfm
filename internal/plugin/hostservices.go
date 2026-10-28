@@ -13,8 +13,8 @@ import (
 
 	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // hostServer 插件反向调用宿主的服务（回写配置、更新缓存状态、写日志）

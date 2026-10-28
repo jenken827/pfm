@@ -13,3 +13,7 @@ apk
 
 # 构建脚本处理的临时备份（dev.sh 注入版本号/commit 时生成）
 *.backup
+
+# 本地工作区文件（联调时用 go work init 生成，不入库）
+go.work
+go.work.sum

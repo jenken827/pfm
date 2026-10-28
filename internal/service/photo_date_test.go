@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/models"
 )
 
 func TestParsePhotoDateFromFilename(t *testing.T) {

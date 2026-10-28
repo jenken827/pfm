@@ -9,14 +9,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/pkg/llog"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // userCmd 本地认证用户管理（auth.mode=local 时使用）

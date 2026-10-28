@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/utils"
 )
 
 // WebDAV 的尾斜杠与 mountPrefix 处理

@@ -6,12 +6,12 @@ import (
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/utils"
 )
 
 // 普通用户可达的两个接口（我的存储源 / 同步源）不能把驱动配置原文发出去：

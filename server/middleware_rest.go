@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/server/middleware"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/server/middleware"
 )
 
 // restAuthMiddleware 为 REST 业务路由提供鉴权，等价于原先的 connect AuthInterceptor：

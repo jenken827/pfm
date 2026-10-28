@@ -8,7 +8,7 @@ import (
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // CreateDownloadRecord 创建下载记录

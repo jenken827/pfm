@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/db"
 )
 
 // ============================================================

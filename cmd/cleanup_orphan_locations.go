@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	_ "github.com/jenken827/pfm/driver" // 注册存储驱动构造器（回收物理副本需要）
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/pkg/llog"
 	"github.com/spf13/cobra"
-	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器（回收物理副本需要）
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // cleanupOrphanLocationsCmd 清理孤儿 file_locations 行（跨所有提供者）

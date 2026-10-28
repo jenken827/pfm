@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // 验证：request_id 注入 ctx + 回写响应头 + 状态码/字节数记录 + panic 恢复。

@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"github.com/jenken827/pfm/bootstrap"
+	_ "github.com/jenken827/pfm/driver" // 注册存储驱动
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/server"
 	"github.com/spf13/cobra"
-	"jenken827.com/jenken827/pfm/bootstrap"
-	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/server"
 )
 
 // serverCmd 启动服务器

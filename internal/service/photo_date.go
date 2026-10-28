@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/models"
 )
 
 // 文件名解析规则类型（与 proto PhotoDateFilenameRule.type 取值一致）

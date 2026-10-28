@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/dbtest"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/dbtest"
 )
 
 const (

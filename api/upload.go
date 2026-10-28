@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/server/response"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/server/response"
 )
 
 // UploadServer 上传服务

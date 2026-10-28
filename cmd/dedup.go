@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
+	_ "github.com/jenken827/pfm/driver" // 注册存储驱动构造器（阶段 2 回收远程副本需要）
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/pkg/llog"
 	"github.com/spf13/cobra"
-	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器（阶段 2 回收远程副本需要）
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // dedupCmd 子树去重：阶段 1 按 hash 合并，阶段 2 按「同名 + (N) 后缀」配对核验（保大）

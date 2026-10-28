@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/internal/models"
+	"github.com/jenken827/pfm/internal/models"
 )
 
 // writeTestImage 生成一张 800x600 的 PNG，返回路径

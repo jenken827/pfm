@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	_ "jenken827.com/jenken827/pfm/driver"
+	_ "github.com/jenken827/pfm/driver"
 )
 
 // 驱动元数据列表直接喂给前端"新增存储源"的类型下拉框。

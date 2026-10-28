@@ -18,11 +18,11 @@ import (
 	"testing"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
 )
 
 var (

@@ -14,14 +14,14 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	_ "github.com/jenken827/pfm/driver" // 注册存储驱动构造器
+	"github.com/jenken827/pfm/globals"
+	"github.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/pkg/llog"
 	"github.com/spf13/cobra"
-	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器
-	"jenken827.com/jenken827/pfm/globals"
-	"jenken827.com/jenken827/pfm/internal/config"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // cleanupStorageOrphansCmd 逆向孤儿：扫描存储提供者远端，找出 file_locations 已无记录的物理文件

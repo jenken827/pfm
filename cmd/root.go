@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jenken827/pfm/globals"
 	"github.com/spf13/cobra"
-	"jenken827.com/jenken827/pfm/globals"
 )
 
 // rootCmd 根命令

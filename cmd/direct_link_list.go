@@ -9,8 +9,8 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/db"
-	"jenken827.com/jenken827/pfm/internal/storage"
+	"github.com/jenken827/pfm/internal/db"
+	"github.com/jenken827/pfm/internal/storage"
 )
 
 // 本文件实现 direct-link 的 --list 模式：列出最近的若干文件，并标注每个文件在各提供者上

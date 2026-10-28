@@ -6,8 +6,8 @@ import (
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/utils"
 )
 
 // DriverID 是本地存储驱动的身份（落库在 storage_providers.provider_type）。

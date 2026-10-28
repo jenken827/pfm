@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/internal/config"
+	"github.com/jenken827/pfm/internal/config"
 )
 
 // allowPrivateHostFunc 读取 download.allow_private_host（测试可替换；

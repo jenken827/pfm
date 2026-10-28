@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // handshakePrefix 插件启动后打印的握手前缀

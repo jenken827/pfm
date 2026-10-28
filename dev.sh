@@ -67,7 +67,7 @@ show_help() {
 注意:
   - build 和 run 命令会自动从 git commit hash 和日期生成版本号
   - buf / protoc-gen-* 只在 pfm-proto 仓库用得到；本仓库只要 go，且 go.mod 能解析 pfm-proto
-  - 项目模块路径: jenken827.com/jenken827/pfm
+  - 项目模块路径: github.com/jenken827/pfm
 EOF
 }
 
@@ -129,7 +129,7 @@ cmd_build() {
 
     check_command "go"
     
-    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X github.com/jenken827/pfm/globals.Version=${VERSION}\""
     if [ "$SKIP_TESTS" = true ]; then
         echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
     fi
@@ -173,7 +173,7 @@ cmd_run() {
 
     check_command "go"
     
-    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X github.com/jenken827/pfm/globals.Version=${VERSION}\""
     if [ "$SKIP_TESTS" = true ]; then
         echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
     fi

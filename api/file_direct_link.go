@@ -6,9 +6,9 @@ import (
 	"net/url"
 
 	"github.com/jenken827/pfm-proto/proto/gen/native"
-	"jenken827.com/jenken827/pfm/internal/auth"
-	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/service"
+	"github.com/jenken827/pfm/pkg/llog"
 )
 
 // DirectLinkRedirectHandler 直链 302：让浏览器 / 第三方下载器不改一行代码就能直连提供者
