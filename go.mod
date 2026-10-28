@@ -76,8 +76,10 @@ require (
 	modernc.org/sqlite v1.23.1 // indirect
 )
 
-// 插件 SDK 的本地开发依赖：SDK 发布到远端后删掉这行，改为按 tag 解析。
+// 本地联调依赖（同级目录）：插件 SDK 与宿主共用同一份 ABI；
+// 改成远端依赖时删掉 replace、require 换成对应 tag。
 replace github.com/jenken827/pfm-plugin-sdk => ../pfm-plugin-sdk
 
-// 应用侧 proto 的本地开发依赖：pfm-proto 发布到远端后删掉这行，改为按 tag 解析。
+// 本地联调依赖（同级目录）：应用侧 proto 与宿主共用同一份定义；
+// 改成远端依赖时删掉 replace、require 换成对应 tag。
 replace github.com/jenken827/pfm-proto => ../pfm-proto

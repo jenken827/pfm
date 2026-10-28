@@ -137,8 +137,24 @@ func GetMyBoundProviders(ctx context.Context) (*native.GetMyBoundProvidersResp, 
 			llog.C(ctx).Warnf("convert provider %d to PB failed: %v", id, convErr)
 			continue
 		}
+		stripProviderSecrets(pb)
 		items = append(items, pb)
 	}
 
 	return &native.GetMyBoundProvidersResp{Providers: items}, nil
+}
+
+// stripProviderSecrets 抹掉面向普通用户的 provider 响应里的敏感字段。
+//
+// `native.StorageProvider.config` 是驱动配置的原文（bot_token / refresh_token /
+// client_secret / encryption_key 之类都在里面），`encryption_key` 本身就是解密密钥。
+// 管理接口（/api/admin/provider/*）由管理员看没问题；但 /api/space/my-providers 与
+// /api/file/sync-providers 是**普通用户**可达的，只需要 id / 名称 / 容量 / 启用状态，
+// 不该把凭据发到客户端。
+func stripProviderSecrets(pb *native.StorageProvider) {
+	if pb == nil {
+		return
+	}
+	pb.Config = nil
+	pb.EncryptionKey = nil
 }

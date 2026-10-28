@@ -130,23 +130,15 @@ func buildShareURL(shareCode, sign string) string {
 }
 
 // checkShareOwnership 校验当前用户是否为分享的归属者（分享记录的 owner_id 或管理员）
-// 老数据 owner_id 为空时退化为校验对应文件的所有者
+//
+// owner_id 在创建分享时就写入，不存在"空着等回填"的记录（老数据早已回填完成），
+// 所以这里不再按文件所有者兜底。
 func checkShareOwnership(ctx context.Context, fs *entity.FileShareORM) bool {
 	if isAdminUser(ctx) {
 		return true
 	}
 	userID := getCurrentUserIDFromCtx(ctx)
-	if userID == "" {
-		return false
-	}
-	if fs.OwnerId != nil && *fs.OwnerId != "" {
-		return *fs.OwnerId == userID
-	}
-	// owner_id 未回填的老记录：按文件所有者校验
-	if fs.FileId != nil {
-		return CheckOwnership(ctx, *fs.FileId)
-	}
-	return false
+	return userID != "" && fs.OwnerId != nil && *fs.OwnerId == userID
 }
 
 // CancelShareLink 取消分享链接

@@ -469,6 +469,7 @@ func GetAvailableProvidersForSync(ctx context.Context, fileHash string) ([]*nati
 			llog.C(ctx).Errorf("convert provider to PB failed: %v", err)
 			continue
 		}
+		stripProviderSecrets(pb)
 		items = append(items, pb)
 	}
 

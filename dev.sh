@@ -51,7 +51,7 @@ show_help() {
   $0 build -o /usr/local/bin/pfm  # 编译到指定路径
   $0 build --skip-tests           # 跳过测试缓存
   $0 run                          # 编译并运行
-  $0 deploy                       # 发布到目标目录（需 PFM_* 环境变量，见 README §3）
+  $0 deploy                       # 发布到目标目录（需 PFM_DEPLOY_DIR / PFM_RESTART_CMD 环境变量）
   $0 dev                          # 开发模式运行（不编译）
   $0 proto                        # 只打印指路：代码在 pfm-proto 仓库生成
   $0 test                         # 运行测试（Go）
@@ -129,7 +129,7 @@ cmd_build() {
 
     check_command "go"
     
-    local BUILD_ARGS="-ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
     if [ "$SKIP_TESTS" = true ]; then
         echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
     fi
@@ -173,7 +173,7 @@ cmd_run() {
 
     check_command "go"
     
-    local BUILD_ARGS="-ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
+    local BUILD_ARGS="-trimpath -ldflags \"-w -s -X jenken827.com/jenken827/pfm/globals.Version=${VERSION}\""
     if [ "$SKIP_TESTS" = true ]; then
         echo "📌 跳过测试缓存（注意：go build 不支持 -count 参数）"
     fi
@@ -186,7 +186,8 @@ cmd_run() {
 # 发布：编译后调用 scripts/deploy.sh，把产物发布到目标目录并重启服务
 #
 # 只做"编译 + 发布"，不含 git 提交/推送。
-# 目标目录 / 重启命令 / 健康检查地址由 PFM_* 环境变量传入（见 README §3 与 scripts/deploy.sh）。
+# 目标目录 / 重启命令 / 健康检查地址由 PFM_DEPLOY_DIR / PFM_RESTART_CMD / PFM_HEALTH_URL 传入
+# （这些值属于部署方，仓库里不留默认值；细节见 scripts/deploy.sh 开头的注释）。
 # **可选**：不用这个脚本、自己写一套发布流程也完全可以。
 cmd_deploy() {
     echo "🚀 发布 PFM..."

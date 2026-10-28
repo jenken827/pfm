@@ -112,8 +112,8 @@ transfer:
   direct_link:
     # 是否启用，默认 true；设为 false = 完全停用直链（所有下载都走服务端代理）
     enabled: true
-    # 允许直链的存储提供者类型白名单（如 BAIDU_NETDISK / PAN123 / ALIYUNDRIVE_OPEN /
-    # YUN139 / CLOUD189_PC）；留空 = 所有实现了直链的驱动
+    # 允许直链的提供者白名单，写驱动身份（storage_providers.provider_type 的值，
+    # 大小写不敏感）；留空 = 所有实现了直链的驱动
     providers: []
     # 自动选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
     prefer_directable_provider: false

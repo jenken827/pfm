@@ -50,7 +50,7 @@ func GetFileSharesByFileID(fileID string) ([]*entity.FileShareORM, error) {
 }
 
 // ListFileSharesByOwner 分页查询指定用户创建的分享记录（按创建时间倒序）
-// 归属规则：owner_id 冗余自文件所有者，创建分享时写入；老数据由迁移脚本回填
+// 归属规则：owner_id 冗余自文件所有者，创建分享时写入
 func ListFileSharesByOwner(ownerID string, offset, pageSize int) ([]*entity.FileShareORM, int64, error) {
 	ctx := context.Background()
 	var total int64

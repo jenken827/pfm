@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -121,15 +120,11 @@ func Transaction(fc func(tx *gorm.DB) error) error {
 
 // 迁移数据库（AutoMigrate + 模型 tag 无法表达的索引不变式）
 //
-// 历史数据回填已全部在这台部署上执行完并清理（task_status 回填、file_shares.owner_id
-// 回填、is_ready 脏数据修复）。新增需要回填的字段时，按同样的方式写幂等迁移函数挂到
-// 这里，确认线上执行完后再删。
+// 这里只做「每次启动都必须成立」的事：建表/加列，以及 tag 表达不了的索引不变式。
+// 一次性数据迁移不进启动路径——历史回填都已在本机执行完并删除，provider_type 的
+// 枚举→身份转换也改成了手工 SQL。以后新增回填同样办理：写成文档仓库里的一次性 SQL，
+// 跑完就完，不让宿主长期背着一份只对某个老库有意义的代码。
 func autoMigrate() error {
-	// 驱动身份（provider_type）字符串化必须在 AutoMigrate 之前：模型已是 string，
-	// GORM 对 int -> varchar 只会生成没有 USING 的 ALTER COLUMN。
-	if err := migrateProviderTypeToString(db); err != nil {
-		return err
-	}
 	if err := db.AutoMigrate(
 		&entity.FileORM{},
 		&entity.FileTagORM{},
@@ -152,96 +147,30 @@ func autoMigrate() error {
 	return ensureSchemaIndexes()
 }
 
-// ensureSchemaIndexes 保证两个「模型 tag 无法完整表达」的索引存在（全新库、老库都要）。
+// ensureSchemaIndexes 保证模型 tag 表达不了的索引不变式（全新库也要成立，所以每次启动都跑）。
 //
-//   - files：partial unique index (owner_id, name, parent_id) WHERE deleted_at IS NULL。
-//     带 WHERE 条件的索引无法用 gorm tag 表达；缺了它全新库会失去「同目录同用户不许
-//     重名」的唯一约束（软删除的记录不参与），并发上传同名会写出重复记录。
-//     MySQL 不支持 partial index，这一条在 MySQL 上跳过（见 ensureFilesUniqueIndex）。
-//   - upload_records：旧的全局唯一索引 idx_ur_fh（只看 file_hash）必须删除，否则不同
-//     用户上传同一 hash 会互相撞约束；复合唯一索引 idx_ur_fh_owner 由模型 tag 建。
+//   - files：(owner_id, name, parent_id) WHERE deleted_at IS NULL 的 partial unique index。
+//     带 WHERE 的索引没法用 gorm tag 表达；缺了它软删除的记录会参与唯一约束，
+//     用户删掉文件后无法再建同名文件。MySQL 不支持 partial index，跳过（见下）。
+//   - upload_records：复合唯一索引 idx_ur_fh_owner (file_hash, owner_id) 由模型 tag 建，
+//     不同用户上传同一 hash 各有一行。
 func ensureSchemaIndexes() error {
-	if err := ensureFilesUniqueIndex(); err != nil {
-		return err
-	}
-	if err := dropLegacyUploadRecordIndex(); err != nil {
-		llog.L().Warnf("drop old index idx_ur_fh failed (may not exist): %v", err)
-	}
-	return nil
+	return ensureFilesUniqueIndex()
 }
 
-// dropLegacyUploadRecordIndex 删除旧的全局唯一索引 idx_ur_fh。
+// ensureFilesUniqueIndex 建 files 的 partial 唯一索引（幂等）。
 //
-// MySQL 的 DROP INDEX 不支持 IF EXISTS，先查 information_schema 再删，
-// 免得每次启动都刷一条失败告警（老库才可能有这个索引）。
-func dropLegacyUploadRecordIndex() error {
-	if config.GetConfig().DB.Type == "mysql" {
-		exists, err := mysqlIndexExists("upload_records", "idx_ur_fh")
-		if err != nil || !exists {
-			return err
-		}
-		return db.Exec("ALTER TABLE upload_records DROP INDEX idx_ur_fh").Error
-	}
-	return db.Exec(`DROP INDEX IF EXISTS idx_ur_fh`).Error
-}
-
-// mysqlIndexExists 查索引是否存在（MySQL 侧没有 pg_indexes / sqlite_master 那样的入口）
-func mysqlIndexExists(table, index string) (bool, error) {
-	var count int64
-	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.statistics
-		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, table, index).
-		Row().Scan(&count); err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-// ensureFilesUniqueIndex 建 files 的 partial 唯一索引。
-//
-// 老库可能已有同名的「非 partial」索引：只有现有定义里没有 WHERE 时才重建，
-// 避免每次启动都重建索引（大库启动开销明显）。
+// MySQL 没有 partial index（CREATE INDEX ... WHERE 是语法错误），也没有等价替代：
+// name / owner_id 是不限长的文本列，带前缀的唯一索引会按前 N 个字符误判重名。
+// 所以 MySQL 上放弃库级约束，同目录重名只由服务层校验兜底（并发同名可能漏网）。
 func ensureFilesUniqueIndex() error {
 	if config.GetConfig().DB.Type == "mysql" {
-		// MySQL 没有 partial index（CREATE INDEX ... WHERE 是语法错误），也没有等价替代：
-		// name / owner_id 是不限长的文本列，带前缀的唯一索引会按前 N 个字符误判重名。
-		// 所以这里放弃库级约束，同目录重名只由服务层校验兜底（并发同名可能漏网）。
 		llog.L().Info("mysql: partial unique index idx_f_npi unsupported, " +
 			"duplicate-name check falls back to service layer")
 		return nil
 	}
-	def, err := currentIndexDefinition("idx_f_npi")
-	if err != nil {
-		return fmt.Errorf("query index idx_f_npi failed: %w", err)
-	}
-	if strings.Contains(strings.ToUpper(def), "WHERE") {
-		return nil
-	}
-	if def != "" {
-		if err := db.Exec(`DROP INDEX IF EXISTS idx_f_npi`).Error; err != nil {
-			return fmt.Errorf("drop old index idx_f_npi failed: %w", err)
-		}
-	}
 	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_f_npi ON files (owner_id, name, parent_id) WHERE deleted_at IS NULL`).Error; err != nil {
 		return fmt.Errorf("create partial unique index idx_f_npi failed: %w", err)
 	}
-	llog.L().Info("ensured partial unique index idx_f_npi on files")
 	return nil
-}
-
-// currentIndexDefinition 返回索引定义（不存在返回空串）；只支持 postgres / sqlite3
-func currentIndexDefinition(indexName string) (string, error) {
-	var query string
-	switch config.GetConfig().DB.Type {
-	case "postgres":
-		query = `SELECT COALESCE((SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ?), '')`
-	case "sqlite3":
-		query = `SELECT COALESCE((SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?), '')`
-	default:
-		return "", nil
-	}
-	var def string
-	if err := db.Raw(query, indexName).Row().Scan(&def); err != nil {
-		return "", err
-	}
-	return def, nil
 }
