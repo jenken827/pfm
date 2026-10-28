@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // Postgres 迁移用例：本地/CI 有可用 PG 时用 PFM_TEST_POSTGRES_DSN 打开，

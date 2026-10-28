@@ -9,7 +9,7 @@ type Config struct {
 	DB   DB   `json:"db" yaml:"db"`
 	// 认证配置（本地认证：users 表 + HS256 JWT）
 	Auth AuthConfig `json:"auth" yaml:"auth"`
-	//服务对外地址，用于telegram回调，i.e. https://example.com
+	//服务对外地址（驱动回调 / 直链等用），i.e. https://example.com
 	ServerURL string `json:"server_url" yaml:"server_url"`
 	// 离线下载后端（kind=downloader 插件）：选哪个插件 + 下发给它的选项
 	Downloader DownloaderConfig `json:"downloader" yaml:"downloader"`
@@ -130,7 +130,7 @@ type UploadConfig struct {
 type TransferConfig struct {
 	// 传输服务地址，为空时使用主服务地址
 	ServerURL string `json:"server_url" yaml:"server_url"`
-	// 直链下载配置（客户端绕开服务端中转，见 DESIGN.md §17）
+	// 直链下载配置（客户端绕开服务端中转，直接向存储提供者取字节）
 	DirectLink DirectLinkConfig `json:"direct_link" yaml:"direct_link"`
 }
 
@@ -141,7 +141,7 @@ type TransferConfig struct {
 type DirectLinkConfig struct {
 	// 是否启用，默认 true（nil = 启用）
 	Enabled *bool `json:"enabled" yaml:"enabled"`
-	// 允许直链的存储提供者类型白名单（如 baidu / pan123 / aliyundrive_open）；
+	// 允许直链的存储提供者类型白名单，写驱动身份（storage_providers.provider_type 的值）；
 	// 留空 = 所有实现直链的驱动
 	Providers []string `json:"providers" yaml:"providers"`
 	// 选源时是否优先挑可直链的提供者，默认 false（不改动现有 sort_order 优先级）
@@ -207,7 +207,7 @@ type DownloaderConfig struct {
 // PluginConfig 驱动插件配置
 //
 // 插件与宿主同权限运行（同一用户、同一文件系统），加载一个插件等于授予它
-// 读取配置与数据库的权限：只放可信来源的二进制，详见 DESIGN.md 的威胁模型。
+// 读取配置与数据库的权限，所以只放可信来源的二进制。
 type PluginConfig struct {
 	// Enabled 是否启用插件（默认 false）
 	Enabled bool `json:"enabled" yaml:"enabled"`

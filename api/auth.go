@@ -4,11 +4,11 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/encoding/protojson"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // maxLoginBodyBytes 限制登录请求体大小（仅两个短字段，防止超大 body）。

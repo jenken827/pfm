@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/internal/db"
@@ -21,8 +23,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
 )
@@ -1537,7 +1537,7 @@ func smallFileUploadToProviders(ctx context.Context, blake3Hash string, req *nat
 //
 // version 必须用本次请求发号的值（传 0 表示无版本上下文，保持原值不动）：
 // 分发完成时 markFileReadyIfVersionMatches 拿它做 CAS，留着旧版本号会让
-// is_ready 永远标不上（见 BUGS.md「三个源都已完成却显示未就绪」）。
+// is_ready 永远标不上（三个源都已完成却显示未就绪）。
 func uploadRecordReuseUpdates(tempPath, fileName, parentID string, fileSize uint64, overwriteID string, version uint64, targetProviderIds *string) map[string]interface{} {
 	updates := map[string]interface{}{
 		"temp_path":           tempPath,

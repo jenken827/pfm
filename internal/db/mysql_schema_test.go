@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // newDryRunMySQLDB 只借 MySQL 方言推演建表 SQL，不连数据库：

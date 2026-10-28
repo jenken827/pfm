@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // MySQL 迁移用例：本地/CI 有可用 MySQL 时用 PFM_TEST_MYSQL_DSN 打开，

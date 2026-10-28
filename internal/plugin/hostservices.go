@@ -11,9 +11,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
 )
 
 // hostServer 插件反向调用宿主的服务（回写配置、更新缓存状态、写日志）
@@ -87,7 +88,7 @@ func (h *hostServer) handleUpdateCacheStatus(w http.ResponseWriter, r *http.Requ
 	if !decodeHostRequest(w, r, req) {
 		return
 	}
-	if err := db.UpdateFileLocationCacheStatus(req.GetLocationId(), req.GetStatus()); err != nil {
+	if err := db.UpdateFileLocationCacheStatus(req.GetLocationId(), native.CacheStatus(req.GetStatus())); err != nil {
 		writeHostError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

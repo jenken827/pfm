@@ -4,12 +4,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -66,7 +65,7 @@ func TestDirectLinkProviderAllowedWhitelist(t *testing.T) {
 	dbtest.Setup(t)
 	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr("123盘"),
-		DriverId: utils.StringPtr(types.DriverPan123),
+		DriverId: utils.StringPtr("example_driver_a"),
 		Config:   utils.StringPtr(`{}`),
 		Enabled:  utils.BoolPtr(true),
 	}
@@ -80,17 +79,18 @@ func TestDirectLinkProviderAllowedWhitelist(t *testing.T) {
 		t.Fatal("白名单为空应放行所有提供者")
 	}
 
-	dl.Providers = []string{"PAN123"}
+	// 白名单里写驱动身份；大小写差异容忍（配置里常有人写大写）
+	dl.Providers = []string{"EXAMPLE_DRIVER_A"}
 	if !directLinkProviderAllowed(*provider.Id) {
-		t.Fatal("白名单命中类型时应放行")
+		t.Fatal("白名单命中驱动身份时应放行")
 	}
 
-	dl.Providers = []string{"BAIDU_NETDISK"}
+	dl.Providers = []string{"other_driver"}
 	if directLinkProviderAllowed(*provider.Id) {
-		t.Fatal("白名单未命中类型时应拒绝")
+		t.Fatal("白名单未命中驱动身份时应拒绝")
 	}
 
-	dl.Providers = []string{"PAN123"}
+	dl.Providers = []string{"example_driver_a"}
 	if directLinkProviderAllowed(999999) {
 		t.Fatal("不存在的提供者不应放行")
 	}
@@ -105,7 +105,7 @@ func TestGetFileDirectLinkUnavailable(t *testing.T) {
 
 	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr("移动云"),
-		DriverId: utils.StringPtr(types.DriverYun139),
+		DriverId: utils.StringPtr("example_driver_b"),
 		Config:   utils.StringPtr(`{}`),
 		Enabled:  utils.BoolPtr(true),
 	}

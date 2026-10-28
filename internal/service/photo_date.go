@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/models"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // 文件名解析规则类型（与 proto PhotoDateFilenameRule.type 取值一致）
@@ -91,7 +91,7 @@ func photoDateOptionsFromConfig(cfg models.PhotoDateConfig) photoDateOptions {
 }
 
 // ParsePhotoDateFromFilename 从文件名解析拍摄日期（使用默认规则）
-// 规则与前端 PhotoDateResolver（frontend/lib/services/photo_date_resolver.dart）完全一致：
+// 规则与前端 PhotoDateResolver（前端仓库 pfm-frontend 的 lib/services/photo_date_resolver.dart）完全一致：
 //   - IMG_20260811_063006.jpg / PANO_20170121_xxxx.jpg / VID_20150218_xxx.jpg
 //     / Screenshot_20240109_xxx : "_" 分隔第二段为日期（YYYYMMDD 或 YYYY-MM-DD）
 //   - IMG20150908xxx.jpg : "IMG" 前缀直接跟 8 位 YYYYMMDD

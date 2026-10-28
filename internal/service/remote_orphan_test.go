@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 )
 
 // fakeRemoteLister 用内存目录树模拟驱动的远端枚举能力

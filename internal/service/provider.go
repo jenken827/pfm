@@ -3,24 +3,106 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"jenken827.com/jenken827/pfm/driver/local"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
+
+// builtinDriverOrder 宿主自带驱动的展示顺序（新增内置驱动时在这里加一行）。
+//
+// 只列**随宿主发布**的驱动：插件驱动不在这里，它们由插件自己注册，排在后面按
+// driver_id 字典序——宿主代码不该认识任何一个插件驱动的名字。
+var builtinDriverOrder = []string{local.DriverID}
+
+// driverOrderRank 内置驱动在展示顺序里的位次，非内置返回 len(builtinDriverOrder)
+func driverOrderRank(driverID string) int {
+	for i, id := range builtinDriverOrder {
+		if id == driverID {
+			return i
+		}
+	}
+	return len(builtinDriverOrder)
+}
 
 // GetStorageProviderTypes 获取支持的存储提供者类型列表
 func GetStorageProviderTypes(ctx context.Context, req *native.GetStorageProviderTypesReq) (*native.GetStorageProviderTypesRespData, *models.Err) {
 	metadatas := types.GetAllDriverMetadata()
+	// 注册表只保证确定性（字典序）；"内置驱动排前面"是宿主的展示策略，在这里做。
+	sort.SliceStable(metadatas, func(i, j int) bool {
+		ri, rj := driverOrderRank(metadatas[i].GetDriverId()), driverOrderRank(metadatas[j].GetDriverId())
+		if ri != rj {
+			return ri < rj
+		}
+		return metadatas[i].GetDriverId() < metadatas[j].GetDriverId()
+	})
+	typesOut := make([]*native.DriverInfo, 0, len(metadatas))
+	for _, info := range metadatas {
+		typesOut = append(typesOut, nativeDriverInfo(info))
+	}
 
 	return &native.GetStorageProviderTypesRespData{
-		Types: metadatas,
+		Types: typesOut,
 	}, nil
+}
+
+// nativeDriverInfo 把插件 ABI 的驱动元数据转成应用侧 proto
+//
+// 两套消息刻意分开：abi.DriverInfo 是**插件契约**（只随 ABI 演进，插件与宿主
+// 共享），native.DriverInfo 是**应用 API**（前端表单按它渲染）。两边字段一一对应，
+// 改动时要同时改；一致性由 driver_info_compat_test.go 盯着。
+func nativeDriverInfo(info *abi.DriverInfo) *native.DriverInfo {
+	if info == nil {
+		return nil
+	}
+	out := &native.DriverInfo{
+		DriverId:    info.DriverId,
+		Name:        info.Name,
+		DisplayName: info.DisplayName,
+		Description: info.Description,
+		IconName:    info.IconName,
+	}
+	for _, capability := range info.GetCapabilities() {
+		out.Capabilities = append(out.Capabilities, native.DriverCapability(capability))
+	}
+	for _, field := range info.GetConfigFields() {
+		if field == nil {
+			continue
+		}
+		converted := &native.ConfigField{
+			Name:              field.Name,
+			FieldType:         native.ConfigFieldType(field.GetFieldType()).Enum(),
+			Label:             field.Label,
+			Placeholder:       field.Placeholder,
+			HelperText:        field.HelperText,
+			Required:          field.Required,
+			DefaultValue:      field.DefaultValue,
+			ValidationPattern: field.ValidationPattern,
+			ValidationMessage: field.ValidationMessage,
+			IconName:          field.IconName,
+			InputType:         field.InputType,
+			MaxLength:         field.MaxLength,
+			MinValue:          field.MinValue,
+			MaxValue:          field.MaxValue,
+			MultilineRows:     field.MultilineRows,
+		}
+		for _, option := range field.GetSelectOptions() {
+			converted.SelectOptions = append(converted.SelectOptions, &native.ConfigSelectOption{
+				Value: option.GetValue(),
+				Label: option.GetLabel(),
+			})
+		}
+		out.ConfigFields = append(out.ConfigFields, converted)
+	}
+	return out
 }
 
 // AddStorageProvider 添加存储提供者

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,10 +14,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/plugin/sdk"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 )
 
 // 自测插件：测试二进制把自己当插件进程拉起（不需要额外编译步骤）
@@ -30,7 +30,7 @@ const (
 func TestMain(m *testing.M) {
 	if os.Getenv(selfTestEnv) == "1" {
 		// 插件进程模式：只注册假驱动并把 SDK 跑起来
-		types.RegisterStorageDriverWithMetadata(newFakeDriver, &native.DriverInfo{
+		types.RegisterStorageDriverWithMetadata(newFakeDriver, &abi.DriverInfo{
 			DriverId: proto.String(testDriverID),
 		})
 		sdk.MustServe(testDriverID)
@@ -45,13 +45,9 @@ type fakeDriver struct {
 	config     *types.ProviderConfig
 }
 
-func newFakeDriver(orm *entity.StorageProviderORM) (types.StorageDriver, error) {
-	cfg := types.ProviderConfigFromORM(orm)
-	providerID := uint32(0)
-	if orm.Id != nil {
-		providerID = *orm.Id
-	}
-	return &fakeDriver{providerID: providerID, config: &cfg}, nil
+func newFakeDriver(provider *types.Provider) (types.StorageDriver, error) {
+	cfg := provider.Config
+	return &fakeDriver{providerID: provider.ID, config: &cfg}, nil
 }
 
 func (d *fakeDriver) GetType() string                          { return testDriverID }
@@ -72,7 +68,7 @@ func (d *fakeDriver) Upload(_ context.Context, src types.UploadSource,
 		ChunkHash:      d.config.EncryptionKey,
 		ChunkSize:      uint64(len(testPayload)),
 		ChunkNumber:    0,
-		CacheStatus:    native.CacheStatus_CACHED,
+		CacheStatus:    abi.CacheStatus_CACHED,
 		ChannelID:      opt.EncryptionSuffix,
 	}}, nil
 }
@@ -91,7 +87,17 @@ func (d *fakeDriver) Open(_ context.Context, refs []types.FileRef,
 func (d *fakeDriver) BatchDelete(_ context.Context, refs []types.FileRef) ([]types.DeleteResult, error) {
 	results := make([]types.DeleteResult, 0, len(refs))
 	for _, ref := range refs {
-		results = append(results, types.DeleteResult{ID: ref.LocationID, Success: ref.LocationID != 0})
+		res := types.DeleteResult{ID: ref.LocationID, Success: ref.LocationID == 3}
+		switch ref.LocationID {
+		case 0:
+			// 只把"重试无用"的信号包进 error，不显式置 Permanent
+			res.Error = fmt.Errorf("远端拒绝: %w", types.ErrPermanent)
+		case 5:
+			// 显式置标志位
+			res.Error = errors.New("远端硬限制")
+			res.Permanent = true
+		}
+		results = append(results, res)
 	}
 	return results, nil
 }
@@ -159,11 +165,13 @@ func TestManagerLoadsPluginAndProxiesCalls(t *testing.T) {
 	if constructor == nil {
 		t.Fatal("插件加载后应能取到构造器")
 	}
-	orm := &entity.StorageProviderORM{
-		Id:            proto.Uint32(7),
-		EncryptionKey: proto.String(testConfigKey),
+	provider := &types.Provider{
+		ID: 7,
+		Config: types.ProviderConfig{
+			EncryptionKey: testConfigKey,
+		},
 	}
-	drv, err := constructor(orm)
+	drv, err := constructor(provider)
 	if err != nil {
 		t.Fatalf("构造插件驱动失败: %v", err)
 	}
@@ -204,7 +212,7 @@ func TestManagerLoadsPluginAndProxiesCalls(t *testing.T) {
 		if ref.ChunkHash != testConfigKey {
 			t.Fatalf("Configure 的 provider 配置未传到插件: %q", ref.ChunkHash)
 		}
-		if ref.ChannelID != ".enc" || ref.CacheStatus != native.CacheStatus_CACHED {
+		if ref.ChannelID != ".enc" || ref.CacheStatus != abi.CacheStatus_CACHED {
 			t.Fatalf("Upload 选项或缓存状态未完整传递: %+v", ref)
 		}
 	})
@@ -257,12 +265,19 @@ func TestManagerLoadsPluginAndProxiesCalls(t *testing.T) {
 
 	t.Run("BatchDelete 与 DirectLink", func(t *testing.T) {
 		results, delErr := drv.(types.BatchDeleter).BatchDelete(ctx,
-			[]types.FileRef{{LocationID: 3}, {LocationID: 0}})
+			[]types.FileRef{{LocationID: 3}, {LocationID: 0}, {LocationID: 5}})
 		if delErr != nil {
 			t.Fatalf("BatchDelete 失败: %v", delErr)
 		}
-		if len(results) != 2 || !results[0].Success || results[1].Success {
+		if len(results) != 3 || !results[0].Success || results[1].Success || results[2].Success {
 			t.Fatalf("删除结果不符: %+v", results)
+		}
+		// Permanent 必须跨进程带回来：一种靠包装哨兵错误，一种靠显式标志位
+		if !results[1].Permanent || !types.IsPermanent(results[1].Error) {
+			t.Fatalf("包装的 Permanent 没带过来: %+v", results[1])
+		}
+		if !results[2].Permanent || !types.IsPermanent(results[2].Error) {
+			t.Fatalf("显式 Permanent 没带过来: %+v", results[2])
 		}
 		link, linkErr := drv.(types.DirectLinker).DirectLink(ctx, types.FileRef{ProviderFileID: "f1"})
 		if linkErr != nil {
@@ -284,7 +299,7 @@ func TestManagerCloseStopsPlugin(t *testing.T) {
 		t.Fatalf("加载插件失败: %v", err)
 	}
 	constructor := types.GetDriverConstructor(testDriverID)
-	drv, err := constructor(&entity.StorageProviderORM{Id: proto.Uint32(1)})
+	drv, err := constructor(&types.Provider{ID: 1})
 	if err != nil {
 		t.Fatalf("构造插件驱动失败: %v", err)
 	}
@@ -321,14 +336,14 @@ func TestLoadManifestRejectsBadExec(t *testing.T) {
 
 // TestWrapCapabilitiesExactSet 16 种能力组合都必须恰好实现声明的接口
 func TestWrapCapabilitiesExactSet(t *testing.T) {
-	all := []native.DriverCapability{
-		native.DriverCapability_DRIVER_CAPABILITY_BATCH_DELETE,
-		native.DriverCapability_DRIVER_CAPABILITY_DIRECT_LINK,
-		native.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST,
-		native.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD,
+	all := []abi.DriverCapability{
+		abi.DriverCapability_DRIVER_CAPABILITY_BATCH_DELETE,
+		abi.DriverCapability_DRIVER_CAPABILITY_DIRECT_LINK,
+		abi.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST,
+		abi.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD,
 	}
 	for mask := 0; mask < 1<<len(all); mask++ {
-		caps := make([]native.DriverCapability, 0, len(all))
+		caps := make([]abi.DriverCapability, 0, len(all))
 		for bit, capability := range all {
 			if mask&(1<<bit) != 0 {
 				caps = append(caps, capability)

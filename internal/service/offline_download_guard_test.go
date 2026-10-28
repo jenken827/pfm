@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 

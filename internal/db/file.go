@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -32,7 +32,7 @@ const maxAncestorDepth = 256
 // GetNearestBoundProviderIds 沿 parent_id 祖先链向上查找最近一个「显式绑定」了
 // 存储提供者的文件夹，返回其 bound_provider_ids（JSON 数组）。
 //
-// 语义（见 DESIGN.md「存储提供者绑定策略」）：
+// 语义：
 //   - 从 fileID 自身开始向上回溯；fileID 可以是文件也可以是文件夹
 //     （文件自身永远为空值，等价于从父目录开始）；
 //   - 链上全部为空（'[]'、空串、NULL）时返回 (nil, nil)，由调用方回退到

@@ -3,8 +3,8 @@ package plugin
 import (
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 )
 
 // toProtoRef 驱动侧文件引用 -> 跨进程消息

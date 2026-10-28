@@ -15,7 +15,7 @@ import (
 
 // IndexEntry 官方索引里的一个插件包（一个版本 + 一个平台）
 type IndexEntry struct {
-	// Name 插件包名（如 pfm-plugin-driver-baidu），安装时用 pfm plugin install 指定
+	// Name 插件包名（如 pfm-plugin-driver-xxx），安装时用 pfm plugin install 指定
 	Name string `json:"name"`
 	// Kind 插件类型（driver / …），必须与包内 plugin.json 一致
 	Kind string `json:"kind"`

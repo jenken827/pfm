@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 )
 
 // client 宿主侧的插件 RPC 客户端（HTTP + protojson，Open 走裸字节流）

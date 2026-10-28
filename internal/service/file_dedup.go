@@ -20,14 +20,14 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -94,7 +94,7 @@ func collectSubtreeFiles(baseParentID, ownerID string) ([]*entity.FileORM, error
 // 安全性（物理存储按 hash 共享）：
 //   - file_locations 按 blake3_hash 关联，删除副本记录不影响幸存文件的存储位置
 //   - 缩略图按 hash 命名，幸存文件继续使用，不清理
-//   - 提供者（百度/Telegram 等）上的物理数据按 hash 共享，不删除
+//   - 提供者上的物理数据按 hash 共享，不删除
 //   - 仅删除冗余的 files 记录及其 file_histories 行
 //
 // dryRun 为 true 时只统计与预览，不删除任何记录。

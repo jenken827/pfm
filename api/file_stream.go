@@ -67,7 +67,7 @@ func PreviewFileHandler(w http.ResponseWriter, r *http.Request) {
 	// 5.1 更新文件访问时间（异步，不阻塞响应）
 	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
-	// 6. 处理 Telegram 大文件预下载状态
+	// 6. 处理"预下载中"的响应（能力由驱动声明）
 	if result.IsPreDownload {
 		respondPreDownload(w, result.PreDownloadData)
 		return
@@ -125,7 +125,7 @@ func DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	// 3.1 更新文件访问时间（异步，不阻塞响应）
 	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
-	// 3.2 处理 Telegram 大文件预下载状态
+	// 3.2 处理"预下载中"的响应
 	if result.IsPreDownload {
 		respondPreDownload(w, result.PreDownloadData)
 		return
@@ -163,7 +163,7 @@ func serveThumbnail(w http.ResponseWriter, r *http.Request, fileID string, size 
 	if needGenerate && file != nil {
 		llog.L().Infof("thumbnail not found, triggering async generation: %s", fileID)
 		// 注意：必须用后台 ctx。r.Context() 在 handler 返回时即被取消，
-		// 若把请求 ctx 传给异步任务，任务里的下游调用（如 Telegram getFile）
+		// 若把请求 ctx 传给异步任务，任务里的下游调用（驱动侧的远端请求）
 		// 会随 ctx 取消而失败（"context canceled"），缩略图永远无法生成。
 		utils.Go(func() {
 			service.RegenerateThumbnail(context.Background(), file)
@@ -576,7 +576,7 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	// 4.1 更新文件访问时间
 	utils.Go(func() { service.UpdateFileAccess(fileID) })
 
-	// 4.2 处理 Telegram 大文件预下载状态
+	// 4.2 处理"预下载中"的响应
 	//
 	// 必须和 PreviewFileHandler / DownloadFileHandler 保持一致：此时 result.Reader
 	// 是 nil（service 只回状态，后台已异步预下载），继续往下走会在
@@ -600,7 +600,7 @@ func RawFilePreviewHandler(w http.ResponseWriter, r *http.Request) {
 // 服务端不阻塞请求（bot-api 拉 30MB+ 可能几十秒），而是触发异步预下载并立即返回本响应。
 // 缓存完成后（cache_status=CACHED）同一个请求会正常流式返回。
 //
-// 三个流式 handler 都必须走这里，漏一个就是 nil Reader → HTTP PANIC（见 BUGS.md）。
+// 三个流式 handler 都必须走这里，漏一个就是 nil Reader → HTTP PANIC。
 func respondPreDownload(w http.ResponseWriter, data map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", "5")

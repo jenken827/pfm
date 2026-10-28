@@ -174,13 +174,14 @@ func TestWebUIAssetsHaveNoExternalReferences(t *testing.T) {
 
 // 文本预览白名单必须与客户端 Dart 版一致：两端对"哪些文件按文本打开"不能有分叉。
 //
-// 这里直接读 `frontend/lib/utils/text_preview.dart` 做集合比对——它是同一仓库的
-// 唯一真理源；改一处忘了另一处会在这里红掉。
+// Dart 白名单在独立仓库 pfm-frontend 里（客户端已从本仓库拆出），所以这里按
+// PFM_FRONTEND_DIR 找（默认同级目录 ../pfm-frontend）；没克隆前端仓库时跳过——
+// 跨仓库一致性只能在前端仓库就在手边时校验，别让它变成"后端 CI 必红"。
 func TestTextWhitelistParityWithDart(t *testing.T) {
-	dartPath := filepath.Join("..", "frontend", "lib", "utils", "text_preview.dart")
+	dartPath := filepath.Join(frontendDir(), "lib", "utils", "text_preview.dart")
 	dartSrc, err := os.ReadFile(dartPath)
 	if err != nil {
-		t.Fatalf("读取 Dart 白名单失败（工作目录应为 server/）：%v", err)
+		t.Skipf("跳过：读不到 %s（设置 PFM_FRONTEND_DIR 指向 pfm-frontend 克隆目录才会校验）", dartPath)
 	}
 	jsSrc, err := fs.ReadFile(webUIFS, "webui/js/text_preview.js")
 	if err != nil {
@@ -202,6 +203,16 @@ func TestTextWhitelistParityWithDart(t *testing.T) {
 			t.Errorf("%s 只在 JS 里：%v", c.jsName, diff)
 		}
 	}
+}
+
+// frontendDir 前端仓库目录：优先 PFM_FRONTEND_DIR，默认与本仓库同级的 pfm-frontend
+//
+// 测试的工作目录是本包目录（server/），所以默认值要往上两级。
+func frontendDir() string {
+	if dir := os.Getenv("PFM_FRONTEND_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join("..", "..", "pfm-frontend")
 }
 
 // extractSet 从 Dart 的 `name = { 'a', 'b' };` 或 JS 的 `name = new Set([ 'a' ]);` 里取字符串集合

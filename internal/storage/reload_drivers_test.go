@@ -7,11 +7,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -52,9 +52,9 @@ func TestReloadDriversRebuildsInstances(t *testing.T) {
 	t.Cleanup(func() { types.ClearDriverOverride(driverID) })
 
 	// 内置注册：模拟「插件加载前」的实例
-	types.RegisterStorageDriverWithMetadata(func(*entity.StorageProviderORM) (types.StorageDriver, error) {
+	types.RegisterStorageDriverWithMetadata(func(*types.Provider) (types.StorageDriver, error) {
 		return &markerDriver{tag: "before"}, nil
-	}, &native.DriverInfo{DriverId: proto.String(driverID)})
+	}, &abi.DriverInfo{DriverId: proto.String(driverID)})
 
 	sps, err := db.GetEnabledProviders()
 	if err != nil {
@@ -71,9 +71,9 @@ func TestReloadDriversRebuildsInstances(t *testing.T) {
 	}
 
 	// 模拟插件热加载：覆盖层换成新构造器
-	types.SetDriverOverride(func(*entity.StorageProviderORM) (types.StorageDriver, error) {
+	types.SetDriverOverride(func(*types.Provider) (types.StorageDriver, error) {
 		return &markerDriver{tag: "after"}, nil
-	}, &native.DriverInfo{DriverId: proto.String(driverID)})
+	}, &abi.DriverInfo{DriverId: proto.String(driverID)})
 
 	rebuilt, err := ReloadDrivers(map[string]struct{}{driverID: {}})
 	if err != nil {
@@ -105,9 +105,9 @@ func TestReloadDriversIgnoresUntouchedDrivers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("创建 provider 失败: %v", err)
 	}
-	types.SetDriverOverride(func(*entity.StorageProviderORM) (types.StorageDriver, error) {
+	types.SetDriverOverride(func(*types.Provider) (types.StorageDriver, error) {
 		return &markerDriver{tag: "other"}, nil
-	}, &native.DriverInfo{DriverId: proto.String(otherDriverID)})
+	}, &abi.DriverInfo{DriverId: proto.String(otherDriverID)})
 	if err := createAndStoreDriver(&entity.StorageProviderORM{
 		Id:       otherID,
 		DriverId: utils.StringPtr(otherDriverID),

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 )
 
 func TestParseContentRangeTotal(t *testing.T) {
@@ -98,11 +98,11 @@ func TestDirectLinkLocationVerdict(t *testing.T) {
 		state    directLinkDriverState
 		wantOK   bool
 	}{
-		{"单副本明文且驱动就绪", []*entity.FileLocationORM{loc(3, false)}, "YUN139", directLinkDriverReady, true},
-		{"驱动不支持（telegram/local）", []*entity.FileLocationORM{loc(2, false)}, "TELEGRAM", directLinkDriverNoCapability, false},
-		{"提供者未启用", []*entity.FileLocationORM{loc(4, false)}, "PAN123", directLinkDriverMissing, false},
-		{"多分片", []*entity.FileLocationORM{loc(2, false), loc(2, false)}, "TELEGRAM", directLinkDriverReady, false},
-		{"已加密", []*entity.FileLocationORM{loc(4, true)}, "ALIYUNDRIVE_OPEN", directLinkDriverReady, false},
+		{"单副本明文且驱动就绪", []*entity.FileLocationORM{loc(3, false)}, "driver_a", directLinkDriverReady, true},
+		{"驱动不支持（未声明 DIRECT_LINK 能力）", []*entity.FileLocationORM{loc(2, false)}, "driver_b", directLinkDriverNoCapability, false},
+		{"提供者未启用", []*entity.FileLocationORM{loc(4, false)}, "driver_c", directLinkDriverMissing, false},
+		{"多分片", []*entity.FileLocationORM{loc(2, false), loc(2, false)}, "driver_b", directLinkDriverReady, false},
+		{"已加密", []*entity.FileLocationORM{loc(4, true)}, "driver_d", directLinkDriverReady, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

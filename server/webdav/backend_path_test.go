@@ -3,8 +3,8 @@ package webdav
 import (
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 )
 
 // WebDAV 的 href 必须是「客户端可见路径」。本 handler 挂在 /dav/ 且被

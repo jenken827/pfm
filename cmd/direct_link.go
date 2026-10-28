@@ -11,15 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/spf13/cobra"
 	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器（取直链需要）
-	"jenken827.com/jenken827/pfm/driver/types"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // 本文件是"直链下载"的**打表工具**：把某个文件在各存储提供者上的直链取出来，
@@ -27,7 +28,7 @@ import (
 //
 // 它只调用驱动的 types.DirectLinker 能力，不经过 service/api —— 服务端直链接口
 // 的资格判定（单分片 / 未加密 / provider 白名单）尚未实现，本工具的输出用于验证
-// 各提供者的直链是否真的能被客户端使用（见 DESIGN.md §17）。
+// 各提供者的直链是否真的能被客户端使用。
 //
 // ⚠ 输出里含临时下载凭证（URL 自带鉴权）：不要贴进 issue / 日志 / 提交。
 
@@ -80,7 +81,7 @@ var directLinkCmd = &cobra.Command{
 	Use:   "direct-link",
 	Short: "取文件在存储提供者上的下载直链（打表/验证用，不经过服务端中转）",
 	Long: `取指定文件在各存储提供者上的**直链**，用于验证「非加密、单分片文件绕过服务端中转」
-是否可行（设计见 DESIGN.md §17）。
+是否可行。
 
 默认遍历该文件所有完整副本的提供者，逐行打印：直链、客户端必需请求头、驱动声明的有效期与
 Range 支持、是否满足直链条件（单分片 + 未加密）。
@@ -232,11 +233,11 @@ func buildDirectLinkRow(ctx context.Context, providerID uint32,
 	}
 	linker, ok := drv.(types.DirectLinker)
 	if !ok {
-		row.IneligibleReason = fmt.Sprintf("%s 驱动未声明 DIRECT_LINK 能力（如 telegram/local）", row.DriverId)
+		row.IneligibleReason = fmt.Sprintf("%s 驱动未声明 DIRECT_LINK 能力", row.DriverId)
 		return row
 	}
 
-	link, err := linker.DirectLink(ctx, types.FileRefsFromLocations(locs)[0])
+	link, err := linker.DirectLink(ctx, ormconv.FileRefsFromLocations(locs)[0])
 	if err != nil {
 		row.Error = err.Error()
 		return row

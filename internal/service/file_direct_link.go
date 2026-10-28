@@ -4,19 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"jenken827.com/jenken827/pfm/driver/types"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
-// 本文件实现"直链下载"的服务端判定与下发（设计见 DESIGN.md §17）。
+// 本文件实现"直链下载"的服务端判定与下发。
 //
 // 直链 = 存储提供者签发的、自带时效与鉴权的下载地址。满足全部硬性条件的文件，
 // 客户端可以绕开服务端中转直接下载（服务端上行带宽是当前瓶颈）。
@@ -24,7 +26,7 @@ import (
 // 硬性条件（任一不满足即返回 DIRECT_LINK_UNAVAILABLE，客户端静默回退代理下载）：
 //  1. 该提供者上恰好 1 条完整位置行（多分片是多个物理对象，一个 URL 表达不了拼接）
 //  2. 位置行未加密（密文必须由持密钥的服务端解密，密钥不下发）
-//  3. 驱动实现 types.DirectLinker（telegram / local 有意不实现）
+//  3. 驱动实现 types.DirectLinker（没实现 = 不支持直链，回落代理下载）
 //  4. 提供者类型在配置白名单内（transfer.direct_link.providers，留空 = 不限制）
 //
 // ⚠ 直链是临时凭证：不要写日志、不要落库、不要进错误信息。
@@ -61,7 +63,7 @@ func GetFileDirectLink(ctx context.Context, req *native.DirectLinkFileReq) (*nat
 	if !ok {
 		return nil, directLinkUnavailable(fmt.Sprintf("提供者 %d 的驱动不支持直链", providerID))
 	}
-	link, err := linker.DirectLink(ctx, types.FileRefsFromLocations(providerLocations)[0])
+	link, err := linker.DirectLink(ctx, ormconv.FileRefsFromLocations(providerLocations)[0])
 	if err != nil {
 		// 底层错误可能带 URL 等凭证，只记服务端日志，不回给客户端
 		llog.C(ctx).Errorf("get direct link failed, file_id: %s, provider: %d, err: %v", fileID, providerID, err)
@@ -198,7 +200,9 @@ func directLinkProviderAllowed(providerID uint32) bool {
 	}
 	driverID := *sp.DriverId
 	for _, allowed := range whitelist {
-		if types.NormalizeDriverID(allowed) == driverID {
+		// 白名单里写驱动身份（storage_providers.provider_type 的值）；大小写与首尾
+		// 空白容忍一下，别的一律不猜（不做"旧枚举名"之类的模糊匹配）。
+		if strings.EqualFold(strings.TrimSpace(allowed), driverID) {
 			return true
 		}
 	}

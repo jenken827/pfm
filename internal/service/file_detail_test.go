@@ -4,17 +4,17 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"jenken827.com/jenken827/pfm/driver/local"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
 // 文件详情「位置分布」里的 provider 名必须是**存储实例名**（storage_providers.name），
-// 而不是驱动类型名——各驱动的 GetName() 返回的是类型字符串（LocalDriver 返回 "LOCAL"、
-// Telegram 返回 "TELEGRAM"…），同类型多实例时无法区分，用户也就无法判断该从哪个源下载。
+// 而不是驱动类型名——各驱动的 GetName() 返回的是类型字符串（如 "LOCAL"），
+// 同类型多实例时无法区分，用户也就无法判断该从哪个源下载。
 //
 // 本用例不初始化运行时驱动（storage.GetStorage 返回 nil），因此也顺带验证了
 // 实例名来自 DB 而不是 driver。
@@ -27,7 +27,7 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 	const instanceName = "我的本地盘"
 	provider := &entity.StorageProviderORM{
 		Name:     utils.StringPtr(instanceName),
-		DriverId: utils.StringPtr(types.DriverLocal),
+		DriverId: utils.StringPtr(local.DriverID),
 		Config:   utils.StringPtr(`{"root_path":"/tmp/x"}`),
 		Enabled:  utils.BoolPtr(true),
 	}
@@ -81,8 +81,8 @@ func TestGetFileDetailUsesProviderInstanceName(t *testing.T) {
 		t.Errorf("ProviderName = %q, want 实例名 %q（不能用驱动类型名）",
 			got.GetProviderName(), instanceName)
 	}
-	if got.GetDriverId() != types.DriverLocal {
-		t.Errorf("DriverId = %q, want %s", got.GetDriverId(), types.DriverLocal)
+	if got.GetDriverId() != local.DriverID {
+		t.Errorf("DriverId = %q, want %s", got.GetDriverId(), local.DriverID)
 	}
 	if got.GetStatus() != native.LocationStatus_PCOMPLETED {
 		t.Errorf("Status = %v, want PCOMPLETED", got.GetStatus())

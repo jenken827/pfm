@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/internal/config"
@@ -14,8 +16,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 	"jenken827.com/jenken827/pfm/pkg/sharelink"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 const (

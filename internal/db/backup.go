@@ -3,11 +3,11 @@ package db
 import (
 	"context"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/driver/types"
+	"jenken827.com/jenken827/pfm/driver/local"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // ==================== BackupTask ====================
@@ -354,7 +354,7 @@ func DeleteBackupFileRecordsByTaskID(taskID uint64) error {
 func GetLocalProviderID() (uint32, error) {
 	ctx := context.Background()
 	var provider entity.StorageProviderORM
-	err := db.WithContext(ctx).Where("provider_type = ? AND enabled = ?", types.DriverLocal, true).First(&provider).Error
+	err := db.WithContext(ctx).Where("provider_type = ? AND enabled = ?", local.DriverID, true).First(&provider).Error
 	if err != nil {
 		return 0, err
 	}

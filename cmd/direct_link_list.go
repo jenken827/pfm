@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"sort"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // 本文件实现 direct-link 的 --list 模式：列出最近的若干文件，并标注每个文件在各提供者上
@@ -174,7 +174,7 @@ type directLinkDriverState int
 const (
 	// directLinkDriverReady 已启用且驱动实现了 DirectLinker
 	directLinkDriverReady directLinkDriverState = iota
-	// directLinkDriverNoCapability 已启用但驱动未实现（telegram/local 有意如此）
+	// directLinkDriverNoCapability 已启用但驱动没实现直链（没声明 DIRECT_LINK 能力）
 	directLinkDriverNoCapability
 	// directLinkDriverMissing 未启用 / 未初始化成功，拿不到存储实例
 	directLinkDriverMissing
@@ -198,7 +198,7 @@ func directLinkLocationVerdict(locs []*entity.FileLocationORM, typeName string,
 		}
 		return fmt.Sprintf("%s ⚠️ 提供者未启用或初始化失败（%s）", label, reason), false
 	case directLinkDriverNoCapability:
-		return fmt.Sprintf("%s ❌ 驱动未实现直链（telegram/local）", label), false
+		return fmt.Sprintf("%s ❌ 驱动未实现直链（未声明 DIRECT_LINK 能力）", label), false
 	}
 	if !eligible {
 		return fmt.Sprintf("%s ❌ %s", label, reason), false

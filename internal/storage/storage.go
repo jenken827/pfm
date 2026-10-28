@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"golang.org/x/sync/syncmap"
-	"jenken827.com/jenken827/pfm/driver/types"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // storages 存储实例映射
@@ -74,17 +76,17 @@ func createAndStoreDriver(sp *entity.StorageProviderORM) error {
 		return fmt.Errorf("storage provider driver not installed: driver_id=%s", driverID)
 	}
 
-	ins, err := dc(sp)
+	ins, err := dc(ormconv.ProviderFromORM(sp))
 	if err != nil {
 		llog.L().Errorf("create storage provider failed, err: %v", err)
 		return err
 	}
 
-	// 注入缓存状态更新器（telegram 等需要，避免驱动直接依赖 db 层）
+	// 注入缓存状态更新器（驱动需要，避免驱动直接依赖 db 层）
 	if setter, ok := ins.(types.CacheUpdaterSetter); ok {
 		setter.SetCacheUpdater(dbCacheUpdater{})
 	}
-	// 注入配置持久化器（baidu token 刷新等需要）
+	// 注入配置持久化器（驱动刷新凭据时需要）
 	if setter, ok := ins.(types.ConfigPersisterSetter); ok {
 		setter.SetConfigPersister(dbConfigPersister{})
 	}
@@ -162,8 +164,8 @@ func EnsureProvider(id uint32) (types.StorageDriver, error) {
 // dbCacheUpdater 基于 db 层的缓存状态更新器
 type dbCacheUpdater struct{}
 
-func (dbCacheUpdater) UpdateCacheStatus(locationID uint64, status native.CacheStatus) error {
-	return db.UpdateFileLocationCacheStatus(locationID, status)
+func (dbCacheUpdater) UpdateCacheStatus(locationID uint64, status abi.CacheStatus) error {
+	return db.UpdateFileLocationCacheStatus(locationID, native.CacheStatus(status))
 }
 
 // dbConfigPersister 基于 db 层的配置持久化器

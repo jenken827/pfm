@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // GetUserSpaceByUserID 根据用户ID获取用户空间信息

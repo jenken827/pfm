@@ -1,6 +1,10 @@
 module jenken827.com/jenken827/pfm
 
-go 1.25.1
+go 1.26.0
+
+require github.com/jenken827/pfm-plugin-sdk v0.1.0
+
+require github.com/jenken827/pfm-proto v0.1.0
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1
@@ -12,18 +16,17 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	golang.org/x/crypto v0.48.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.41.0
-	golang.org/x/net v0.51.0
-	golang.org/x/sync v0.20.0
-	golang.org/x/term v0.40.0
+	golang.org/x/net v0.60.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/term v0.47.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/mysql v1.6.0
@@ -63,8 +66,8 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260223185530-2f722ef697dc // indirect
 	modernc.org/libc v1.22.5 // indirect
@@ -72,3 +75,9 @@ require (
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
+
+// 插件 SDK 的本地开发依赖：SDK 发布到远端后删掉这行，改为按 tag 解析。
+replace github.com/jenken827/pfm-plugin-sdk => ../pfm-plugin-sdk
+
+// 应用侧 proto 的本地开发依赖：pfm-proto 发布到远端后删掉这行，改为按 tag 解析。
+replace github.com/jenken827/pfm-proto => ../pfm-proto

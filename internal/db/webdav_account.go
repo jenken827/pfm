@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // ===== WebDAV 独立账号 CRUD =====

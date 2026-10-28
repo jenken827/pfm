@@ -1,6 +1,6 @@
 package models
 
-import "jenken827.com/jenken827/pfm/proto/gen/native"
+import "github.com/jenken827/pfm-proto/proto/gen/native"
 
 // Err 错误类型
 type Err struct {

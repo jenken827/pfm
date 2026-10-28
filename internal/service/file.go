@@ -7,15 +7,16 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/driver/types"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -656,7 +657,7 @@ func batchDeleteFromProvider(
 		return
 	}
 
-	results, err := batchDeleter.BatchDelete(ctx, types.FileRefsFromLocations(locations))
+	results, err := batchDeleter.BatchDelete(ctx, ormconv.FileRefsFromLocations(locations))
 
 	// 全部成功
 	if results == nil && err == nil {
@@ -702,13 +703,9 @@ func batchDeleteFromProvider(
 			if loc.Id != nil {
 				failedIDs = append(failedIDs, *loc.Id)
 			}
-			// 部分失败原因多为 Telegram 老消息(>48h API 禁止) 或百度 errno=12 参数错误
-			// 等平台/驱动侧"已知预期"，降为 warning；新错误保持 error 让监控感知
-			errStr := ""
-			if result.Error != nil {
-				errStr = result.Error.Error()
-			}
-			if isExpectedDeleteFailure(errStr) {
+			// 驱动标记为 Permanent 的失败（远端硬限制 / 参数错误）降为 warning，
+			// 其余保持 error 让监控感知；判断完全由驱动给出，宿主不认识具体平台。
+			if result.Permanent || types.IsPermanent(result.Error) {
 				llog.C(ctx).Warnf("delete location %d failed (will keep record): %v", *loc.Id, result.Error)
 			} else {
 				llog.C(ctx).Errorf("delete location %d failed: %v", *loc.Id, result.Error)
@@ -716,24 +713,6 @@ func batchDeleteFromProvider(
 		}
 	}
 	return
-}
-
-// isExpectedDeleteFailure 判别是否为"已知预期"的删除失败：Telegram 老消息或百度 errno=12
-// 这些是平台硬限制或参数错误，重复尝试不会改变结果，记为 warning 即可
-func isExpectedDeleteFailure(errStr string) bool {
-	if errStr == "" {
-		return false
-	}
-	knownSubstrings := []string{
-		"message can't be deleted", // Telegram >48h
-		"errno=12",                 // 百度网盘参数错误
-	}
-	for _, s := range knownSubstrings {
-		if strings.Contains(errStr, s) {
-			return true
-		}
-	}
-	return false
 }
 
 // deleteFilesFromProviders 从存储提供者批量删除文件（内部函数）

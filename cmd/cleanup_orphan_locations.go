@@ -21,7 +21,7 @@ import (
 // 或删除流程中途失败的遗留（DELETED_FAILED）等。
 //
 // 处理方式：按 hash 调用 service.ReclaimOrphanHashStorage——真实调用各提供者
-// 驱动（local / telegram / baidu…）删除物理副本，成功后删 file_locations 行
+// 由各提供者的驱动删除物理副本，成功后删 file_locations 行
 // 并扣减容量；删除失败的行标记 DELETED_FAILED 保留待重试。
 //
 // 安全性：只处理 files + file_histories 都无引用的 hash，活跃文件绝不受影响；
@@ -32,7 +32,7 @@ var cleanupOrphanLocationsCmd = &cobra.Command{
 	Long: `扫描 file_locations 中按 blake3_hash 关联后、files 与 file_histories
 都没有任何记录引用的孤儿行（不限提供者、不限状态），逐 hash 回收：
 
-  1. 调用各提供者驱动（local/telegram/baidu…）批量删除物理副本
+  1. 调用各提供者驱动批量删除物理副本
      - 删除失败的行为标记 DELETED_FAILED 保留待重试
   2. 删除已成功的 file_locations 行
   3. 扣减各提供者的已用容量统计

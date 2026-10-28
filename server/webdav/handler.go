@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	gowebdav "github.com/emersion/go-webdav"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // Handler WebDAV HTTP handler

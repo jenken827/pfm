@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"golang.org/x/image/draw"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // 头像规格常量

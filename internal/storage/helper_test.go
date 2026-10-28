@@ -3,8 +3,8 @@ package storage
 import (
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 )
 
 func int32Ptr(v int32) *int32    { return &v }

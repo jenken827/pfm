@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 )
 
 // 复用旧上传记录的字段刷新：version 必须换成"本次请求"发号得到的值。

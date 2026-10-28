@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 )
 
 // GetFileType 根据文件内容或扩展名获取文件类型

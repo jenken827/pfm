@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"github.com/robfig/cron/v3"
 	ignore "github.com/sabhiram/go-gitignore"
 	"gorm.io/gorm"
@@ -18,8 +20,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/fileutil"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 	"lukechampine.com/blake3"
 )
@@ -304,7 +304,7 @@ func (s *BackupScheduler) consumeRegisters() {
 
 // registerFile 注册文件（核心逻辑）
 // 备份文件统一通过 storage.Dispatch 上传到目标目录绑定的所有存储提供者
-// 无论是 local 还是 telegram，都通过各自驱动的 Upload 方法物理写入文件
+// 不管落到哪个驱动，都通过它们各自的 Upload 方法物理写入文件
 func (s *BackupScheduler) registerFile(item *BackupRegisterItem) {
 	ctx := context.Background()
 	task := item.Task

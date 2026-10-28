@@ -1,26 +1,24 @@
 package local
 
 import (
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 )
 
 // LocalDriver  storage driver for local
 type LocalDriver struct {
 	Config         *native.LocalDriverConfig
-	Orm            *entity.StorageProviderORM
 	ProviderConfig types.ProviderConfig
 }
 
 // GetType 获取驱动类型
 func (t *LocalDriver) GetType() string {
-	return types.DriverLocal
+	return DriverID
 }
 
 // GetName 获取驱动名称
 func (t *LocalDriver) GetName() string {
-	return types.DriverLocal
+	return DriverID
 }
 
 // GetConfig 获取驱动配置

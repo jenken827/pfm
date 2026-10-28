@@ -3,8 +3,8 @@ package db
 import (
 	"context"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // IsAdmin 检查用户是否为管理员。

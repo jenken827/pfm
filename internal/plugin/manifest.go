@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 )
 
 // manifest 插件目录里的 plugin.json
@@ -26,7 +26,7 @@ type manifest struct {
 	Exec string `json:"exec"`
 	// AbiVersion 插件编译时使用的协议版本
 	AbiVersion uint32 `json:"abi_version"`
-	// Name 插件包名（如 pfm-baidu），仅用于展示
+	// Name 插件包名（如 pfm-plugin-driver-xxx），仅用于展示
 	Name string `json:"name"`
 	// Version 插件版本，仅用于展示
 	Version string `json:"version"`

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"gorm.io/gorm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // UpdateFileTagsImpl 更新文件标签的内部实现

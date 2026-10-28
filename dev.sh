@@ -21,18 +21,15 @@ show_help() {
   build          编译 Go 服务器（自动注入版本号）
   run            编译并运行服务器
   deploy         发布到目标目录（编译 + 调用 scripts/deploy.sh；需 PFM_* 环境变量）
-  proto          生成 protobuf 代码（Go + Dart）
-  proto-go       仅生成 Go protobuf 代码
-  proto-dart     仅生成 Dart protobuf 代码
+  proto          已移除：Go 消息与 GORM 实体都在 pfm-proto 仓库生成（本命令只打印指路）
+  proto-go       同上（旧名）
+  proto-dart     同上（Dart 代码也在 pfm-proto 仓库生成）
   test           运行所有测试（Go）
   test-web       运行 Web UI 测试（node:test，假 DOM，无需浏览器）
   test-cover     运行测试并生成覆盖率报告
   tidy           执行 go mod tidy
   lint           运行 golangci-lint 代码检查
   clean          清理构建产物
-  flutter        执行 Flutter 开发任务（见 flutter help）
-  native         构建 BLAKE3 原生库（可选加速；host / android / android-multi / clean）
-  flutter-clean  清理 Flutter 构建缓存
   help           显示此帮助信息
 
 选项:
@@ -56,9 +53,7 @@ show_help() {
   $0 run                          # 编译并运行
   $0 deploy                       # 发布到目标目录（需 PFM_* 环境变量，见 README §3）
   $0 dev                          # 开发模式运行（不编译）
-  $0 proto                        # 生成所有 protobuf 代码
-  $0 proto-go                     # 仅生成 Go protobuf 代码
-  $0 proto-dart                   # 仅生成 Dart protobuf 代码
+  $0 proto                        # 只打印指路：代码在 pfm-proto 仓库生成
   $0 test                         # 运行测试（Go）
   $0 test-web                     # 运行 Web UI 测试（node:test）
   $0 test -v                      # 详细输出
@@ -68,11 +63,10 @@ show_help() {
   $0 lint                         # 代码检查
   $0 lint --fix                   # 自动修复
   $0 clean                        # 清理构建产物
-  $0 flutter-clean                # 清理 Flutter 构建缓存
 
 注意:
   - build 和 run 命令会自动从 git commit hash 和日期生成版本号
-  - proto 命令需要在 proto/ 目录下执行 buf generate
+  - buf / protoc-gen-* 只在 pfm-proto 仓库用得到；本仓库只要 go，且 go.mod 能解析 pfm-proto
   - 项目模块路径: jenken827.com/jenken827/pfm
 EOF
 }
@@ -208,40 +202,17 @@ cmd_dev() {
     go run . server -d ./data
 }
 
-# 生成所有 protobuf 代码
-cmd_proto() {
-    echo "📦 生成所有 protobuf 代码..."
-    check_command "buf"
-    cmd_proto_go
-    cmd_proto_dart
-    echo "✅ 所有 protobuf 代码生成完成！"
-}
-
-# 仅生成 Go protobuf 代码
-cmd_proto_go() {
-    echo "📦 生成 Go protobuf 代码..."
-    check_command "buf"
-    check_command "protoc-gen-go"
-    check_command "protoc-gen-sgorm"
-
-    cd "$SCRIPT_DIR/proto"
-    buf generate
-    cd "$SCRIPT_DIR"
-
-    echo "✅ Go protobuf 代码生成完成！"
-}
-
-# 仅生成 Dart protobuf 代码
-cmd_proto_dart() {
-    echo "📦 生成 Dart protobuf 代码..."
-    check_command "buf"
-    # 跳过 protoc-gen-dart 检测（在 Windows 上会卡住）
-
-    cd "$SCRIPT_DIR/proto"
-    buf generate --template buf.gen.dart.yaml
-    cd "$SCRIPT_DIR"
-
-    echo "✅ Dart protobuf 代码生成完成！"
+# proto 代码一律在 pfm-proto 仓库生成（含 GORM 实体），宿主只消费
+#
+# 本仓库不再有 proto 源、也不再生成任何代码：
+#   - 数据结构（native/*.pb.go）与 GORM 实体（entity/*.sgorm.go）都由
+#     github.com/jenken827/pfm-proto 生成并入库，这里按模块依赖直接使用；
+#   - 于是 clone 下来 `go build` 就能编译，不需要 buf / protoc-gen-* 工具链。
+proto_hint() {
+    echo "ℹ️ 本仓库不生成 proto 代码：Go 消息与 GORM 实体都在 pfm-proto 仓库生成并入库。" >&2
+    echo "   改了 .proto 之后在那里跑：" >&2
+    echo "     cd ../pfm-proto && ./dev.sh proto" >&2
+    echo "   再回来升级依赖（远端发布后用 go get github.com/jenken827/pfm-proto@<新版本>）。" >&2
 }
 
 # 运行测试
@@ -385,39 +356,12 @@ cmd_clean() {
     echo "✅ 清理完成！"
 }
 
-# Flutter 清理构建缓存
-cmd_flutter_clean() {
-    echo "🧹 清理 Flutter 构建缓存..."
-    check_command "puro"
-    cd "$SCRIPT_DIR/frontend"
-    puro flutter clean
-    echo "✅ Flutter 缓存清理完成！"
-}
-
-# 构建 BLAKE3 原生库（Dart FFI 加速，见 DESIGN.md §14.12.4）。
-# 可选步骤：缺 Rust / NDK 时只影响哈希吞吐，App 会退回纯 Dart。
-cmd_native() {
-    cd "$SCRIPT_DIR/frontend"
-    if [[ ! -f "native/build_native.sh" ]]; then
-        echo "❌ 错误: frontend/native/build_native.sh 不存在"
-        exit 1
-    fi
-    bash native/build_native.sh "$@"
-}
-
-# Flutter 开发任务
-cmd_flutter() {
-    cd "$SCRIPT_DIR/frontend"
-    if [[ ! -f "dev.sh" ]]; then
-        echo "❌ 错误: frontend/dev.sh 不存在"
-        exit 1
-    fi
-
-    if [[ "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
-        bash dev.sh help
-    else
-        bash dev.sh "$@"
-    fi
+# 前端（Flutter）已拆到独立仓库 pfm-frontend：构建 / 原生库 / 静态检查都在那边
+# 用它自己的 dev.sh（`bash dev.sh help`）。这里只留一句提示，避免误以为还能从这里构建。
+cmd_frontend_hint() {
+    echo "❌ 前端已拆到独立仓库 pfm-frontend（与本仓库同级目录）" >&2
+    echo "   跑：cd ../pfm-frontend && bash dev.sh help" >&2
+    exit 1
 }
 
 # ============================================================
@@ -441,14 +385,10 @@ case "$ACTION" in
     dev)
         cmd_dev
         ;;
-    proto)
-        cmd_proto
-        ;;
-    proto-go)
-        cmd_proto_go
-        ;;
-    proto-dart)
-        cmd_proto_dart
+    proto|proto-go|proto-dart)
+        # proto 代码（含 GORM 实体）在 pfm-proto 仓库生成并入库，这里只指路（rc=0，
+        # 免得把它当"生成成功"用；需要生成就去那个仓库）。
+        proto_hint
         ;;
     test)
         cmd_test "$@"
@@ -468,14 +408,8 @@ case "$ACTION" in
     clean)
         cmd_clean
         ;;
-    flutter-clean)
-        cmd_flutter_clean
-        ;;
-    flutter)
-        cmd_flutter $FLUTTER_ARGS
-        ;;
-    native)
-        cmd_native "$@"
+    flutter|flutter-clean|native)
+        cmd_frontend_hint
         ;;
     help|--help|-h)
         show_help

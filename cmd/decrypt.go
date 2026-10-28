@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/jenken827/pfm-plugin-sdk/driver/cryptostream"
 	"io"
-	"jenken827.com/jenken827/pfm/driver/cryptostream"
 	"os"
 
 	"github.com/spf13/cobra"

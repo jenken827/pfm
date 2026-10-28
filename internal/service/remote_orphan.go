@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
 )
 
 // ErrRemoteListUnsupported 该提供者只支持按对象 ID 读写，没有目录树可枚举
-// （典型：Telegram 只能按 message id 取文件）。
+// （典型：只能按消息 ID 取文件的驱动）。
 var ErrRemoteListUnsupported = errors.New("该存储提供者不支持远端目录枚举")
 
 // remoteScanMaxDepth 远端递归深度上限，防脏数据造成的目录环

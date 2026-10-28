@@ -10,12 +10,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"jenken827.com/jenken827/pfm/driver/cryptostream"
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/cryptostream"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -309,7 +309,7 @@ func getUploadContext(ur *entity.UploadRecordORM) (fileName, parentID string, fi
 // 不能把新内容误标为就绪。
 //
 // 注意 ur.Version 必须是**本次上传**发号得到的版本：复用旧 upload record 时若
-// 不刷新版本号，CAS 会静默命中 0 行，文件永远停在"未就绪"（见 BUGS.md）。
+// 不刷新版本号，CAS 会静默命中 0 行，文件永远停在"未就绪"。
 func markFileReadyIfVersionMatches(ctx context.Context, ur *entity.UploadRecordORM) {
 	if ur.ParentId == nil || *ur.ParentId == "" || ur.FileName == nil || *ur.FileName == "" {
 		return

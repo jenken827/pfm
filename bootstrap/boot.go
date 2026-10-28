@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"jenken827.com/jenken827/pfm/internal/auth"
 	"jenken827.com/jenken827/pfm/internal/backup"
 	"jenken827.com/jenken827/pfm/internal/config"

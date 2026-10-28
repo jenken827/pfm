@@ -26,9 +26,10 @@ CHAT_ID="${TELEGRAM_CHAT_ID:?请设置 TELEGRAM_CHAT_ID（数字型目标会话 
 if [ -n "$1" ]; then
     APK_PATH="$1"
 else
-    # 自动查找本仓库最新的 arm64 APK
+    # 自动查找前端仓库最新的 arm64 交付包（release/ 优先，其次 build/）
     REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-    APK_PATH=$(ls -t "$REPO_DIR"/frontend/build/app/outputs/flutter-apk/*arm64*.apk 2>/dev/null | head -1)
+    FRONTEND_DIR="${PFM_FRONTEND_DIR:-$REPO_DIR/../pfm-frontend}"
+    APK_PATH=$(ls -t "$FRONTEND_DIR"/release/*arm64*.apk "$FRONTEND_DIR"/build/app/outputs/flutter-apk/*arm64*.apk 2>/dev/null | head -1)
 fi
 
 if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then

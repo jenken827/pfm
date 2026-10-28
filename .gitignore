@@ -2,22 +2,14 @@
 .vscode/
 .idea/
 .codebuddy
-proto/gen/
 data/
 pfm
 *.test
 apk
 .hermes/memory/MEMORY.md.lock
 
-# puro/flutter 构建会污染 lockfile, 移出版本控制
-frontend/pubspec.lock
-
 # 交付安装包（APK 等）：不进版本控制，也不许 git add
 /release/
-
-# BLAKE3 原生库（Dart FFI 加速）的构建产物：机器相关，不入版本控制
-frontend/native/blake3_ffi/target/
-frontend/android/app/src/main/jniLibs/
 
 # 构建脚本处理的临时备份（dev.sh 注入版本号/commit 时生成）
 *.backup

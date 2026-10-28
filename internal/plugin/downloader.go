@@ -7,10 +7,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
 )
 
 // downloaderCallTimeout 单次下载器 RPC 的等待上限（后端本身可能很慢，但别挂死宿主）
@@ -222,7 +222,7 @@ func (m *Manager) loadDownloader(ctx context.Context, dir string, mf *manifest, 
 	}
 
 	m.plugins = append(m.plugins, &loadedPlugin{
-		driverID: mf.DownloaderID, manifest: mf, dir: dir, proc: proc, metadata: &native.DriverInfo{},
+		driverID: mf.DownloaderID, manifest: mf, dir: dir, proc: proc, metadata: &abi.DriverInfo{},
 	})
 	llog.L().Infof("下载器插件已加载: downloader=%s name=%s version=%s backend=%s addr=%s pid=%d",
 		mf.DownloaderID, mf.Name, mf.Version, backendVersion, proc.addr, proc.pid)

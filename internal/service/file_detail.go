@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/models"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // GetFileDetail 获取文件详情
@@ -158,7 +158,7 @@ func groupLocationsByProvider(locations []*entity.FileLocationORM) []*native.Pro
 	// 实例名/类型批量取一次（避免逐 provider 查库）
 	//
 	// 注意不能用 st.GetName()：各驱动的 GetName() 返回的是**驱动身份**
-	// （local / telegram…），同驱动多实例无法区分；实例名在 storage_providers.name。
+	// 同一驱动的多实例无法区分；实例名在 storage_providers.name。
 	// provider 行已被删除（位置行还在）时回退到驱动身份。
 	ids := make([]uint32, 0, len(groupMap))
 	for id := range groupMap {

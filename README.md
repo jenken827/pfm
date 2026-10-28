@@ -86,14 +86,11 @@ flowchart TB
 │   ├── db/             # 数据访问层
 │   ├── storage/        # 上传调度、提供者解析、副本维护
 │   └── ...             # auth / config / download / thumbnail / backup
-├── driver/             # 存储驱动实现；types/ 为驱动接口与元数据注册
-├── plugin/sdk/         # 进程外插件 SDK（驱动 / 下载器后端都打成独立进程）
-├── proto/              # Protobuf 定义（数据结构唯一真理源，生成物不入库）
-├── frontend/           # Flutter 客户端
+├── driver/             # 内置存储驱动（只有 local）；orm/ 为宿主侧实体转换
 ├── cmd/                # cobra 子命令：server / user / plugin / cleanup-* 等
 ├── pkg/                # 通用库
 ├── config.example.yaml # 配置示例
-└── dev.sh              # 构建 / 运行 / 测试 / 代码生成统一入口
+└── dev.sh              # 构建 / 运行 / 测试统一入口（代码生成在契约仓库）
 ```
 
 ## 如何开发
@@ -103,38 +100,54 @@ flowchart TB
 | 组件 | 要求 | 用途 |
 |------|------|------|
 | Go | 1.25.1+ | 后端编译与测试 |
-| Flutter / Dart | Flutter 3.47+（Dart `^3.13.0`） | 客户端 |
+| pfm-plugin-sdk | 见下方说明 | 插件 ABI 与驱动值类型，宿主与插件共用的唯一契约 |
+| pfm-proto | 见下方说明 | 应用侧 protobuf：Go 数据结构 + GORM 实体 + Dart 包（都已入库，build 即可用） |
 | Node.js | 能跑 `node --test` 即可 | Web UI 测试（可选） |
-| buf + protoc-gen-go + protoc-gen-sgorm | 见下方安装命令 | 生成 Go / Dart 代码（首次克隆也要跑，生成物不入库） |
 | golangci-lint | 任意较新版本 | 代码检查（可选） |
-| Rust + Android NDK | 可选 | BLAKE3 原生加速，只影响上传哈希速度 |
+| Flutter / Dart | Flutter 3.47+（Dart `^3.13.0`） | 只有客户端仓库 `pfm-frontend` 需要 |
+| Rust + Android NDK | 可选 | 客户端 BLAKE3 原生加速（在 `pfm-frontend` 里构建） |
 | PostgreSQL / MySQL | 可选 | 默认 SQLite 是纯 Go 实现，无需额外安装 |
 
-```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install github.com/jenken827/protoc-gen-sgorm/cmd/protoc-gen-sgorm@v0.1.0
-```
+宿主**不生成任何代码**：`.proto`、Go 结构、GORM 实体、Dart 包都在 `pfm-proto` 仓库生成并入库。
+所以 `go build` 只需要 Go 本身——不需要 buf / protoc 系列工具；要改 proto 才需要那些，
+而且是在 `pfm-proto` 里用它的 `./dev.sh proto`。
 
 ### 上手
 
+契约与客户端都在独立仓库里，宿主按版本依赖它们（发布前用 `replace` 指向同级目录）：
+
+| 仓库 | 内容 | 本地位置 |
+|---|---|---|
+| `pfm-plugin-sdk` | 插件 ABI、驱动值类型、插件运行时 | 与 `pfm` 同级的 `pfm-plugin-sdk/` |
+| `pfm-proto` | 应用侧 protobuf（Go 数据结构 + GORM 实体 + Dart 包 `pfm_proto`） | 与 `pfm` 同级的 `pfm-proto/` |
+| `pfm-frontend` | Flutter 客户端 | 与 `pfm` 同级的 `pfm-frontend/` |
+
+```bash
+git clone <sdk-repo> pfm-plugin-sdk         # 后端编译必需
+git clone <proto-repo> pfm-proto            # 后端编译必需
+git clone <frontend-repo> pfm-frontend      # 只有做客户端时才需要
+```
+
 ```bash
 git clone <repo> && cd pfm
-bash dev.sh proto                       # 生成 proto/gen/（不入库，首次必须）
 cp config.example.yaml data/config.yaml # 按需改 db / server_url / sign_token
 bash dev.sh build                       # 编译为 ./pfm
 ./pfm -d ./data user add <用户名>        # 本地认证没有注册入口，用户需手动创建
 ./pfm server -d ./data                  # 启动服务；health 检查 /health
 ```
 
-客户端：
+客户端在独立仓库 `pfm-frontend`（Flutter），用它的 `dev.sh`：
 
 ```bash
-bash dev.sh flutter get             # 拉依赖（puro flutter pub get）
-bash dev.sh flutter build_runner    # 路由 / 序列化代码生成
-bash dev.sh flutter run windows     # 运行（设备名可省略，如 android / chrome）
+cd ../pfm-frontend
+bash dev.sh get                     # 拉依赖（puro flutter pub get）
+bash dev.sh build_runner            # 路由 / 序列化代码生成
+bash dev.sh run windows             # 运行（设备名可省略，如 android / chrome）
+bash dev.sh build android           # 构建 APK，产物另存 release/
 ```
 
-登录页填服务端地址，用上面创建的账号登录。其余常用任务（`build` / `run` / `dev` / `test` / `test-web` / `lint` / `clean` / `flutter build` 等）都由 `bash dev.sh` 分发，`bash dev.sh help` 可看全部。
+登录页填服务端地址，用上面创建的账号登录。后端这边常用任务（`build` / `run` / `test` /
+`test-web` / `lint` / `clean` / `proto` 等）都由 `bash dev.sh` 分发，`bash dev.sh help` 可看全部。
 
 构建产物是单个自包含的 Go 二进制，怎么常驻（systemd、容器、进程管理器…）由部署方决定；配置文件默认读 `<DataDir>/config.yaml`，也可用 `-c` 指定。改了 `server/webui/` 需要重新 `bash dev.sh build` 才会生效。
 
@@ -146,7 +159,7 @@ bash dev.sh flutter run windows     # 运行（设备名可省略，如 android 
 2. **实现必选接口** `types.StorageDriver`：`GetType` / `GetName` / `GetConfig` / `GetProviderConfig`，加上两个内容面能力——
    - `Upload`：把明文源文件写到提供者，返回 `[]FileRef`（大文件由驱动自己决定怎么分片）；
    - `Open`：按 `FileRef` 打开字节流，支持按 offset 裁剪以便断点续传与 Range 播放。
-   落到提供者的哪个物理目录也由驱动决定：`types.AllocateUploadDir` 配合 `DirBackend` 提供「年 / 月 / 数字子目录」分片，按 ID 寻址的提供者（如 Telegram）直接用自己的 ID 即可。
+   落到提供者的哪个物理目录也由驱动决定：`types.AllocateUploadDir` 配合 `DirBackend` 提供「年 / 月 / 数字子目录」分片，按 ID 寻址的提供者直接用自己的 ID 即可。
 3. **按需实现可选能力**（实现即生效，不实现也不影响基本可用）：
 
    | 能力 | 接口 | 作用 |
@@ -159,7 +172,10 @@ bash dev.sh flutter run windows     # 运行（设备名可省略，如 android 
 4. **注册**：在 `init()` 里 `types.RegisterStorageDriverWithMetadata(ctor, metadata)`，内置驱动在 `driver/driver.go` 里 import 一行即生效。
 5. **要独立分发就打成驱动插件**：加一个 `plugin.json`（`kind: "driver"` + `driver_id` + `exec` + `abi_version`），`main` 里 `func main() { sdk.MustServe("<driver_id>") }`；宿主打开 `plugin.enabled` 后通过 loopback RPC 调用同一个驱动。插件与宿主同权限运行，只应安装可信来源的二进制。装 / 删 / 回滚插件不用重启服务：`pfm plugin install` 会向运行中的实例发 `SIGHUP` 重新扫描插件目录并重建受影响的 provider（手工等价 `pfm plugin reload` 或 `kill -HUP <pid>`）。
 
-边界：驱动包只能依赖 `driver/types`、`proto/gen/*`、`pkg/*`、`utils`，不要 import `internal/*`，否则编不进独立插件进程。
+边界：驱动包只能依赖插件 SDK（`github.com/jenken827/pfm-plugin-sdk` 的 `driver/types`、
+`driver/cryptostream`、`pkg/crypt`、`plugin/sdk`、`proto/gen/abi`、`proto/gen/plugin`）和公共库，
+**不要 import 宿主模块的任何包**（`internal/*`、宿主的日志与配置包），也**不要** import
+`github.com/jenken827/pfm-proto`——那是后端与前端的应用侧契约，插件只要 SDK 的 ABI 类型。插件是独立进程、独立发布物，一旦依赖宿主内部实现，两个仓库就重新绑死了。
 
 ## 其他类型的插件
 

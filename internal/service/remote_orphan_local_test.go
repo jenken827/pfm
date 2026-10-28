@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
+	"jenken827.com/jenken827/pfm/driver/local"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/dbtest"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -23,7 +23,7 @@ func setupLocalProvider(t *testing.T, root string) uint32 {
 	if err := db.CreateStorageProvider(&entity.StorageProviderORM{
 		Id:       utils.Uint32Ptr(providerID),
 		Name:     utils.StringPtr("test-local-orphan"),
-		DriverId: utils.StringPtr(types.DriverLocal),
+		DriverId: utils.StringPtr(local.DriverID),
 		Config:   utils.StringPtr(fmt.Sprintf(`{"root_path":%q}`, root)),
 		Enabled:  utils.BoolPtr(true),
 	}); err != nil {
@@ -96,20 +96,20 @@ func TestLocalRemoteOrphanEndToEnd(t *testing.T) {
 	}
 }
 
-// TestScanRemoteOrphansUnsupportedProvider Telegram 无目录枚举能力，必须明确报错而不是静默空结果。
+// TestScanRemoteOrphansUnsupportedProvider 驱动没有目录枚举能力，必须明确报错而不是静默空结果。
 func TestScanRemoteOrphansUnsupportedProvider(t *testing.T) {
 	dbtest.Setup(t)
 	const providerID uint32 = 4243
 	if err := db.CreateStorageProvider(&entity.StorageProviderORM{
 		Id:       utils.Uint32Ptr(providerID),
-		Name:     utils.StringPtr("test-telegram-orphan"),
-		DriverId: utils.StringPtr(types.DriverTelegram),
-		Config:   utils.StringPtr(`{"bot_token":"x","chat_id":1}`),
+		Name:     utils.StringPtr("test-unsupported-orphan"),
+		DriverId: utils.StringPtr("driver_without_remote_list"),
+		Config:   utils.StringPtr(`{}`),
 		Enabled:  utils.BoolPtr(true),
 	}); err != nil {
 		t.Fatalf("创建 provider 失败: %v", err)
 	}
-	_, err := ScanRemoteOrphans(context.Background(), providerID, "test-telegram-orphan", "/", nil)
+	_, err := ScanRemoteOrphans(context.Background(), providerID, "test-unsupported-orphan", "/", nil)
 	if err == nil {
 		t.Fatalf("不支持的 provider 应返回错误")
 	}

@@ -9,14 +9,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"jenken827.com/jenken827/pfm/driver/cryptostream"
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/cryptostream"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/internal/thumbnail"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -32,7 +34,7 @@ type FileStreamResult struct {
 	FileName        string
 	ContentType     string
 	FileSize        int64
-	IsPreDownload   bool           // 是否为 Telegram 大文件预下载状态
+	IsPreDownload   bool           // 是否为"预下载中"状态（驱动声明 PREDOWNLOAD 能力时才会出现）
 	PreDownloadData map[string]any // 预下载状态数据
 }
 
@@ -138,7 +140,7 @@ func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 	}
 
 	// 7. 打开文件（支持多分片合并、Seek）
-	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
+	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
 	}
@@ -319,7 +321,7 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool,
 	}
 
 	// 7. 打开文件
-	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
+	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
 	}
@@ -415,7 +417,7 @@ func RegenerateThumbnail(ctx context.Context, file *entity.FileORM) {
 	defer tempFile.Close()
 
 	// 6. 打开文件
-	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
+	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		llog.C(ctx).Warnf("open file for thumbnail failed: %v", err)
 		return
@@ -470,11 +472,11 @@ const preDownloadSizeThreshold int64 = 20 * 1024 * 1024
 
 // checkPreDownloadState 检查大文件预下载状态
 // fileSize: 文件实际大小（来自 files 表），用于判断是否需要预下载。
-// 不能使用 sourceLocations[0].Size，因为 Telegram API 可能返回错误的值。
+// 不能使用 sourceLocations[0].Size，因为远端 API 可能返回不可靠的值。
 func checkPreDownloadState(sourceStorage types.StorageDriver, sourceLocations []*entity.FileLocationORM, fileID string, sourceProviderID uint32, fileSize *int64) map[string]any {
 	llog.L().Infof("checkPreDownloadState ENTER: file_id=%s, storage_type=%v, fileSize=%v, locs=%d", fileID, sourceStorage.GetType(), fileSize, len(sourceLocations))
-	// 只有声明了 PREDOWNLOAD 能力的驱动（telegram 类）才有预缓存状态
-	if !types.HasCapability(types.GetDriverMetadata(sourceStorage.GetType()), native.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD) {
+	// 只有声明了 PREDOWNLOAD 能力的驱动才有预缓存状态
+	if !types.HasCapability(types.GetDriverMetadata(sourceStorage.GetType()), abi.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD) {
 		return nil
 	}
 
@@ -520,7 +522,7 @@ func checkPreDownloadState(sourceStorage types.StorageDriver, sourceLocations []
 		// 异步触发预下载（不阻塞当前请求）
 		utils.Go(func() {
 			bgCtx := context.Background()
-			if err := preDownloader.PreDownload(bgCtx, types.FileRefsFromLocations(sourceLocations)); err != nil {
+			if err := preDownloader.PreDownload(bgCtx, ormconv.FileRefsFromLocations(sourceLocations)); err != nil {
 				llog.L().Errorf("async pre-download failed: file_id=%s, provider=%d, err=%v",
 					fileID, sourceProviderID, err)
 			} else {

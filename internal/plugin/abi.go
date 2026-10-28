@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 )
 
 // 插件类型（kind）。
@@ -21,9 +23,10 @@ const (
 )
 
 // kindABI 每种插件类型的线上协议版本（握手行里的版本号，也是包内 plugin.json 的 abi_version）
+// 版本号直接取自 SDK 的 ABI 枚举，避免这里写死 1 而和契约漂移。
 var kindABI = map[string]uint32{
-	KindDriver:     1,
-	KindDownloader: 1,
+	KindDriver:     uint32(abi.AbiVersion_ABI_VERSION_1),
+	KindDownloader: uint32(abi.AbiVersion_ABI_VERSION_1),
 }
 
 // ABI 返回该插件类型的协议版本；未知类型返回 false

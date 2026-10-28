@@ -55,6 +55,9 @@ func Init() {
 	logger.SetLevel(lv)
 
 	logger.Info("log init success")
+
+	// 把驱动层的日志出口接到宿主日志（此前只有驱动的直接调用者才会用 llog）
+	initDriverLog()
 }
 
 // 根据字面值获取日志级别

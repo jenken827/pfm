@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/native"
+	ormconv "jenken827.com/jenken827/pfm/driver/orm"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/utils"
 )
 
@@ -132,7 +133,7 @@ func DownloadAndMergeFile(
 	})
 
 	// 2. 打开文件（多分片自动合并、解密）
-	reader, err := sourceStorage.Open(ctx, types.FileRefsFromLocations(locations), types.OpenOptions{Encryptor: encryptor})
+	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(locations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return "", fmt.Errorf("open file failed: %w", err)
 	}

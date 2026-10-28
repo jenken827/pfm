@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // FilePathResolver 在单次请求内缓存文件行，供「目录路径回溯」复用。

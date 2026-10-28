@@ -11,12 +11,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 	"jenken827.com/jenken827/pfm/internal/downloader"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
 )
 
 // Options 插件管理器配置
@@ -49,7 +48,7 @@ type loadedPlugin struct {
 	manifest *manifest
 	dir      string
 	proc     *process
-	metadata *native.DriverInfo
+	metadata *abi.DriverInfo
 }
 
 // LoadedPlugin 对外暴露的插件概况（供 pfm plugin list 展示）
@@ -61,7 +60,7 @@ type LoadedPlugin struct {
 	Version      string
 	AbiVersion   uint32
 	Dir          string
-	Capabilities []native.DriverCapability
+	Capabilities []abi.DriverCapability
 }
 
 // NewManager 创建管理器（不启动任何东西）
@@ -157,7 +156,7 @@ func (m *Manager) loadDriver(ctx context.Context, dir string, mf *manifest, expe
 	}
 	metadata := resp.GetMetadata()
 	if metadata == nil {
-		metadata = &native.DriverInfo{DriverId: proto.String(mf.DriverID)}
+		metadata = &abi.DriverInfo{DriverId: proto.String(mf.DriverID)}
 	}
 	if metadata.GetDriverId() == "" {
 		metadata.DriverId = proto.String(mf.DriverID)
@@ -172,27 +171,24 @@ func (m *Manager) loadDriver(ctx context.Context, dir string, mf *manifest, expe
 
 // constructor 该插件的驱动构造器：宿主每次初始化 provider 都会调用
 func (m *Manager) constructor(p *loadedPlugin) types.DriverConstructor {
-	return func(orm *entity.StorageProviderORM) (types.StorageDriver, error) {
-		return m.configure(p, orm)
+	return func(provider *types.Provider) (types.StorageDriver, error) {
+		return m.configure(p, provider)
 	}
 }
 
 // configure 在插件侧创建 provider 实例，并按返回能力组装代理
-func (m *Manager) configure(p *loadedPlugin, orm *entity.StorageProviderORM) (types.StorageDriver, error) {
-	if orm.Id == nil || *orm.Id == 0 {
+func (m *Manager) configure(p *loadedPlugin, provider *types.Provider) (types.StorageDriver, error) {
+	if provider == nil || provider.ID == 0 {
 		return nil, fmt.Errorf("provider 缺少 id")
 	}
-	providerID := *orm.Id
+	providerID := provider.ID
 	ctx, cancel := context.WithTimeout(context.Background(), m.opts.ConfigureTimeout)
 	defer cancel()
-	pb, err := orm.ToPB(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("转换 provider 失败: %w", err)
-	}
+
 	resp := &plugin.ConfigureResp{}
 	req := &plugin.ConfigureReq{
 		ProviderId: proto.Uint32(providerID),
-		Provider:   pb,
+		Provider:   providerPB(provider),
 		Host: &plugin.HostEndpoint{
 			Addr:  proto.String(m.host.addr),
 			Token: proto.String(m.host.token),
@@ -201,7 +197,7 @@ func (m *Manager) configure(p *loadedPlugin, orm *entity.StorageProviderORM) (ty
 	if err := p.proc.cli.call(ctx, "Configure", req, resp); err != nil {
 		return nil, fmt.Errorf("配置插件驱动 %s 失败: %w", p.driverID, err)
 	}
-	cfg := types.ProviderConfigFromORM(orm)
+	cfg := provider.Config
 	core := &driverCore{
 		cli:         p.proc.cli,
 		driverID:    p.driverID,
@@ -209,6 +205,28 @@ func (m *Manager) configure(p *loadedPlugin, orm *entity.StorageProviderORM) (ty
 		providerCfg: &cfg,
 	}
 	return wrapCapabilities(core, resp.GetCapabilities()), nil
+}
+
+// providerPB 把驱动视角的 Provider 转成插件协议里的 provider 消息
+//
+// 只发送驱动需要/宿主已算好的字段：驱动私有配置原样透传，其余是提供者级的
+// 通用配置视图（含 proxy——网络类驱动要按它设 transport）。数据库实体的时间戳、
+// 容量、统计等与驱动无关，不发。
+func providerPB(provider *types.Provider) *abi.Provider {
+	return &abi.Provider{
+		Id:                   proto.Uint32(provider.ID),
+		DriverId:             proto.String(provider.DriverID),
+		Name:                 proto.String(provider.Name),
+		Config:               proto.String(provider.ConfigJSON),
+		Enabled:              proto.Bool(provider.Config.Enabled),
+		SortOrder:            proto.Uint32(provider.Config.SortOrder),
+		FileSizeLimit:        proto.Uint64(provider.Config.FileSizeLimit),
+		MaxConcurrentUploads: proto.Uint32(provider.Config.MaxConcurrentUploads),
+		HashType:             provider.Config.HashType.Enum(),
+		EncryptionKey:        proto.String(provider.Config.EncryptionKey),
+		EncryptionSuffix:     proto.String(provider.Config.EncryptionSuffix),
+		Proxy:                proto.String(provider.Proxy),
+	}
 }
 
 // DriverIDs 返回本管理器当前加载的驱动身份（去重、按加载顺序）。

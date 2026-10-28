@@ -1,8 +1,8 @@
 package db
 
 import (
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"gorm.io/gorm"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // CreateFileTags 创建文件标签

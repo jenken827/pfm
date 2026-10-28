@@ -147,8 +147,8 @@ func TestHTTPStatusFromError(t *testing.T) {
 	}
 }
 
-// Telegram 大文件预下载态：三个流式 handler 都必须回 202 + 状态 JSON，
-// 而不是拿 nil Reader 去 Close / Read（历史 bug：HTTP PANIC → 500，见 BUGS.md）。
+// 预下载态（驱动声明 PREDOWNLOAD 能力）：三个流式 handler 都必须回 202 + 状态 JSON，
+// 而不是拿 nil Reader 去 Close / Read（漏了就是 HTTP PANIC → 500）。
 func TestRespondPreDownload(t *testing.T) {
 	rec := httptest.NewRecorder()
 	respondPreDownload(rec, map[string]any{

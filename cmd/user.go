@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gorm.io/gorm"
@@ -16,7 +17,6 @@ import (
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
 )
 
 // userCmd 本地认证用户管理（auth.mode=local 时使用）

@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"github.com/spf13/cobra"
 	_ "jenken827.com/jenken827/pfm/driver" // 注册存储驱动构造器
-	"jenken827.com/jenken827/pfm/driver/types"
 	"jenken827.com/jenken827/pfm/globals"
 	"jenken827.com/jenken827/pfm/internal/config"
 	"jenken827.com/jenken827/pfm/internal/db"
 	"jenken827.com/jenken827/pfm/internal/service"
 	"jenken827.com/jenken827/pfm/internal/storage"
 	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // cleanupStorageOrphansCmd 逆向孤儿：扫描存储提供者远端，找出 file_locations 已无记录的物理文件
@@ -31,7 +31,7 @@ import (
 //   - 本命令：远端有文件、数据库连 file_locations 都没有 → 列清单/回收（逆向孤儿）
 //
 // 能力来自驱动的可选接口 types.RemoteLister（local / 百度 / 123 / 阿里 / 移动 / 天翼）；
-// Telegram 这类只能按消息 ID 读取的提供者不支持目录枚举，会被跳过并提示。
+// 只能按对象 ID 读取的提供者（没有目录枚举能力）不支持远端扫描，会被跳过并提示。
 var cleanupStorageOrphansCmd = &cobra.Command{
 	Use:   "cleanup-storage-orphans",
 	Short: "扫描存储提供者远端、处理数据库无记录的孤儿文件（逆向孤儿，支持多提供者）",
@@ -43,7 +43,7 @@ var cleanupStorageOrphansCmd = &cobra.Command{
 
 支持的提供者（实现了 types.RemoteLister 的驱动）：
   local / 百度网盘 / 123 云盘 / 阿里云盘 / 移动云盘 / 天翼云盘
-  Telegram 只能按消息 ID 读取、没有目录树，会被跳过。
+  只能按对象 ID 读取、没有目录树的提供者会被跳过。
 
 安全默认：
   - 只扫描、默认只写清单文件，不删任何东西
@@ -54,7 +54,7 @@ var cleanupStorageOrphansCmd = &cobra.Command{
 示例:
   pfm -d ./data cleanup-storage-orphans --list-providers
       # 列出所有 provider 及是否支持远端枚举
-  pfm -d ./data cleanup-storage-orphans --provider-name mybaidu
+  pfm -d ./data cleanup-storage-orphans --provider-name my-netdisk
       # 扫描该 provider 当前年份目录，孤儿路径写入 /tmp 清单
   pfm -d ./data cleanup-storage-orphans --all --root-path / --dry-run
       # 扫描所有支持的 provider 全盘，只打印统计不写文件
@@ -344,7 +344,7 @@ func printProviderList() error {
 		fmt.Printf("  id=%-3d %-24s driver=%-18s enabled=%-5v %s\n",
 			*sp.Id, *sp.Name, driverID, enabled, support)
 	}
-	fmt.Println("\n说明：Telegram 只能按消息 ID 读取，不做远端目录枚举；其余网盘/本地均支持。")
+	fmt.Println("\n说明：只按对象 ID 读取、没有目录树的提供者不做远端枚举；其余网盘/本地均支持。")
 	return nil
 }
 
@@ -352,7 +352,7 @@ func printProviderList() error {
 // 声明 REMOTE_LIST，与其是否实现 types.RemoteLister 一致）
 func remoteListSupported(driverID string) bool {
 	return types.HasCapability(types.GetDriverMetadata(driverID),
-		native.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST)
+		abi.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST)
 }
 
 func init() {

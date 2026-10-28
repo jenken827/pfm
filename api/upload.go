@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 
+	"github.com/jenken827/pfm-proto/proto/gen/native"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"jenken827.com/jenken827/pfm/internal/service"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 	"jenken827.com/jenken827/pfm/server/response"
 )
 

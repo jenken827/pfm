@@ -54,7 +54,7 @@ type InstallResult struct {
 // version 为空时取索引里该名字的最高版本。
 func (i *Installer) Install(ctx context.Context, name, version string) (*InstallResult, error) {
 	if strings.TrimSpace(name) == "" {
-		return nil, fmt.Errorf("必须指定插件名（如 baidu）")
+		return nil, fmt.Errorf("必须指定插件名（plugin.json 里的 name）")
 	}
 	client := i.HTTP
 	if client == nil {

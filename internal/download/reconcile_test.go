@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
+	"github.com/jenken827/pfm-proto/proto/gen/entity"
 	"jenken827.com/jenken827/pfm/utils"
 )
 

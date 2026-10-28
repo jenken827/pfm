@@ -9,9 +9,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/proto/gen/plugin"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
+	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 )
 
 // closeTimeout 通知插件释放实例的等待上限
@@ -299,17 +299,17 @@ type driverCaps15 struct {
 }
 
 // wrapCapabilities 按能力组合出代理对象
-func wrapCapabilities(core *driverCore, caps []native.DriverCapability) types.StorageDriver {
+func wrapCapabilities(core *driverCore, caps []abi.DriverCapability) types.StorageDriver {
 	mask := 0
 	for _, capability := range caps {
 		switch capability {
-		case native.DriverCapability_DRIVER_CAPABILITY_BATCH_DELETE:
+		case abi.DriverCapability_DRIVER_CAPABILITY_BATCH_DELETE:
 			mask |= capBitBatch
-		case native.DriverCapability_DRIVER_CAPABILITY_DIRECT_LINK:
+		case abi.DriverCapability_DRIVER_CAPABILITY_DIRECT_LINK:
 			mask |= capBitDirect
-		case native.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST:
+		case abi.DriverCapability_DRIVER_CAPABILITY_REMOTE_LIST:
 			mask |= capBitRemote
-		case native.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD:
+		case abi.DriverCapability_DRIVER_CAPABILITY_PREDOWNLOAD:
 			mask |= capBitPreDownload
 		}
 	}
@@ -363,9 +363,17 @@ func (d *driverCore) batchDelete(ctx context.Context, refs []types.FileRef) ([]t
 	}
 	results := make([]types.DeleteResult, 0, len(resp.GetResults()))
 	for _, item := range resp.GetResults() {
-		result := types.DeleteResult{ID: item.GetLocationId(), Success: item.GetSuccess()}
+		result := types.DeleteResult{
+			ID:        item.GetLocationId(),
+			Success:   item.GetSuccess(),
+			Permanent: item.GetPermanent(),
+		}
 		if item.GetError() != "" {
 			result.Error = errors.New(item.GetError())
+			if result.Permanent {
+				// 统一成哨兵错误，宿主一律用 types.IsPermanent 判断
+				result.Error = fmt.Errorf("%w: %v", types.ErrPermanent, result.Error)
+			}
 		}
 		results = append(results, result)
 	}
