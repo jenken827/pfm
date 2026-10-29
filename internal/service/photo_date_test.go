@@ -11,10 +11,8 @@ func TestParsePhotoDateFromFilename(t *testing.T) {
 	cases := []struct {
 		name     string
 		filename string
-		want     string // "2006-01-02 15:04:05"，空表示期望 nil
+		want     string // 本地墙钟 "2006-01-02 15:04:05"，空表示期望 nil
 	}{
-		// 规则1：毫秒时间戳命名
-		{"毫秒时间戳", "1784212534296.png", "2026-07-16 22:35:34"},
 		// 规则2/3：IMG_ / Screenshot_
 		{"相机命名", "IMG_20260811_063006.jpg", "2026-08-11 00:00:00"},
 		{"截图命名", "Screenshot_20240109_213741_1_com.tencent.mm.jpg", "2024-01-09 00:00:00"},
@@ -27,10 +25,6 @@ func TestParsePhotoDateFromFilename(t *testing.T) {
 		// 老照片：不设年份下界，2000 年前同样解析
 		{"1998年相机命名", "IMG_19980812_101112.jpg", "1998-08-12 00:00:00"},
 		// 规则4/5：mmexport / wx_camera_
-		{"微信转发", "mmexport1713701399029.jpg", "2024-04-21 20:09:59"},
-		{"微信拍摄", "wx_camera_1725958479520.jpg", "2024-09-10 16:54:39"},
-		{"microMsg前缀", "microMsg.1713701399029.jpg", "2024-04-21 20:09:59"},
-		{"视频扩展名同样解析", "mmexport1713701399029.mp4", "2024-04-21 20:09:59"},
 		// 防误判
 		{"前两位12拒绝", "12345678901.jpg", ""},
 		{"前两位大于当前拒绝", "1955555555555.jpg", ""},
@@ -58,6 +52,27 @@ func TestParsePhotoDateFromFilename(t *testing.T) {
 				t.Fatalf("bad test want: %v", err)
 			}
 			if !got.Equal(want) {
+				t.Fatalf("ParsePhotoDateFromFilename(%q) = %v, want %v", tc.filename, got, want)
+			}
+		})
+	}
+
+	// 时间戳类文件名：期望值按同一个 Unix 秒还原，不把某个时区的墙钟写死进用例
+	// （UTC 机器上 1713701399 是 12:09:59，+08:00 机器上是 20:09:59，两者是同一时刻）
+	for _, tc := range []struct {
+		filename string
+		wantUnix int64
+	}{
+		{"1784212534296.png", 1784212534},
+		{"mmexport1713701399029.jpg", 1713701399},
+		{"wx_camera_1725958479520.jpg", 1725958479},
+		{"microMsg.1713701399029.jpg", 1713701399},
+		{"mmexport1713701399029.mp4", 1713701399},
+	} {
+		t.Run("时间戳/"+tc.filename, func(t *testing.T) {
+			got := ParsePhotoDateFromFilename(tc.filename)
+			want := time.Unix(tc.wantUnix, 0)
+			if got == nil || !got.Equal(want) {
 				t.Fatalf("ParsePhotoDateFromFilename(%q) = %v, want %v", tc.filename, got, want)
 			}
 		})

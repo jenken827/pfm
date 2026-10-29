@@ -27,7 +27,7 @@ PFM(Personal File Manager)是一款个人文件管理系统。前端使用 Flutt
 
 ## 当前实现概览
 
-- **后端**：Go 1.25.1+；`net/http` + REST/JSON（proto 只定义数据结构）；GORM + SQLite / PostgreSQL / MySQL；本地账号 + HS256 JWT；驱动以元数据描述自身配置，前端表单据此自动渲染；支持进程外插件（存储驱动 / 离线下载后端），核心只内置 `local` 驱动、不内置下载器。
+- **后端**：Go 1.26+；`net/http` + REST/JSON（proto 只定义数据结构）；GORM + SQLite / PostgreSQL / MySQL；本地账号 + HS256 JWT；驱动以元数据描述自身配置，前端表单据此自动渲染；支持进程外插件（存储驱动 / 离线下载后端），核心只内置 `local` 驱动、不内置下载器。
 - **客户端**：Flutter（Dart SDK `^3.13.0`），`flutter_bloc` + `go_router` + `Dio`，Hive / SQLite 本地持久化，与后端共用 protobuf 数据结构；另带一套无需构建的 Web UI，已 `//go:embed` 进二进制。
 - **内置驱动**：`local`。
 - **主要能力**：文件树 / 回收站 / 标签 / 历史版本、分片上传与断点续传、BLAKE3 秒传、多提供者副本同步、直链下载（不可直链时自动回退代理）、可控分享、WebDAV、URL 离线下载、缩略图与流式预览、移动端相册与通讯录 / 短信 / 通话记录备份。
@@ -99,7 +99,7 @@ flowchart TB
 
 | 组件 | 要求 | 用途 |
 |------|------|------|
-| Go | 1.25.1+ | 后端编译与测试 |
+| Go | 1.26+ | 后端编译与测试 |
 | pfm-plugin-sdk | 见下方说明 | 插件 ABI 与驱动值类型，宿主与插件共用的唯一契约 |
 | pfm-proto | 见下方说明 | 应用侧 protobuf：Go 数据结构 + GORM 实体 + Dart 包（都已入库，build 即可用） |
 | Node.js | 能跑 `node --test` 即可 | Web UI 测试（可选） |
@@ -136,6 +136,17 @@ bash dev.sh build                       # 编译为 ./pfm
 ./pfm -d ./data user add <用户名>        # 本地认证没有注册入口，用户需手动创建
 ./pfm server -d ./data                  # 启动服务；health 检查 /health
 ```
+
+不想自己编译的话，[Releases](https://github.com/jenken827/pfm/releases) 里有现成的二进制：
+
+| 平台 | 文件 |
+|---|---|
+| Linux x86_64 | `pfm_<版本>_<日期>-<commit>_linux-amd64.tar.gz` |
+| Windows x64 | `pfm_<版本>_<日期>-<commit>_windows-amd64.zip` |
+
+解压出来是同名的 `pfm`（Windows 上是 `pfm.exe`）、`config.example.yaml` 和 `LICENSE`，
+`./pfm version` 查版本；`checksums.txt` 是各包的 SHA-256。要自己打包就用
+`bash scripts/package.sh --version <版本> --goos linux|windows`。
 
 客户端在独立仓库 `pfm-frontend`（Flutter），用它的 `dev.sh`：
 

@@ -1,0 +1,208 @@
+name: 发布
+
+# 推 v* tag 触发：交叉编译 linux-amd64 与 windows-amd64 两个版本，建 GitHub Release 并上传资产。
+# 手工补发：Actions 页面 Run workflow 填 tag（须已存在）；tag 留空则只构建、不发布。
+# 重复执行会覆盖同名资产，不会重复建 Release。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布的 tag（如 v0.1.0，必须已存在）；留空只构建不发布
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: 解析版本
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      dry_run: ${{ steps.v.outputs.dry_run }}
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 解析 tag
+        id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 手工触发时只看输入框：留空即干跑（此时 ref_name 是分支名，不能当 tag）
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          if [ -z "$tag" ]; then
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+            echo "本次只构建、不发布（未指定 tag）"
+            exit 0
+          fi
+          python3 - "$tag" <<'PY'
+          import re, sys
+          tag = sys.argv[1]
+          if not re.fullmatch(r'v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?', tag):
+              sys.exit(f"tag 必须形如 v1.2.3（可带 -rc1 后缀），收到：{tag}")
+          PY
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=false" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: 构建 ${{ matrix.platform }}
+    needs: meta
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: linux-amd64,   goos: linux,   goarch: amd64 }
+          - { platform: windows-amd64, goos: windows, goarch: amd64 }
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 打发布包
+        shell: bash
+        run: |
+          bash scripts/package.sh \
+            --version "${{ needs.meta.outputs.version }}" \
+            --goos "${{ matrix.goos }}" \
+            --goarch "${{ matrix.goarch }}" \
+            --out dist
+
+      - name: 校验产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          case "${{ matrix.goos }}" in
+            windows) unzip -q dist/*.zip -d verify ;;
+            *)       tar -xzf dist/*.tar.gz -C verify ;;
+          esac
+          # 发布构建必须自包含：不许把构建机路径带进去
+          for p in "$HOME" "$GITHUB_WORKSPACE"; do
+            if strings -a verify/pfm | grep -qF "$p"; then
+              echo "::error::产物里带构建机路径：$p"
+              exit 1
+            fi
+          done
+          if [ "${{ matrix.goos }}" = linux ]; then
+            verify/pfm version
+          fi
+          ls -l dist
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: 发布 Release
+    needs: [meta, build]
+    if: needs.meta.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+        with:
+          # 发布说明要按 tag 算变更范围
+          fetch-depth: 0
+
+      - name: 汇总各平台包
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+
+      - name: 生成校验和
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./*.tar.gz ./*.zip > checksums.txt
+          cat checksums.txt
+
+      - name: 生成发布说明
+        shell: bash
+        env:
+          TAG: v${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          {
+            if [ -n "$prev" ]; then
+              echo "## 自 ${prev} 起的变更"
+              echo
+              git log --no-merges --pretty='- %s' "${prev}..${TAG}"
+              echo
+              echo "**完整对比**：https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${TAG}"
+            else
+              echo "## 首个版本"
+              echo
+              git log --no-merges --pretty='- %s' "${TAG}"
+            fi
+            echo
+            echo "## 下载"
+            echo
+            echo "| 平台 | 文件 |"
+            echo "|---|---|"
+            echo "| Linux x86_64 | \`pfm_*_linux-amd64.tar.gz\` |"
+            echo "| Windows x64 | \`pfm_*_windows-amd64.zip\` |"
+            echo
+            echo "\`checksums.txt\` 里是各包的 SHA-256。"
+            echo
+            echo "## 上手"
+            echo
+            echo '```bash'
+            echo "tar -xzf pfm_*_linux-amd64.tar.gz   # Windows 解压 zip"
+            echo "cp config.example.yaml data/config.yaml"
+            echo "./pfm user add <用户名>              # 本地认证没有注册入口"
+            echo "./pfm server -d data"
+            echo '```'
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v${{ needs.meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # 重跑：同名资产覆盖，说明重写。--draft=false 是必须的——把 tag 删了再重推
+            # 会让原来的 Release 变成 draft，光 upload / edit 说明会一直停在未发布状态。
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --notes-file release-notes.md --draft=false --latest
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --verify-tag
+          fi

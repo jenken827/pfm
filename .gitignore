@@ -4,6 +4,9 @@
 .codebuddy
 data/
 pfm
+
+# 发布包输出目录（scripts/package.sh 生成）
+/dist/
 *.test
 apk
 .hermes/memory/MEMORY.md.lock
