@@ -49,6 +49,8 @@ type loadedPlugin struct {
 	dir      string
 	proc     *process
 	metadata *abi.DriverInfo
+	// tool kind=tool 插件的工具代理（其它类型为 nil）
+	tool *ToolPlugin
 }
 
 // LoadedPlugin 对外暴露的插件概况（供 pfm plugin list 展示）
@@ -109,10 +111,22 @@ func (m *Manager) Load(ctx context.Context) error {
 			failures = append(failures, fmt.Sprintf("%s: %v", name, loadErr))
 		}
 	}
+	m.publishTools()
 	if len(failures) > 0 {
 		return fmt.Errorf("部分插件加载失败: %s", strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+// publishTools 把本次加载到的工具插件登记给 MCP 层（部分失败也登记成功的那些）
+func (m *Manager) publishTools() {
+	list := make([]*ToolPlugin, 0, len(m.plugins))
+	for _, p := range m.plugins {
+		if p.tool != nil {
+			list = append(list, p.tool)
+		}
+	}
+	SetToolPlugins(m, list)
 }
 
 // loadOne 拉起单个插件，并按插件类型登记它的能力
@@ -130,6 +144,8 @@ func (m *Manager) loadOne(ctx context.Context, dir string) error {
 		return m.loadDriver(ctx, dir, mf, expectABI)
 	case KindDownloader:
 		return m.loadDownloader(ctx, dir, mf, expectABI)
+	case KindTool:
+		return m.loadTool(ctx, dir, mf, expectABI)
 	default:
 		// 类型已登记但宿主还没有对应的加载分支：装上也不该被当成驱动用
 		return fmt.Errorf("插件类型 %q 尚未支持加载", mf.Kind)
@@ -237,6 +253,9 @@ func (m *Manager) DriverIDs() []string {
 	seen := make(map[string]struct{}, len(m.plugins))
 	ids := make([]string, 0, len(m.plugins))
 	for _, p := range m.plugins {
+		if p.driverID == "" {
+			continue
+		}
 		if _, ok := seen[p.driverID]; ok {
 			continue
 		}
@@ -278,6 +297,7 @@ func (m *Manager) Close() {
 		p.proc.Close()
 	}
 	m.plugins = nil
+	ClearToolPlugins(m)
 	if m.host != nil {
 		m.host.Close()
 		m.host = nil

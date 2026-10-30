@@ -270,6 +270,8 @@ func runMcpTools(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "共 %d 个工具；路由 %s（enabled=%v，allow_write=%v）\n",
 		len(tools), mcp.EndpointPath(), config.GetConfig().Mcp.Enabled, config.GetConfig().Mcp.AllowWrite)
+	// 插件工具只有服务跑起来、插件加载完之后才存在；这条命令不加载插件，只列核心工具
+	fmt.Fprintln(os.Stderr, "说明：这里只列核心工具；插件提供的工具（<tool_id>.<name>）在服务运行态才出现")
 	return nil
 }
 

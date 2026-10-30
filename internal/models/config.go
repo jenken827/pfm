@@ -245,8 +245,6 @@ type McpConfig struct {
 	CallTimeoutSeconds int `json:"call_timeout_seconds" yaml:"call_timeout_seconds"`
 	// TokenRatePerMinute 每个令牌每分钟的调用上限（0 = 只受全局限流约束）
 	TokenRatePerMinute int `json:"token_rate_per_minute" yaml:"token_rate_per_minute"`
-	// TicketTTLMinutes 发给工具插件读取文件用的单文件票据有效期（分钟），默认 10
-	TicketTTLMinutes int `json:"ticket_ttl_minutes" yaml:"ticket_ttl_minutes"`
 }
 
 // 以下默认值同时被 internal/config（缺省填充）与 internal/mcp（越界收敛）引用，
@@ -260,6 +258,4 @@ const (
 	DefaultMcpCallTimeoutSeconds = 30
 	// DefaultMcpTokenRatePerMinute 每令牌默认每分钟配额
 	DefaultMcpTokenRatePerMinute = 120
-	// DefaultMcpTicketTTLMinutes 文件票据默认有效期（分钟）
-	DefaultMcpTicketTTLMinutes = 10
 )

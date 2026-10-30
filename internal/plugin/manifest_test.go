@@ -81,10 +81,10 @@ func TestManifestAcceptsDriverKind(t *testing.T) {
 	}
 }
 
-// TestKindsRegistered 当前登记了 driver 与 downloader；加新类型时这条会提醒同步 ABI 表与加载分派
+// TestKindsRegistered 当前登记了 driver / downloader / tool；加新类型时这条会提醒同步 ABI 表与加载分派
 func TestKindsRegistered(t *testing.T) {
 	kinds := Kinds()
-	want := []string{KindDownloader, KindDriver}
+	want := []string{KindDownloader, KindDriver, KindTool}
 	if len(kinds) != len(want) {
 		t.Fatalf("已登记的插件类型 = %v, want %v", kinds, want)
 	}
@@ -100,6 +100,27 @@ func TestKindsRegistered(t *testing.T) {
 	}
 	if _, ok := ABI("notifier"); ok {
 		t.Fatal("未登记的类型不应返回协议版本")
+	}
+}
+
+// TestManifestRequiresToolID tool 类型必须声明 tool_id，且不会拿 driver_id 顶替
+func TestManifestRequiresToolID(t *testing.T) {
+	fields := map[string]any{
+		"kind":        KindTool,
+		"exec":        "./run",
+		"abi_version": 1,
+	}
+	_, err := loadManifest(writeManifestDir(t, fields))
+	if err == nil || !strings.Contains(err.Error(), "tool_id") {
+		t.Fatalf("缺少 tool_id 应报错，实际：%v", err)
+	}
+	fields["tool_id"] = "imageinfo"
+	if _, err := loadManifest(writeManifestDir(t, fields)); err != nil {
+		t.Fatalf("合法 tool 清单不该报错: %v", err)
+	}
+	fields["tool_id"] = "Bad-ID"
+	if _, err := loadManifest(writeManifestDir(t, fields)); err == nil {
+		t.Fatal("非法 tool_id 应报错")
 	}
 }
 

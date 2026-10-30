@@ -14,7 +14,7 @@ import (
 //
 // 一个插件是一个目录：plugin.json + 可执行文件（exec 相对该目录）。
 // kind / exec / abi_version 是必填的；driver 类型还要求 driver_id，
-// downloader 类型还要求 downloader_id，其余字段仅用于展示。
+// downloader 类型还要求 downloader_id，tool 类型还要求 tool_id，其余字段仅用于展示。
 type manifest struct {
 	// Kind 插件类型（见 abi.go 的 Kind* 常量），决定宿主怎么用这个插件
 	Kind string `json:"kind"`
@@ -22,6 +22,8 @@ type manifest struct {
 	DriverID string `json:"driver_id"`
 	// DownloaderID 插件提供的下载器身份（kind=downloader 必填），必须与 Describe 返回的一致
 	DownloaderID string `json:"downloader_id"`
+	// ToolID 插件提供的工具身份（kind=tool 必填），工具在 MCP 里暴露为 <tool_id>.<name>
+	ToolID string `json:"tool_id"`
 	// Exec 可执行文件（相对插件目录的路径，或绝对路径）
 	Exec string `json:"exec"`
 	// AbiVersion 插件编译时使用的协议版本
@@ -60,7 +62,11 @@ func (m *manifest) validate(dir string) error {
 			return err
 		}
 	case KindDownloader:
-		if err := validateDownloaderID(m.DownloaderID); err != nil {
+		if err := validateKindID("downloader_id", m.DownloaderID); err != nil {
+			return err
+		}
+	case KindTool:
+		if err := validateKindID("tool_id", m.ToolID); err != nil {
 			return err
 		}
 	}
@@ -84,20 +90,20 @@ func (m *manifest) execPath(dir string) string {
 	return filepath.Join(dir, m.Exec)
 }
 
-// validateDownloaderID 下载器身份：小写字母 / 数字 / 下划线，与驱动身份同一套规则
-func validateDownloaderID(id string) error {
+// validateKindID 插件身份（下载器 / 工具）：小写字母 / 数字 / 下划线，与驱动身份同一套规则
+func validateKindID(field, id string) error {
 	trimmed := strings.TrimSpace(id)
 	if trimmed == "" {
-		return fmt.Errorf("缺少 downloader_id（kind=downloader 必填）")
+		return fmt.Errorf("缺少 %s", field)
 	}
 	if trimmed != id {
-		return fmt.Errorf("downloader_id %q 前后不能有空白", id)
+		return fmt.Errorf("%s %q 前后不能有空白", field, id)
 	}
 	for _, r := range id {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
 		default:
-			return fmt.Errorf("downloader_id %q 只能包含小写字母、数字和下划线", id)
+			return fmt.Errorf("%s %q 只能包含小写字母、数字和下划线", field, id)
 		}
 	}
 	return nil
@@ -108,6 +114,8 @@ func (m *manifest) ID() string {
 	switch m.Kind {
 	case KindDownloader:
 		return m.DownloaderID
+	case KindTool:
+		return m.ToolID
 	default:
 		return m.DriverID
 	}

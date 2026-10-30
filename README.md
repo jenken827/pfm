@@ -191,15 +191,17 @@ bash dev.sh build android           # 构建 APK，产物另存 release/
 
 ## 其他类型的插件
 
-`plugin.json` 里的 `kind` 决定宿主怎么用它，目前有两种：
+`plugin.json` 里的 `kind` 决定宿主怎么用它，目前有三种：
 
 | kind | 身份字段 | 作用 |
 |------|----------|------|
 | `driver` | `driver_id` | 存储驱动，覆盖同 id 的内置驱动 |
 | `downloader` | `downloader_id` | 离线下载后端（提交任务 / 查进度 / 取消） |
+| `tool` | `tool_id` | 给 MCP 客户端扩展工具（工具名 `<tool_id>.<name>`） |
 
 `downloader` 类型的插件负责对接真正的下载器（aria2、qBittorrent …），示例实现见
-`pfm-plugin-downloader-aria2`。下载产物落在**宿主机**上，算 BLAKE3、建文件记录、
+`pfm-plugin-downloader-aria2`。`tool` 类型的插件只提供工具与执行逻辑，MCP 的协议层、
+鉴权、scope、审计都在核心（见「MCP 服务」一节）。下载产物落在**宿主机**上，算 BLAKE3、建文件记录、
 分发到各存储提供者这些入库动作仍由核心完成；插件不碰数据库。
 
 ```yaml
@@ -258,6 +260,7 @@ bash dev.sh build
 - `read_text` 有字节上限（`mcp.max_read_bytes`，默认 256KB），图片走缩略图档位，大文件只给 12 小时有效的单文件下载链接。
 - 令牌限定根目录时，令牌视角的 `/` 就是那个目录，路径解析天然出不去；`..` 一律拒绝。
 - 每次调用记一行审计日志（工具 / 用户 / 令牌 id / 耗时 / 路径类参数），正文与凭据不记。
+- 工具可扩展：`kind=tool` 插件提供额外工具，在 MCP 里叫 `<tool_id>.<name>`；协议版本协商、鉴权、scope、审计仍由核心统一处理，插件需要文件字节时走宿主回调（凭据是本次调用临时签发的，5 分钟失效）。
 
 ## 配置示例
 

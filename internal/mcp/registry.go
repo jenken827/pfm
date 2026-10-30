@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/jenken827/pfm/internal/auth"
+	"github.com/jenken827/pfm/internal/plugin"
 )
 
 // Tool 一个 MCP 工具：定义（name / schema / annotations）+ 实现
@@ -91,16 +93,62 @@ func imageResult(mimeType string, data []byte) *Result {
 
 // Registry 工具注册表（进程内常驻，顺序确定）
 type Registry struct {
+	// tools 核心工具（顺序即声明顺序，测试按它断言）
 	tools []*Tool
+	// mu 保护 plugins / signature（插件热加载后第一次 list/call 时刷新）
+	mu sync.Mutex
+	// plugins 插件工具（按名字排序，不含与核心工具重名的）
+	plugins []*Tool
+	// signature 当前插件工具集签名（同名同序则跳过重建）
+	signature string
 }
 
-// newRegistry 构造注册表：核心工具在前
+// newRegistry 构造注册表：核心工具在前，插件工具在后
 func newRegistry() *Registry {
 	registry := &Registry{}
 	for _, tool := range coreTools() {
 		registry.add(tool)
 	}
+	// 插件读文件回调（插件工具按需要文件字节时走这里，鉴权在 readFileForPlugin 里）
+	preregisterReadFile()
+	registry.refreshPlugins()
 	return registry
+}
+
+// refreshPlugins 同步插件工具；插件集没变就直接返回（tools/list 是热路径）
+func (r *Registry) refreshPlugins() {
+	signature := toolSignature(plugin.ToolPlugins())
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if signature == r.signature {
+		return
+	}
+	r.signature = signature
+	taken := make(map[string]struct{}, len(r.tools))
+	for _, tool := range r.tools {
+		taken[tool.Name] = struct{}{}
+	}
+	merged := make([]*Tool, 0, len(r.plugins))
+	for _, tool := range pluginTools() {
+		if _, dup := taken[tool.Name]; dup {
+			// 插件不得覆盖核心工具（正常命名空间下不会发生）
+			continue
+		}
+		taken[tool.Name] = struct{}{}
+		merged = append(merged, tool)
+	}
+	r.plugins = sortTools(merged)
+}
+
+// all 当前全部工具（核心 + 插件），顺序：核心在前、插件按名字
+func (r *Registry) all() []*Tool {
+	r.refreshPlugins()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*Tool, 0, len(r.tools)+len(r.plugins))
+	out = append(out, r.tools...)
+	out = append(out, r.plugins...)
+	return out
 }
 
 // add 追加一个工具（重名直接跳过：插件工具不得覆盖核心工具）
@@ -119,8 +167,9 @@ func (r *Registry) add(tool *Tool) {
 // 权限不足的工具直接不出现（而不是调用时才报错）——不让模型看见做不到的事，
 // 也省掉一轮"试了才知道没权限"的往返。
 func (r *Registry) List(includeRead, includeWrite bool) []*Tool {
-	out := make([]*Tool, 0, len(r.tools))
-	for _, tool := range r.tools {
+	tools := r.all()
+	out := make([]*Tool, 0, len(tools))
+	for _, tool := range tools {
 		if tool.ReadOnly && !includeRead {
 			continue
 		}
@@ -134,7 +183,7 @@ func (r *Registry) List(includeRead, includeWrite bool) []*Tool {
 
 // Get 按名字取工具
 func (r *Registry) Get(name string) (*Tool, bool) {
-	for _, tool := range r.tools {
+	for _, tool := range r.all() {
 		if tool.Name == name {
 			return tool, true
 		}

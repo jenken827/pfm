@@ -25,8 +25,6 @@ type Settings struct {
 	CallTimeout time.Duration
 	// TokenPerMin 每个令牌每分钟的调用上限
 	TokenPerMin int
-	// TicketTTL 发给工具插件读取文件用的单文件票据有效期
-	TicketTTL time.Duration
 	// ServerURL 对外地址（拼下载链接用，末尾无斜杠）
 	ServerURL string
 	// Version 宿主版本（serverInfo 用）
@@ -59,18 +57,12 @@ func LoadSettings() Settings {
 		perMinute = models.DefaultMcpTokenRatePerMinute
 	}
 
-	ticketMinutes := mc.TicketTTLMinutes
-	if ticketMinutes <= 0 {
-		ticketMinutes = models.DefaultMcpTicketTTLMinutes
-	}
-
 	return Settings{
 		AllowWrite:   mc.AllowWrite,
 		AllowOrigins: mc.AllowOrigins,
 		MaxReadBytes: maxRead,
 		CallTimeout:  time.Duration(timeoutSeconds) * time.Second,
 		TokenPerMin:  perMinute,
-		TicketTTL:    time.Duration(ticketMinutes) * time.Minute,
 		ServerURL:    strings.TrimRight(strings.TrimSpace(cfg.ServerURL), "/"),
 		Version:      globals.Version,
 	}

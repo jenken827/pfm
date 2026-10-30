@@ -131,7 +131,6 @@ func defaultConfig() *models.Config {
 			MaxReadBytes:       models.DefaultMcpMaxReadBytes,
 			CallTimeoutSeconds: models.DefaultMcpCallTimeoutSeconds,
 			TokenRatePerMinute: models.DefaultMcpTokenRatePerMinute,
-			TicketTTLMinutes:   models.DefaultMcpTicketTTLMinutes,
 		},
 	}
 

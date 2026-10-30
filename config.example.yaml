@@ -165,5 +165,3 @@ mcp:
   call_timeout_seconds: 30
   # 每个令牌每分钟的调用上限（0 = 只受全局 ratelimit 约束）
   token_rate_per_minute: 120
-  # 发给工具插件读取文件用的单文件票据有效期（分钟）
-  ticket_ttl_minutes: 10
