@@ -1,11 +1,6 @@
 package webdav
 
-import (
-	"testing"
-
-	"github.com/jenken827/pfm-proto/proto/gen/entity"
-	"github.com/jenken827/pfm-proto/proto/gen/native"
-)
+import "testing"
 
 // WebDAV 的 href 必须是「客户端可见路径」。本 handler 挂在 /dav/ 且被
 // http.StripPrefix("/dav") 处理，后端内部路径是剥掉前缀后的 /webvav/…，
@@ -14,15 +9,7 @@ import (
 func TestToFileInfoPrefixesClientVisiblePath(t *testing.T) {
 	backend := NewBackend("root-id", "owner-id", "/dav")
 
-	folderName := "readany"
-	folderType := int32(native.FileType_FOLDER)
-	folderSize := uint64(0)
-	folder := &entity.FileORM{
-		Id:   webdavTestStrPtr("file-1"),
-		Name: &folderName,
-		Type: &folderType,
-		Size: &folderSize,
-	}
+	folder := &Entry{ID: "file-1", Name: "readany", IsDir: true}
 
 	info := backend.toFileInfo(folder, "/webvav/readany")
 	if info.Path != "/dav/webvav/readany" {
@@ -32,15 +19,7 @@ func TestToFileInfoPrefixesClientVisiblePath(t *testing.T) {
 		t.Fatalf("folder must be reported as a collection")
 	}
 
-	fileName := "book.epub"
-	fileType := int32(native.FileType_DOCUMENT)
-	fileSize := uint64(1024)
-	file := &entity.FileORM{
-		Id:   webdavTestStrPtr("file-2"),
-		Name: &fileName,
-		Type: &fileType,
-		Size: &fileSize,
-	}
+	file := &Entry{ID: "file-2", Name: "book.epub", Size: 1024}
 
 	fileInfo := backend.toFileInfo(file, "/webvav/readany/data/books/b/book.epub")
 	if fileInfo.Path != "/dav/webvav/readany/data/books/b/book.epub" {
@@ -49,6 +28,27 @@ func TestToFileInfoPrefixesClientVisiblePath(t *testing.T) {
 	if fileInfo.IsDir {
 		t.Fatalf("file must not be reported as a collection")
 	}
+	if fileInfo.Size != 1024 {
+		t.Fatalf("file size = %d, want 1024", fileInfo.Size)
+	}
 }
 
-func webdavTestStrPtr(value string) *string { return &value }
+// MIME 类型：文件行自带的优先，缺失时按扩展名推断（目录不推断）
+func TestToFileInfoMIMEType(t *testing.T) {
+	backend := NewBackend("root-id", "owner-id", "/dav")
+
+	withMime := backend.toFileInfo(&Entry{Name: "book.bin", Mime: "application/epub+zip"}, "/x")
+	if withMime.MIMEType != "application/epub+zip" {
+		t.Errorf("MIMEType = %q, want the one from the file row", withMime.MIMEType)
+	}
+
+	byExt := backend.toFileInfo(&Entry{Name: "book.epub"}, "/x")
+	if byExt.MIMEType != "application/epub+zip" {
+		t.Errorf("MIMEType = %q, want inferred from extension", byExt.MIMEType)
+	}
+
+	dir := backend.toFileInfo(&Entry{Name: "books", IsDir: true}, "/x")
+	if dir.MIMEType != "" {
+		t.Errorf("directory must not carry a MIME type, got %q", dir.MIMEType)
+	}
+}

@@ -28,7 +28,7 @@ import (
 //   - 凭据独立：username 是 /dav 专用命名空间（与 users.username 无关），
 //     password_hash 为 bcrypt；账号不能登录 App、不能签发 JWT。
 //   - 每个账号绑定用户自己的一个目录作为「WebDAV 根」，路径解析从该根逐级向下，
-//     天然无法越出该子树（见 server/webdav/backend.go resolvePath）。
+//     天然无法越出该子树（见 server/webdav/tree.go 的 hostFileTree.resolve）。
 //   - 只读账号在 handler 层按方法白名单拦截写操作。
 //   - 认证走内存缓存：bcrypt 约 50-100ms/次，而 WebDAV 同步一次会发几百个请求，
 //     逐请求 bcrypt 会打满 CPU；缓存命中后只剩 1 次主键查询 + 1 次绑定目录校验。
