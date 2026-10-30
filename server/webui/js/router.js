@@ -16,6 +16,7 @@ const ROUTES = [
   { name: 'offline', re: /^\/offline$/, keys: [] },
   { name: 'transfers', re: /^\/transfers$/, keys: [] },
   { name: 'webdav', re: /^\/webdav$/, keys: [] },
+  { name: 'mcp', re: /^\/mcp$/, keys: [] },
   { name: 'adminUsers', re: /^\/admin\/users$/, keys: [] },
   { name: 'adminProviders', re: /^\/admin\/providers$/, keys: [] },
   { name: 'adminBackup', re: /^\/admin\/backup$/, keys: [] },
