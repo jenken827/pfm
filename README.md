@@ -249,6 +249,26 @@ bash dev.sh build
 }
 ```
 
+只认 stdio 的客户端（多数桌面客户端）用内置桥转发，不必再装 npx 转发器：
+
+```jsonc
+{
+  "mcpServers": {
+    "pfm": {
+      "command": "/path/to/pfm",
+      "args": ["-d", "<data>", "mcp", "stdio"],
+      "env": { "PFM_MCP_TOKEN": "pfm_mcp_..." }
+    }
+  }
+}
+```
+
+`pfm mcp stdio` 从 stdin 读 JSON-RPC、转发到 `/mcp`、把响应写回 stdout（诊断走 stderr）。
+默认连**本机监听地址**（对外地址常是域名 / 反代 / 没改的示例值，猜错就静默连到别处），
+要连远端用 `--url`。
+
+Web UI 也有「MCP 令牌」页（`#/mcp`）：签发 / 查看 / 撤销，创建后直接给出可粘贴的客户端配置。
+
 只读工具：`list_files` / `stat_file` / `search_files` / `recent_files` / `trash_list` / `read_text` / `read_image` / `download_link` / `share_links_list` / `providers_list`。
 
 写工具（`mcp.allow_write` 与令牌 `--write` **都**打开才会出现在工具列表里）：`create_folder` / `write_text_file` / `rename_file` / `move_file` / `delete_file` / `restore_file` / `update_tags` / `create_share_link` / `cancel_share_link` / `create_offline_download` / `sync_file_providers`。
