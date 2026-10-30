@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/pkg/crypt"
 	abi "github.com/jenken827/pfm-plugin-sdk/proto/gen/abi"
 	"github.com/jenken827/pfm-plugin-sdk/proto/gen/plugin"
 )
@@ -68,9 +69,9 @@ func (d *driverCore) Upload(ctx context.Context, src types.UploadSource,
 // Open 打开文件：返回一条可按 offset 重开的流
 func (d *driverCore) Open(ctx context.Context, refs []types.FileRef,
 	opt types.OpenOptions) (types.ReadSeekCloser, error) {
-	total := int64(0)
-	for _, ref := range refs {
-		total += int64(ref.Size)
+	total, err := plaintextTotal(refs, opt.Encryptor)
+	if err != nil {
+		return nil, err
 	}
 	reader := &streamReader{
 		cli:        d.cli,
@@ -84,6 +85,36 @@ func (d *driverCore) Open(ctx context.Context, refs []types.FileRef,
 		return nil, err
 	}
 	return reader, nil
+}
+
+// plaintextTotal 计算 Open 流的总长度，单位与「插件实际下发的字节」一致。
+//
+// 关键：`/rpc/Open` 返回的是**明文**流——解密在插件侧完成（SDK 的
+// MultiChunkReader 先按明文空间算长度再吐字节），而 `FileRef.Size` 是
+// **存储大小（加密后）**：33B 文件头 + 每 64KiB 明文块 16B 认证标签。
+// 直接用存储大小当总长，`Seek(io.SeekEnd)` 就会比真实可读字节数多出
+// 那点开销：
+//   - net/http.ServeContent（go-webdav 的 GET/HEAD 走它）第一件事就是
+//     Seek(End) 取长度，多出来的部分让它按 Content-Length 读完前提前 EOF
+//     → WebDAV GET 变 500 "seeker can't seek"（小文件，Seek 内部用 CopyN
+//     丢弃时撞 EOF）或响应被截断（大文件，重开流后少给几 KB）；
+//   - 只读明文流、不 Seek 的调用方（REST 下载）不受影响，所以问题只在
+//     WebDAV / Range 场景暴露。
+func plaintextTotal(refs []types.FileRef, encryptor types.Encryptor) (int64, error) {
+	encrypted := encryptor != nil && encryptor.IsEncrypted()
+	total := int64(0)
+	for _, ref := range refs {
+		size := int64(ref.Size)
+		if encrypted {
+			plain, err := crypt.DecryptedSize(size)
+			if err != nil {
+				return 0, fmt.Errorf("分片 %d 大小非法（%d 字节）: %w", ref.ChunkNumber, size, err)
+			}
+			size = plain
+		}
+		total += size
+	}
+	return total, nil
 }
 
 // streamReader 把插件的 Open 字节流转成 ReadSeekCloser。
