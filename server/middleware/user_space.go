@@ -57,3 +57,10 @@ func injectUserSpace(ctx context.Context, userID string) context.Context {
 	}
 	return context.WithValue(ctx, globals.ContextUserSpaceKey, uc)
 }
+
+// InjectUserSpace 查询并注入用户空间（导出给 MCP 这类非 REST 入口复用）。
+//
+// 语义与 REST 完全一致：查不到时只记日志、不阻断（授权判断交给 service 层）。
+func InjectUserSpace(ctx context.Context, userID string) context.Context {
+	return injectUserSpace(ctx, userID)
+}

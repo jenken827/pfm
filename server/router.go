@@ -25,6 +25,8 @@ func route(mux *http.ServeMux) {
 	fileViewerV3Route(mux)
 	fileStreamRoute(mux)
 	publicDownloadRoute(mux)
+	// MCP 服务（AI 客户端入口；mcp.enabled 未开启时不注册，直接 404）
+	mcpRoute(mux)
 	// 极简 Web UI（登录 + 浏览 + 下载），注册为 "/" 兜底；更具体的路径优先
 	webUIRoute(mux)
 

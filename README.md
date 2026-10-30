@@ -85,7 +85,7 @@ flowchart TB
 │   ├── service/        # 业务编排
 │   ├── db/             # 数据访问层
 │   ├── storage/        # 上传调度、提供者解析、副本维护
-│   └── ...             # auth / config / download / thumbnail / backup
+│   └── ...             # auth / config / download / thumbnail / backup / mcp
 ├── driver/             # 内置存储驱动（只有 local）；orm/ 为宿主侧实体转换
 ├── cmd/                # cobra 子命令：server / user / plugin / cleanup-* 等
 ├── pkg/                # 通用库
@@ -217,6 +217,47 @@ downloader:
 
 宿主不订阅下载器的推送：每 5 秒对齐一次任务状态（`internal/download/reconcile.go`），
 所以下载器重启、暂停、改选文件这些变化最多 5 秒后收敛。
+
+## MCP 服务（AI 客户端接入）
+
+pfm 可以作为 MCP（Model Context Protocol）服务端，把虚拟文件树交给 AI 客户端使用：列目录、搜索、读文本 / 图片、取下载链接，按需开启建目录 / 写入 / 移动 / 改名 / 进回收站 / 分享。
+
+- **形态**：`POST /mcp`（与主服务同端口），Streamable HTTP + JSON-RPC；同时支持无状态的最新版协议与带 `initialize` 握手的旧版，客户端按自身能力协商。
+- **默认关闭**：`mcp.enabled` 未打开时连路由都不注册。
+- **凭据**：`mcp_tokens` 表里的令牌，可限定读 / 写与可见根目录、可设过期、可随时撤销；库里只存 sha256，明文只在创建时打印一次。令牌**只对 `/mcp` 生效**，不能拿去调 REST；登录 JWT 也能用（本机调试）。
+
+```bash
+bash dev.sh build
+./pfm -d data mcp token create --user alice --name laptop --read [--write] [--root <文件夹ID>] [--days 90]
+./pfm -d data mcp token list
+./pfm -d data mcp token revoke <id>
+./pfm -d data mcp tools          # 当前注册了哪些工具（含来源）
+```
+
+客户端侧（支持 HTTP 的直接填 URL；只认 stdio 的客户端用 `npx mcp-remote` 转发）：
+
+```jsonc
+{
+  "mcpServers": {
+    "pfm": {
+      "url": "http://127.0.0.1:10999/mcp",
+      "headers": { "Authorization": "Bearer pfm_mcp_..." }
+    }
+  }
+}
+```
+
+只读工具：`list_files` / `stat_file` / `search_files` / `recent_files` / `trash_list` / `read_text` / `read_image` / `download_link` / `share_links_list` / `providers_list`。
+
+写工具（`mcp.allow_write` 与令牌 `--write` **都**打开才会出现在工具列表里）：`create_folder` / `write_text_file` / `rename_file` / `move_file` / `delete_file` / `restore_file` / `update_tags` / `create_share_link` / `cancel_share_link` / `create_offline_download` / `sync_file_providers`。
+
+边界与约束：
+
+- 所有工具只经 `internal/service`，与 REST 走同一条链路——归属隔离、秒传、落盘分发、回收站语义完全一致。
+- 删除只进回收站；`empty_trash` / `delete_permanently` 这类不可逆操作不暴露。
+- `read_text` 有字节上限（`mcp.max_read_bytes`，默认 256KB），图片走缩略图档位，大文件只给 12 小时有效的单文件下载链接。
+- 令牌限定根目录时，令牌视角的 `/` 就是那个目录，路径解析天然出不去；`..` 一律拒绝。
+- 每次调用记一行审计日志（工具 / 用户 / 令牌 id / 耗时 / 路径类参数），正文与凭据不记。
 
 ## 配置示例
 

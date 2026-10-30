@@ -109,3 +109,40 @@ func EnumPtr[T ~int32](v T) *int32 {
 	p := int32(v)
 	return &p
 }
+
+// 以下 Deref* 解引用 optional 标量指针（generated ORM 实体全是指针）。
+// nil 一律返回零值：调用方拿到的是"没有这个值"，而不是 panic。
+func DerefString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func DerefBool(v *bool) bool {
+	if v == nil {
+		return false
+	}
+	return *v
+}
+
+func DerefInt32(v *int32) int32 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func DerefUint32(v *uint32) uint32 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func DerefUint64(v *uint64) uint64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}

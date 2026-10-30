@@ -140,6 +140,7 @@ func autoMigrate() error {
 		&entity.UserSpaceORM{},
 		&entity.UserORM{},
 		&entity.WebdavAccountORM{},
+		&entity.McpTokenORM{},
 	); err != nil {
 		return err
 	}

@@ -29,6 +29,8 @@ type Config struct {
 	Thumbnail ThumbnailConfig `json:"thumbnail" yaml:"thumbnail"`
 	// 驱动插件（默认关闭；开启后宿主会拉起 plugins/<id>/ 下的子进程）
 	Plugin PluginConfig `json:"plugin" yaml:"plugin"`
+	// MCP 服务（默认关闭；开启后 AI 客户端凭 mcp_tokens 里的令牌连 <path>）
+	Mcp McpConfig `json:"mcp" yaml:"mcp"`
 }
 
 // 缩略图默认边长（像素）。放在 models 里是为了让 config 与 thumbnail 都能引用，
@@ -222,3 +224,42 @@ type PluginConfig struct {
 	// PublicKeys 索引签名公钥（base64 raw ed25519）；留空用内置的官方公钥
 	PublicKeys []string `json:"public_keys" yaml:"public_keys"`
 }
+
+// McpConfig MCP 服务配置
+//
+// MCP 是对外的第二个入口（AI 客户端连 /mcp），所以默认关闭；开启后仍需
+// mcp_tokens 表里的令牌才能访问，令牌可以限定读/写与可见根目录。
+// 写操作要「配置 + 令牌」两个开关同时打开才生效。
+type McpConfig struct {
+	// Enabled 是否启用 MCP 服务（默认 false；关闭时 /mcp 不注册，直接 404）
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// Path MCP 端点路径（默认 /mcp，与主服务同端口）
+	Path string `json:"path" yaml:"path"`
+	// AllowWrite 是否允许写工具（与令牌的 allow_write 是「与」关系）
+	AllowWrite bool `json:"allow_write" yaml:"allow_write"`
+	// AllowOrigins 允许的浏览器 Origin（防 DNS rebinding）；留空 = 不校验
+	AllowOrigins []string `json:"allow_origins" yaml:"allow_origins"`
+	// MaxReadBytes 单次 read_text 返回上限（字节），默认 256KB
+	MaxReadBytes int `json:"max_read_bytes" yaml:"max_read_bytes"`
+	// CallTimeoutSeconds 单次工具调用超时（秒），默认 30
+	CallTimeoutSeconds int `json:"call_timeout_seconds" yaml:"call_timeout_seconds"`
+	// TokenRatePerMinute 每个令牌每分钟的调用上限（0 = 只受全局限流约束）
+	TokenRatePerMinute int `json:"token_rate_per_minute" yaml:"token_rate_per_minute"`
+	// TicketTTLMinutes 发给工具插件读取文件用的单文件票据有效期（分钟），默认 10
+	TicketTTLMinutes int `json:"ticket_ttl_minutes" yaml:"ticket_ttl_minutes"`
+}
+
+// 以下默认值同时被 internal/config（缺省填充）与 internal/mcp（越界收敛）引用，
+// 放在 models 里避免 config -> mcp -> config 的循环依赖。
+const (
+	// DefaultMcpPath MCP 端点默认路径
+	DefaultMcpPath = "/mcp"
+	// DefaultMcpMaxReadBytes read_text 默认上限（256KB）
+	DefaultMcpMaxReadBytes = 256 << 10
+	// DefaultMcpCallTimeoutSeconds 工具调用默认超时（秒）
+	DefaultMcpCallTimeoutSeconds = 30
+	// DefaultMcpTokenRatePerMinute 每令牌默认每分钟配额
+	DefaultMcpTokenRatePerMinute = 120
+	// DefaultMcpTicketTTLMinutes 文件票据默认有效期（分钟）
+	DefaultMcpTicketTTLMinutes = 10
+)
