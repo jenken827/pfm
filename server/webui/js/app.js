@@ -19,6 +19,7 @@ import { renderShares } from './views/shares.js';
 import { renderOffline } from './views/offline.js';
 import { renderTransfers } from './views/transfers.js';
 import { renderWebdav } from './views/webdav.js';
+import { renderMcp } from './views/mcp.js';
 import { renderAdminUsers } from './views/admin_users.js';
 import { renderAdminProviders } from './views/admin_providers.js';
 import { renderAdminBackup } from './views/admin_backup.js';
@@ -36,6 +37,7 @@ const VIEWS = {
   offline: renderOffline,
   transfers: renderTransfers,
   webdav: renderWebdav,
+  mcp: renderMcp,
   adminUsers: renderAdminUsers,
   adminProviders: renderAdminProviders,
   adminBackup: renderAdminBackup,
@@ -128,7 +130,8 @@ function buildShell() {
       navItem('#/shares', '🔗', '我的分享', 'shares'),
       navItem('#/offline', '⬇️', '离线下载', 'offline'),
       navItem('#/transfers', '🔁', '传输队列', 'transfers'),
-      navItem('#/webdav', '🔌', 'WebDAV 账号', 'webdav')));
+      navItem('#/webdav', '🔌', 'WebDAV 账号', 'webdav'),
+      navItem('#/mcp', '🤖', 'MCP 令牌', 'mcp')));
 
   // 管理组只对管理员显示（服务端也会再校验一次，这里纯属别让人点进去看 403）
   const adminGroup = h('div', { class: 'nav-group', hidden: true },

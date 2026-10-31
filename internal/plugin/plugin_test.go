@@ -25,9 +25,16 @@ const (
 	selfTestEnv   = "PFM_PLUGIN_SELFTEST"
 	testPayload   = "0123456789abcdefghij"
 	testConfigKey = "cfg-key"
+	// 工具插件的自测开关与身份（同一份测试二进制，按环境变量切成工具插件）
+	selfToolEnv = "PFM_PLUGIN_SELFTEST_TOOL"
+	testToolID  = "selftesttool"
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv(selfToolEnv) == "1" {
+		sdk.MustServeTool(testToolID, selftestTools()...)
+		return
+	}
 	if os.Getenv(selfTestEnv) == "1" {
 		// 插件进程模式：只注册假驱动并把 SDK 跑起来
 		types.RegisterStorageDriverWithMetadata(newFakeDriver, &abi.DriverInfo{

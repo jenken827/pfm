@@ -23,6 +23,7 @@ const V = {
   offline: await import('../js/views/offline.js'),
   transfers: await import('../js/views/transfers.js'),
   webdav: await import('../js/views/webdav.js'),
+  mcp: await import('../js/views/mcp.js'),
   adminUsers: await import('../js/views/admin_users.js'),
   adminProviders: await import('../js/views/admin_providers.js'),
   adminBackup: await import('../js/views/admin_backup.js'),
@@ -222,6 +223,44 @@ test('transfers：没有失败任务时不显示"重试全部"', async () => {
   });
   await renderView(env, V.transfers.renderTransfers, {});
   assert.doesNotMatch(env.text(), /重试全部失败/);
+});
+
+// ---------------------------------------------------------------- mcp
+
+const MCP = {
+  '/api/mcp/token/list': {
+    tokens: [{
+      id: 1, name: '笔记本', ownerName: 'alice', allowRead: true, allowWrite: false,
+      rootFolderId: 'dir-1', rootFolderPath: '/文档', createdAt: ts, lastUsedAt: '',
+    }, {
+      id: 2, name: '旧令牌', allowRead: true, allowWrite: true,
+      rootFolderId: '', rootFolderPath: '', createdAt: ts, expiresAt: ts, expired: true, lastUsedAt: ts,
+    }],
+  },
+};
+
+test('mcp：令牌列表包含权限 / 可见范围 / 过期状态', async () => {
+  const env = install(MCP);
+  await renderView(env, V.mcp.renderMcp, { params: {} });
+  const text = env.text();
+  assert.match(text, /MCP 令牌/);
+  assert.match(text, /笔记本/);
+  assert.match(text, /文档/, '要显示可见目录');
+  assert.match(text, /整棵树/, '不限范围时要说清是整棵树');
+  assert.match(text, /已过期/, '过期令牌要看得出来');
+  assert.match(text, /可写/, '写权限要有标记');
+  assert.match(text, /撤销/, '要能撤销');
+});
+
+test('mcp：没有令牌时给空状态，接口报错时可重试', async () => {
+  let env = install({ '/api/mcp/token/list': { tokens: [] } });
+  await renderView(env, V.mcp.renderMcp, { params: {} });
+  assert.match(env.text(), /还没有 MCP 令牌/);
+
+  env = install({ '/api/mcp/token/list': FAIL });
+  await renderView(env, V.mcp.renderMcp, { params: {} });
+  assert.match(env.text(), /加载失败/);
+  assert.match(env.text(), /重试/);
 });
 
 // ---------------------------------------------------------------- webdav

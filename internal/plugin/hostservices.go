@@ -17,7 +17,7 @@ import (
 	"github.com/jenken827/pfm/pkg/llog"
 )
 
-// hostServer 插件反向调用宿主的服务（回写配置、更新缓存状态、写日志）
+// hostServer 插件反向调用宿主的服务（回写配置、更新缓存状态、写日志、读文件）
 //
 // 监听 127.0.0.1 随机端口，token 与插件侧共享；插件进程与宿主同用户，
 // 这个 token 只是防"同机其它进程顺手误调"，不是安全边界。
@@ -42,6 +42,7 @@ func startHostServer() (*hostServer, error) {
 	mux.HandleFunc("/rpc/UpdateProviderConfig", host.auth(host.handleUpdateProviderConfig))
 	mux.HandleFunc("/rpc/UpdateCacheStatus", host.auth(host.handleUpdateCacheStatus))
 	mux.HandleFunc("/rpc/Log", host.auth(host.handleLog))
+	mux.HandleFunc("/rpc/ReadFile", host.auth(host.handleReadFile))
 	host.server = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if serveErr := host.server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {

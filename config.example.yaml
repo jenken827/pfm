@@ -144,3 +144,24 @@ plugin:
   # 索引签名公钥（base64 raw ed25519）。留空 = 用内置的官方公钥；
   # 自建索引时填自己的公钥（自签名自用），此时官方索引会被拒绝
   public_keys: []
+
+# MCP 服务（AI 客户端接入）：默认关闭。
+# 开启后 <path> 是对外入口，客户端必须带 mcp_tokens 表里的令牌：
+#   pfm mcp token create --user <用户名> --name <标签> [--write] [--root <文件夹ID>] [--days 90]
+# 令牌明文只在创建时打印一次，可随时用 `pfm mcp token revoke <id>` 撤销。
+mcp:
+  enabled: false
+  # 端点路径（与主服务同端口）
+  path: /mcp
+  # 写工具总开关：与令牌的 allow_write 是「与」关系，两个都开才可写。
+  # 关闭时写工具不会出现在 tools/list 里。
+  allow_write: false
+  # 允许的浏览器 Origin（防 DNS rebinding）；留空 = 不校验
+  # （非浏览器客户端本来就不发 Origin，留空不影响它们）
+  allow_origins: []
+  # read_text 单次返回上限（字节），默认 256KB，硬顶 8MB
+  max_read_bytes: 262144
+  # 单次工具调用超时（秒）
+  call_timeout_seconds: 30
+  # 每个令牌每分钟的调用上限（0 = 只受全局 ratelimit 约束）
+  token_rate_per_minute: 120

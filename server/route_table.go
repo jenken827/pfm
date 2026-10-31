@@ -23,6 +23,7 @@ var (
 	fileServer      = &api.FileServer{}
 	uploadServer    = &api.UploadServer{}
 	providerServer  = &api.StorageProviderServer{}
+	mcpTokenServer  = &api.McpTokenServer{}
 	backupServer    = &api.BackupServer{}
 	spaceServer     = &api.UserSpaceServer{}
 	dlServer        = &api.DownloadServer{}
@@ -100,6 +101,10 @@ func registerProviderRoutes(mux *http.ServeMux) {
 	Register(mux, http.MethodPost, "/api/admin/provider/list", providerServer.ListStorageProviders)
 	Register(mux, http.MethodPost, "/api/admin/provider/update", providerServer.UpdateStorageProvider)
 	Register(mux, http.MethodPost, "/api/admin/provider/delete", providerServer.DeleteStorageProvider)
+	// MCP 令牌（本人可用；列表在管理员下可查他人）
+	Register(mux, http.MethodPost, "/api/mcp/token/create", mcpTokenServer.CreateMcpToken)
+	Register(mux, http.MethodPost, "/api/mcp/token/list", mcpTokenServer.ListMcpTokens)
+	Register(mux, http.MethodPost, "/api/mcp/token/revoke", mcpTokenServer.RevokeMcpToken)
 }
 
 // registerBackupRoutes 备份服务路由（全部管理员专属）

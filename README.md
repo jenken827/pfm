@@ -85,7 +85,7 @@ flowchart TB
 │   ├── service/        # 业务编排
 │   ├── db/             # 数据访问层
 │   ├── storage/        # 上传调度、提供者解析、副本维护
-│   └── ...             # auth / config / download / thumbnail / backup
+│   └── ...             # auth / config / download / thumbnail / backup / mcp
 ├── driver/             # 内置存储驱动（只有 local）；orm/ 为宿主侧实体转换
 ├── cmd/                # cobra 子命令：server / user / plugin / cleanup-* 等
 ├── pkg/                # 通用库
@@ -191,15 +191,17 @@ bash dev.sh build android           # 构建 APK，产物另存 release/
 
 ## 其他类型的插件
 
-`plugin.json` 里的 `kind` 决定宿主怎么用它，目前有两种：
+`plugin.json` 里的 `kind` 决定宿主怎么用它，目前有三种：
 
 | kind | 身份字段 | 作用 |
 |------|----------|------|
 | `driver` | `driver_id` | 存储驱动，覆盖同 id 的内置驱动 |
 | `downloader` | `downloader_id` | 离线下载后端（提交任务 / 查进度 / 取消） |
+| `tool` | `tool_id` | 给 MCP 客户端扩展工具（工具名 `<tool_id>.<name>`） |
 
 `downloader` 类型的插件负责对接真正的下载器（aria2、qBittorrent …），示例实现见
-`pfm-plugin-downloader-aria2`。下载产物落在**宿主机**上，算 BLAKE3、建文件记录、
+`pfm-plugin-downloader-aria2`。`tool` 类型的插件只提供工具与执行逻辑，MCP 的协议层、
+鉴权、scope、审计都在核心（见「MCP 服务」一节）。下载产物落在**宿主机**上，算 BLAKE3、建文件记录、
 分发到各存储提供者这些入库动作仍由核心完成；插件不碰数据库。
 
 ```yaml
@@ -217,6 +219,68 @@ downloader:
 
 宿主不订阅下载器的推送：每 5 秒对齐一次任务状态（`internal/download/reconcile.go`），
 所以下载器重启、暂停、改选文件这些变化最多 5 秒后收敛。
+
+## MCP 服务（AI 客户端接入）
+
+pfm 可以作为 MCP（Model Context Protocol）服务端，把虚拟文件树交给 AI 客户端使用：列目录、搜索、读文本 / 图片、取下载链接，按需开启建目录 / 写入 / 移动 / 改名 / 进回收站 / 分享。
+
+- **形态**：`POST /mcp`（与主服务同端口），Streamable HTTP + JSON-RPC；同时支持无状态的最新版协议与带 `initialize` 握手的旧版，客户端按自身能力协商。
+- **默认关闭**：`mcp.enabled` 未打开时连路由都不注册。
+- **凭据**：`mcp_tokens` 表里的令牌，可限定读 / 写与可见根目录、可设过期、可随时撤销；库里只存 sha256，明文只在创建时打印一次。令牌**只对 `/mcp` 生效**，不能拿去调 REST；登录 JWT 也能用（本机调试）。
+
+```bash
+bash dev.sh build
+./pfm -d data mcp token create --user alice --name laptop --read [--write] [--root <文件夹ID>] [--days 90]
+./pfm -d data mcp token list
+./pfm -d data mcp token revoke <id>
+./pfm -d data mcp tools          # 当前注册了哪些工具（含来源）
+```
+
+客户端侧（支持 HTTP 的直接填 URL；只认 stdio 的客户端用 `npx mcp-remote` 转发）：
+
+```jsonc
+{
+  "mcpServers": {
+    "pfm": {
+      "url": "http://127.0.0.1:10999/mcp",
+      "headers": { "Authorization": "Bearer pfm_mcp_..." }
+    }
+  }
+}
+```
+
+只认 stdio 的客户端（多数桌面客户端）用内置桥转发，不必再装 npx 转发器：
+
+```jsonc
+{
+  "mcpServers": {
+    "pfm": {
+      "command": "/path/to/pfm",
+      "args": ["-d", "<data>", "mcp", "stdio"],
+      "env": { "PFM_MCP_TOKEN": "pfm_mcp_..." }
+    }
+  }
+}
+```
+
+`pfm mcp stdio` 从 stdin 读 JSON-RPC、转发到 `/mcp`、把响应写回 stdout（诊断走 stderr）。
+默认连**本机监听地址**（对外地址常是域名 / 反代 / 没改的示例值，猜错就静默连到别处），
+要连远端用 `--url`。
+
+Web UI 也有「MCP 令牌」页（`#/mcp`）：签发 / 查看 / 撤销，创建后直接给出可粘贴的客户端配置。
+
+只读工具：`list_files` / `stat_file` / `search_files` / `recent_files` / `trash_list` / `read_text` / `read_image` / `download_link` / `share_links_list` / `providers_list`。
+
+写工具（`mcp.allow_write` 与令牌 `--write` **都**打开才会出现在工具列表里）：`create_folder` / `write_text_file` / `rename_file` / `move_file` / `delete_file` / `restore_file` / `update_tags` / `create_share_link` / `cancel_share_link` / `create_offline_download` / `sync_file_providers`。
+
+边界与约束：
+
+- 所有工具只经 `internal/service`，与 REST 走同一条链路——归属隔离、秒传、落盘分发、回收站语义完全一致。
+- 删除只进回收站；`empty_trash` / `delete_permanently` 这类不可逆操作不暴露。
+- `read_text` 有字节上限（`mcp.max_read_bytes`，默认 256KB），图片走缩略图档位，大文件只给 12 小时有效的单文件下载链接。
+- 令牌限定根目录时，令牌视角的 `/` 就是那个目录，路径解析天然出不去；`..` 一律拒绝。
+- 每次调用记一行审计日志（工具 / 用户 / 令牌 id / 耗时 / 路径类参数），正文与凭据不记。
+- 工具可扩展：`kind=tool` 插件提供额外工具，在 MCP 里叫 `<tool_id>.<name>`；协议版本协商、鉴权、scope、审计仍由核心统一处理，插件需要文件字节时走宿主回调（凭据是本次调用临时签发的，5 分钟失效）。
 
 ## 配置示例
 

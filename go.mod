@@ -2,9 +2,9 @@ module github.com/jenken827/pfm
 
 go 1.26.0
 
-require github.com/jenken827/pfm-plugin-sdk v0.3.0
+require github.com/jenken827/pfm-plugin-sdk v0.4.0
 
-require github.com/jenken827/pfm-proto v0.3.1
+require github.com/jenken827/pfm-proto v0.5.0
 
 require (
 	buf.build/go/protovalidate v1.0.0

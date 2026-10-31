@@ -122,6 +122,16 @@ func defaultConfig() *models.Config {
 			Small: models.DefaultThumbnailSmallSize,
 			Large: models.DefaultThumbnailLargeSize,
 		},
+
+		// MCP 服务：默认关闭（对外的第二个入口），开启后仍需 mcp_tokens 里的令牌
+		Mcp: models.McpConfig{
+			Enabled:            false,
+			Path:               models.DefaultMcpPath,
+			AllowWrite:         false,
+			MaxReadBytes:       models.DefaultMcpMaxReadBytes,
+			CallTimeoutSeconds: models.DefaultMcpCallTimeoutSeconds,
+			TokenRatePerMinute: models.DefaultMcpTokenRatePerMinute,
+		},
 	}
 
 }

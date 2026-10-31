@@ -12,7 +12,7 @@ import (
 //
 // 进程模型（握手 + loopback RPC + 安装 / 验签 / 热加载）与具体类型无关，
 // 但每种类型有自己的线上方法与协议版本：`driver` 插件注册到驱动注册表，
-// `downloader` 插件注册成离线下载后端。再加新类型时在这里登记 kind + ABI，
+// `downloader` 插件注册成离线下载后端，`tool` 插件把工具并入 MCP 工具表。再加新类型时在这里登记 kind + ABI，
 // 再由 Manager 按 kind 分派即可，不需要动安装链。
 const (
 	// KindDriver 存储驱动插件：实现 DriverPlugin 服务，按 driver_id 注册驱动覆盖
@@ -20,6 +20,9 @@ const (
 	// KindDownloader 离线下载后端插件：实现 DownloaderPlugin 服务，按 downloader_id
 	// 提供「提交任务 / 查进度 / 取消」，产物入库仍在宿主
 	KindDownloader = "downloader"
+	// KindTool 工具插件：实现 ToolPlugin 服务，给 MCP 客户端扩展工具（名字前缀
+	// `<tool_id>.`）。协议层、鉴权、审计仍在宿主核心，插件只提供工具与执行逻辑
+	KindTool = "tool"
 )
 
 // kindABI 每种插件类型的线上协议版本（握手行里的版本号，也是包内 plugin.json 的 abi_version）
@@ -27,6 +30,7 @@ const (
 var kindABI = map[string]uint32{
 	KindDriver:     uint32(abi.AbiVersion_ABI_VERSION_1),
 	KindDownloader: uint32(abi.AbiVersion_ABI_VERSION_1),
+	KindTool:       uint32(abi.AbiVersion_ABI_VERSION_1),
 }
 
 // ABI 返回该插件类型的协议版本；未知类型返回 false
