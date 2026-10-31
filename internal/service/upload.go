@@ -1684,6 +1684,10 @@ func GetUploadRecordDetail(ctx context.Context, req *native.GetUploadRecordDetai
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
+	// 位置行是全局按 hash 共享的，别人的提供者上也可能有同一份内容；
+	// 这里只下发当前用户分配集内的位置行（与文件详情同一口径）。
+	locations = scopeFromCtx(ctx).narrow(ctx, locations, "upload record detail")
+
 	// 查询存储提供者名称
 	providerIDs := []uint32{}
 	for _, loc := range locations {

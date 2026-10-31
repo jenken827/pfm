@@ -79,75 +79,114 @@ func getFileStream(ctx context.Context, fileID string, providerID *uint32) (*Fil
 		return nil, fmt.Errorf("no file location found")
 	}
 
-	// 3. 选择源提供者
-	var sourceProviderID uint32
-	var sourceLocations []*entity.FileLocationORM
-	if providerID != nil {
-		sourceProviderID = *providerID
-		sourceLocations, err = storage.GetCompleteProviderLocations(locations, sourceProviderID)
-		if err != nil {
-			return nil, fmt.Errorf("provider %d location not found: %w", sourceProviderID, err)
+	// 3. 选择源提供者（只在自己的可用范围内选；显式 provider_id 越权直接拒绝）
+	scope := scopeForFile(ctx, strPtrVal(file.OwnerId))
+	sourceProviderID, sourceLocations, err := selectStreamSource(ctx, scope, locations, providerID)
+	if err != nil {
+		if providerID != nil {
+			return nil, err
 		}
-	} else {
-		sourceProviderID, sourceLocations, err = storage.SelectBestSourceProvider(locations)
+		// 无可用 provider：文件可能正处于异步分发上传窗口（如 WebDAV PUT 后立即读）。
+		// 降级 1：读本地 staging 明文（TempDir/<hash>/<fileName>，上传期必在）；
+		// 降级 2：短轮询等待首个 provider 完成后再选源。
+		if result, ok := tryServeFromLocalTemp(file); ok {
+			return result, nil
+		}
+		if waitErr := waitForReadyProvider(ctx, *file.Hash); waitErr != nil {
+			return nil, fmt.Errorf("no available provider: %w", err)
+		}
+		// 等待期间 location 状态已变化，重新拉取后选源
+		locations, err = db.GetFileLocationsByBlake3Hash(*file.Hash)
 		if err != nil {
-			// 无可用 provider：文件可能正处于异步分发上传窗口（如 WebDAV PUT 后立即读）。
-			// 降级 1：读本地 staging 明文（TempDir/<hash>/<fileName>，上传期必在）；
-			// 降级 2：短轮询等待首个 provider 完成后再选源。
-			if result, ok := tryServeFromLocalTemp(file); ok {
-				return result, nil
-			}
-			if waitErr := waitForReadyProvider(ctx, *file.Hash); waitErr != nil {
-				return nil, fmt.Errorf("no available provider: %w", err)
-			}
-			// 等待期间 location 状态已变化，重新拉取后选源
-			locations, err = db.GetFileLocationsByBlake3Hash(*file.Hash)
-			if err != nil {
-				return nil, fmt.Errorf("file location not found: %w", err)
-			}
-			sourceProviderID, sourceLocations, err = storage.SelectBestSourceProvider(locations)
-			if err != nil {
-				return nil, fmt.Errorf("no available provider: %w", err)
-			}
+			return nil, fmt.Errorf("file location not found: %w", err)
+		}
+		sourceProviderID, sourceLocations, err = selectStreamSource(ctx, scope, locations, nil)
+		if err != nil {
+			return nil, fmt.Errorf("no available provider: %w", err)
 		}
 	}
 
-	llog.C(ctx).Infof("stream file: %s, provider: %d, chunks: %d", *file.Name, sourceProviderID, len(sourceLocations))
+	return openStreamFromProvider(ctx, file, fileID, sourceProviderID, sourceLocations)
+}
+
+// selectStreamSource 在允许集内选源。
+//
+// 显式 provider_id 必须落在允许集内，否则直接拒绝：这是「别人的提供者被当成自己的
+// 下载源」最直接的入口，一次点击就把流量 / 配额记到对方账上。
+//
+// 自动选源先在允许集内挑；一份完整副本都没有时才回退到全部位置行（历史数据、
+// 管理员回收过分配等降级场景），并记 WARN —— 回退意味着这次读会打到别人的提供者上。
+func selectStreamSource(ctx context.Context, scope providerScope,
+	locations []*entity.FileLocationORM, requested *uint32) (uint32, []*entity.FileLocationORM, error) {
+	if requested != nil {
+		if !scope.contains(*requested) {
+			return 0, nil, fmt.Errorf("permission denied: 存储提供者 %d 不在你的可用范围内", *requested)
+		}
+		locs, err := storage.GetCompleteProviderLocations(locations, *requested)
+		if err != nil {
+			return 0, nil, fmt.Errorf("provider %d location not found: %w", *requested, err)
+		}
+		return *requested, locs, nil
+	}
+
+	visible := scope.narrow(ctx, locations, "stream source")
+	providerID, locs, err := storage.SelectBestSourceProvider(visible)
+	if err == nil {
+		return providerID, locs, nil
+	}
+	// 允许集未知 / 什么都没被裁掉：直接用原始错误，不做"跨用户回退"
+	if !scope.ok || len(visible) == len(locations) {
+		return 0, nil, err
+	}
+	llog.C(ctx).Warnf("no complete copy in allowed providers (hidden=%d), falling back to all locations",
+		len(locations)-len(visible))
+	providerID, locs, fallbackErr := storage.SelectBestSourceProvider(locations)
+	if fallbackErr != nil {
+		return 0, nil, err
+	}
+	return providerID, locs, nil
+}
+
+// openStreamFromProvider 打开选定提供者上的文件（含预下载判定与解密）
+func openStreamFromProvider(ctx context.Context, file *entity.FileORM, fileID string,
+	providerID uint32, locations []*entity.FileLocationORM) (*FileStreamResult, error) {
+	llog.C(ctx).Infof("stream file: %s, provider: %d, chunks: %d",
+		strValueOrEmpty(file.Name), providerID, len(locations))
 
 	// 4. 获取存储实例
-	sourceStorage := storage.GetStorage(sourceProviderID)
+	sourceStorage := storage.GetStorage(providerID)
 	if sourceStorage == nil {
-		return nil, fmt.Errorf("storage not found for provider %d", sourceProviderID)
+		return nil, fmt.Errorf("storage not found for provider %d", providerID)
 	}
 
 	// 5. 大文件预下载检查（驱动声明 PREDOWNLOAD 能力时；使用 file_location.Size）
 	var fileSizePtr *int64
-	if len(sourceLocations) > 0 && sourceLocations[0].Size != nil {
-		s := int64(*sourceLocations[0].Size)
+	if len(locations) > 0 && locations[0].Size != nil {
+		s := int64(*locations[0].Size)
 		fileSizePtr = &s
 	}
-	if preDownloadResult := checkPreDownloadState(sourceStorage, sourceLocations, fileID, sourceProviderID, fileSizePtr); preDownloadResult != nil {
+	if preDownload := checkPreDownloadState(sourceStorage, locations, fileID, providerID, fileSizePtr); preDownload != nil {
 		return &FileStreamResult{
 			IsPreDownload:   true,
-			PreDownloadData: preDownloadResult,
+			PreDownloadData: preDownload,
 		}, nil
 	}
 
 	// 6. 创建加密器（用于解密，如果需要）
-	encryptor, err := createEncryptorIfNeeded(sourceStorage, sourceLocations)
+	encryptor, err := createEncryptorIfNeeded(sourceStorage, locations)
 	if err != nil {
 		return nil, fmt.Errorf("create encryptor failed: %w", err)
 	}
 
 	// 7. 打开文件（支持多分片合并、Seek）
-	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(sourceLocations), types.OpenOptions{Encryptor: encryptor})
+	reader, err := sourceStorage.Open(ctx, ormconv.FileRefsFromLocations(locations), types.OpenOptions{Encryptor: encryptor})
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
 	}
 
 	// 8. 准备响应数据
 	fileName := "download"
-	if file.Name != nil {
+	if file.Name != nil && *file.Name != "" {
 		fileName = *file.Name
 	}
 
@@ -272,15 +311,19 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool,
 	}
 
 	// 2. 获取关联的文件信息
+	var ownerID string
 	var fileName string
 	var mimeType string
 	if history.FileId != nil {
 		file, err := db.GetFileByID(*history.FileId)
-		if err == nil && file.Name != nil {
-			fileName = *file.Name
-		}
-		if err == nil && file.Mime != nil {
-			mimeType = *file.Mime
+		if err == nil {
+			ownerID = strPtrVal(file.OwnerId)
+			if file.Name != nil {
+				fileName = *file.Name
+			}
+			if file.Mime != nil {
+				mimeType = *file.Mime
+			}
 		}
 	}
 	if fileName == "" {
@@ -302,8 +345,8 @@ func GetFileHistoryStream(ctx context.Context, historyID uint64, isPreview bool,
 		return nil, fmt.Errorf("no file location found")
 	}
 
-	// 4. 选择源提供者
-	sourceProviderID, sourceLocations, err := storage.SelectBestSourceProvider(locations)
+	// 4. 选择源提供者（历史版本与当前版本共用同一批位置行，选源同样要按允许集收口）
+	sourceProviderID, sourceLocations, err := selectStreamSource(ctx, scopeForFile(ctx, ownerID), locations, nil)
 	if err != nil {
 		return nil, fmt.Errorf("no available provider: %w", err)
 	}
@@ -387,8 +430,8 @@ func RegenerateThumbnail(ctx context.Context, file *entity.FileORM) {
 		return
 	}
 
-	// 2. 选择一个可用的存储提供者
-	sourceProviderID, sourceLocations, err := storage.SelectBestSourceProvider(locations)
+	// 2. 选择一个可用的存储提供者（与取流同一口径：优先文件所有者自己的盘）
+	sourceProviderID, sourceLocations, err := selectStreamSource(ctx, scopeForFile(ctx, strPtrVal(file.OwnerId)), locations, nil)
 	if err != nil {
 		llog.C(ctx).Warnf("select source provider failed for thumbnail: %v", err)
 		return

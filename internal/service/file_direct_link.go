@@ -48,6 +48,22 @@ func GetFileDirectLink(ctx context.Context, req *native.DirectLinkFileReq) (*nat
 	if mErr != nil {
 		return nil, mErr
 	}
+
+	// 只在自己的提供者上取直链：显式 provider_id 越权直接拒绝（不静默回落，避免把
+	// 别人的提供者当成自己的下载源）；自动选源时把候选裁到允许集内，裁完没得选就按
+	// "直链不可用"返回，客户端会回退到服务端代理下载。
+	scope := scopeForFile(ctx, strValueOrEmpty(file.OwnerId))
+	if req.ProviderId != nil && !scope.contains(*req.ProviderId) {
+		return nil, &models.Err{
+			E: fmt.Errorf("permission denied: 存储提供者 %d 不在你的可用范围内", *req.ProviderId),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
+	locations = scope.narrow(ctx, locations, "direct link")
+	if len(locations) == 0 {
+		return nil, directLinkUnavailable("文件在你的存储提供者上没有副本")
+	}
+
 	providerID, providerLocations, mErr := selectDirectLinkProvider(locations, req.ProviderId)
 	if mErr != nil {
 		return nil, mErr

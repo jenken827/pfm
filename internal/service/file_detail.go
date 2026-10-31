@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 	"github.com/jenken827/pfm-proto/proto/gen/entity"
@@ -37,17 +38,11 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
-	// 2. 查询文件位置
-	var providerLocations []*native.ProviderLocationInfo
-	if file.Hash != nil && *file.Hash != "" {
-		locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
-		if err != nil {
-			llog.C(ctx).Errorf("get file locations failed: %v", err)
-			return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
-		}
-
-		// 按提供者分组
-		providerLocations = groupLocationsByProvider(locations)
+	// 2. 查询文件位置（按当前用户的分配集收口）
+	providerLocations, err := loadProviderLocations(ctx, file)
+	if err != nil {
+		llog.C(ctx).Errorf("get file locations failed: %v", err)
+		return nil, &models.Err{E: err, C: native.RespCode_DB_ERROR}
 	}
 
 	// 3. 查询文件历史
@@ -90,6 +85,21 @@ func GetFileDetail(ctx context.Context, req *native.FileDetailReq) (*native.File
 		Histories: historyPBs,
 		Tags:      tags,
 	}, nil
+}
+
+// loadProviderLocations 查文件位置行并转成「按 provider 分组」的展示结构。
+//
+// 位置行只按 hash 归类（没有 owner 列），同一份内容可能同时落在别人的提供者上；
+// 详情是用户可见的（实例名 / 驱动 / 物理路径 / 状态），必须按当前用户的分配集收口。
+func loadProviderLocations(ctx context.Context, file *entity.FileORM) ([]*native.ProviderLocationInfo, error) {
+	if file.Hash == nil || *file.Hash == "" {
+		return nil, nil
+	}
+	locations, err := db.GetFileLocationsByBlake3Hash(*file.Hash)
+	if err != nil {
+		return nil, err
+	}
+	return groupLocationsByProvider(scopeFromCtx(ctx).narrow(ctx, locations, "file detail")), nil
 }
 
 // groupLocationsByProvider 按存储提供者分组文件位置信息
@@ -259,6 +269,12 @@ func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) 
 	if userID == "" {
 		return nil, &models.Err{E: errors.New("unauthorized"), C: native.RespCode_TOKEN_INVALID}
 	}
+	if req.GetFileHash() == "" || req.ProviderId == nil {
+		return nil, &models.Err{
+			E: errors.New("file_hash and provider_id are required"),
+			C: native.RespCode_PARAMS_ERROR,
+		}
+	}
 	ownerFile, err := db.GetFileByHashAndOwner(req.GetFileHash(), userID)
 	if err != nil {
 		return nil, &models.Err{
@@ -267,6 +283,15 @@ func GetFileCacheStatus(ctx context.Context, req *native.GetFileCacheStatusReq) 
 		}
 	}
 	_ = ownerFile
+
+	// provider 归属校验：hash 是全局共享键，别人的提供者上也可能有同一份内容的位置行，
+	// 不加这一层就能读到他人提供者上的上传 / 缓存状态。
+	if !scopeFromCtx(ctx).contains(*req.ProviderId) {
+		return nil, &models.Err{
+			E: fmt.Errorf("permission denied: 存储提供者 %d 不在你的可用范围内", *req.ProviderId),
+			C: native.RespCode_PERMISSION_DENIED,
+		}
+	}
 
 	// 查询文件位置记录
 	location, err := db.GetFileLocationByFileHashAndProvider(*req.FileHash, *req.ProviderId)
